@@ -377,6 +377,7 @@ export const serve = async (build: Build): Promise<void> => {
             installation,
             installations,
             serveLog,
+            (root) => build.cut.applications.inside(build.cut.applications.kept(root, build.channel.name)),
             () => {
               closingSignal('restart');
               Deferred.doneUnsafe(restartExit, Exit.void);

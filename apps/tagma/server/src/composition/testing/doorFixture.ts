@@ -243,7 +243,7 @@ const built = Effect.fnUntraced(
     const routed = routedContext(runtime.graph, runtime.pool);
     const installation = yield* Layer.build(
       Layer.mergeAll(
-        successionLayer(undefined, join(data, 'install'), join(data, 'serve.log')),
+        successionLayer(undefined, join(data, 'install'), join(data, 'serve.log'), (root) => join(root, 'desktop', 'carried')),
         checkoutBuildsLayer({ checkout: undefined, log: join(data, 'build.log'), worktrees: join(data, 'build') }),
         devSurfaceLayer({ checkout: undefined, app: { root: 'apps/tagma/app', config: null }, port: 5642 }).pipe(
           Layer.provide(Layer.mergeAll(Layer.succeedContext(runtime.door), FetchHttpClient.layer)),

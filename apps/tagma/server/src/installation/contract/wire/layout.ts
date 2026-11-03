@@ -107,6 +107,3 @@ export const ASKED_EVERY_MS = 100;
 
 export const SURFACE_INDEX = 'index.html';
 export const HOST_MAIN = 'app/main.mjs';
-export const hostBundle = (name: string): string => `${name}.app`;
-export const hostBinary = (name: string): string => `${hostBundle(name)}/Contents/MacOS/Electron`;
-export const RELEASE_INSIDE = 'Contents/Resources/release';

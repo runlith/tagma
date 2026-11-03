@@ -17,15 +17,14 @@ import {
   BUILD_MAPS_ENV,
   BUILD_TARGET_ENV,
   buildConditionsIn,
-  hostBundle,
   HOST_ASSETS_ENV,
   HOST_CHANNEL_ENV,
   HOST_MAIN,
-  RELEASE_INSIDE,
   RELEASE_NUMBER_ENV,
   SIGNING_IDENTITY_ENV,
   sourceMapOriginIn,
 } from '@tagma/server/installation/contract/wire/layout';
+import { hostBundle, RELEASE_INSIDE } from '@tagma/server/mac-applications/bundle';
 import { DESKTOP, EXECUTIONS } from '@tagma/server/installation/contract/wire/manifest';
 import { EXECUTIONS_RUNTIME } from '@tagma/server/installation/contract/wire/archive';
 import { signingIdentity, signingNotice } from '@tagma/server/cut/signing';

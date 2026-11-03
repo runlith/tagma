@@ -11,6 +11,8 @@ export class ApplicationNotCopied extends Data.TaggedError('ApplicationNotCopied
 }
 
 export type Applications = {
+  readonly kept: (root: string, name: string) => string;
+  readonly inside: (application: string) => string;
   readonly carrier: (dir: string) => string | null;
   readonly carried: (unpacked: string) => string | null;
   readonly verify: (bundle: string) => Effect.Effect<string | null>;

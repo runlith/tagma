@@ -13,7 +13,7 @@ import type { MachinePlatform } from '../installation/contract/service/platform.
 import { DowngradeSteps } from '../installation/contract/service/steps.js';
 import { type Installed, type Installing, type NextFrame, type NextIssue, type Then } from '../installation/contract/wire/next.js';
 import { CURRENT } from '../platform/contract/wire/versions.js';
-import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
+import type { Installation } from '../installation/contract/wire/manifest.js';
 import type { Placement } from '../installation/contract/wire/placement.js';
 import { updateRecordSchema } from '../installation/contract/wire/update.js';
 import { readAttempt, readReturn } from '../installation/closure/attempt.js';
@@ -425,7 +425,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     if (refused !== null) return yield* undelivered(refused);
     const read = manifestAt(target.root);
     if (read._tag !== 'Read') return yield* undelivered(`${target.root} holds no installation manifest that reads`);
-    const kept = releaseApplication(target.root, place.name);
+    const kept = place.applications.kept(target.root, place.name);
     if (!existsSync(kept)) return yield* undelivered(`no application of release ${target.build ?? target.version} is kept at ${kept}`);
     const named = target.build ?? target.version;
     const preflight = downgradePreflight().pipe(

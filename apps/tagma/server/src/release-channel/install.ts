@@ -24,9 +24,9 @@ import {
 } from '../installation/closure/moves.js';
 import type { ApplicationNotCopied, Applications } from '../installation/contract/service/applications.js';
 import type { HostVerdict } from '../installation/contract/service/steps.js';
-import { type InstallationManifest, releaseApplication } from '../installation/contract/wire/manifest.js';
+import type { InstallationManifest } from '../installation/contract/wire/manifest.js';
 import { writeLauncherBeside } from '../installation/setup/launcher.js';
-import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
+import { RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import type { Asked, Held, Landed } from '../installation/contract/wire/placement.js';
@@ -246,13 +246,13 @@ const placed = Effect.fn('release.place')(function* (
     });
   }
   const reused = yield* held(installRoot, manifest.identity.digest);
-  if (reused === null || !existsSync(releaseApplication(reused.root, place.name))) yield* spaced(carrier, installRoot);
+  if (reused === null || !existsSync(applications.kept(reused.root, place.name))) yield* spaced(carrier, installRoot);
   const claimed = reused ?? (yield* attempt('place', () => claimLeased(installRoot, at)));
   const written = Effect.gen(function* () {
-    const kept = releaseApplication(claimed.root, place.name);
+    const kept = applications.kept(claimed.root, place.name);
     if (!existsSync(kept)) yield* applications.copy(carrier, kept).pipe(Effect.mapError(copyRefusal));
     if (reused === null) {
-      yield* cloneTree(join(kept, RELEASE_INSIDE), claimed.root).pipe(Effect.mapError(cloneRefusal));
+      yield* cloneTree(applications.inside(kept), claimed.root).pipe(Effect.mapError(cloneRefusal));
       yield* cloneRuntime(claimed.root, manifest).pipe(Effect.mapError(cloneRefusal));
     }
     const quarantined = yield* applications.unquarantine(claimed.root);
@@ -305,7 +305,7 @@ const landedOn = Effect.fn('release.land')(function* (
     root: join(place.installRoot, version),
     build: prepared.build,
     previous: version === now.from ? null : now.from,
-    application: releaseApplication(join(place.installRoot, version), place.name),
+    application: applications.kept(join(place.installRoot, version), place.name),
     launcher: place.launcher,
   } satisfies Landed;
 });

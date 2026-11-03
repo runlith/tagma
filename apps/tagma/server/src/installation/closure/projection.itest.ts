@@ -34,7 +34,18 @@ it.live('current reuses identity proof for an unchanged version and detects link
       );
     }
     swapCurrent(install, 'first');
-    const succession = Context.get(yield* Layer.build(successionLayer(undefined, install, join(home, 'serve.log'), () => {})), Succession);
+    const succession = Context.get(
+      yield* Layer.build(
+        successionLayer(
+          undefined,
+          install,
+          join(home, 'serve.log'),
+          (root) => join(root, 'desktop', 'carried'),
+          () => {},
+        ),
+      ),
+      Succession,
+    );
     let proofs = 0;
     const tracer = Tracer.make({
       ...Tracer.nativeTracer,
@@ -106,7 +117,18 @@ it.live('server and window projections release a pruned cold version while retai
         Effect.provide(BunFileSystem.layer),
       );
     }
-    const server = Context.get(yield* Layer.build(successionLayer(undefined, install, join(home, 'serve.log'), () => {})), Succession);
+    const server = Context.get(
+      yield* Layer.build(
+        successionLayer(
+          undefined,
+          install,
+          join(home, 'serve.log'),
+          (root) => join(root, 'desktop', 'carried'),
+          () => {},
+        ),
+      ),
+      Succession,
+    );
     const window = makeManifestProjection();
     const weak = Effect.all([
       server.current.pipe(Effect.map((installation) => new WeakRef(installation!.manifest))),

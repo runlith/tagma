@@ -65,6 +65,7 @@ await Effect.runPromise(
             undefined,
             home,
             join(home, 'serve.log'),
+            (root) => join(root, 'desktop', 'carried'),
             () => {
               Deferred.doneUnsafe(stopped, Exit.void);
             },

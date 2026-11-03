@@ -14,7 +14,6 @@ import type { InstallationDoor } from '../../../installation/cli/port.js';
 import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { EXECUTIONS } from '../../../installation/contract/wire/manifest.js';
 import { INSTALLATION_OPERATIONS } from '../../../installation/contract/wire/operations.js';
-import { InstalledChannel } from '../../../installation/contract/service/channel.js';
 import { MachineHost } from '../../../installation/contract/service/machineHost.js';
 import { SuccessionSteps } from '../../../installation/contract/service/steps.js';
 import { Succession } from '../../../installation/contract/service/succession.js';
@@ -143,6 +142,7 @@ describe('a published release the standing execution host does not take', () => 
                 runsFrom,
                 installRoot,
                 join(installRoot, '..', 'serve.log'),
+                (root) => trustedApplications.inside(trustedApplications.kept(root, channel.name)),
                 () => {},
                 undefined,
                 undefined,
@@ -159,7 +159,6 @@ describe('a published release the standing execution host does not take', () => 
                   ? Schema.decodeUnknownEffect(INSTALLATION_OPERATIONS.check_successor.input)(payload).pipe(
                       Effect.flatMap((input) => checkSuccessor.body.execute(input, undefined, operator)),
                       Effect.provideService(Succession, succession),
-                      Effect.provideService(InstalledChannel, channel),
                     )
                   : Effect.die(new Error(`install-from asks only check_successor, not ${params.id}`)),
             },

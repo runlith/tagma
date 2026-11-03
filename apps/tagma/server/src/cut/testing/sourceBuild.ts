@@ -40,6 +40,8 @@ export const runSourceRelease = async (root: string, args: readonly string[]): P
   const distribution: Distribution = {
     conditions: [],
     applications: {
+      kept: (at, name) => join(at, 'desktop', name),
+      inside: (application) => join(application, 'release'),
       carrier: () => null,
       carried: () => null,
       verify: unread,

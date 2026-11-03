@@ -79,6 +79,8 @@ const checkout = (
 };
 
 const inert: Applications = {
+  kept: (root, name) => join(root, 'desktop', name),
+  inside: (application) => join(application, 'release'),
   carrier: () => null,
   carried: () => null,
   verify: () => Effect.succeed(null),

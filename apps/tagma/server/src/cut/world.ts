@@ -11,13 +11,13 @@ import { portBlock, portsEnv } from '../installation/contract/wire/ports.js';
 import {
   CLI_ENTRY,
   INSTALL_FILE,
-  RELEASE_INSIDE,
   RUNTIME_PART,
   SERVE_FLAGS,
   WHISPER_ENGINE_PART,
   dataDirectory,
 } from '../installation/contract/wire/layout.js';
-import { releaseApplication } from '../installation/contract/wire/manifest.js';
+import { RELEASE_INSIDE } from '../mac-applications/bundle.js';
+import { applications } from '../mac-applications/placement.js';
 import { installationRootIn } from '../installation/paths.js';
 import { readStartup } from '../installation/process/record.js';
 import { RESTART_RECORD } from '../installation/contract/wire/restart.js';
@@ -462,7 +462,7 @@ export const observed = async (world: World, terminals: Terminals | null, waited
   return {
     serving: Result.isSuccess(serving) ? serving.success : `nothing: ${serving.failure}`,
     current: standing === null ? null : buildIn(standing),
-    kept: standing === null ? null : carried(releaseApplication(standing, world.channel.name)),
+    kept: standing === null ? null : carried(applications.kept(standing, world.channel.name)),
     copy: keptOf(world),
     sound: {
       present: Result.isSuccess(sound) && sound.success.speech.devices.availability._tag === 'present',
@@ -491,7 +491,7 @@ export const observedAfresh = async (world: World, terminals: Terminals | null):
 export const keptOf = (world: World): string | null => {
   const current = join(world.installRoot, CURRENT);
   return existsSync(current)
-    ? relative(world.dir, releaseApplication(join(world.installRoot, readlinkSync(current)), world.channel.name))
+    ? relative(world.dir, applications.kept(join(world.installRoot, readlinkSync(current)), world.channel.name))
     : null;
 };
 

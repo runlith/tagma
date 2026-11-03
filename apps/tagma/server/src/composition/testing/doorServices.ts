@@ -9,7 +9,7 @@ import { ServerProcess } from '../../installation/contract/service/succession.js
 export const doorServicesOf = Effect.fnUntraced(function* (runtime: ServerRuntime, data: string) {
   const installed = yield* Layer.build(
     Layer.mergeAll(
-      successionLayer(undefined, join(data, 'install'), join(data, 'serve.log')),
+      successionLayer(undefined, join(data, 'install'), join(data, 'serve.log'), (root) => join(root, 'desktop', 'carried')),
       checkoutBuildsLayer({ checkout: undefined, log: join(data, 'build.log'), worktrees: join(data, 'build') }),
     ),
   );

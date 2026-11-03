@@ -31,6 +31,12 @@ const migration = (folder: string, name: string): void => {
 
 const unplaced = () => Effect.die('a refused cut places no application');
 const applications: Applications = {
+  kept: () => {
+    throw new Error('a refused cut keeps no application');
+  },
+  inside: () => {
+    throw new Error('a refused cut carries no release');
+  },
   carrier: () => null,
   carried: () => null,
   verify: unplaced,

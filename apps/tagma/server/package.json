@@ -514,6 +514,11 @@
       "node": "./src/mac-applications/placement.ts",
       "bun": "./src/mac-applications/placement.ts"
     },
+    "./mac-applications/bundle": {
+      "types": "./src/mac-applications/bundle.ts",
+      "node": "./src/mac-applications/bundle.ts",
+      "default": "./src/mac-applications/bundle.ts"
+    },
     "./graph/contract/wire/journal": {
       "types": "./src/graph/contract/wire/journal.ts",
       "browser": "./src/graph/contract/wire/journal.ts",

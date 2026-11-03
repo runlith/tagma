@@ -12,8 +12,8 @@ import { verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { type GitAnswerInvalid, type GitRefused, type GitUnreadable, troubleOf } from '@runlith/git/repository';
 import { gitCut, gitText, gitTree } from '../platform/git/readings.js';
 import type { Composition } from './descriptor.js';
+import { hostBinary } from '../mac-applications/bundle.js';
 import {
-  hostBinary,
   SURFACE_INDEX,
   CLI_ENTRY,
   RUNTIME_PART,
