@@ -32,6 +32,8 @@ edges:
     to: 01a0fd8b-bef5-738e-8ee9-97f36cc306ce
   - kind: imports-tests
     to: 01a0fd8b-bf0c-778a-8cab-a7689e81e75e
+  - kind: imports-tests
+    to: 01a132c7-c70e-71c2-9a65-20a479a88a92
 sources:
   - kind: dir
     ref: apps/tagma/server/src/release-channel
