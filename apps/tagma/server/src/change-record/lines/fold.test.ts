@@ -251,7 +251,12 @@ test('a shifted head outside the record aligns bases once and retains line owner
   expect(cached).toBe(alignment);
   const value = { ...input(base, bytes, []), head: headContent };
   const kept = memory.fold('checkout:path');
-  const answer = foldPath(value, budget(), kept === undefined ? undefined : { kind: 'after', state: kept, row: kept.last }, cached);
+  const answer = foldPath(
+    value,
+    budget(),
+    kept === undefined ? undefined : { kind: 'after', state: kept, row: kept.last },
+    (before, after) => memory.alignment(before, after, false),
+  );
   expect(answer.record).toBe(original.record);
   expect(prove(answer.result, value).hands).toEqual([{ holder: B, added: 1, removed: 1 }]);
 });

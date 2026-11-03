@@ -158,13 +158,12 @@ export class FoldResidence {
         ? { outside: { kind: 'external' }, debts: [], released: [], landed: [] }
         : readEvidence(payload.evidence);
     const input = inputOf(payload, evidence);
-    const base = saved?.state.base ?? input.base;
-    const aligned =
-      alignment ??
-      ((base.kind === 'text' || base.kind === 'absent') && (input.head.kind === 'text' || input.head.kind === 'absent')
-        ? this.memory.alignment(base, input.head, input.normalized)
-        : undefined);
-    const folded = foldPath(input, stepsIn(1 << 23), saved === undefined ? undefined : { kind: 'complete', state: saved.state }, aligned);
+    const folded = foldPath(
+      input,
+      stepsIn(1 << 23),
+      saved === undefined ? undefined : { kind: 'complete', state: saved.state },
+      (before, after) => alignment ?? this.memory.alignment(before, after, input.normalized),
+    );
     if (folded.alignment !== null) this.memory.aligned(folded.alignment);
     let record: FoldRecall | null = null;
     const first = input.rows[0];

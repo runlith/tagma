@@ -37,7 +37,7 @@ function counts(proven: Proven, added: number, removed: number): void {
   expect(proven.hands.reduce((sum, hand) => sum + hand.removed, proven.nobody.removed)).toBe(removed);
 }
 function prove(value: FoldInput, cached?: CachedFold, alignment?: BaseAlignment) {
-  const answer = foldPath(value, budget(), cached, alignment);
+  const answer = foldPath(value, budget(), cached, alignment === undefined ? undefined : () => alignment);
   if (answer.result.verdict !== 'proven' || answer.result.lines === 'unweighed') throw new Error(JSON.stringify(answer.result));
   const a = value.head.kind === 'text' ? value.head.lines : [];
   const b = value.working.kind === 'text' ? value.working.lines : [];
@@ -179,7 +179,7 @@ test('base alignment belongs to a pair of blobs and its normalization mode', () 
     { ...alignment, from: 'other-blob' },
     { ...alignment, normalized: true },
   ])
-    expect(projectFold(state, head, value.working, budget(), invalid)).toMatchObject({ verdict: 'unknown', reason: 'alignment' });
+    expect(projectFold(state, head, value.working, budget(), () => invalid)).toMatchObject({ verdict: 'unknown', reason: 'alignment' });
 });
 
 test('a fold answers the base alignment it computed, and the next fold proves the same verdict reusing it', () => {
