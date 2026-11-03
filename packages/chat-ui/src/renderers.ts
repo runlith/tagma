@@ -86,7 +86,7 @@ export type ChatToolStatus = {
   readonly standing?: (entry: ChatEntryOf<'tool'>) => boolean;
   readonly mark: Snippet<[ChatEntryOf<'tool'>]>;
   readonly status: Snippet<[ChatEntryOf<'tool'>]>;
-  readonly detail: Snippet<[ChatEntryOf<'tool'>]>;
+  readonly detail: (entry: ChatEntryOf<'tool'>) => Snippet<[ChatEntryOf<'tool'>]> | null;
 };
 
 export type ChatActivityIdentity = {

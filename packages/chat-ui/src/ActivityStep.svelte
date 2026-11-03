@@ -513,43 +513,41 @@
       {#if toolRenderer}
         {@render toolRenderer(entry, rendering.context)}
       {/if}
-      {@const targetDetail = rendering.kinds.toolStatus(entry)?.detail}
+      {@const targetDetail = rendering.kinds.toolStatus(entry)?.detail(entry) ?? null}
       {#if targetDetail}
         {@render targetDetail(entry)}
       {/if}
-      {#if context.verbose}
-        {@const details = entry.display?.details ?? []}
-        {@const launch = chatToolStanding(entry) ? entry.display?.durationMs : undefined}
-        {@const ordered = entry.execution?.state === 'started' && (entry.execution.waitedMs ?? 0) > 0 ? entry.execution : null}
-        {#if details.length > 0 || launch !== undefined || ordered !== null}
-          <dl
-            class="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 font-mono text-meta text-muted-foreground/50"
-          >
-            {#each details as detail, index (index)}
-              <dt>{detail.label}</dt>
-              <dd class="flex min-w-0 items-center gap-1.5">
-                {#if detail.value !== undefined}
-                  <span class="min-w-0 text-muted-foreground/80" title={detail.value} data-fade {@attach clipFade}>{detail.value}</span>
-                  <CopyAddress address={detail.value} {context} id={`${entry.id}:detail:${index}`} />
-                {/if}
-              </dd>
-            {/each}
-            {#if launch !== undefined}
-              <dt>{strings.launchTime()}</dt>
-              <dd class="text-muted-foreground/80">{callDuration(launch)}</dd>
-            {/if}
-            {#if ordered !== null}
-              <dt>{strings.waited()}</dt>
-              <dd class="min-w-0 text-muted-foreground/80" data-fade {@attach clipFade}>
-                {strings.waitedAfter(callDuration(ordered.waitedMs ?? 0), (ordered.after ?? []).map((call) => call.toolName).join(', '))}
-              </dd>
-            {/if}
-          </dl>
-        {/if}
+      {@const details = context.verbose ? (entry.display?.details ?? []) : []}
+      {@const launch = context.verbose && chatToolStanding(entry) ? entry.display?.durationMs : undefined}
+      {@const ordered =
+        context.verbose && entry.execution?.state === 'started' && (entry.execution.waitedMs ?? 0) > 0 ? entry.execution : null}
+      {@const factsShown = details.length > 0 || launch !== undefined || ordered !== null}
+      {#if factsShown}
+        <dl class="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 font-mono text-meta text-muted-foreground/50">
+          {#each details as detail, index (index)}
+            <dt>{detail.label}</dt>
+            <dd class="flex min-w-0 items-center gap-1.5">
+              {#if detail.value !== undefined}
+                <span class="min-w-0 text-muted-foreground/80" title={detail.value} data-fade {@attach clipFade}>{detail.value}</span>
+                <CopyAddress address={detail.value} {context} id={`${entry.id}:detail:${index}`} />
+              {/if}
+            </dd>
+          {/each}
+          {#if launch !== undefined}
+            <dt>{strings.launchTime()}</dt>
+            <dd class="text-muted-foreground/80">{callDuration(launch)}</dd>
+          {/if}
+          {#if ordered !== null}
+            <dt>{strings.waited()}</dt>
+            <dd class="min-w-0 text-muted-foreground/80" data-fade {@attach clipFade}>
+              {strings.waitedAfter(callDuration(ordered.waitedMs ?? 0), (ordered.after ?? []).map((call) => call.toolName).join(', '))}
+            </dd>
+          {/if}
+        </dl>
       {/if}
       {#if context.verbose || toolTrouble(entry)}
         {@const modelText = rendering.kinds.toolModelText(entry.toolName, entry.toolOutput)}
-        <ToolXRay {entry} {context} {address} {modelText} />
+        <ToolXRay {entry} {context} {address} {modelText} folded={toolBody(entry) || targetDetail !== null || factsShown} />
       {/if}
     {/if}
   </div>

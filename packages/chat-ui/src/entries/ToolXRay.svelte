@@ -10,11 +10,13 @@
   let {
     entry,
     context,
+    folded,
     address = null,
     modelText = null,
   }: {
     entry: ToolActivityEntry;
     context: ChatEntryContext;
+    folded: boolean;
     address?: string | null;
     modelText?: string | null;
   } = $props();
@@ -32,15 +34,17 @@
 
 {#if hasPayload}
   <div class="grid min-w-0 gap-1.5">
-    <button
-      type="button"
-      class="-ml-1 flex w-fit cursor-pointer items-center gap-0.5 rounded-sm px-1 py-0.5 text-small text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-      aria-expanded={rawOpen}
-      onclick={() => context.setExpanded(rawKey, !rawOpen)}
-    >
-      {strings.details()}<ChevronRight class={['size-3 transition-transform', rawOpen && 'rotate-90']} />
-    </button>
-    {#if rawOpen}
+    {#if folded}
+      <button
+        type="button"
+        class="-ml-1 flex w-fit cursor-pointer items-center gap-0.5 rounded-sm px-1 py-0.5 text-small text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+        aria-expanded={rawOpen}
+        onclick={() => context.setExpanded(rawKey, !rawOpen)}
+      >
+        {strings.details()}<ChevronRight class={['size-3 transition-transform', rawOpen && 'rotate-90']} />
+      </button>
+    {/if}
+    {#if !folded || rawOpen}
       <div class="grid min-w-0 gap-1.5">
         <div class="flex items-center gap-x-3 font-mono text-meta text-muted-foreground/50">
           <span class="shrink-0">{entry.toolName}</span>

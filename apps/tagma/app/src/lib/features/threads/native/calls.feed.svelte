@@ -40,8 +40,16 @@
     standing: (entry) => activity.launchedLine(entry) === null && activity.pending(entry) !== null,
     mark: commandMark,
     status: commandStatus,
-    detail: targetDetail,
+    detail: (entry) => (sheetOf(entry) === null ? null : targetDetail),
   };
+
+  function sheetOf(entry: ChatEntryOf<'tool'>) {
+    const awaited = activity.awaited(entry);
+    const view = activity.view;
+    return awaited === null || awaited.line === null || view === null
+      ? null
+      : { line: awaited.line, view, call: awaited.call, budgetMs: awaited.budgetMs };
+  }
 
   $effect.pre(() =>
     kinds.register(contributor, { kind: 'tool', actions: callActions, identity: (entry) => activity.identity(entry), status }),
@@ -82,9 +90,9 @@
 {/snippet}
 
 {#snippet targetDetail(entry: ChatEntryOf<'tool'>)}
-  {@const awaited = activity.awaited(entry)}
-  {#if awaited !== null && awaited.line !== null && activity.view !== null}
-    <CommandSheet line={awaited.line} view={activity.view} call={awaited.call} budgetMs={awaited.budgetMs} />
+  {@const sheet = sheetOf(entry)}
+  {#if sheet !== null}
+    <CommandSheet line={sheet.line} view={sheet.view} call={sheet.call} budgetMs={sheet.budgetMs} />
   {/if}
 {/snippet}
 
