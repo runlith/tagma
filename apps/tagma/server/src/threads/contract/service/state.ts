@@ -3,6 +3,7 @@ import type { ThreadSnapshotOf } from '@runlith/agent/transcript/live';
 import type { ThreadState } from '@runlith/agent/thread/state';
 import type { ApprovalModeView } from '@runlith/agent/modes/ApprovalMode';
 import type { ExternalSession } from '../wire/harness/externalSession.js';
+import type { ThreadPick } from '../wire/harness/pick.js';
 import type { Approving } from '../wire/approving.js';
 import type { Delegation, ThreadPlace } from '../wire/birth.js';
 import type { RecapAttempt, RecapReading } from '../wire/recap.js';
@@ -15,6 +16,7 @@ export type NativeThreadState = ThreadState & {
   readonly parent?: ThreadParent;
   readonly detachedFrom?: ThreadParent;
   readonly harness: ExternalSession | null;
+  readonly picked: ThreadPick | null;
   readonly delegation: Delegation;
   readonly approving: Approving;
   readonly spawnDepth: ThreadSpawnDepth;

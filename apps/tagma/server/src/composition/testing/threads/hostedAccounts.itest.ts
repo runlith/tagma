@@ -9,6 +9,7 @@ import { writes } from '../../../platform/contract/service/writes.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { WorkSpells } from '../../../thread-record/contract/service/spells.js';
+import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { HarnessMoves } from '../../../threads/contract/service/harness.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { ThreadRunning } from '../../../threads/contract/service/reads.js';
@@ -66,6 +67,7 @@ layer(doorFixture(), { excludeTestServices: true })('hosted account world', (it)
         const currentRuns = Context.get(world.runtime.owners, ThreadRunning);
         const { models } = yield* Context.get(world.runtime.owners, ProviderRegistry).catalog;
         const moves = yield* harnessMoves({
+          harness: Effect.succeed(Context.get(world.runtime.owners, ThreadHarness)),
           models: () => models,
           handed: () => Effect.void,
           releasing: Effect.fnUntraced(function* () {

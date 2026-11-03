@@ -1,4 +1,4 @@
-import { Cause, Clock, Context, Effect, Layer } from 'effect';
+import { Cause, Clock, Context, Deferred, Effect, Layer } from 'effect';
 import { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { threadAgentsLayer, threadCompactorLayer, threadFeaturesLayer, threadStorageLayer } from '@runlith/agent/thread/kernelPorts';
@@ -238,7 +238,9 @@ export const threadEngineLayer = Layer.effectContext(
         ),
       );
     const binder = yield* makeThreadRebinding.pipe(Effect.provideService(ThreadJournal, journal));
+    const built = yield* Deferred.make<ThreadHarness['Service']>();
     const moves = yield* makeHarnessMoves({
+      harness: Deferred.await(built),
       releasing: (threadId) => harness.threads.handle(threadId, OPERATOR_PRINCIPAL).release(),
       handed: Effect.fnUntraced(function* (threadId) {
         yield* harness.threads.publish(threadId);
@@ -415,6 +417,7 @@ export const threadEngineLayer = Layer.effectContext(
         },
       },
     );
+    yield* Deferred.succeed(built, harness);
     const modelChanges = yield* ModelChanges;
     yield* Effect.acquireRelease(
       Effect.sync(() => modelChanges.follow((threadId, change) => events.told(threadId, { kind: 'model-changed', change }))),

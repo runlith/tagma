@@ -45,7 +45,9 @@ import type { ThreadContextTokens, ThreadListRow, ThreadListPage, ThreadListWind
 import type { ThreadWireFeedEvent, ThreadWireSnapshotPayload, WireState, WireThread } from '../contract/wire/snapshot.js';
 import { hostingCli, processAccount, shownHarness } from '../voice/rowDetail.js';
 import type { ThreadSelectionQuery } from '../contract/wire/selection.js';
+import type { ThreadPick } from '../contract/wire/harness/pick.js';
 import { ThreadInputRefused } from '../contract/service/failure.js';
+import type { ModelSwitches } from '@runlith/llm/models/description';
 
 export function threadSelectionOf(query: ThreadSelectionQuery): Effect.Effect<ThreadSelection> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) => {
@@ -216,7 +218,28 @@ export function wireThreadListWindow(window: ThreadProjectionWindow, basis: Thre
   };
 }
 
-export function wireThread(row: ThreadListProjection, basis: ThreadBasis): ThreadListRow {
+type Picking = {
+  readonly provider: string;
+  readonly model: string | null;
+  readonly reasoning: string | null;
+  readonly account: string | null;
+  readonly switches: ModelSwitches;
+};
+
+const shownPick = <T extends Picking>(thread: T, picked: ThreadPick | null): T =>
+  picked === null
+    ? thread
+    : {
+        ...thread,
+        provider: picked.provider,
+        model: picked.model,
+        reasoning: picked.reasoning,
+        account: picked.account,
+        switches: picked.switches,
+      };
+
+export function wireThread(listed: ThreadListProjection, basis: ThreadBasis): ThreadListRow {
+  const row = shownPick(listed, listed.picked);
   const context = contextTokens(row.contextReading, basis.limits.get(row.id) ?? null);
   return {
     id: row.id,
@@ -294,13 +317,14 @@ export function cacheWarmthOf(
 }
 
 function wireThreadOf(state: NativeThreadState, basis: ThreadBasis): WireThread {
+  const shown = shownPick(state.thread, state.picked);
   return {
-    ...serializeThread(state.thread),
+    ...serializeThread(shown),
     projectId: state.home,
     title: state.title,
     ...(state.parent === undefined ? {} : { parent: state.parent }),
     ...(state.detachedFrom === undefined ? {} : { detachedFrom: state.detachedFrom }),
-    cacheWarmth: cacheWarmthOf(state.thread, state.activeRun !== null, basis.warmth),
+    cacheWarmth: cacheWarmthOf(shown, state.activeRun !== null, basis.warmth),
     harness: shownHarness(state.harness, state.thread),
     cli: hostingCli(state.harness, state.thread),
     processAccount: processAccount(state.harness),
@@ -397,6 +421,7 @@ export function evidenceQueryOf(request: EvidenceInput | EvidenceQueryTerms): Th
 }
 
 export function wireThreadFacts(row: ThreadListProjection): ThreadFacts {
+  const shown = shownPick(row, row.picked);
   return {
     recap: row.recap ?? undefined,
     id: row.id as ThreadId,
@@ -416,7 +441,7 @@ export function wireThreadFacts(row: ThreadListProjection): ThreadFacts {
             failureReason: row.outcome.failureReason,
             finishedAt: row.outcome.finishedAt.toISOString(),
           },
-    thread: { provider: row.provider, model: row.model, reasoning: row.reasoning },
+    thread: { provider: shown.provider, model: shown.model, reasoning: shown.reasoning },
     run:
       row.outcome === null
         ? null

@@ -34,6 +34,7 @@ const setup = Effect.gen(function* () {
       detachedFrom: null,
       createdBySessionId: null,
       harness: null,
+      picked: null,
       activeRun: null,
       outcome: null,
       ask: null,

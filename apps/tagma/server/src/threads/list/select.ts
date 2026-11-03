@@ -286,6 +286,7 @@ export function summariesOf(db: StoreDb<'machine'>, where: SQL | undefined) {
       titleOrigin: recordFacts.titleOrigin,
       createdBySessionId: recordFacts.createdBySessionId,
       harness: facet,
+      picked: thread.pendingModel,
       projectId: sql<number>`${recordFacts.projectId}`,
       scopeBlockUuid: recordFacts.scopeBlockUuid,
       readerOrderAt: recordFacts.readerOrderAt,

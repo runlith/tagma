@@ -22,6 +22,7 @@ import type { NativeThreadState } from '../contract/service/state.js';
 import { subAgentDepth } from '../contract/wire/settings.js';
 import { readDelegation } from '../birth/delegation.js';
 import { readApproves, type StandingOf } from '../approvers.js';
+import { pickOf } from '../store/seat.js';
 
 export type SubAgentDepths = Effect.Success<typeof makeSubAgentDepths>;
 
@@ -50,7 +51,8 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
   const settings = yield* Settings;
   const modes = yield* ApprovalModes;
   const units = yield* MachineUnits;
-  const assignments = makeAssignmentStore({ db: (yield* MachineStore).db });
+  const { db } = yield* MachineStore;
+  const assignments = makeAssignmentStore({ db });
   const worktrees = yield* WorktreeRecords;
   const pins = yield* ThreadPins;
 
@@ -67,9 +69,13 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
   });
 
   const standing = Effect.fnUntraced(function* (threadId: string, unit?: Unit<'machine'>) {
-    const { facts, harness } = yield* failedAs(
+    const { facts, harness, picked } = yield* failedAs(
       'title',
-      Effect.all({ facts: records.facts(threadId, unit), harness: sessionOf(threadId, unit) }),
+      Effect.all({
+        facts: records.facts(threadId, unit),
+        harness: sessionOf(threadId, unit),
+        picked: unit === undefined ? units.read((read) => pickOf(db, read, threadId)) : pickOf(db, unit, threadId),
+      }),
     );
     const ancestorId = facts?.parentId ?? facts?.detachedFrom;
     const ancestor = ancestorId == null ? undefined : yield* failedAs('parent', records.facts(ancestorId, unit));
@@ -83,6 +89,7 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
       title: facts?.title ?? DEFAULT_TITLE,
       ...(address === undefined ? {} : facts?.parentId == null ? { detachedFrom: address } : { parent: address }),
       harness,
+      picked,
       recap,
       recapAttempt: recaps.attempt(threadId),
     };

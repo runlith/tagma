@@ -101,6 +101,7 @@ const initial: NativeThreadState = {
   home: 1,
   title: 'thread',
   harness: null,
+  picked: null,
   delegation: { own: null, allowed: true, setAt: null },
   approving: { approver: null, why: 'no-parent', takenOver: false, approves: { own: null, effective: [], origin: 'setting', setAt: null } },
   spawnDepth: { current: 0, maximum: 0, remaining: 0 },

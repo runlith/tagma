@@ -109,6 +109,7 @@ function row(over: Partial<ThreadListProjection> = {}): ThreadListProjection {
     phase: null,
     held: { paths: 0, unproven: 0 },
     harness: null,
+    picked: null,
     ...over,
   };
 }

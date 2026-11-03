@@ -14,6 +14,7 @@ import {
 import { thread } from '../store/kernel.js';
 import { DEFAULT_TITLE, type TitleProvenance } from '../../thread-record/contract/wire/title.js';
 import { parseExternalSession, type ExternalSession } from '../contract/wire/harness/externalSession.js';
+import type { ThreadPick } from '../contract/wire/harness/pick.js';
 import { cutText, nativeAsk, standaloneAsk } from './pendingAsk.js';
 import { SAID_LINE_CHARS, type ThreadPhase, type ThreadAsk } from '../contract/wire/list.js';
 import type { RecapLine } from '../contract/wire/recap.js';
@@ -59,6 +60,7 @@ export type ThreadSummary = ThreadMetadataRow & {
   readonly detachedFrom: string | null;
   readonly createdBySessionId: number | null;
   readonly harness: ExternalSession | null;
+  readonly picked: ThreadPick | null;
   readonly activeRun: ThreadActiveRun | null;
   readonly outcome: RunEnding | null;
   readonly ask: ThreadAsk | null;
@@ -104,6 +106,7 @@ export type SummaryRow = {
   titleOrigin: TitleProvenance | null;
   createdBySessionId: number | null;
   harness: ExternalSession | null;
+  picked: ThreadPick | null;
   projectId: number;
   scopeBlockUuid: string | null;
   readerOrderAt: Date | null;
@@ -214,6 +217,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     detachedFrom: row.detachedFrom,
     createdBySessionId: row.createdBySessionId,
     harness,
+    picked: row.picked,
     activeRun,
     outcome:
       activeRun !== null || row.outcomeRunId === null || row.outcomeStatus === null || row.outcomeFinishedAt === null

@@ -35,11 +35,6 @@ export class ThreadRunUnavailable extends Data.TaggedError('ThreadRunUnavailable
   readonly cause?: unknown;
 }> {}
 
-export class ThreadRunLost extends Data.TaggedError('ThreadRunLost')<{
-  readonly threadId: string;
-  readonly key: string;
-}> {}
-
 export type ThreadRunsFailure =
   | ThreadCallBroke
   | ThreadMissing
@@ -47,10 +42,11 @@ export type ThreadRunsFailure =
   | ThreadRunRefused
   | ThreadDeliveryConflict
   | ThreadRunUnavailable
-  | ThreadRunLost
   | ThreadStorageFailed;
 
 export type ThreadStopReceipt = { readonly status: 'stopped' | 'not-running'; readonly runId: string | null };
+
+export type ThreadStepWait = 'deadline' | 'boundary';
 
 export class ThreadRuns extends Context.Service<
   ThreadRuns,
@@ -86,7 +82,13 @@ export class ThreadRuns extends Context.Service<
     >;
     stop(
       threadId: string,
-      input: { readonly request: KeyedRequest; readonly expected?: string; readonly by: ThreadRunStoppedBy; readonly at?: 'step' },
+      input: {
+        readonly request: KeyedRequest;
+        readonly expected?: string;
+        readonly by: ThreadRunStoppedBy;
+        readonly at?: 'step';
+        readonly until?: ThreadStepWait;
+      },
     ): Effect.Effect<{ readonly status: 'stopped' | 'stopping' | 'not-running'; readonly acted: boolean } | KeyedSpent, ThreadRunsFailure>;
   }
 >()('@runlith/agent/ThreadRuns') {}

@@ -4,7 +4,14 @@ import { ThreadStorageFailed } from '../thread/persisted';
 import type { ThreadModelSelection } from '../thread/record';
 import { RunAdmission } from '../thread/run/runAdmission';
 import { ThreadModelRefused } from './model';
-import { ThreadRunConflict, ThreadRunRefused, ThreadRuns, type ThreadRunsFailure, type ThreadStopReceipt } from './runs';
+import {
+  ThreadRunConflict,
+  ThreadRunRefused,
+  ThreadRuns,
+  type ThreadRunsFailure,
+  type ThreadStepWait,
+  type ThreadStopReceipt,
+} from './runs';
 export type CarriedMove =
   | {
       readonly to: ThreadModelSelection;
@@ -20,6 +27,8 @@ export type ModelCarryAsk<A extends CarriedMove, E> = {
   readonly stopped?: ThreadStopReceipt | null;
   readonly self?: boolean;
   readonly restoreOnFailure?: boolean;
+  readonly until?: ThreadStepWait;
+  readonly holding?: (wake?: boolean) => void;
 };
 export type ModelCarry<A> = {
   readonly moved: A;
@@ -83,7 +92,7 @@ export const carryModelMove = Effect.fnUntraced(function* <A extends CarriedMove
     Effect.fnUntraced(function* (interruptible) {
       let halted: string | undefined;
       const moved = yield* Effect.acquireUseRelease(
-        Effect.sync(() => admission.hold([threadId])),
+        Effect.sync(() => ask.holding ?? admission.hold([threadId])),
         () =>
           interruptible(move(stopped?.status === 'stopped' ? (stopped.runId ?? undefined) : undefined)).pipe(
             Effect.catchIf(
@@ -93,7 +102,9 @@ export const carryModelMove = Effect.fnUntraced(function* <A extends CarriedMove
                 const active = yield* runs.current(threadId);
                 if (active === null) return yield* interruptible(move());
                 if (ask.self === true) return yield* new ThreadModelRefused({ threadId, reason: 'self-move' });
-                const stop = yield* interruptible(runs.stop(threadId, { request, expected: active.runId, by: 'model', at: 'step' }));
+                const stop = yield* interruptible(
+                  runs.stop(threadId, { request, expected: active.runId, by: 'model', at: 'step', until: ask.until }),
+                );
                 if (stop.status === 'stopping') return yield* new ThreadModelRefused({ threadId, reason: 'step-unreached' });
                 if (stop.status === 'stopped') halted = active.runId;
                 return yield* move(halted);

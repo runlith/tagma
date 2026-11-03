@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
 import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities, TransportCopies } from '@runlith/agent/thread/record';
@@ -6,8 +6,9 @@ import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
 import type { HarnessAskedModel } from '../contract/wire/harness/askedModel.js';
+import type { ThreadPick } from '../contract/wire/harness/pick.js';
 import type { HarnessRoad, KernelSeat } from '../contract/wire/harness/seat.js';
-import { thread } from './kernel.js';
+import { THREAD_PICK_INDEX, thread } from './kernel.js';
 
 export const seatColumns = (seat: KernelSeat) => ({
   provider: seat.selection.provider,
@@ -15,6 +16,7 @@ export const seatColumns = (seat: KernelSeat) => ({
   reasoning: seat.selection.reasoning,
   account: seat.account,
   switches: seat.switches,
+  pendingModel: null,
   transport: seat.transport,
   capabilities: seat.capabilities,
 });
@@ -122,9 +124,52 @@ export const chooseModel = Effect.fn('ThreadSeat.chooseModel')(function* (
   yield* unit.run(
     db
       .update(thread)
-      .set({ model: asked?.model ?? null, reasoning: asked?.reasoning ?? null, account, switches, updatedAt })
+      .set({ model: asked?.model ?? null, reasoning: asked?.reasoning ?? null, account, switches, pendingModel: null, updatedAt })
       .where(eq(thread.id, threadId)),
   );
+});
+
+export const pickOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadId: string): Effect.Effect<ThreadPick | null, StoreFailure> =>
+  Effect.map(
+    unit.run(db.select({ pick: thread.pendingModel }).from(thread).where(eq(thread.id, threadId)).get()),
+    (row) => row?.pick ?? null,
+  );
+
+export const pickedThreads = (db: StoreDb<'machine'>, unit: Unit<'machine'>): Effect.Effect<readonly string[], StoreFailure> =>
+  Effect.map(
+    unit.run(
+      db
+        .select({ id: sql<string>`${thread.id}`.as('id') })
+        .from(sql`${thread} indexed by ${sql.identifier(THREAD_PICK_INDEX)}`)
+        .where(isNotNull(thread.pendingModel))
+        .all(),
+    ),
+    (rows) => rows.map((row) => row.id),
+  );
+
+export const keepPick = Effect.fn('ThreadSeat.keepPick')(function* (
+  db: StoreDb<'machine'>,
+  unit: Unit<'machine'>,
+  threadId: string,
+  pick: ThreadPick,
+): Effect.fn.Return<void, StoreFailure> {
+  yield* unit.run(db.update(thread).set({ pendingModel: pick }).where(eq(thread.id, threadId)));
+});
+
+export const dropPick = Effect.fn('ThreadSeat.dropPick')(function* (
+  db: StoreDb<'machine'>,
+  unit: Unit<'machine'>,
+  threadId: string,
+  id: string,
+): Effect.fn.Return<boolean, StoreFailure> {
+  const dropped = yield* unit.run(
+    db
+      .update(thread)
+      .set({ pendingModel: null })
+      .where(and(eq(thread.id, threadId), sql`json_extract(${thread.pendingModel}, '$.id') = ${id}`))
+      .returning({ id: thread.id }),
+  );
+  return dropped.length > 0;
 });
 
 export const switchesOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadId: string): Effect.Effect<ModelSwitches, StoreFailure> =>

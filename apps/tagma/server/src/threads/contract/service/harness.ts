@@ -13,6 +13,8 @@ import type { ThreadListRow } from '../wire/list.js';
 import type { ExternalSession, HarnessInstall } from '../wire/harness/externalSession.js';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { HarnessSeat, SeatChoice, SeatedHarness } from '../wire/harness/seat.js';
+import type { ModelPick } from '../wire/harness/pick.js';
+import type { NativeThreadSnapshot } from './state.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { CarriedRecord, RolloutPart } from '../../journal/rolloutMeta.js';
 import type { HarnessFailure } from './failure.js';
@@ -42,7 +44,11 @@ export type HarnessSeating = {
   seat(agent: string): Effect.Effect<SeatedHarness, HarnessFailure>;
 };
 export type HarnessSeated = { readonly name: HarnessId; readonly seat: SeatedHarness };
-export type HarnessMoveTo = ThreadModelSelection & { readonly account?: string | null; readonly switches?: ModelSwitches };
+export type HarnessMoveTo = ThreadModelSelection & {
+  readonly account?: string | null;
+  readonly switches?: ModelSwitches;
+  readonly pending?: string;
+};
 export type HarnessMoved = { readonly from: ThreadModelSelection | null; readonly to: ThreadModelSelection };
 export type HarnessFollowed = HarnessMoved & { readonly left: string | null };
 
@@ -97,6 +103,7 @@ export class HarnessMoves extends Context.Service<
   HarnessMoves,
   {
     move(threadId: string, to: HarnessMoveTo): Effect.Effect<HarnessMoved | null, HarnessFailure>;
+    pick(threadId: string, pick: ModelPick): Effect.Effect<NativeThreadSnapshot, HarnessFailure>;
     lagging(provider: string, account: string): Effect.Effect<readonly string[], StoreFailure>;
     follow(threadId: string, provider: string, account: string | null): Effect.Effect<HarnessFollowed | null, HarnessFailure>;
   }

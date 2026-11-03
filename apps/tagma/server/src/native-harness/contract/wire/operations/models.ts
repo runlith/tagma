@@ -86,7 +86,7 @@ export const MODEL_OPERATIONS = {
     doors: { http: 'perform', socket: true },
     meaning: "Move one thread's next runs onto another model, reasoning rung, switches or account.",
     grammar:
-      'A run already going keeps the model it opened with. A model another harness serves — Claude over ACP — moves the thread onto that harness, and a native model moves it back; the thread keeps its history and its feed, and a turn still going is carried: the call waits for its current step to end, moves the thread and continues the turn there; `thread-running` answers only a step that did not end within three minutes, and the turn then goes on untouched. A CLI agent of its own stays on its own provider row. An omitted `account` keeps the thread’s own where the provider still holds it.',
+      'A run already going keeps the model it opened with. A model another harness serves — Claude over ACP — moves the thread onto that harness, and a native model moves it back; the thread keeps its history and its feed. A move a going turn holds back answers at once with the pick as the thread’s model: the server stops that turn at its next step, moves the thread and continues the turn there, and words sent meanwhile run on the new model. A later pick replaces one still waiting. A CLI agent of its own stays on its own provider row. An omitted `account` keeps the thread’s own where the provider still holds it.',
     place: 'project',
     input: Schema.Struct({ threadId: ThreadId, ...threadModelSchema.fields }),
     answer: arms({ loaded: { snapshot: threadWireSnapshotPayloadSchema.fields.snapshot } }),
@@ -102,7 +102,6 @@ export const MODEL_OPERATIONS = {
       'model-pinned',
       'model-provider',
       'model-unavailable',
-      'thread-running',
       'harness-moved',
       'journal-moved',
       'harness-host',

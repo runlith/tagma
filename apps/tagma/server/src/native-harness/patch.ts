@@ -39,7 +39,7 @@ export const applyPatch = (
       unit.run(
         db
           .update(thread)
-          .set({ ...native, updatedAt })
+          .set({ ...native, pendingModel: native.provider === undefined ? undefined : null, updatedAt })
           .where(eq(thread.id, id))
           .returning({ id: thread.id }),
       ),

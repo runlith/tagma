@@ -52,6 +52,7 @@ const row = (id: string, projectId: number, life: ThreadSummary['life'] = 'worki
   detachedFrom: null,
   createdBySessionId: null,
   harness: null,
+  picked: null,
   activeRun: null,
   outcome: null,
   ask: null,

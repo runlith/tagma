@@ -413,6 +413,11 @@
       "browser": "./src/threads/contract/wire/harness/transportEntry.ts",
       "default": "./src/threads/contract/wire/harness/transportEntry.ts"
     },
+    "./threads/contract/wire/harness/pick": {
+      "types": "./src/threads/contract/wire/harness/pick.ts",
+      "browser": "./src/threads/contract/wire/harness/pick.ts",
+      "default": "./src/threads/contract/wire/harness/pick.ts"
+    },
     "./threads/contract/wire/harness/externalSession": {
       "types": "./src/threads/contract/wire/harness/externalSession.ts",
       "browser": "./src/threads/contract/wire/harness/externalSession.ts",

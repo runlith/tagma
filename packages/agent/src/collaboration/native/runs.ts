@@ -322,9 +322,11 @@ export const nativeThreadRunsLayer: Layer.Layer<
             at: input.at,
             key: input.request.key,
             settled:
-              input.at === 'step'
-                ? { within: Duration.millis(Math.max(0, input.request.deadline.getTime() - (yield* Clock.currentTimeMillis))) }
-                : undefined,
+              input.at !== 'step'
+                ? undefined
+                : input.until === 'boundary'
+                  ? {}
+                  : { within: Duration.millis(Math.max(0, input.request.deadline.getTime() - (yield* Clock.currentTimeMillis))) },
           });
           if (answer.status === 'still-settling' || answer.status === 'requested') return { status: 'stopping' as const, acted: true };
           const stopped = answer.status === 'stopped' ? ('stopped' as const) : ('not-running' as const);

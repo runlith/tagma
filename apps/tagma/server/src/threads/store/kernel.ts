@@ -28,11 +28,13 @@ import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities } from '@runlith/agent/thread/record';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import { projectRows } from '../../platform/contract/service/projections.js';
+import type { ThreadPick } from '../contract/wire/harness/pick.js';
 
 export const ENDINGS_LIST: SQL = sql.raw(`(${RUN_ENDINGS.map((status) => `'${status}'`).join(', ')})`);
 
 export const THREAD_OPEN_QUESTION_INDEX = 'native_thread_open_question_idx';
 export const THREAD_CLOCK_INDEX = 'native_thread_clock_idx';
+export const THREAD_PICK_INDEX = 'native_thread_pick_idx';
 
 export const thread = sqliteTable(
   'native_thread',
@@ -54,6 +56,7 @@ export const thread = sqliteTable(
     systemPrompt: text('system_prompt'),
     pendingSystemPrompt: text('pending_system_prompt'),
     pendingDefinition: text('pending_definition', { mode: 'json' }).$type<ThreadDefinition>(),
+    pendingModel: text('pending_model', { mode: 'json' }).$type<ThreadPick>(),
     failureReason: text('failure_reason'),
     contextReading: text('context_reading', { mode: 'json' }).$type<ThreadContextReading>(),
     contextEventId: integer('context_event_id').notNull().default(0),
@@ -74,6 +77,9 @@ export const thread = sqliteTable(
     index(THREAD_OPEN_QUESTION_INDEX)
       .on(table.id)
       .where(sql`${entryField(table.pendingInteraction, 'status')} = 'open'`),
+    index(THREAD_PICK_INDEX)
+      .on(table.id)
+      .where(sql`${table.pendingModel} is not null`),
   ],
 );
 
@@ -212,6 +218,7 @@ export const nativeRows = projectRows({
     model: thread.model,
     reasoning: thread.reasoning,
     switches: thread.switches,
+    pendingModel: thread.pendingModel,
     transport: thread.transport,
     capabilities: thread.capabilities,
     failureReason: thread.failureReason,

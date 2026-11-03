@@ -106,6 +106,7 @@ export const rowOf = (held: HeldRow): SummaryRow => {
     titleOrigin: record.titleOrigin,
     createdBySessionId: record.createdBySessionId,
     harness: held.facet,
+    picked: native.pendingModel,
     projectId: record.projectId!,
     scopeBlockUuid: record.scopeBlockUuid,
     readerOrderAt: record.readerOrderAt,

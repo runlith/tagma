@@ -8,7 +8,7 @@ import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { NATIVE_BINDING } from '@runlith/agent/thread/record';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import { MachineUnits } from '../../platform/contract/service/units.js';
+import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { NATIVE_HARNESS, type HarnessId } from '../../platform/contract/wire/session.js';
@@ -36,9 +36,11 @@ import { currentEffort, currentModel } from '../contract/wire/harness/observatio
 import { harnessSessionActive } from '../contract/wire/harness/session.js';
 import { nativeCapabilities, servedSelection, type KernelSeat } from '../contract/wire/harness/seat.js';
 import { mandateFacts } from '../mandate.js';
+import type { ThreadHarness } from '../contract/service/engine.js';
+import { makePicks, PICK_REPLACED } from './picks.js';
 import { deleteSession, externalSession, insertSession, recoverableSession, sessionFacts } from '../store/harnessFacet.js';
 import { nativeRows, thread, threadRun } from '../store/kernel.js';
-import { bindingOf, capabilitiesOf, switchesOf } from '../store/seat.js';
+import { bindingOf, capabilitiesOf, pickOf, switchesOf } from '../store/seat.js';
 import { keptSwitches } from '@runlith/llm/models/description';
 
 const running = (threadId: string) =>
@@ -67,10 +69,12 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
   releasing,
   handed,
   models,
+  harness,
 }: {
   readonly releasing: ReleaseThread;
   readonly handed: (threadId: string) => Effect.Effect<void, HarnessFailure>;
   readonly models: () => ModelCatalog;
+  readonly harness: Effect.Effect<ThreadHarness['Service']>;
 }) {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
@@ -82,6 +86,41 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
   const admission = yield* RunAdmission;
   const handing = writes('HarnessMoves.handover', [nativeRows, sessionFacts], records.writes, rebinding.writes);
 
+  const seatable = Effect.fnUntraced(function* (
+    unit: Unit<'machine'>,
+    threadId: string,
+    record: ThreadRecordFacts,
+    seat: HarnessSeated['seat'] | null,
+  ) {
+    if (seat !== null) {
+      if (record.projectId === null)
+        return yield* new GateRefusal('thread-project-missing', `Thread ${threadId} works no project, and a hosted agent runs in one.`, [
+          'choose a model of a native provider',
+        ]);
+      const mandate = yield* unit.run(
+        db.select({ hostKind: mandateFacts.hostKind }).from(mandateFacts).where(eq(mandateFacts.id, threadId)).get(),
+      );
+      if (mandate?.hostKind != null)
+        return yield* new GateRefusal('harness-host', 'A hosted agent runs in the local project workspace.', [
+          'choose a model of a native provider',
+        ]);
+    }
+    const native = yield* unit.run(
+      db
+        .select({ provider: thread.provider, model: thread.model, reasoning: thread.reasoning })
+        .from(thread)
+        .where(eq(thread.id, threadId))
+        .get(),
+    );
+    if (native === undefined)
+      return yield* new GateRefusal(
+        'model-pinned',
+        `Thread ${threadId} keeps no journal of its own, so another harness cannot continue it.`,
+        ['start a new agent on the model you need, with this one’s report as its brief'],
+      );
+    return native;
+  });
+
   const handover = Effect.fn('HarnessMoves.handover')(function* (
     threadId: string,
     record: ThreadRecordFacts,
@@ -90,6 +129,7 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
     target: HarnessSeated | null,
     to: HarnessMoveTo,
   ) {
+    yield* units.read((unit) => seatable(unit, threadId, record, target?.seat ?? null));
     if ((yield* runs.runningRunOf(threadId)) !== null) return yield* running(threadId);
     const leaving = facet === null ? null : yield* resolved(registry, facet.name);
     if (leaving !== null) yield* releasing(threadId);
@@ -119,34 +159,11 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
             ]);
           }
         }
-        if (seat !== null) {
-          if (record.projectId === null)
-            return yield* new GateRefusal(
-              'thread-project-missing',
-              `Thread ${threadId} works no project, and a hosted agent runs in one.`,
-              ['choose a model of a native provider'],
-            );
-          const mandate = yield* unit.run(
-            db.select({ hostKind: mandateFacts.hostKind }).from(mandateFacts).where(eq(mandateFacts.id, threadId)).get(),
-          );
-          if (mandate?.hostKind != null)
-            return yield* new GateRefusal('harness-host', 'A hosted agent runs in the local project workspace.', [
-              'choose a model of a native provider',
-            ]);
-        }
-        const native = yield* unit.run(
-          db
-            .select({ provider: thread.provider, model: thread.model, reasoning: thread.reasoning })
-            .from(thread)
-            .where(eq(thread.id, threadId))
-            .get(),
-        );
-        if (native === undefined)
-          return yield* new GateRefusal(
-            'model-pinned',
-            `Thread ${threadId} keeps no journal of its own, so another harness cannot continue it.`,
-            ['start a new agent on the model you need, with this one’s report as its brief'],
-          );
+        const native = yield* seatable(unit, threadId, record, seat);
+        if (to.pending !== undefined && (yield* pickOf(db, unit, threadId))?.id !== to.pending)
+          return yield* new GateRefusal(PICK_REPLACED, `The pick waiting on ${threadId} was replaced before it landed.`, [
+            'read the thread’s model',
+          ]);
         if (standing !== null) {
           if (leaving?.release !== undefined) yield* leaving.release(threadId, unit);
           yield* deleteSession(db, unit, threadId);
@@ -217,6 +234,33 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
       }),
     );
 
+  const move = Effect.fn('HarnessMoves.move')(
+    function* (threadId: string, asked: HarnessMoveTo) {
+      const to = { ...asked, switches: asked.switches ?? (yield* kept(threadId, asked)) };
+      const facet = yield* sessionOf(threadId);
+      const bound = facet === null ? undefined : yield* units.read((unit) => bindingOf(db, unit, threadId));
+      const capabilities = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, unit, threadId));
+      if (facet !== null && capabilities?.modelMove === 'pinned') return yield* pinned(threadId, facet.name);
+      if (facet !== null && bound?.agent == null) return yield* within(threadId, facet, to);
+      const road = yield* registry.seating(to, models());
+      if (facet === null && road === null) return null;
+      if (facet !== null && facet.name === road?.name) return yield* within(threadId, facet, to);
+      const record = yield* records.facts(threadId);
+      if (record === undefined) return yield* new GateRefusal('thread-gone', `Thread ${threadId} is gone.`, ['name a thread that stands']);
+      const hosts = bound?.agent ?? record.agentId;
+      const seat = road === null ? null : { name: road.name, seat: yield* road.seat(hosts) };
+      return yield* handover(threadId, record, hosts, facet, seat, to).pipe(
+        Effect.retry({ times: STALE_RETRIES, while: (failure) => failure instanceof HarnessTurnStale }),
+        Effect.mapError((failure) =>
+          failure instanceof HarnessTurnStale ? new GateRefusal(JOURNAL_MOVED, failure.message, ['choose the model again']) : failure,
+        ),
+      );
+    },
+    (work, threadId) => held(threadId, work),
+  );
+
+  const picks = yield* makePicks({ move, harness });
+
   return HarnessMoves.of({
     lagging: Effect.fn('HarnessMoves.lagging')(function* (provider, account) {
       const lagged = sql`json_extract(${externalSession.facet}, '$.session.account.provider') = ${provider} and json_extract(${externalSession.facet}, '$.session.account.key') != ${account}`;
@@ -267,32 +311,8 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
       },
       (work, threadId) => held(threadId, work),
     ),
-
-    move: Effect.fn('HarnessMoves.move')(
-      function* (threadId, asked) {
-        const to = { ...asked, switches: asked.switches ?? (yield* kept(threadId, asked)) };
-        const facet = yield* sessionOf(threadId);
-        const bound = facet === null ? undefined : yield* units.read((unit) => bindingOf(db, unit, threadId));
-        const capabilities = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, unit, threadId));
-        if (facet !== null && capabilities?.modelMove === 'pinned') return yield* pinned(threadId, facet.name);
-        if (facet !== null && bound?.agent == null) return yield* within(threadId, facet, to);
-        const road = yield* registry.seating(to, models());
-        if (facet === null && road === null) return null;
-        if (facet !== null && facet.name === road?.name) return yield* within(threadId, facet, to);
-        const record = yield* records.facts(threadId);
-        if (record === undefined)
-          return yield* new GateRefusal('thread-gone', `Thread ${threadId} is gone.`, ['name a thread that stands']);
-        const hosts = bound?.agent ?? record.agentId;
-        const seat = road === null ? null : { name: road.name, seat: yield* road.seat(hosts) };
-        return yield* handover(threadId, record, hosts, facet, seat, to).pipe(
-          Effect.retry({ times: STALE_RETRIES, while: (failure) => failure instanceof HarnessTurnStale }),
-          Effect.mapError((failure) =>
-            failure instanceof HarnessTurnStale ? new GateRefusal(JOURNAL_MOVED, failure.message, ['choose the model again']) : failure,
-          ),
-        );
-      },
-      (work, threadId) => held(threadId, work),
-    ),
+    move,
+    pick: picks.place,
   });
 });
 

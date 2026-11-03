@@ -1,17 +1,8 @@
-import { Cause, Clock, Effect, Option, Stream } from 'effect';
+import { Cause, Effect, Option, Stream } from 'effect';
 import { DefaultLogins } from '../../providers/accounts/defaultLogins.js';
 import { keptSwitches, type ModelSwitch, type ModelSwitches } from '@runlith/llm/models/description';
 import type { ModelCatalog, ModelOption } from '@runlith/llm/models/catalog';
-import { ThreadCallBroke, ThreadMissing } from '@runlith/agent/thread/ThreadBorder';
-import { ThreadModelRefused } from '@runlith/agent/collaboration/model';
-import {
-  ThreadDeliveryConflict,
-  ThreadRunConflict,
-  ThreadRunLost,
-  ThreadRunRefused,
-  type ThreadRunsFailure,
-  ThreadRunUnavailable,
-} from '@runlith/agent/collaboration/runs';
+import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { profileModel } from '@runlith/agent/collaboration/modelChoice';
 import { callRung } from '@runlith/llm/models/resolve';
 import { planeRefusalOf } from '@runlith/agent/collaboration/planeRefusal';
@@ -43,7 +34,6 @@ import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import { HarnessMoves, HarnessRegistry } from '../../threads/contract/service/harness.js';
 import { ThreadList } from '../../threads/contract/service/list.js';
-import { ThreadRollouts } from '../../threads/contract/service/rollouts.js';
 import { ThreadHarness, ThreadLive } from '../../threads/contract/service/engine.js';
 
 const connectedModel = Effect.fnUntraced(function* (
@@ -126,29 +116,6 @@ const servedMemory = (models: ModelCatalog, memory: ModelMemory): RememberedSwit
     }
   return served;
 };
-
-const STEP_WINDOW_MS = 3 * 60_000;
-
-const carryFailed =
-  (threadId: string) =>
-  (failure: HarnessFailure | ThreadModelRefused | ThreadRunsFailure): HarnessFailure => {
-    if (failure instanceof ThreadModelRefused)
-      return new GateRefusal('thread-running', `The turn of ${threadId} did not reach the end of its step, so its model stayed.`, [
-        'choose the model again',
-        'stop the turn, then choose the model',
-      ]);
-    if (failure instanceof ThreadMissing)
-      return new GateRefusal('thread-gone', `Thread ${threadId} is gone.`, ['name a thread that stands']);
-    if (
-      failure instanceof ThreadRunConflict ||
-      failure instanceof ThreadRunRefused ||
-      failure instanceof ThreadDeliveryConflict ||
-      failure instanceof ThreadRunUnavailable ||
-      failure instanceof ThreadRunLost
-    )
-      return new ThreadCallBroke({ cause: failure });
-    return failure;
-  };
 
 export const publishDefaultMoves = Effect.gen(function* () {
   const live = yield* ThreadLive;
@@ -275,11 +242,9 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
 });
 
 export const makeModelPreferences = Effect.fnUntraced(function* ({ rows }: { readonly rows: ModelPreferenceRows }) {
-  const harness = yield* ThreadHarness;
   const threads = yield* ThreadLookup;
   const records = yield* ThreadRecords;
   const defaultAccounts = yield* DefaultAccounts;
-  const rollouts = yield* ThreadRollouts;
   const units = yield* MachineUnits;
   const moves = yield* HarnessMoves;
   const registry = yield* ProviderRegistry;
@@ -385,32 +350,12 @@ export const makeModelPreferences = Effect.fnUntraced(function* ({ rows }: { rea
       }).pipe(
         Effect.flatMap(({ switches, account }) =>
           gated(records, threadId, projectId, () =>
-            Effect.gen(function* () {
-              const handle = harness.threads.handle(threadId, OPERATOR_PRINCIPAL);
-              const now = yield* Clock.currentTimeMillis;
-              const { moved } = yield* handle
-                .carryModel({
-                  threadId,
-                  request: { key: crypto.randomUUID(), deadline: new Date(now + STEP_WINDOW_MS) },
-                  move: (resume) =>
-                    Effect.map(
-                      moves.move(threadId, {
-                        provider: settings.provider,
-                        model: settings.model,
-                        reasoning: settings.reasoning,
-                        account,
-                        switches,
-                      }),
-                      (landed) => (landed === null ? null : { ...landed, resume }),
-                    ),
-                  running: (failure) => failure instanceof GateRefusal && failure.code === 'thread-running',
-                  restoreOnFailure: true,
-                })
-                .pipe(Effect.mapError(carryFailed(threadId)));
-              if (moved !== null) return yield* harness.reads.snapshot(threadId);
-              return yield* handle
-                .setModelSettings({ ...settings, account, switches })
-                .pipe(Effect.tap(() => rollouts.appendMeta(threadId)));
+            moves.pick(threadId, {
+              provider: settings.provider,
+              model: settings.model,
+              reasoning: settings.reasoning,
+              account,
+              switches,
             }),
           ),
         ),
