@@ -8646,10 +8646,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/providers/contract/wire/accounts.ts#accountProblemSchema",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/providers/contract/wire/accounts.ts#accountQuotaRowSchema",
           "owner": "5a3bed29"
         },
