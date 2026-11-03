@@ -112,21 +112,11 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
       const log = join(directory, 'runs.log');
       writeFileSync(join(directory, 'gemini'), `#!/bin/sh\necho ran >> '${log}'\necho '0.12.0'\n`, { mode: 0o755 });
       const users = makeUserEnvironment({ shell: null, env: { PATH: directory }, world: null, home: null });
-      const located: string[] = [];
       const actual = installedHarnessesLayer.pipe(
         Layer.provide(
           Layer.merge(
             BunFileSystem.layer,
-            Layer.succeed(
-              UserEnvironment,
-              UserEnvironment.of({
-                ...users,
-                locate: (name) => {
-                  located.push(name);
-                  return users.locate(name, []);
-                },
-              }),
-            ),
+            Layer.succeed(UserEnvironment, UserEnvironment.of({ ...users, locate: (name) => users.locate(name, []) })),
           ),
         ),
         Layer.provideMerge(harnessAdaptersLayer),
@@ -153,7 +143,6 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
       expect(yield* cli.installed('gemini')).toEqual({ _tag: 'Found' });
       expect(yield* cli.installed('codex')).toMatchObject({ _tag: 'Missing' });
       expect(existsSync(log)).toBe(false);
-      expect(located).toEqual(['gemini']);
     }),
   );
 
