@@ -13,6 +13,7 @@ import { AgentRetryFailed } from '../agent/AgentFailure';
 import type { ThreadRunRow } from './rows';
 import { threadFailureEntry } from './ThreadFailure';
 import { parseThreadRunFailure } from './persisted';
+import { ThreadSummaryFailedError } from './storage/compaction';
 
 describe('ThreadFailure', () => {
   test('projects a provider refusal into the durable public diagnostic contract', () => {
@@ -179,6 +180,26 @@ describe('ThreadFailure', () => {
     );
 
     expect(entry.diagnostics.reason).toEqual({ family: 'stalled', idleMs: 120_000 });
+  });
+
+  test('a failed compaction summary names the model that summarized and its own failure, not the thread model', () => {
+    const stalled = new LLMError({
+      module: 'CompactionAsks',
+      method: 'text',
+      reason: new StreamStalledReason({ message: 'The program printed nothing for 300 seconds.', idleMs: 300_000 }),
+    });
+    const entry = threadFailureEntry(
+      { id: 'run-compact', threadId: 'thread-1', provider: 'claude-code', account: 'own-account' },
+      new ThreadSummaryFailedError({ threadId: 'thread-1', provider: 'muse-code' }, 'model', stalled.message, stalled),
+    );
+
+    expect(entry.diagnostics).toMatchObject({
+      provider: 'muse-code',
+      account: null,
+      stage: 'CompactionAsks.text',
+      type: 'StreamStalled',
+      reason: { family: 'stalled', idleMs: 300_000 },
+    });
   });
 
   test('writes no wire record for a failure that never reached the wire', () => {

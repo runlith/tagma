@@ -6,6 +6,7 @@ import { AgentResponseUnfinished, AgentRetryFailed } from '../agent/AgentFailure
 import type { ThreadFailureEntry, TransportFailure } from '../transcript/entries';
 import { failureEntryId } from '../transcript/entryNames';
 import type { ThreadRunRow } from './rows';
+import { ThreadSummaryFailedError } from './storage/compaction';
 
 export function threadFailureMessage(value: unknown): string {
   if (value instanceof Error && value.message) return value.message;
@@ -52,11 +53,12 @@ export function threadFailure(
   error: unknown,
 ): Pick<ThreadFailureEntry, 'message' | 'diagnostics'> {
   const message = typeof error === 'string' ? error.trim() : error instanceof Error ? error.message.trim() : '';
+  const summarizer = error instanceof ThreadSummaryFailedError ? error : null;
   return {
     message: message || describeError(error).slice(0, 2000),
     diagnostics: {
-      provider: run.provider,
-      account: run.account ?? null,
+      provider: summarizer === null ? run.provider : summarizer.provider,
+      account: summarizer === null ? (run.account ?? null) : summarizer.account,
       ...transportFailureOf(error),
       retry: error instanceof AgentRetryFailed ? error.retry : undefined,
       stack: defectStack(error),
@@ -80,7 +82,14 @@ function transportFailureOf(error: unknown): TransportFailure {
   if (error instanceof TransportFailed) return error.failure ?? { stage: 'thread', type: UNCLASSED, retryable: null, modelStarted: null };
   if (error instanceof AgentResponseUnfinished)
     return { stage: 'model.finish', type: FINISH_TYPES[error.finish], retryable: false, modelStarted: true, detail: error.finish };
-  const call = error instanceof AgentRetryFailed ? error.cause : error instanceof LLMError ? error : null;
+  const call =
+    error instanceof AgentRetryFailed
+      ? error.cause
+      : error instanceof LLMError
+        ? error
+        : error instanceof ThreadSummaryFailedError && error.failure instanceof LLMError
+          ? error.failure
+          : null;
   if (call === null) return { stage: 'thread', type: failureName(error), retryable: null, modelStarted: null };
   return {
     stage: `${call.module}.${call.method}`,

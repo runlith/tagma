@@ -3254,7 +3254,7 @@ describe('ThreadCompaction strategy choice', () => {
       }),
   });
   const failing: ThreadCompactionStrategy = {
-    summarize: (segment) => Effect.fail(new ThreadSummaryFailedError(segment.threadId, 'empty', 'the model gave no summary.')),
+    summarize: (segment) => Effect.fail(new ThreadSummaryFailedError(segment, 'empty', 'the model gave no summary.')),
   };
   const owner = (strategy: ThreadCompactionStrategy) =>
     makeThreadCompaction({
@@ -3336,7 +3336,7 @@ describe('ThreadCompaction strategy choice', () => {
     Effect.fnUntraced(function* () {
       const limited = new LLMError({ module: 'LLM', method: 'text', reason: new RateLimitReason({ message: 'slow down' }) });
       const compactor = owner({
-        summarize: (segment) => Effect.fail(new ThreadSummaryFailedError(segment.threadId, 'model', limited.message, limited)),
+        summarize: (segment) => Effect.fail(new ThreadSummaryFailedError(segment, 'model', limited.message, limited)),
       });
       const recording = activityRecording();
       const refused = yield* compactor

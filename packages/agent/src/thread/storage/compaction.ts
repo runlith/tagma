@@ -59,14 +59,25 @@ export class ThreadCompactionExhaustedError extends Data.TaggedError('ThreadComp
   }
 }
 
+type ThreadSummarizerAt = { readonly threadId: string; readonly provider: string; readonly account?: string };
+
 export class ThreadSummaryFailedError extends Data.TaggedError('ThreadSummaryFailed')<{
   readonly message: string;
   readonly threadId: string;
+  readonly provider: string;
+  readonly account: string | null;
   readonly reason: 'model' | 'unfinished' | 'empty' | 'over-budget' | 'too-short' | 'no-fit';
   readonly failure: unknown;
 }> {
-  constructor(threadId: string, reason: ThreadSummaryFailedError['reason'], detail: string, failure: unknown = null) {
-    super({ message: `Thread ${threadId} compaction summary failed: ${detail}`, threadId, reason, failure });
+  constructor(at: ThreadSummarizerAt, reason: ThreadSummaryFailedError['reason'], detail: string, failure: unknown = null) {
+    super({
+      message: `Thread ${at.threadId} compaction summary failed: ${detail}`,
+      threadId: at.threadId,
+      provider: at.provider,
+      account: at.account ?? null,
+      reason,
+      failure,
+    });
     this.name = 'ThreadSummaryFailedError';
   }
 }

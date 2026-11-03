@@ -33,7 +33,10 @@ it.effect('kernel refusals become actionable product refusals under their own co
         'interaction-conflict',
       ],
       [new ThreadCompactionConflictError('thread-1'), 'compaction-conflict'],
-      [new ThreadSummaryFailedError('thread-1', 'empty', 'the model produced an empty summary'), 'summary-failed'],
+      [
+        new ThreadSummaryFailedError({ threadId: 'thread-1', provider: 'acme' }, 'empty', 'the model produced an empty summary'),
+        'summary-failed',
+      ],
       [new ThreadCompactionOffError('thread-1'), 'compaction-off'],
       [
         new ThreadCallBroke({ cause: new ThreadRunNotInterruptedError({ threadId: 'thread-1', status: 'completed' }) }),

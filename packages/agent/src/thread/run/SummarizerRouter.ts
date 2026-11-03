@@ -321,7 +321,7 @@ export const makeSummarizerRouter = ({
                 continue;
               }
               return yield* Effect.failCause(attempt.cause).pipe(
-                Effect.mapError((refused) => new ThreadSummaryFailedError(segment.threadId, 'model', refused.message, refused)),
+                Effect.mapError((refused) => new ThreadSummaryFailedError(segment, 'model', refused.message, refused)),
               );
             }
             const { summary, response } = attempt.value;
