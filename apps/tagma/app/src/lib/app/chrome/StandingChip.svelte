@@ -7,6 +7,7 @@
   import type { InstallProgress, NextOffer, NextStep } from '@tagma/server/installation/contract/wire/next';
   import { labelRevision } from '@tagma/server/installation/contract/wire/layout';
   import AgentIcon from '$lib/shared/AgentIcon.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import Bar from '$lib/shared/ui/Bar.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import Told from '$lib/shared/Told.svelte';
@@ -506,15 +507,15 @@
         </div>
         <ol class="flex gap-0.5">
           {#each segments as segment (segment.stage.id)}
-            <li class="grid min-w-0 basis-0 gap-1.5" style:flex-grow={segment.weight}>
+            <li class="grid min-w-0 gap-1.5" style:flex-grow={segment.weight}>
               <Bar
                 used={(segment.fill ?? 1) * 100}
                 color={segment.state === 'done' ? 'var(--status-done)' : 'var(--status-in-work)'}
                 class={['h-1', segment.state === 'active' && segment.fill === null && 'animate-pulse']}
               />
-              <span class={cn('stamp truncate text-meta', segment.state === 'active' ? 'text-foreground' : 'text-muted-foreground')}>
-                {#if segment.state === 'done'}<span class="text-status-done">✓ </span>{/if}{segment.stage.title}
-              </span>
+              <FadeText class={cn('stamp text-meta', segment.state === 'active' ? 'text-foreground' : 'text-muted-foreground')}
+                >{#if segment.state === 'done'}<span class="text-status-done">✓ </span>{/if}{segment.stage.title}</FadeText
+              >
             </li>
           {/each}
         </ol>
