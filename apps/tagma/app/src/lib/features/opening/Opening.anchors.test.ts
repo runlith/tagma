@@ -133,3 +133,22 @@ test('an app route a kind owns stays the page’s click, opens beside on the mod
   detach();
   document.body.replaceChildren();
 });
+
+test('an http anchor whose address does not parse is no site link', () => {
+  const { router } = makeRouterWithLog({ params: { project: 'runlith' }, url: new URL('https://tagma.test/runlith') });
+  const opening = new Opening(testLinks(), {} as never, {} as never, {} as never, new Host('desktop', 'macos'));
+  const here = { resolve: () => router } as unknown as Resolver;
+  const anchor = (href: string): string => {
+    const made = document.createElement('a');
+    made.setAttribute('href', href);
+    return made.href;
+  };
+
+  expect(opening.anchored(anchor('https://'), here)).toBeNull();
+  expect(opening.anchored(anchor('http://example.com:99999/'), here)).toBeNull();
+  expect(opening.anchored(anchor('https://example.com/page'), here)).toEqual({
+    kind: 'site',
+    target: { url: 'https://example.com/page' },
+    from: undefined,
+  });
+});

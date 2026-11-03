@@ -28,7 +28,10 @@ const sites: LinkKind<SiteRef> = {
     },
   },
   full: { words: SYSTEM, icon: SquareArrowOutUpRight, open: (app, link) => app.resolve(Links).system(link.target.url) },
-  anchor: (app, href) => (/^https?:\/\//iu.test(href) && new URL(href).origin !== app.resolve(Router).url.origin ? siteLink(href) : null),
+  anchor: (app, href) => {
+    const url = URL.parse(href);
+    return url !== null && /^https?:$/u.test(url.protocol) && url.origin !== app.resolve(Router).url.origin ? siteLink(href) : null;
+  },
   tab: {
     kind: BROWSER_PANE,
     link: (app, id) => {

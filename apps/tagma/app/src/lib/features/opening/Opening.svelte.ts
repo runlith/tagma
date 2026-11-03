@@ -221,7 +221,7 @@ const routed = (anchor: HTMLAnchorElement, router: Router): boolean =>
   (anchor.target === '' || anchor.target === '_self') &&
   !anchor.relList.contains('external') &&
   !anchor.hasAttribute('data-sveltekit-reload') &&
-  new URL(anchor.href).origin === router.url.origin;
+  URL.parse(anchor.href)?.origin === router.url.origin;
 
 const wordsOf = (words: LinkWords<never>, app: Resolver, link: Link): string =>
   typeof words === 'string' ? words : words(app, link as Link<never>);
