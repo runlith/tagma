@@ -2,7 +2,8 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { CliHarnessProvider, HarnessLoginStatus } from '@runlith/tagma/adapter/provider';
 import { dirname, join, relative, resolve } from 'node:path';
 import { stat } from 'node:fs/promises';
-import { Clock, Context, Deferred, Effect, FileSystem, Layer, Option, PubSub, Semaphore, Stream } from 'effect';
+import { Clock, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, PubSub, Queue, Scope, Semaphore, Stream } from 'effect';
+import { FileWatcher, WatchRefused } from '../../platform/contract/service/watch.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { AccountCli, LoginPlaces, type LoginEnvironment } from '../contract/service/cli.js';
 import { ProviderRegistry } from '../contract/service/registry.js';
@@ -130,6 +131,9 @@ export const defaultLoginsLayer = Layer.effect(
     if (Option.isNone(bound)) return book;
     const places = bound.value;
     const files = yield* FileSystem.FileSystem;
+    const watching = yield* Effect.serviceOption(FileWatcher);
+    if (Option.isNone(watching)) return yield* Effect.die('CLI login discovery requires the file watcher.');
+    const watcher = watching.value;
     const scope = yield* Effect.scope;
     const ready = yield* Deferred.make<void>();
     const moved = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1, replay: 1 }), PubSub.shutdown);
@@ -145,6 +149,7 @@ export const defaultLoginsLayer = Layer.effect(
     const observed = new Set<string>();
     const signed = new Set<string>();
     let profilePending = true;
+    const scans = yield* Semaphore.make(1);
 
     const read = Effect.fn('DefaultLogins.observe')(function* (provider: CliHarnessProvider, directory = book.directoryOf(provider)) {
       const before = book.revision();
@@ -179,41 +184,76 @@ export const defaultLoginsLayer = Layer.effect(
         if (watches.has(key)) continue;
         watches.add(key);
         let stamp = yield* fingerprint(target);
+        const refresh = Effect.fnUntraced(function* () {
+          let next = yield* fingerprint(target);
+          while (next !== stamp) {
+            stamp = next;
+            yield* read(provider, directory);
+            next = yield* fingerprint(target);
+          }
+        });
+        const events = yield* Effect.acquireRelease(Queue.make<string | null>({ capacity: 1, strategy: 'sliding' }), Queue.shutdown);
+        const open = Effect.fnUntraced(function* () {
+          let root = dirname(target);
+          while (!(yield* files.exists(root))) {
+            const parent = dirname(root);
+            if (parent === root) break;
+            root = parent;
+          }
+          const direct = root === dirname(target);
+          const name = relative(root, target).split('/')[0]!;
+          let active = true;
+          const lost = (reason: string) => {
+            if (!active) return;
+            active = false;
+            Queue.offerUnsafe(events, reason);
+          };
+          const subscription = yield* watcher.subscribe(
+            root,
+            { recursive: false, ignore: [] },
+            {
+              heard: (changes) => {
+                if (active && changes.some((change) => change.path === name || change.path === join(root, name)))
+                  Queue.offerUnsafe(events, null);
+              },
+              dropped: lost,
+              ended: lost,
+            },
+          );
+          const close = Effect.andThen(
+            Effect.sync(() => {
+              active = false;
+            }),
+            subscription.close,
+          );
+          return { direct, close };
+        });
+        let subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
+        yield* refresh();
         yield* Effect.forkIn(
           Effect.gen(function* () {
             for (;;) {
-              let root = dirname(target);
-              while (!(yield* files.exists(root))) {
-                const parent = dirname(root);
-                if (parent === root) break;
-                root = parent;
+              const reason = yield* Queue.take(events);
+              if (reason !== null) return yield* new WatchRefused({ message: reason });
+              yield* refresh();
+              if (!subscription.direct) {
+                yield* subscription.close;
+                subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
+                yield* refresh();
               }
-              const direct = root === dirname(target);
-              const name = relative(root, target).split('/')[0]!;
-              yield* files.watch(root).pipe(
-                Stream.filter((event) => event.path === name || event.path === join(root, name)),
-                Stream.take(direct ? Number.POSITIVE_INFINITY : 1),
-                Stream.mapEffect(() =>
-                  Effect.map(fingerprint(target), (next) => {
-                    const changed = next !== stamp;
-                    stamp = next;
-                    return changed;
-                  }),
-                ),
-                Stream.filter((changed) => changed),
-                Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-                Stream.runForEach(() => read(provider, directory)),
-              );
             }
           }).pipe(
-            Effect.catchTag('GateRefusal', (cause) =>
-              Effect.logWarning('the CLI login watch could not keep its observation', { provider: provider.id, target, cause }),
-            ),
-            Effect.catchTag('PlatformError', (cause) =>
-              Effect.logWarning('the CLI login directory cannot be watched; focus still observes unsigned logins', {
-                provider: provider.id,
-                target,
-                cause,
+            Effect.catchTags({
+              GateRefusal: (cause) =>
+                Effect.logWarning('the CLI login watch could not keep its observation', { provider: provider.id, target, cause }),
+              PlatformError: (cause) =>
+                Effect.logWarning('the CLI login directory cannot be watched', { provider: provider.id, target, cause }),
+              WatchRefused: (cause) => Effect.logWarning('the CLI login watch was lost', { provider: provider.id, target, cause }),
+            }),
+            Effect.ensuring(
+              Effect.sync(() => {
+                watches.delete(key);
+                signed.delete(provider.id);
               }),
             ),
           ),
@@ -231,7 +271,7 @@ export const defaultLoginsLayer = Layer.effect(
       book.place(provider, directory);
       const persisted = (yield* rows.of(provider.id)).find((row) => row.directory === directory);
       if (persisted?.signed && persisted.problem == null) signed.add(provider.id);
-      yield* watch(provider, directory);
+      yield* watch(provider, directory).pipe(Effect.provideService(Scope.Scope, scope));
     });
     const settle = Effect.fnUntraced(function* () {
       const providers = declaring();
@@ -255,7 +295,7 @@ export const defaultLoginsLayer = Layer.effect(
         (provider) =>
           Effect.gen(function* () {
             const installed = yield* cli.installed(provider.accounts!.status.program);
-            if (installed._tag === 'Found') {
+            if (installed._tag === 'Found' && !observed.has(provider.id)) {
               yield* read(provider);
               yield* settle();
             }
@@ -282,8 +322,32 @@ export const defaultLoginsLayer = Layer.effect(
       }
       yield* settle();
     }).pipe(
+      scans.withPermit,
       Effect.tapCause((cause) => Effect.logWarning('CLI login discovery did not complete', { cause })),
-      Effect.ensuring(Deferred.succeed(ready, undefined)),
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? Deferred.succeed(ready, undefined) : Effect.void)),
+    );
+    const revisit = Effect.gen(function* () {
+      const environment = yield* places.now;
+      profilePending = environment.reading;
+      places.retain(declaring().map((provider) => provider.accounts!.discovery!.variable));
+      yield* Effect.forEach(
+        declaring(),
+        (provider) =>
+          Effect.gen(function* () {
+            yield* prepare(provider, environment);
+            if (!observed.has(provider.id) && (yield* cli.installed(provider.accounts!.status.program))._tag === 'Found')
+              yield* read(provider);
+            yield* settle();
+          }),
+        { concurrency: 3 },
+      );
+    }).pipe(
+      scans.withPermit,
+      Effect.tapCause((cause) => Effect.logWarning('CLI login discovery could not follow an installation change', { cause })),
+    );
+    yield* Effect.forkIn(
+      Stream.runForEach(cli.changes, () => revisit),
+      scope,
     );
     yield* Effect.forkIn(start, scope);
     return {
@@ -302,6 +366,7 @@ export const defaultLoginsLayer = Layer.effect(
           { concurrency: 3 },
         );
       }).pipe(
+        scans.withPermit,
         Effect.matchEffect({
           onFailure: (cause) => Effect.logWarning('CLI login focus observation could not read its rows', { cause }),
           onSuccess: () => Effect.void,

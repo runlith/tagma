@@ -59,7 +59,8 @@ const makeAccountCli = Effect.gen(function* () {
     installed: (program) =>
       Effect.map(installs.read, (rows): ProgramState => {
         const row = rows.find((one) => adapters.find(one.harness)?.binary === program);
-        if (row === undefined) return { _tag: 'Missing', reason: `no harness runs ${program}` };
+        if (row === undefined)
+          return adapters.all().length === 0 ? { _tag: 'Searching' } : { _tag: 'Missing', reason: `no harness runs ${program}` };
         if (row.binary !== null) return { _tag: 'Found' };
         return row.searching ? { _tag: 'Searching' } : { _tag: 'Missing', reason: row.missing ?? `${program} was not found` };
       }),

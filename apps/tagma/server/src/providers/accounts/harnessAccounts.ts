@@ -224,7 +224,7 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
       let existing = selected === undefined ? null : yield* named(provider, selected);
       if (selected === undefined && auth.discovery !== undefined) {
         const held = yield* stored(provider);
-        if (!held.some((row) => (row.signed && row.problem == null) || row.pending)) {
+        if (!held.some((row) => row.pending) && (projectId === undefined || !held.some((row) => row.signed && row.problem == null))) {
           const current = yield* logins.current(registration);
           if (current?.signed && current.problem == null) {
             const adopted = yield* finish(provider, current.key, current.label);
