@@ -44,9 +44,9 @@ function makeTester<R>(provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect
   const run = <A, E>(body: () => Effect.Effect<A, E, R>): Promise<void> => runTest(provide(Effect.suspend(body)), onTestFinished);
 
   const register =
-    (test: typeof bunIt): Test<R> =>
+    (test: () => typeof bunIt): Test<R> =>
     (name, body, timeout) => {
-      test.serial(name, () => run(body), timeout ?? fallback);
+      test().serial(name, () => run(body), timeout ?? fallback);
     };
 
   const each =
@@ -55,12 +55,15 @@ function makeTester<R>(provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect
       bunIt.serial.each([...cases])(name, (...args) => run(() => body(...(args as unknown as TestArgs<T>))), timeout ?? fallback);
     };
 
-  return Object.assign(register(bunIt), {
-    skip: register(bunIt.skip),
-    only: register(bunIt.only),
-    failing: register(bunIt.failing),
-    each,
-  });
+  return Object.assign(
+    register(() => bunIt),
+    {
+      skip: register(() => bunIt.skip),
+      only: register(() => bunIt.only),
+      failing: register(() => bunIt.failing),
+      each,
+    },
+  );
 }
 
 function withMethods<T extends object>(methods: T): typeof bunIt & T {

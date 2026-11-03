@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 
-const run = async (files: readonly string[], flags: readonly string[] = []) => {
+const run = async (files: readonly string[], flags: readonly string[] = [], env: Readonly<Record<string, string>> = {}) => {
   const child = Bun.spawn([process.execPath, 'test', ...files, '--parallel=1', ...flags], {
     cwd: import.meta.dir + '/..',
+    env: { ...process.env, ...env },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -17,6 +18,12 @@ test('Bun selection and expected-failure modes apply to both Effect testers', as
   const only = await run(['./src/testing/selectors.fixture.ts'], ['--only']);
   expect(only.status).toBe(0);
   expect(only.record).toEqual({ ran: ['effect', 'live'] });
+});
+
+test('the Effect testers load in CI, where Bun refuses every read of test.only', async () => {
+  const ci = await run(['./src/testing/modifiers.fixture.ts'], [], { CI: 'true' });
+  expect(ci.status).toBe(0);
+  expect(ci.record).toEqual({ ran: ['effect', 'live', 'failed-effect', 'failed-live'] });
 });
 
 test('a layer applies its own acquisition and release deadlines rather than the runner default', async () => {
