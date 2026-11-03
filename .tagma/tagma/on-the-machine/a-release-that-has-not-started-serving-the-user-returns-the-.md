@@ -21,6 +21,6 @@ sources:
 
 **How.** An automatic install attempt between `install-from`, `serve` and the desktop loader; retry and report-saving in the window.
 
-**Behaviour.** Before first opening the stores, the new release saves copies of the databases, and the move counts as successful only after opening the local door. A failure before it restores the copies and the previous choice; an interrupted start is picked up by the next launch. If the data could not be returned, the new release stays selected and first repeats the return instead of opening the data for work. The window reports the outcome and does not re-impose an already failed attempt.
+**Behaviour.** Before first opening the stores, the new release saves copies of the databases, and the move counts as successful only after opening the local door. A failure before it restores the copies and the previous choice; an interrupted start is picked up by the next launch. If the data could not be returned, the new release stays selected and first repeats the return instead of opening the data for work, and no other release installs over it until the data is back. The window reports the outcome and does not re-impose an already failed attempt.
 
 **Limits.** The guard covers a move that has not yet started serving the user. After an open door, data is not returned automatically. A first release with no previous installation cannot bring back a previous program. A disk fault may leave the return unfinished; the window names that separately from a plain rollback.

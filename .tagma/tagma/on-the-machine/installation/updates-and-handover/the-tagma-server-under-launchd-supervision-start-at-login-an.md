@@ -20,10 +20,7 @@ Right now the first client that needs the Tagma server raises it, and the server
 
 - **Live terminals and commands.** After a job dies launchd kills its group's remaining processes, while the execution host currently launches without `detached` (`executions/host/boot.ts:216`). A plain server restart would sever terminals, yet `cli/server.ts` promises they survive a restart without `--force`.
 - **Restart.** `launchctl kickstart -k` kills the process and never lets it answer the restart request and close the stores. The standard road is an orderly exit with a nonzero code under `KeepAlive.SuccessfulExit = false`.
-- **Rolling back to the previous version** by switching `current` fails after a migration: the old version refuses to open a database with a migration it does not know (`platform/store/chain.ts:57–63`). Three more things stand in the way:
-  - the attempt counter before `exec` never tells a crash from a deliberate stop or a hang;
-  - `pruneVersions` keeps no last working version;
-  - `swapCurrent` is not serialized with other writers.
+- **Rolling back to the previous version** by switching `current` fails after a migration: the old version refuses to open a database with a migration it does not know (`platform/store/chain.ts`). The attempt returns the data only for a start before its door, and its start counter before `exec` never tells a crash from a deliberate stop or a hang.
 - **Environment.** Under launchd there is no user `PATH`, and the server stops finding Claude Code, Codex and Homebrew tools (`external-harnesses/birth/installed.ts`).
 - **Modes and channels.**
   - `tagma:try` and child CLIs inherit the agent-mode mark from the environment.

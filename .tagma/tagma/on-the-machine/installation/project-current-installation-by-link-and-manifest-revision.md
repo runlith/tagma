@@ -5,11 +5,11 @@ ord: 65
 tags: ["task"]
 fields:
   {
-    "holder": "tagma:01a1a256-8f22-7269-86e8-731b8c64af1d",
+    "holder": "tagma:01a1a245-7a18-7360-ba89-67591ec4329c",
     "status": "in_work"
   }
 edges:
   - kind: relates
     to: 01a0fd8b-bef5-738e-8ee9-97f36cc306ce
 ---
-Keep current installation identity proof at the closure owner, reused for an unchanged version and invalidated by current-link or manifest changes. Route succession and window meeting through the owner projection without changing typed failure semantics; prove invalidation and shared reads through public doors.
+Succession now uses the closure owner's projection keyed by canonical target and manifest realpath, device, inode, size, modification and change timestamps. The succession.current regression failed on repeated installation.read proof spans, then passed concurrent-read deduplication, A→B→A reuse, same-size changes with preserved mtime, missing→present and a link switch during proof; projection.itest.ts passed seeds 1, 2 and 3. The synchronous read/at/identified owner API is handed to the desktop update-path owner; its caller adaptation remains part of this finding until landed.
