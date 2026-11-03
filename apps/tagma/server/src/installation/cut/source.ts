@@ -43,13 +43,21 @@ export const capturedSource = Effect.fnUntraced(function* (root: string) {
   );
 });
 
+const REFUSED_EXIT = 2;
+
 const graphPath = (path: string): boolean => path === '.tagma' || path.startsWith('.tagma/');
-const unblock = ['commit the changes to include them in HEAD', 'bun run tagma:build --tree — deliberately build the working tree'];
+const COMMIT = 'commit the changes to include them in HEAD';
 
 export const buildSource = Effect.fn('installation.buildHead')(function* (input: SourceBuild) {
   const git = yield* Git;
   const files = yield* FileSystem.FileSystem;
   const at = yield* CurrentInvocation;
+  const unblock =
+    input.kind === 'tree'
+      ? []
+      : input.command === 'tagma:release'
+        ? [COMMIT]
+        : [COMMIT, 'bun run tagma:build --tree — deliberately build the working tree'];
   const failed = (message: string) => new SourceRefused({ message, unblock });
   const status = yield* statusAt(git, input.checkout, { untracked: 'all', monitor: false }).pipe(
     Effect.mapError((failure) => failed(troubleOf(failure))),
@@ -113,7 +121,7 @@ export const buildSource = Effect.fn('installation.buildHead')(function* (input:
       return yield* new SourceRefused({
         message: `${args.join(' ')} exited ${status} while building ${input.kind} of ${input.checkout}`,
         unblock,
-        ...(entry ? { exited: status } : {}),
+        ...(entry && status === REFUSED_EXIT ? { exited: status } : {}),
       });
     }
   });

@@ -77,7 +77,13 @@ it.live(
       const runBuild = (name: string, args: readonly string[], more: Record<string, string> = {}) =>
         spawnedEffect([process.execPath, 'run', 'tagma:build', '--no-restart', ...args], {
           cwd: checkout,
-          env: { ...process.env, TAGMA_INSTALL_ROOT: join(tree, name), SOURCE_CHECKOUT: checkout, ...more },
+          env: {
+            ...process.env,
+            TAGMA_INSTALL_ROOT: join(tree, name),
+            SOURCE_CHECKOUT: checkout,
+            SOURCE_INPUTS: 'skills/_probe-peer/SKILL.md',
+            ...more,
+          },
         });
       const deliberate = yield* runBuild('tree', ['--tree']);
       expect(deliberate.exitCode).toBe(0);

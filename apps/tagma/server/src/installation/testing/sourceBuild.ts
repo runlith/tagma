@@ -29,7 +29,7 @@ export const runSourceBuild = async (root: string, args: readonly string[]): Pro
     build(unused, args, {
       channel: CHANNELS.dev,
       checkout: root,
-      inputs: ['skills/_probe-peer/SKILL.md'],
+      inputs: process.env.SOURCE_INPUTS?.split('\n').filter((path) => path !== '') ?? [],
       composition: Effect.die('a source build evaluates its captured entry instead of the working composition'),
     }).pipe(Effect.provide(testProcesses)),
   );
