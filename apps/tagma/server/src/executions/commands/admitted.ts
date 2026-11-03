@@ -41,7 +41,7 @@ export type AdmittedCommand = {
   readonly requested?: number;
 };
 
-export type CommandSaid = { readonly text: string; readonly gap: boolean; readonly unread?: string };
+export type CommandSaid = { readonly text: string; readonly gap: boolean };
 
 export type AdmittedEnding =
   | {
@@ -153,13 +153,19 @@ export const admittedWatch = Effect.fnUntraced(function* (
               ),
         ),
   );
-  const unread: CommandSaid = {
-    text: '',
-    gap: true,
-    unread: said._tag === 'Failure' ? `${input.subject}'s console could not be read: ${refusedAs(said.failure)}` : undefined,
-  };
-  const [stdout, stderr] = said._tag === 'Failure' ? [unread, unread] : said.success;
   const ending = endingOf(input, decided.success);
+  if (said._tag === 'Failure') {
+    const lost = `its console could not be read: ${refusedAs(said.failure)}`;
+    return {
+      _tag: 'Unread',
+      execution,
+      said: 'unread' in ending ? `${ending.unread}; ${lost}` : `${input.subject} exited ${ending.exitCode}, but ${lost}`,
+      cancelled: 'unread' in ending ? ending.cancelled : undefined,
+      stdout: UNREAD,
+      stderr: UNREAD,
+    };
+  }
+  const [stdout, stderr] = said.success;
   return 'unread' in ending
     ? {
         _tag: 'Unread',

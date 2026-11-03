@@ -100,7 +100,53 @@ export default defineProgram({ audit: async ({ tree, base }) => ({ tree: await r
     }),
   );
 
-  it.effect('one key needing preparation does not end the others: the refusal names every unprepared key at once', () =>
+  it.effect('unprepared keys are prepared by one whole reading of the tree and the group is then judged, the prepared key untouched', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'checker-prepare-' });
+      yield* files.writeFileString(
+        join(root, 'check.ts'),
+        `import { defineProgram } from '@runlith/tagma/rules';
+import { existsSync, writeFileSync } from 'node:fs';
+class NeedsPreparation extends Error { name = 'NeedsPreparation'; }
+const indexed = (what) => ({ tree, mode }) => {
+  const marker = ${JSON.stringify(root)} + '/' + what + '.index';
+  if (mode === 'measure') writeFileSync(marker, 'whole');
+  else if (!existsSync(marker)) throw new NeedsPreparation(what + ' holds no index');
+  return { tree: { findings: [{ fingerprint: what, path: tree.paths[0] ?? 'src/a.ts', message: what }] } };
+};
+export default defineProgram({
+  first: indexed('first'),
+  second: ({ tree }) => ({ tree: { findings: [{ fingerprint: 'second', path: tree.paths[0], message: 'ready' }] } }),
+  third: indexed('third'),
+});`,
+      );
+      const head = committed(root, ['check.ts']);
+      const checks = ['first', 'second', 'third'].map((name) => ({
+        key: name,
+        program: { program: 'check.ts', name, concern: 'code' as const, needs: [], params: {} },
+      }));
+      const checker = checkerFor(root, checks[0]!);
+      const bindings: ProgramBinding[] = checks.map((check) => ({ rule: check.key, check, places: ['src'], debt: [], checker }));
+      const judged: GroupSubject = { ...subject(root), tree: head, base: null, sides: [subject(root).sides[0]] };
+      const launches: ProgramLaunch[] = [];
+      const answered = (yield* judgePrograms(judged, bindings).pipe(Effect.provideService(ProgramRoad, localRoad(launches)))).get(
+        checker.id,
+      )!.answer;
+      const answer = yield* Effect.fromResult(answered);
+      expect(answer.map((one) => [one.rule, one.verdict.violations.length])).toEqual([
+        ['first', 1],
+        ['second', 1],
+        ['third', 1],
+      ]);
+      const invocations = launches.map((one) => JSON.parse(one.stdin) as ProgramInvocation);
+      expect(invocations.map((one) => one.mode)).toEqual([undefined, 'measure', undefined]);
+      expect(invocations[1]!.keys.map((key) => key.id)).toEqual(['first', 'third']);
+      expect(invocations[1]!.sides).toEqual([{ side: 'tree', paths: null, files: null }]);
+    }),
+  );
+
+  it.effect('a thrown key beside unprepared ones refuses once, naming every key that gave no reading', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
       const root = yield* files.makeTempDirectoryScoped({ prefix: 'checker-unprepared-' });
@@ -132,7 +178,6 @@ export default defineProgram({
       expect(refused.failure.reason).toContain('third is unprepared: third holds no index');
       expect(refused.failure.reason).toContain('fourth threw: Error: boom');
       expect(refused.failure.reason).not.toContain('second');
-      expect(refused.failure.ways?.join(' ')).toContain('first, third');
     }),
   );
 
