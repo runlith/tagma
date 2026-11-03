@@ -24,6 +24,9 @@ import { blockName } from '../../../graph/contract/wire/references.js';
 import { graphPool, machineGraphOf } from '../../../graph/testing/doubles.js';
 import { routedContext } from '../../../graph/serving/routing.js';
 import { runGit } from '../../../platform/git/ownGit.js';
+import type { Caller } from '../../../platform/contract/wire/caller.js';
+import { MachineUnits } from '../../../platform/contract/service/units.js';
+import { makeThreadRecords } from '../../../thread-record/layer.js';
 
 const signed = signedBy({ harness: 'test', key: 'copied-blocks' });
 
@@ -33,6 +36,7 @@ const toolsAt = Effect.fnUntraced(function* (
   routed: ReturnType<typeof routedContext>,
   served: ServedGraph,
   project: { readonly id: number; readonly name: string },
+  caller: Caller = { actor: { kind: 'operator' }, files: null },
 ) {
   const vocabulary = yield* Effect.provide(
     Effect.flatMap(Tags, (tags) => tags.reader(project.id)),
@@ -40,7 +44,7 @@ const toolsAt = Effect.fnUntraced(function* (
   );
   const catalog = yield* fixtureNativeCatalog(
     {
-      caller: { actor: { kind: 'operator' }, files: null },
+      caller,
       place: { root: served.checkout, origin: null },
       project,
       vocabulary,
@@ -80,9 +84,14 @@ const landed = (routed: ReturnType<typeof routedContext>, name: string, rootPath
     Context.add(routed, RegisteredRoots, RegisteredRoots.of({ joined: () => Effect.void, left: () => Effect.void })),
   );
 
-layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law']) }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
-  excludeTestServices: true,
-})('a block copied into another project', (it) => {
+layer(
+  demoGraphLayer({ repos: ['law', 'brand'], prepareEffect: prepareTeamCopies(['law', 'brand']) }).pipe(
+    Layer.provideMerge(BunFileSystem.layer),
+  ),
+  {
+    excludeTestServices: true,
+  },
+)('a block copied into another project', (it) => {
   it.effect('is refused by its name alone with an address per copy, and the address or the project reaches the copy from any field', () =>
     withDemo(({ graph, context, project, demoRoot, projectId, root, nameOf }) =>
       Effect.scoped(
@@ -156,6 +165,79 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
             );
           expect(yield* titleIn(servedCopy)).toBe('Law of the copy, by address');
           expect(yield* titleIn(servedLaw)).toBe('Law');
+        }),
+      ),
+    ),
+  );
+
+  it.effect('a move followed by a project-scoped parent reference names the foreign address that reaches it', () =>
+    withDemo(({ graph, context, project, demoRoot, projectId, fixture }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const law = project('law');
+          const machine = machineGraphOf(context);
+          const pool = yield* Effect.acquireRelease(
+            graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
+            (held) => held.dispose(),
+          );
+          const routed = routedContext(machine, pool);
+          const served = yield* pool.resolve({ projectId });
+          const source = yield* pool.resolve({ projectId: law.id });
+          const brand = yield* graph.projects.byId(project('brand').id);
+          const destination = yield* pool.resolve({ projectId: brand.id });
+          const records = yield* Effect.provide(makeThreadRecords, context);
+          yield* Context.get(context, MachineUnits).write(records.writes, (unit) =>
+            records.insert(unit, {
+              id: 'moving-blocks',
+              projectId,
+              spawnRootId: 'moving-blocks',
+              principalId: 'owner',
+              agentId: 'tagma',
+            }),
+          );
+          const caller: Caller = {
+            actor: {
+              kind: 'thread',
+              threadId: 'moving-blocks',
+              projectId,
+              principalId: 'owner',
+              session: { harness: 'tagma', key: 'moving-blocks' },
+            },
+            files: null,
+          };
+          const call = yield* toolsAt(routed, served, { id: projectId, name: 'home' }, caller);
+          const rootName = (copy: ServedGraph) =>
+            Effect.map(Context.get(copy.context, Blocks).rootBlockOf(copy.projectId), (root) => blockName(root.uuid));
+          const sourceRoot = yield* rootName(source);
+          const destinationRoot = yield* rootName(destination);
+          const born = (yield* call('create_block', { project: law.id, parentId: sourceRoot, title: 'Moving parent' })) as {
+            block: { name: string };
+          };
+          expect(born).toMatchObject({ status: 'ok' });
+          const child = (yield* call('create_block', { project: law.id, parentId: sourceRoot, title: 'Following child' })) as {
+            block: { name: string };
+          };
+          expect(child).toMatchObject({ status: 'ok' });
+          const branchRoot = yield* fixture.directory('before-move');
+          yield* runGit(graph.git, 'before-move', ['add', '-A'], { cwd: law.root });
+          yield* runGit(graph.git, 'before-move', ['-c', 'user.name=team', '-c', 'user.email=team@tagma', 'commit', '-qm', 'before move'], {
+            cwd: law.root,
+          });
+          yield* runGit(graph.git, 'before-move', ['worktree', 'add', '-b', 'before-move', branchRoot], { cwd: law.root });
+          yield* pool.resolve({ projectId: law.id, cwd: branchRoot });
+          expect(yield* call('update_block', { project: law.id, blockId: born.block.name, parentId: destinationRoot })).toMatchObject({
+            status: 'ok',
+            moved: { blocks: 1 },
+          });
+          const input = { project: law.id, blockId: child.block.name, parentId: born.block.name };
+          const refused = yield* call('update_block', input);
+          expect(refused).toMatchObject({ code: 'not-found', reason: expect.stringContaining(brand.name) });
+          const address = (refused.unblock as readonly string[])[0]!.split(' ')[0]!;
+          expect(address).toBe(`${brand.id}/${born.block.name}`);
+          expect(yield* call('update_block', { ...input, parentId: address })).toMatchObject({ status: 'ok', moved: { blocks: 1 } });
+          expect(yield* call('read_block', { blockIds: [`${brand.id}/${child.block.name}`] })).toMatchObject({
+            reads: [{ name: child.block.name, projectId: brand.id, parentName: born.block.name }],
+          });
         }),
       ),
     ),

@@ -5,7 +5,7 @@ import type { GraphStore, StoreFailure } from '../../platform/contract/service/s
 import { Blocks, Edges, type BlockLink, type LinkTarget } from '../contract/service/blocks.js';
 import type { EdgeKind } from '../contract/wire/edges.js';
 import type { FarAddress } from '../contract/wire/far.js';
-import { blockAddress, distinctTails } from '../contract/wire/references.js';
+import { addressed, blockAddress, blockName, distinctLength, distinctTails, tailOf } from '../contract/wire/references.js';
 import { BlockNames } from '../contract/service/acts.js';
 import { type BlockRow } from '../contract/service/acts.js';
 import type { GraphServices } from '../contract/service/services.js';
@@ -40,7 +40,12 @@ type Elsewhere = {
 
 type ElsewhereReading = { readonly hit: Elsewhere | undefined; readonly unreachable: readonly UnreachableProject[] };
 
-type Holding = { readonly canonical: boolean; readonly checkout: string; readonly blocks: ReadonlySet<string> };
+type Holding = {
+  readonly canonical: boolean;
+  readonly checkout: string;
+  readonly blocks: ReadonlySet<string>;
+  readonly live: ReadonlySet<string>;
+};
 
 const indexHolding = Effect.fn('crossing.indexHolding')(function* (
   name: string,
@@ -51,18 +56,22 @@ const indexHolding = Effect.fn('crossing.indexHolding')(function* (
   if (pool === null) return null;
   const reading = yield* pool.titles({ projectIds, names: [name], ...(excluding === undefined ? {} : { excluding }) });
   const holding = new Map<number, Holding>();
-  const hold = (projectId: number, canonical: boolean, checkout: string, uuid: string | null) => {
+  const hold = (projectId: number, canonical: boolean, checkout: string, uuid: string | null, trashed = false) => {
     const known = holding.get(projectId);
     const blocks = new Set(known?.blocks);
-    if (uuid !== null) blocks.add(uuid);
+    const live = new Set(known?.live);
+    if (uuid !== null) {
+      blocks.add(uuid);
+      if (!trashed) live.add(uuid);
+    }
     const better =
       known === undefined ||
       (uuid !== null && known.blocks.size === 0) ||
       (canonical && !known.canonical && (uuid !== null || known.blocks.size === 0));
     const kept = better ? { canonical, checkout } : known;
-    holding.set(projectId, { canonical: kept.canonical, checkout: kept.checkout, blocks });
+    holding.set(projectId, { canonical: kept.canonical, checkout: kept.checkout, blocks, live });
   };
-  for (const row of reading.titles) hold(row.projectId, row.canonical, row.checkout, row.uuid);
+  for (const row of reading.titles) hold(row.projectId, row.canonical, row.checkout, row.uuid, row.trashed);
   for (const copy of reading.unindexed) if (copy.canonical) hold(copy.projectId, true, copy.checkout, null);
   for (const copy of reading.unreadable) if (copy.branch === null) hold(copy.projectId, true, copy.checkout, null);
   return holding;
@@ -452,12 +461,40 @@ export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
 
 export const scoped = (name: string) => cross(name, (id) => Effect.flatMap(Blocks, (blocks) => blocks.blockById(id)));
 
-const heldApart = (name: string, target: GraphTarget, here: GraphCopy | null) => {
+const heldApart = Effect.fn('crossing.heldApart')(function* (name: string, target: Target, here: GraphCopy | null) {
   const there = copyOf(target);
   if (there == null || here === null) return null;
+  const projects = yield* Projects;
+  const global = yield* projects.global();
+  const listed = yield* projects.list();
+  const targets = (global === undefined || listed.some((project) => project.id === global.id) ? listed : [...listed, global]).filter(
+    (project) => project.id !== here.projectId,
+  );
+  const short = blockName(target.row.uuid);
+  const holding = yield* indexHolding(
+    short,
+    targets.map((project) => project.id),
+    undefined,
+  );
+  const holders = targets.flatMap((project) => {
+    const copy = holding?.get(project.id);
+    if (copy?.live.has(target.row.uuid) !== true) return [];
+    const tail = copy.blocks.size === 1 ? short : tailOf(target.row.uuid, distinctLength([...copy.blocks]));
+    return [{ project, address: addressed(project.id, tail) }];
+  });
+  const [first, ...rest] = holders.map(
+    ({ project, address }) => `${address} — use this address for the block in project "${project.name}" (${project.id})`,
+  );
+  if (first !== undefined) {
+    return new GateRefusal(
+      'not-found',
+      `${name} is absent from this graph copy; it stands in ${holders.map(({ project }) => `project "${project.name}" (${project.id})`).join(', ')}`,
+      [first, ...rest],
+    );
+  }
   if (there.projectId !== here.projectId)
     return new GateRefusal('not-found', `${name} stands in project ${there.projectId}, not in the graph this call writes`, [
-      `name a block of project ${here.projectId}`,
+      `${addressed(there.projectId, blockAddress(name).name)} — use this address for the block in project ${there.projectId}`,
     ]);
   return new GateRefusal(
     'not-found',
@@ -467,7 +504,7 @@ const heldApart = (name: string, target: GraphTarget, here: GraphCopy | null) =>
       `or name a block the copy of ${here.checkout} holds`,
     ],
   );
-};
+});
 
 const idHere = Effect.fn('crossing.idHere')(function* (name: string, target: Target) {
   const current = yield* CurrentGraph;
@@ -476,7 +513,9 @@ const idHere = Effect.fn('crossing.idHere')(function* (name: string, target: Tar
     .idOfName(target.row.uuid)
     .pipe(
       Effect.catchTag('GateRefusal', (refusal) =>
-        Effect.fail(refusal.code === 'not-found' ? (heldApart(name, target, here) ?? refusal) : refusal),
+        refusal.code === 'not-found'
+          ? Effect.flatMap(heldApart(name, target, here), (apart) => Effect.fail(apart ?? refusal))
+          : Effect.fail(refusal),
       ),
     );
 });
