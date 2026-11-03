@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Git, gitLayer } from '@runlith/git/Git';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { compareReleases, type Feed, FEED_FILE, type FeedRelease, newestOf, tagOf } from '../contract/wire/feed.js';
+import { compareReleases, type Feed, FEED_FILE, type FeedRelease, newestOf, releaseOfTag, tagOf } from '../contract/wire/feed.js';
 import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
@@ -335,24 +335,52 @@ export const cutCommand = Effect.fnUntraced(function* (given: readonly string[],
   yield* notarizeCommand(given, composition);
 });
 
-const releasedHead = Effect.fnUntraced(function* (checkout: string) {
-  const tagged = yield* (yield* Git).run(['tag', '--points-at', 'HEAD', '--list', tagOf('*')], { cwd: checkout });
-  if (tagged.status !== 0) return yield* Effect.fail(`git tag --points-at HEAD exited ${tagged.status}: ${tagged.stderr.trim()}`);
-  return tagged.stdout.trim().split('\n')[0] || null;
+type Head = { readonly _tag: 'Released'; readonly release: string } | { readonly _tag: 'Cut' } | { readonly _tag: 'Uncut' };
+
+const headOf = Effect.fnUntraced(function* (checkout: string, cut: string): Effect.fn.Return<Head, string, CutMachine> {
+  const files = yield* FileSystem.FileSystem;
+  const git = yield* Git;
+  const asked = (args: readonly string[]) =>
+    git.run(args, { cwd: checkout }).pipe(Effect.mapError((failure) => `git ${args[0]}: ${failure.message}`));
+  const head = yield* asked(['rev-parse', 'HEAD']);
+  if (head.status !== 0) return yield* Effect.fail(`git rev-parse HEAD exited ${head.status}: ${head.stderr.trim()}`);
+  const commit = head.stdout.trim();
+  const tagged = yield* asked(['tag', '--points-at', commit, '--list', tagOf('*')]);
+  if (tagged.status !== 0) return yield* Effect.fail(`git tag --points-at exited ${tagged.status}: ${tagged.stderr.trim()}`);
+  const released = tagged.stdout
+    .split('\n')
+    .map((line) => releaseOfTag(line.trim()))
+    .filter((release) => release !== null)
+    .sort((one, other) => compareReleases(other, one))[0];
+  if (released !== undefined) return { _tag: 'Released', release: released };
+  const home = yield* standingHome(cut).pipe(Effect.mapError((failure) => failure.detail));
+  const recordPath = join(home ?? cut, RELEASE_RECORD);
+  const present = yield* files.exists(recordPath).pipe(Effect.mapError((error) => `${recordPath}: ${error.reason._tag}`));
+  if (home === null || !present) return { _tag: 'Uncut' };
+  const decoded = decodeRecord(
+    yield* files.readFileString(recordPath).pipe(Effect.mapError((error) => `${recordPath}: ${error.reason._tag}`)),
+  );
+  if (decoded._tag === 'Failure') return { _tag: 'Uncut' };
+  const cutFrom = yield* asked(['rev-parse', '--verify', '--quiet', `${decoded.success.commit}^{commit}`]);
+  return cutFrom.status === 0 && cutFrom.stdout.trim() === commit ? { _tag: 'Cut' } : { _tag: 'Uncut' };
 });
 
 export const shipCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
-  const json = given.includes('--json');
+  let json = given.includes('--json');
   const told = toldBy(USAGE, () => json);
-  const head = yield* Effect.result(releasedHead(composition.roots.checkout).pipe(Effect.provide(machine)));
-  if (head._tag === 'Failure') {
-    const detail = typeof head.failure === 'string' ? head.failure : head.failure.message;
-    return told('publish-refused', `tag: ${detail}`, [AGAIN]);
+  const flags = flagsOf(given, told);
+  json = flags.json;
+  const { cut } = cutIn(composition, flags.value('--out'), told);
+  const head = yield* Effect.result(headOf(composition.roots.checkout, cut).pipe(Effect.provide(machine)));
+  if (head._tag === 'Failure') return told('publish-refused', `head: ${head.failure}`, [AGAIN]);
+  if (head.success._tag === 'Released') {
+    const { release } = head.success;
+    if (json) console.log(JSON.stringify({ release, published: true }));
+    else console.log(`${composition.channel.name} ${release} is HEAD and is published; a commit is released once`);
+    return;
   }
-  if (head.success === null) {
-    yield* releaseCommand(given, composition, !json);
-    yield* notarizeCommand(given, composition, !json);
-  }
+  if (head.success._tag === 'Uncut') yield* releaseCommand(given, composition, !json);
+  yield* notarizeCommand(given, composition, !json);
   yield* publishCommand(given, composition);
 });
 

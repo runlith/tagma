@@ -1,4 +1,4 @@
-import { Clock, Data, Effect, FileSystem, type PlatformError, Schema, Semaphore } from 'effect';
+import { Clock, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { realpathSync } from 'node:fs';
 import { basename, dirname, relative as relativePath, resolve } from 'node:path';
@@ -199,8 +199,6 @@ const bundled = Effect.fnUntraced(function* (
 });
 
 const WATCH_ENGINE = 'watch.native';
-
-const workingDirectory = Semaphore.makeUnsafe(1);
 
 const labelled = Effect.fnUntraced(function* (
   git: Git['Service'],
@@ -471,7 +469,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
           ...server.written.map((path): readonly [InstallationRole, string] => ['server', relativePath(root, path)]),
         ];
       }),
-    ).pipe(workingDirectory.withPermit),
+    ),
     (error) => String(error),
   );
 

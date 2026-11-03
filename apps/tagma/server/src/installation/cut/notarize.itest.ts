@@ -8,7 +8,7 @@ import { Deferred, Effect, Fiber, Layer } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { type Apple, sealingNotary } from './notarize.js';
+import { type Apple, NotarizationRefused, sealingNotary } from './notarize.js';
 import { packRelease } from './pipeline.js';
 import { notarizeRelease } from './publish.js';
 import { RELEASE_RECORD, type ReleaseRecord } from './stage.js';
@@ -22,47 +22,83 @@ const machine = Layer.mergeAll(spawning, BunFileSystem.layer);
 const sha = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
 const submissionId = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const recordAt = (out: string): ReleaseRecord => JSON.parse(readFileSync(join(out, RELEASE_RECORD), 'utf8'));
+const appOf = (path: string) => readFileSync(join(path, 'Contents', 'Info.plist'), 'utf8');
+const stapledIn = (path: string) => existsSync(join(path, 'Contents', 'ticket'));
+
+const cutAt = Effect.fnUntraced(function* (name: string) {
+  const out = join(scratch, name);
+  mkdirSync(out);
+  const archive = 'tagma-0.1.0-darwin-arm64.tar.gz';
+  const x64 = 'tagma-0.1.0-darwin-x64.tar.gz';
+  for (const [arch, file] of [
+    ['arm64', archive],
+    ['x64', x64],
+  ] as const) {
+    const built = join(scratch, `${name}-built-${arch}`);
+    mkdirSync(join(built, 'Tagma.app', 'Contents'), { recursive: true });
+    writeFileSync(join(built, 'Tagma.app', 'Contents', 'Info.plist'), arch);
+    yield* packRelease(built, join(out, file), 'Tagma.app').pipe(Effect.provide(machine));
+  }
+  const images = { 'darwin-arm64': 'Tagma-0.1.0-arm64.dmg', 'darwin-x64': 'Tagma-0.1.0-x64.dmg' };
+  for (const image of Object.values(images)) writeFileSync(join(out, image), 'the dmg as cut');
+  const record: ReleaseRecord = {
+    release: '0.1.0',
+    commit: 'c'.repeat(40),
+    platforms: {
+      'darwin-arm64': { archive, sha256: sha(join(out, archive)), size: readFileSync(join(out, archive)).length },
+      'darwin-x64': { archive: x64, sha256: sha(join(out, x64)), size: readFileSync(join(out, x64)).length },
+    },
+    images,
+    stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
+    irreversible: [],
+    notarized: false,
+  };
+  writeFileSync(join(out, RELEASE_RECORD), JSON.stringify(record));
+  return out;
+});
+
+const accepting = (opens: Apple['opens']): Apple => {
+  let sent = 0;
+  return {
+    submit: () => Effect.sync(() => submissionId((sent += 1))),
+    accepted: () => Effect.void,
+    staple: (path) => Effect.sync(() => (path.endsWith('.app') ? writeFileSync(join(path, 'Contents', 'ticket'), '') : undefined)),
+    assess: () => Effect.void,
+    opens,
+    image: (app, image) => Effect.sync(() => writeFileSync(image, `the dmg around ${appOf(app)}`)),
+  };
+};
+
+it.live('a disk image Gatekeeper would not open refuses the notarization, and the cut stands unnotarized and whole', () =>
+  Effect.gen(function* () {
+    const out = yield* cutAt('refused');
+    const before = recordAt(out);
+    const notary = yield* sealingNotary(
+      accepting((image) =>
+        basename(image).includes('x64') ? Effect.fail(new NotarizationRefused({ detail: 'rejected', unblock: [] })) : Effect.void,
+      ),
+    ).pipe(Effect.provide(machine));
+    const refused = yield* Effect.result(notarizeRelease(notary, out).pipe(Effect.provide(machine)));
+    const standing = recordAt(out);
+
+    expect(refused._tag === 'Failure' && refused.failure.detail).toBe('rejected');
+    expect(standing).toEqual(before);
+    expect(Object.values(standing.platforms).every((one) => sha(join(out, one.archive)) === one.sha256)).toBe(true);
+  }),
+);
 
 it.live(
   'notarization submits, staples and judges the application and the disk image of every platform, the platforms side by side; stopped while Apple checks an image, it leaves the cut standing whole, and notarizing again sends nothing again',
   () =>
     Effect.gen(function* () {
-      const out = join(scratch, 'release');
-      mkdirSync(out);
-      const archive = 'tagma-0.1.0-darwin-arm64.tar.gz';
-      const x64 = 'tagma-0.1.0-darwin-x64.tar.gz';
-      for (const [arch, name] of [
-        ['arm64', archive],
-        ['x64', x64],
-      ] as const) {
-        const built = join(scratch, `built-${arch}`);
-        mkdirSync(join(built, 'Tagma.app', 'Contents'), { recursive: true });
-        writeFileSync(join(built, 'Tagma.app', 'Contents', 'Info.plist'), arch);
-        yield* packRelease(built, join(out, name), 'Tagma.app').pipe(Effect.provide(machine));
-      }
-      const appOf = (path: string) => readFileSync(join(path, 'Contents', 'Info.plist'), 'utf8');
-      const stapledIn = (path: string) => existsSync(join(path, 'Contents', 'ticket'));
-      const images = { 'darwin-arm64': 'Tagma-0.1.0-arm64.dmg', 'darwin-x64': 'Tagma-0.1.0-x64.dmg' };
-      for (const image of Object.values(images)) writeFileSync(join(out, image), 'the dmg as cut');
-      const record: ReleaseRecord = {
-        release: '0.1.0',
-        commit: 'c'.repeat(40),
-        platforms: {
-          'darwin-arm64': { archive, sha256: sha(join(out, archive)), size: readFileSync(join(out, archive)).length },
-          'darwin-x64': { archive: x64, sha256: sha(join(out, x64)), size: readFileSync(join(out, x64)).length },
-        },
-        images,
-        stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
-        irreversible: [],
-        notarized: false,
-      };
-      writeFileSync(join(out, RELEASE_RECORD), JSON.stringify(record));
+      const out = yield* cutAt('release');
 
       const submitted: string[] = [];
       const stapled = new Set<string>();
       const opened = new Set<string>();
       const checking = yield* Deferred.make<void>();
       const x64Sent = yield* Deferred.make<void>();
+      const arm64Opened = yield* Deferred.make<void>();
       const stopping = { during: true };
       const nameOf = (id: string) => submitted[Number(id.slice(-12)) - 1];
       const apple: Apple = {
@@ -77,7 +113,7 @@ it.live(
             const name = nameOf(id);
             if (name === 'arm64') return Deferred.await(x64Sent).pipe(Effect.timeout('5 seconds'), Effect.orDie);
             return name === 'Tagma-0.1.0-x64.dmg' && stopping.during
-              ? Effect.andThen(Deferred.succeed(checking, undefined), Effect.never)
+              ? Deferred.await(arm64Opened).pipe(Effect.andThen(Deferred.succeed(checking, undefined)), Effect.andThen(Effect.never))
               : Effect.void;
           }),
         staple: (path) =>
@@ -86,7 +122,11 @@ it.live(
             else stapled.add(basename(path));
           }),
         assess: () => Effect.void,
-        opens: (image) => Effect.sync(() => opened.add(basename(image))),
+        opens: (image) =>
+          Effect.suspend(() => {
+            opened.add(basename(image));
+            return basename(image).includes('arm64') ? Deferred.succeed(arm64Opened, undefined).pipe(Effect.asVoid) : Effect.void;
+          }),
         image: (app, image) => Effect.sync(() => writeFileSync(image, `the dmg around ${appOf(app)}, stapled ${stapledIn(app)}`)),
       };
       const notary = yield* sealingNotary(apple).pipe(Effect.provide(machine));

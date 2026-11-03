@@ -255,12 +255,8 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
 
   const build = Effect.fnUntraced(function* (home: string): Effect.fn.Return<Built, ReleaseRefused, Machine> {
     logged = join(home, RELEASE_LOG);
-    const made = yield* Effect.forEach(
-      runtimes,
-      ({ target, runtime }) => Effect.map(built(home, target, runtime), (one) => [targetName(target), one] as const),
-      { concurrency: 'unbounded' },
-    );
-    const platforms: Record<string, BuiltPlatform> = Object.fromEntries(made);
+    const platforms: Record<string, BuiltPlatform> = {};
+    for (const { target, runtime } of runtimes) platforms[targetName(target)] = yield* built(home, target, runtime);
     return { platforms };
   });
 
