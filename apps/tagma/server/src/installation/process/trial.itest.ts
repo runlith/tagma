@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Clock, Effect, Result } from 'effect';
+import { TestClock } from 'effect/testing';
 import { passAttempt, readAttempt, writeAttempt } from '../closure/attempt.js';
 import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { arrive, enterTrial, rollBack, type TrialPlace } from './trial.js';
@@ -268,5 +269,23 @@ it.effect('a start over an attempt record that does not read drops no copy: it s
       existsSync(`${store}.attempt`),
       standing(),
     ]).toEqual([false, damaged, 'before', 'wal before', false, 'v2']);
+  }),
+);
+
+it.effect('a start over an attempt record it may not read sets it and every copy aside the same way and serves', () =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust('1 second');
+    attempted(1);
+    yield* on(yield* enterTrial(place));
+    chmodSync(join(install, 'attempt.json'), 0o000);
+
+    expect(yield* arrive(place)).toBe('serve');
+    expect([
+      existsSync(join(install, 'attempt.json')),
+      existsSync(join(install, 'attempt.json.unread-1000')),
+      readFileSync(`${store}.attempt.unread-1000`, 'utf8'),
+      existsSync(`${store}.attempt`),
+      standing(),
+    ]).toEqual([false, true, 'before', false, 'v2']);
   }),
 );

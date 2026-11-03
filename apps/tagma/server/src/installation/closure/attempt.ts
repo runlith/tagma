@@ -13,12 +13,12 @@ const encodeReturn = Schema.encodeSync(Schema.fromJsonString(returnSchema));
 const decodeServed = Schema.decodeUnknownResult(Schema.fromJsonString(servingSchema));
 const encodeServed = Schema.encodeSync(Schema.fromJsonString(servingSchema));
 
-const textAt = (path: string): string | null => {
+const textAt = (path: string): Result.Result<string | null, RecordUnreadable> => {
   try {
-    return readFileSync(path, 'utf8');
+    return Result.succeed(readFileSync(path, 'utf8'));
   } catch (error) {
-    if (absentPath(error)) return null;
-    throw error;
+    if (absentPath(error)) return Result.succeed(null);
+    return Result.fail(new RecordUnreadable({ path, detail: error instanceof Error ? error.message : String(error) }));
   }
 };
 
@@ -52,11 +52,12 @@ export class RecordUnreadable extends Data.TaggedError('RecordUnreadable')<{ rea
 
 type Recorded<A> = Result.Result<A | null, RecordUnreadable>;
 
-const recorded = <A, E>(path: string, decoded: (text: string) => Result.Result<A, E>): Recorded<A> => {
-  const text = textAt(path);
-  if (text === null) return Result.succeed(null);
-  return Result.mapError(decoded(text), (failure) => new RecordUnreadable({ path, detail: String(failure) }));
-};
+const recorded = <A, E>(path: string, decoded: (text: string) => Result.Result<A, E>): Recorded<A> =>
+  Result.flatMap(textAt(path), (text) =>
+    text === null
+      ? Result.succeed(null)
+      : Result.mapError(decoded(text), (failure) => new RecordUnreadable({ path, detail: String(failure) })),
+  );
 
 export const readAttempt = (installRoot: string): Recorded<Attempt> => recorded(join(installRoot, ATTEMPT_FILE), decodeAttempt);
 

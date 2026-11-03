@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
@@ -241,6 +241,26 @@ describe('install-from', () => {
         expect(yield* enterTrial(starting).pipe(Effect.orDie)).toBeNull();
         expect((yield* landed(three)).previous).toBe(two.version);
       }).pipe(Effect.provide(world)),
+  );
+
+  it.live('an update record this process may not read refuses an install over it, until a start sets it aside', () =>
+    Effect.gen(function* () {
+      const { home, root } = yield* World;
+      const { version: from } = yield* landed(yield* built('one', '0.1.0'));
+      passAttempt(root, from);
+      const two = yield* landed(yield* built('two', '0.2.0'));
+      chmodSync(join(root, 'attempt.json'), 0o000);
+      const three = yield* built('three', '0.3.0');
+      const refused = yield* offered(three);
+      expect(refused._tag === 'Failure' ? refused.failure.code : 'installed').toBe(ATTEMPT_OPEN);
+      expect([yield* standing(), existsSync(join(root, 'attempt.json'))]).toEqual([two.version, true]);
+
+      const data = join(home, '.tagma');
+      mkdirSync(data, { recursive: true });
+      const starting = { installRoot: root, release: join(root, two.version), files: [join(data, 'tagma.sqlite')], stores: null };
+      expect(yield* arrive(starting).pipe(Effect.orDie)).toBe('serve');
+      expect((yield* landed(three)).previous).toBe(two.version);
+    }).pipe(Effect.provide(world)),
   );
 
   it.live(
