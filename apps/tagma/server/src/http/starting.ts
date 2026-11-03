@@ -6,7 +6,7 @@ import { OUTCOME_HEADER } from '../invocation/contract/wire/headers.js';
 import { API_PREFIX } from './contract/wire/served.js';
 
 export const startingHandler = Effect.fnUntraced(function* (records: RestartRecords['Service'], appDist: string) {
-  const surface = yield* HttpStaticServer.make({ root: appDist, spa: true });
+  const surface = yield* HttpStaticServer.make({ root: appDist, spa: true, cacheControl: 'no-cache' });
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const path = new URL(request.url, 'http://localhost').pathname;

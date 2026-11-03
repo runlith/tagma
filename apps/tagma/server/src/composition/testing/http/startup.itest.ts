@@ -32,6 +32,8 @@ it.live('a pending migration is visible while health and operations refuse, then
     const path = join(home, 'machine.sqlite');
     yield* inDatabase(path, (db) => db.run(sql`PRAGMA user_version = 0`));
     yield* files.writeFileString(join(home, 'index.html'), '<!doctype html><title>surface</title>');
+    yield* files.makeDirectory(join(home, '_app'), { recursive: true });
+    yield* files.writeFileString(join(home, '_app', 'version.json'), '{"version":"first"}');
     const records = yield* makeProcessRestart({ path: join(home, 'restart.json'), pid: process.pid });
     records.start(yield* Clock.currentTimeMillis);
     const context = yield* Layer.build(BunHttpServer.layer({ hostname: '127.0.0.1', port: 0, gracefulShutdownTimeout: '20 millis' }));
@@ -74,7 +76,13 @@ it.live('a pending migration is visible while health and operations refuse, then
       expect(operation.status).toBe(503);
       expect(operation.headers[OUTCOME_HEADER]).toBe('refusal');
       expect(yield* operation.json).toMatchObject({ code: 'server-starting' });
-      expect((yield* get('', { accept: 'text/html' })).status).toBe(200);
+      const shell = yield* get('/project/chat', { accept: 'text/html' });
+      expect([shell.status, shell.headers['cache-control']]).toEqual([200, 'no-cache']);
+      expect(yield* shell.text).toContain('<title>surface</title>');
+      const unchanged = yield* get('/project/chat', { accept: 'text/html', 'if-none-match': shell.headers.etag! });
+      expect([unchanged.status, unchanged.headers['cache-control']]).toEqual([304, 'no-cache']);
+      const version = yield* get('/_app/version.json');
+      expect([version.status, version.headers['cache-control']]).toEqual([200, 'no-cache']);
       expect((yield* get('/startup', { origin: 'https://example.com' })).status).toBe(403);
     }).pipe(Effect.ensuring(Effect.andThen(Deferred.succeed(proceed, undefined), Fiber.await(opening))));
     const store = Context.get(yield* Fiber.join(opening), MachineStore);
