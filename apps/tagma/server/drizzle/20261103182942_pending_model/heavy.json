@@ -1,0 +1,3 @@
+{
+  "reason": "Building the pending-pick index reads every native thread row, whose new column follows potentially large prompt and state payloads."
+}
