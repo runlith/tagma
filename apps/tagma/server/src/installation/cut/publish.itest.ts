@@ -199,52 +199,125 @@ it.live(
     }),
 );
 
-it.live('ship on a tagged HEAD answers released only while its source maps are kept, and finishes the publication when they are lost', () =>
-  Effect.gen(function* () {
-    const { checkout, head } = repository('shipped');
-    const { publisher } = shelf();
-    const data = join(scratch, 'shipped-data');
-    const cut = join(scratch, 'shipped-release');
-    const place = { cut, checkout, kept: join(data, KEPT_MAPS) };
-    cutInto(cut, head, '0.6.0');
-    yield* publishRelease(publisher, notary, place).pipe(Effect.provide(machine));
-    const composition = {
-      roots: { checkout },
-      workshop: { data: '.shipped' },
-      channel: { name: 'Tagma' },
-      signing: { team: 'NOSUCHTEAM', notary: 'none' },
-      brand: { assets: '' },
-      publisher,
-      feed: null,
-    } as unknown as Composition;
-    const previous = process.env.TAGMA_DATABASE_PATH;
-    process.env.TAGMA_DATABASE_PATH = join(data, 'tagma.db');
-    const printed: string[] = [];
-    const logging = spyOn(console, 'log').mockImplementation((line: unknown) => void printed.push(String(line)));
-    const exiting = spyOn(process, 'exit').mockImplementation((() => {
-      throw new Error('exited');
-    }) as never);
-    const ship = () => Effect.exit(shipCommand(['--out', cut, '--json'], composition)).pipe(Effect.map(() => printed.splice(0)));
-    const answers = yield* Effect.gen(function* () {
-      const kept = yield* ship();
-      rmSync(join(data, KEPT_MAPS), { recursive: true, force: true });
-      const lost = yield* ship();
-      return { kept, lost };
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          logging.mockRestore();
-          exiting.mockRestore();
-          if (previous === undefined) delete process.env.TAGMA_DATABASE_PATH;
-          else process.env.TAGMA_DATABASE_PATH = previous;
-        }),
-      ),
-    );
-    const completed = yield* Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
+const untouched = () => {
+  const touched: (string | symbol)[] = [];
+  const publisher = new Proxy({} as Publisher, {
+    get: (_, name) => {
+      touched.push(name);
+      return () => Effect.die('the publisher is not for a release that is already published');
+    },
+  });
+  return { publisher, touched };
+};
 
-    expect(answers.kept).toEqual(['{"release":"0.6.0","published":true}']);
-    expect(answers.lost.map((line) => JSON.parse(line).published)).toEqual([undefined]);
-    expect(completed._tag).toBe('Success');
-    expect(existsSync(join(data, KEPT_MAPS, '0.6.0', 'http.js.map'))).toBe(true);
+const shipping = (checkout: string, data: string, publisher: Publisher) => {
+  const composition = {
+    roots: { checkout },
+    workshop: { data: '.shipped' },
+    channel: { name: 'Tagma' },
+    signing: { team: 'NOSUCHTEAM', notary: 'none' },
+    brand: { assets: '' },
+    publisher,
+    feed: null,
+  } as unknown as Composition;
+  return (cut: string) =>
+    Effect.suspend(() => {
+      const previous = process.env.TAGMA_DATABASE_PATH;
+      process.env.TAGMA_DATABASE_PATH = join(data, 'tagma.db');
+      const printed: string[] = [];
+      const logging = spyOn(console, 'log').mockImplementation((line: unknown) => void printed.push(String(line)));
+      const exiting = spyOn(process, 'exit').mockImplementation(((code: number) => {
+        printed.push(`exit ${code}`);
+        throw new Error('exited');
+      }) as never);
+      return Effect.exit(shipCommand(['--out', cut, '--json'], composition)).pipe(
+        Effect.map(() => printed),
+        Effect.ensuring(
+          Effect.sync(() => {
+            logging.mockRestore();
+            exiting.mockRestore();
+            if (previous === undefined) delete process.env.TAGMA_DATABASE_PATH;
+            else process.env.TAGMA_DATABASE_PATH = previous;
+          }),
+        ),
+      );
+    });
+};
+
+const mapsOf = (line: string | undefined) => (line === undefined ? undefined : JSON.parse(line).maps);
+
+it.live(
+  'ship on a tagged HEAD completes the source maps from the standing cut, also over a partial directory, and touches neither publisher nor notary',
+  () =>
+    Effect.gen(function* () {
+      const { checkout, head } = repository('shipped');
+      const { publisher } = shelf();
+      const data = join(scratch, 'shipped-data');
+      const cut = join(scratch, 'shipped-release');
+      const kept = join(data, KEPT_MAPS, '0.6.0');
+      cutInto(cut, head, '0.6.0');
+      writeFileSync(join(cut, MAPS, 'b.js.map'), '{"second":true}');
+      yield* publishRelease(publisher, notary, { cut, checkout, kept: join(data, KEPT_MAPS) }).pipe(Effect.provide(machine));
+      const idle = untouched();
+      const ship = shipping(checkout, data, idle.publisher);
+
+      const whole = yield* ship(cut);
+      rmSync(kept, { recursive: true });
+      const lost = yield* ship(cut);
+      const completed = readdirSync(kept).sort();
+      rmSync(kept, { recursive: true });
+      mkdirSync(kept);
+      writeFileSync(join(kept, 'http.js.map'), '{"release":"0.6.0"}');
+      const partial = yield* ship(cut);
+
+      expect([mapsOf(whole[0]), mapsOf(lost[0]), mapsOf(partial[0])]).toEqual(['kept', 'repaired', 'repaired']);
+      expect(completed).toEqual(['b.js.map', 'http.js.map', 'kept.json']);
+      expect(readdirSync(kept).sort()).toEqual(completed);
+      expect(idle.touched).toEqual([]);
+    }),
+);
+
+it.live('ship on an older tagged HEAD completes its source maps locally although a newer release is published', () =>
+  Effect.gen(function* () {
+    const { checkout, head } = repository('older');
+    const { publisher } = shelf();
+    const data = join(scratch, 'older-data');
+    const kept = join(data, KEPT_MAPS);
+    const older = join(scratch, 'older-release');
+    cutInto(older, head, '0.7.0');
+    yield* publishRelease(publisher, notary, { cut: older, checkout, kept }).pipe(Effect.provide(machine));
+    expect(
+      git(['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'fix: newer']).exitCode,
+    ).toBe(0);
+    const newer = join(scratch, 'newer-release');
+    cutInto(newer, said(['-C', checkout, 'rev-parse', 'HEAD']), '0.8.0');
+    yield* publishRelease(publisher, notary, { cut: newer, checkout, kept }).pipe(Effect.provide(machine));
+    expect(git(['-C', checkout, 'checkout', '-q', '--detach', head]).exitCode).toBe(0);
+    rmSync(join(kept, '0.7.0'), { recursive: true });
+    const idle = untouched();
+
+    const answered = yield* shipping(checkout, data, idle.publisher)(older);
+
+    expect(mapsOf(answered[0])).toBe('repaired');
+    expect(readFileSync(join(kept, '0.7.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.7.0"}');
+    expect(idle.touched).toEqual([]);
+  }),
+);
+
+it.live('ship on a tagged HEAD whose source maps are lost and whose cut is gone refuses naming what is missing', () =>
+  Effect.gen(function* () {
+    const { checkout, head } = repository('gone');
+    const { publisher } = shelf();
+    const data = join(scratch, 'gone-data');
+    const cut = join(scratch, 'gone-release');
+    cutInto(cut, head, '0.9.0');
+    yield* publishRelease(publisher, notary, { cut, checkout, kept: join(data, KEPT_MAPS) }).pipe(Effect.provide(machine));
+    rmSync(join(data, KEPT_MAPS, '0.9.0'), { recursive: true });
+
+    const answered = yield* shipping(checkout, data, untouched().publisher)(join(scratch, 'nowhere'));
+
+    expect(JSON.parse(answered[0]!).code).toBe('maps-refused');
+    expect(JSON.parse(answered[0]!).reason).toContain('no standing cut of 0.9.0 at HEAD holds them');
+    expect(answered[1]).toBe('exit 2');
   }),
 );

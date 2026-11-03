@@ -9,6 +9,7 @@ import { compareReleases, type Feed, FEED_FILE, type FeedRelease, newestOf, rele
 import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
+import { keepMaps, keptMapsOf } from './maps.js';
 import { appleNotary, type Notary } from './notarize.js';
 import { flagsOf, KEPT_MAPS, publishedBy, RELEASE_DIRECTORY, releaseCommand } from './pipeline.js';
 import { releaseNotes } from './notes.js';
@@ -204,7 +205,6 @@ export const publishRelease = (
 ): Effect.Effect<Published, PublishRefused, CutMachine> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
       const git = yield* Git;
       const unreadable = unreadableIn('release');
       const stood = yield* cutStanding(cut);
@@ -254,13 +254,7 @@ export const publishRelease = (
       const landed = yield* publisher.publish({ record, home, files: shipped, feed, notes }).pipe(Effect.mapError(troubled('publish')));
       yield* verified(publisher, release, home, shipped);
 
-      const maps = join(kept, release);
-      const part = `${maps}.part`;
-      yield* files.makeDirectory(kept, { recursive: true }).pipe(Effect.mapError(unreadable(kept)));
-      yield* files.remove(part, { recursive: true, force: true }).pipe(Effect.mapError(unreadable(part)));
-      yield* files.copy(join(home, MAPS), part, { overwrite: true }).pipe(Effect.mapError(unreadable(join(home, MAPS))));
-      yield* files.remove(maps, { recursive: true, force: true }).pipe(Effect.mapError(unreadable(maps)));
-      yield* files.rename(part, maps).pipe(Effect.mapError(unreadable(maps)));
+      const maps = yield* keepMaps(home, kept, { release, commit }).pipe(Effect.mapError(unreadable(join(home, MAPS))));
 
       if (!tagged) {
         yield* git.run(['tag', tag, commit], { cwd: checkout }).pipe(
@@ -353,13 +347,12 @@ export const cutCommand = Effect.fnUntraced(function* (given: readonly string[],
   yield* notarizeCommand(given, composition);
 });
 
-type Head = { readonly _tag: 'Released'; readonly release: string } | { readonly _tag: 'Cut' } | { readonly _tag: 'Uncut' };
+type Head =
+  | { readonly _tag: 'Released'; readonly release: string; readonly commit: string; readonly home: string | null }
+  | { readonly _tag: 'Cut' }
+  | { readonly _tag: 'Uncut' };
 
-const headOf = Effect.fnUntraced(function* (
-  checkout: string,
-  cut: string,
-  kept: string,
-): Effect.fn.Return<Head, PublishRefused, CutMachine> {
+const headOf = Effect.fnUntraced(function* (checkout: string, cut: string): Effect.fn.Return<Head, PublishRefused, CutMachine> {
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
   const asked = (args: readonly string[]) =>
@@ -387,16 +380,40 @@ const headOf = Effect.fnUntraced(function* (
       ]);
     }
     const cutFrom = yield* asked(['rev-parse', '--verify', '--quiet', `${decoded.success.commit}^{commit}`]);
-    return cutFrom.status === 0 && cutFrom.stdout.trim() === commit ? decoded.success : null;
+    return cutFrom.status === 0 && cutFrom.stdout.trim() === commit ? { record: decoded.success, home } : null;
   });
+  const standing = yield* cutAtHead;
   if (released !== undefined) {
-    const keptPath = join(kept, released);
-    const mapsKept = yield* files.exists(keptPath).pipe(Effect.mapError(unread(keptPath)));
-    if (mapsKept) return { _tag: 'Released', release: released };
-    const finishing = yield* cutAtHead;
-    return finishing?.release === released ? { _tag: 'Cut' } : { _tag: 'Released', release: released };
+    return { _tag: 'Released', release: released, commit, home: standing?.record.release === released ? standing.home : null };
   }
-  return (yield* cutAtHead) === null ? { _tag: 'Uncut' } : { _tag: 'Cut' };
+  return standing === null ? { _tag: 'Uncut' } : { _tag: 'Cut' };
+});
+
+const completedMaps = Effect.fnUntraced(function* (
+  kept: string,
+  head: { readonly release: string; readonly commit: string; readonly home: string | null },
+): Effect.fn.Return<'kept' | 'repaired' | 'unverified', PublishRefused, FileSystem.FileSystem> {
+  const one = { release: head.release, commit: head.commit };
+  const state = yield* keptMapsOf(kept, one).pipe(
+    Effect.mapError((error) => refused('maps', `${join(kept, head.release)} could not be read: ${error.reason._tag}`)),
+  );
+  if (state === 'complete') return 'kept';
+  if (head.home === null) {
+    if (state === 'unverified') return 'unverified';
+    return yield* refused(
+      'maps',
+      `the source maps of ${head.release} are not kept in ${join(kept, head.release)}, and no standing cut of ${head.release} at HEAD holds them`,
+      [`bun run tagma:stack reads maps only from ${kept} or a cut; the machine that published ${head.release} keeps them`],
+    );
+  }
+  yield* keepMaps(head.home, kept, one).pipe(
+    Effect.mapError((error) =>
+      refused('maps', `the source maps of ${head.release} could not be kept from ${head.home}: ${error.reason._tag}`, [
+        `the cut at ${head.home} holds no complete ${MAPS} directory, so they cannot be recovered from it`,
+      ]),
+    ),
+  );
+  return 'repaired';
 });
 
 export const shipCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
@@ -405,14 +422,19 @@ export const shipCommand = Effect.fnUntraced(function* (given: readonly string[]
   const flags = flagsOf(given, told);
   json = flags.json;
   const { data, cut } = cutIn(composition, flags.value('--out'), told);
-  const head = yield* Effect.result(headOf(composition.roots.checkout, cut, join(data, KEPT_MAPS)).pipe(Effect.provide(machine)));
+  const head = yield* Effect.result(headOf(composition.roots.checkout, cut).pipe(Effect.provide(machine)));
   if (head._tag === 'Failure') {
     return told('publish-refused', `${head.failure.step}: ${head.failure.detail}`, head.failure.unblock);
   }
   if (head.success._tag === 'Released') {
     const { release } = head.success;
-    if (json) console.log(JSON.stringify({ release, published: true }));
-    else console.log(`${composition.channel.name} ${release} is HEAD and is published; a commit is released once`);
+    const maps = yield* Effect.result(completedMaps(join(data, KEPT_MAPS), head.success).pipe(Effect.provide(machine)));
+    if (maps._tag === 'Failure') return told('maps-refused', maps.failure.detail, maps.failure.unblock);
+    if (json) console.log(JSON.stringify({ release, published: true, maps: maps.success }));
+    else
+      console.log(
+        `${composition.channel.name} ${release} is HEAD and is published; a commit is released once; its source maps are ${maps.success === 'kept' ? 'kept' : maps.success === 'repaired' ? 'kept again from the standing cut' : 'kept, but nothing proves them whole'}`,
+      );
     return;
   }
   if (head.success._tag === 'Uncut') yield* releaseCommand(given, composition, !json);
