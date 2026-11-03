@@ -5,8 +5,8 @@ ord: 4
 tags: ["task"]
 fields:
   {
-    "holder": "tagma:01a1a1d9-8e94-7b5b-8188-aa7a75a98d69",
-    "status": "in_work"
+    "holder": "tagma:01a1a245-7a43-7a67-8046-6e8a2efb5b64",
+    "status": "done"
   }
 ---
 Before executing the downloaded runtime, require its proven manifest to match the offered release, this machine's platform and the irreversible changes advertised before the installation act. Prove rejection through the release-channel install door when an otherwise authentic archive is filed under another release or consent metadata.

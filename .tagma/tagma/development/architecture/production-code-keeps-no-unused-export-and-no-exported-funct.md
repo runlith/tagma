@@ -6442,10 +6442,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/closure/leases.ts#Claimed",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/closure/manifests.ts#ManifestReading",
           "owner": "5a3bed29"
         },
@@ -6748,14 +6744,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#ReleaseLanded",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#PreviousVersionMissing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#SteppedBack",
           "owner": "5a3bed29"
         },
         {
@@ -8766,31 +8754,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/archive.ts#UNPACK_FLAGS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/archive.ts#listingRefusal",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/child.ts#Captured",
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/install.ts#ReleaseNotInstalled",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/install.ts#Landed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/install.ts#Asked",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/install.ts#Held",
           "owner": "5a3bed29"
         },
         {
@@ -19852,14 +19820,6 @@ fields:
           "said": "exported const `STARTED` is imported by no production file"
         },
         {
-          "commit": "233fb18b09676629cc5c1c159e06fa1864587f5e",
-          "fingerprint": "dead-code dead packages/utils/src/worker.ts#WorkerLink",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 23,
-          "path": "packages/utils/src/worker.ts",
-          "said": "exported type `WorkerLink` is imported by no production file"
-        },
-        {
           "changed": "check",
           "commit": "91e8c8b3c9d8162a147cd434186e1f3fe6f048a3",
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/presence/Presence.svelte.ts#PresenceHold",
@@ -19876,6 +19836,14 @@ fields:
           "line": 17,
           "path": "apps/tagma/server/src/speech/listening/choice.ts",
           "said": "exported type `Chosen` is imported by no production file"
+        },
+        {
+          "commit": "233fb18b09676629cc5c1c159e06fa1864587f5e",
+          "fingerprint": "dead-code dead packages/utils/src/worker.ts#WorkerLink",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 23,
+          "path": "packages/utils/src/worker.ts",
+          "said": "exported type `WorkerLink` is imported by no production file"
         }
       ],
       "inspection": "dead-code",

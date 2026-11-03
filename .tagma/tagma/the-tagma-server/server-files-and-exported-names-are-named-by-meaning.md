@@ -228,14 +228,6 @@ fields:
           "owner": "02c71a0d"
         },
         {
-          "fingerprint": "S4 installation:HostRefusal @ installation/contract/service/succession.ts",
-          "owner": "02c71a0d"
-        },
-        {
-          "fingerprint": "S4 installation:HostRefusal @ installation/contract/wire/hostRefusal.ts",
-          "owner": "02c71a0d"
-        },
-        {
           "fingerprint": "S4 installation:Trial @ installation/cut/trial.ts",
           "owner": "02c71a0d"
         },

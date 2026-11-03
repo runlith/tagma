@@ -5,8 +5,8 @@ ord: 66
 tags: ["task"]
 fields:
   {
-    "holder": "tagma:01a1a245-7a51-7739-a251-86d1ad1d1996",
-    "status": "in_work"
+    "holder": "tagma:01a1a245-7a43-7a67-8046-6e8a2efb5b64",
+    "status": "done"
   }
 ---
 Make quit and installation switching cancel an admitted restart at its process lifecycle owner, including issued predecessors that may start a fallback after their successor dies. Prove the handover race through the real stopping door, preserve graceful normal shutdown, and report any limit imposed by issued code.
