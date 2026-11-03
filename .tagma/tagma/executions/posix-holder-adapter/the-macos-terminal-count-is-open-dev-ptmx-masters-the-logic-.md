@@ -11,4 +11,4 @@ PTY occupancy on macOS is read from open /dev/ptmx descriptors, not from /dev/tt
 
 The holder is excluded because each of its own terminals holds two fds — the holder's master and the logic's copy; capacity subtracts one per live terminal (`liveTerminals`) from the reading, and the count rests on the discipline "the logic holds exactly one fd per live terminal". The logic's copy is never duplicated (dup) without updating that count; otherwise the subtraction undercounts and terminal admission over-refuses.
 
-When the masters cannot be read (lsof timed out, error, truncation), the count is a bound: the number of /dev/ttysN nodes. It is no less than the occupied ones, errs toward refusal, and never refuses loading and recounting; terminals become unreadable (StandingUnreadable) only when /dev cannot be read either.
+When the masters cannot be read (probe failure or truncation), the count is a bound: the number of /dev/ttysN nodes. It is no less than the occupied ones, errs toward refusal, and never refuses loading and recounting; terminals become unreadable (StandingUnreadable) only when /dev cannot be read either.
