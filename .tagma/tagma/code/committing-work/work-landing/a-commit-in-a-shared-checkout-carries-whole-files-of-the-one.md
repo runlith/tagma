@@ -82,6 +82,7 @@ Every round closed one case and opened the next. The Work landing and Line autho
 
 **What rides along without being asked for:**
 - Every line in a selected file, whoever wrote it: other sessions' lines, and lines no tool recorded.
+- The whole change of every writer whose lines ride. When a commit carries another writer's lines, it also carries every file that writer has changed and not committed, and in turn the changes of the writers in those files. A writer's uncommitted lines are one change that only ever existed whole. A changed declaration rides together with the callers its writer updated, and a new route rides with the new file it points to. This needs no language knowledge, and it keeps the safety `taking` gave by carrying a writer's whole held work.
 - The other path of a move, as today.
 - Files the commit cannot do without, as far as a language adapter can see. The code-facts port gains this question: which changed files does this text need? When the adapter for a carried file's language finds a reference to a declaration that exists only in another changed file, that file rides too, whole, and the walk continues from it. Today's JS/TS/Svelte binder and placement become this adapter. A false match now costs a larger commit, never a refusal. A language without an adapter adds nothing, and the project's checks judge.
 - Derived outputs, through `derive` and the config's declarations, as today.
@@ -137,6 +138,7 @@ No refusal names a holder to wait for or to take from.
 1. **No new gated crossings.** A commit never adds a new crossing of a gated rule, judged on the tree that lands. HEAD feeds checkout builds, worktrees and pushes.
 2. **No file nobody had.** A commit never carries a file that nobody had on disk. The landed tree is as close to what the agents ran as a partial commit can be.
 3. **No missing declarations, where an adapter sees them.** A commit never leaves out an uncommitted declaration its code needs. This is the failure of [[03b72225]].
+3a. **No half of another writer's change.** A commit that carries any of a writer's lines carries all of that writer's uncommitted change, so a changed signature never lands without the callers its writer updated.
 4. **Authorship stays.** It is recorded and shown everywhere, and a thread's lines still roll back without touching others' lines.
 5. **The rest is unchanged:** publication by compare-and-set, rebuild on a moved HEAD, moves as pairs, derivations, and hooks in the commit tree.
 
@@ -152,6 +154,7 @@ No refusal names a holder to wait for or to take from.
 
 - **Commits follow the tree, not the session.** Two writers in one file land together in whichever commit comes first. A commit's subject describes its caller's change, and the receipt and the per-line authors of a commit in the Git tab show who else rode along.
 - **Your lines can wait for another writer's.** When another writer's lines in a file you need do not yet pass the checks, your lines in that file wait and land with theirs. Under heavy concurrency a shared file lands later than a cut by author would have landed it, but no agent waits, asks or messages for it.
+- **Commits grow with entanglement.** Where many agents share files, a commit takes in every change entangled with it through those files, and lands only once all of them pass the checks. It is larger, and it lands no earlier than the slowest of those changes.
 - **Everyone's lines ride along.** The operator's edits, and lines no tool recorded such as edits from an editor outside Tagma, ride with a file an agent lands and are named in the answer. Git-ignored files such as `.env` never land.
 
 ## Every user
@@ -190,7 +193,8 @@ Performer checks run through the real native door.
 3. A gated crossing stands in another session's lines in a selected file. `rule-violated` names the rule, the place and the author, and its ways out name neither waiting nor taking. After that writer fixes it, the next landing carries both.
 4. A file an agent lands also holds the operator's recorded lines. The commit carries them with no question in any mode, and `carried` names the operator.
 5. A parent's bare `submit_work` after its child rested lands the child's files and attributes the child's tasks named in `tasks`, with no claim. A teammate finishing that task raises no question.
-6. A two-file change in a language with no adapter lands its selected files whole and adds nothing.
+6. A two-file change in a language with no adapter lands its selected files whole and adds nothing. When one of those files also holds another writer's lines, that writer's other changed files ride too.
+6a. B changed a declaration in one file and its caller in another. A's landing, which needs that declaration, carries both of B's files, and the landed tree typechecks.
 7. In a `single` checkout, a bare `submit_work` lands every changed file.
 8. `check_rules` over a change answers `refuses` exactly when `submit_work` would refuse that tree.
 9. The `submit_work` and `check_rules` descriptions and the Commits section mention neither `taking`, `whole` and `still-running` nor waiting for a holder. The doctrine tests read the new text, and the performer's prompt is not larger than before.
