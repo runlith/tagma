@@ -112,28 +112,20 @@ export const submitWork = Effect.fn('submitWork')(function* (
   }
   if (receipt.status !== 'landed') return receipt;
   const standing = yield* Effect.result(produce.remaining(place, team));
+  if (standing._tag === 'Failure')
+    return {
+      ...receipt,
+      unrecorded: [
+        ...(receipt.unrecorded ?? []),
+        { step: 'receipt', reason: `which files of this session still differ from HEAD could not be read: ${standing.failure.message}` },
+      ],
+    };
   const kept = new Set((receipt.kept ?? []).map((one) => one.path));
-  const left =
-    standing._tag === 'Failure'
-      ? []
-      : standing.success
-          .filter((path) => !kept.has(path))
-          .sort()
-          .map((path) => ({ path, reason: carried.has(path) || input.paths === undefined ? ('written' as const) : ('paths' as const) }));
-  const unread =
-    standing._tag === 'Failure'
-      ? [
-          {
-            step: 'receipt' as const,
-            reason: `which files of this session still differ from HEAD could not be read: ${standing.failure.message}`,
-          },
-        ]
-      : [];
-  return {
-    ...receipt,
-    left: left.length === 0 ? undefined : left,
-    unrecorded: unread.length === 0 ? receipt.unrecorded : [...(receipt.unrecorded ?? []), ...unread],
-  };
+  const left = standing.success
+    .filter((path) => !kept.has(path))
+    .sort()
+    .map((path) => ({ path, reason: carried.has(path) || input.paths === undefined ? ('written' as const) : ('paths' as const) }));
+  return { ...receipt, left: left.length === 0 ? undefined : left };
 });
 
 const submitHeld = Effect.fn('submitWork.held')(function* (
@@ -276,23 +268,25 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
             ),
           );
     const formed = emptied === null ? [] : yield* recorded('stamp', retirement.formed(checkoutId, emptied.ids));
-    const unrecorded = [
-      ...formed,
-      ...(settled?._tag === 'Failure' ? [{ step: 'reshape' as const, reason: settled.failure.message }] : []),
-      ...(settled?._tag === 'Success'
-        ? settled.success.unrecorded.map((path) => ({
-            step: 'reshape' as const,
-            reason: `${path} carries the commit steps' change, and the session's row of that write was not recorded`,
-          }))
-        : []),
-      ...(yield* discharged(answer.success.paths)),
-    ];
+    const reshape =
+      settled === null
+        ? { edits: NO_EDITS, unrecorded: [] }
+        : settled._tag === 'Failure'
+          ? { edits: NO_EDITS, unrecorded: [{ step: 'reshape' as const, reason: settled.failure.message }] }
+          : {
+              edits: settled.success,
+              unrecorded: settled.success.unrecorded.map((path) => ({
+                step: 'reshape' as const,
+                reason: `${path} carries the commit steps' change, and the session's row of that write was not recorded`,
+              })),
+            };
+    const unrecorded = [...formed, ...reshape.unrecorded, ...(yield* discharged(answer.success.paths))];
     return {
       receipt: {
         status: 'nothing',
         unmatched: unmatched.length === 0 ? undefined : [...unmatched],
         unrecorded: unrecorded.length === 0 ? undefined : unrecorded,
-        ...hookFields(settled?._tag === 'Success' ? settled.success : NO_EDITS),
+        ...hookFields(reshape.edits),
       },
       team,
       carried: NO_PATHS,
