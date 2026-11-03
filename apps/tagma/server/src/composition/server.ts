@@ -14,6 +14,7 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Settings } from '../settings/contract/service/values.js';
+import { BuildSteps } from '../checkout-builds/contract/service/steps.js';
 import { HarnessRegistry } from '../threads/contract/service/harness.js';
 import { FetchHttpClient, HttpRouter, HttpServer } from 'effect/http';
 import { startingHandler } from '../http/starting.js';
@@ -527,7 +528,15 @@ export const serve = async (build: Build): Promise<void> => {
                 roots: Context.get(tagma.workspace, FileRoots),
                 watch: Context.get(tagma.workspace, CheckoutWatch),
               })
-              .pipe(Layer.provide(Layer.mergeAll(Layer.succeed(Settings, Context.get(tagma.graph, Settings)), FetchHttpClient.layer))),
+              .pipe(
+                Layer.provide(
+                  Layer.mergeAll(
+                    Layer.succeed(Settings, Context.get(tagma.graph, Settings)),
+                    Layer.succeed(BuildSteps, Context.get(tagma.owners, BuildSteps)),
+                    FetchHttpClient.layer,
+                  ),
+                ),
+              ),
           ),
           localScope,
         ),

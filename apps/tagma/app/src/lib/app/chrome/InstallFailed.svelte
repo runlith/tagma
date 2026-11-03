@@ -4,16 +4,21 @@
   import type { Installed } from '@tagma/server/installation/contract/wire/next';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { cn } from '$lib/shared/utils.js';
+  import type { ThreadAddress } from '$lib/features/workspace/ShellOps.js';
 
   let {
     failed,
     title,
     retry,
+    openThread,
   }: {
     failed: Installed;
     title: string;
     retry: (() => void) | undefined;
+    openThread: ((thread: ThreadAddress) => void) | undefined;
   } = $props();
+
+  const thread = $derived(failed.refused?.thread);
 
   let open = $state(false);
   let clipped = $state(false);
@@ -24,6 +29,9 @@
 </script>
 
 {#snippet actions()}
+  {#if thread !== undefined && openThread !== undefined}
+    <Button variant="outline" size="xs" onclick={() => openThread(thread)} data-install-thread={thread.threadId}>Open thread</Button>
+  {/if}
   {#if retry !== undefined}
     <Button variant="outline" size="xs" onclick={retry} data-install-retry>Try again</Button>
   {/if}

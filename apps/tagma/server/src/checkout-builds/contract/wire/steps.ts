@@ -1,0 +1,18 @@
+import { Schema } from 'effect';
+
+export const BeforeBuild = Schema.Array(
+  Schema.Struct({
+    tool: Schema.NonEmptyString.annotate({ description: 'The tool of the app’s process Tagma calls before a build from this checkout.' }),
+    title: Schema.NonEmptyString.annotate({ description: 'What the update card shows while the step runs.' }),
+  }),
+);
+export type BeforeBuild = typeof BeforeBuild.Type;
+
+export const StepVerdict = Schema.Union([
+  Schema.Struct({ verdict: Schema.Literal('go') }),
+  Schema.Struct({ verdict: Schema.Literal('pending') }),
+  Schema.Struct({ verdict: Schema.Literal('stop'), reason: Schema.NonEmptyString, thread: Schema.optional(Schema.NonEmptyString) }),
+]);
+export type StepVerdict = typeof StepVerdict.Type;
+
+export type StepAsk = { readonly offer: 'head' | 'tree'; readonly checkout: string };

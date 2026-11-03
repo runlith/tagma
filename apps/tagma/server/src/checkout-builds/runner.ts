@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir, open, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Effect, Layer, PubSub, Schema, Stream } from 'effect';
+import { Effect, Exit, Fiber, Layer, PubSub, type Result, Schema, Stream } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -32,6 +32,8 @@ import {
 } from './record.js';
 import { actsOf, backOf, installedOf, installingOf, offersOf, standingOf, updateOf } from './offers.js';
 import { commandOf, endGroup } from './group.js';
+import { type BuildStepFailed, BuildSteps } from './contract/service/steps.js';
+import type { StepVerdict } from './contract/wire/steps.js';
 
 const HOST = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -50,6 +52,8 @@ const TAIL_LINES = 20;
 const SWAPPED_NOTE = 'build.swapped';
 
 const REFUSED_NOTE = 'build.refused';
+
+const PENDING_ASKED_AGAIN_MS = 1000;
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.fromJsonString(installRefusalSchema));
 
@@ -155,7 +159,9 @@ const restarting = (busy: BuildRunning): InstallRefused & StopRefused => ({
 
 export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: CheckoutBuildsOptions) {
   const source = yield* makeCheckoutReading({ path: options.checkout, running: options.running ?? null });
+  const steps = yield* BuildSteps;
   const shifts = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
+  let asking: Fiber.Fiber<Result.Result<StepVerdict, BuildStepFailed>> | null = null;
   let running: { readonly record: BuildRunning; readonly offset: number } | null = null;
   let ended: BuildEnded | null = null;
   let took: Took = { head: null, tree: null, back: null };
@@ -242,7 +248,13 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
   };
 
   const halt = async (building: BuildRunning): Promise<BuildEnded | null> => {
-    if (stopping === null) stopping = group === null ? Promise.resolve() : endGroup(group.pid);
+    if (stopping === null)
+      stopping =
+        group !== null
+          ? endGroup(group.pid)
+          : asking !== null
+            ? Effect.runPromise(Fiber.interrupt(asking)).then(() => undefined)
+            : Promise.resolve();
     if (finishing !== null) await finishing;
     return ended !== null && ended.since === building.since ? ended : null;
   };
@@ -269,9 +281,9 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     refused,
   });
 
-  const stepped = (step: BuildStep): void => {
+  const stepped = (step: BuildStep, more: { readonly before?: BuildRunning['before']; readonly revision?: string } = {}): void => {
     if (running === null) return;
-    running = { ...running, record: { ...running.record, step } };
+    running = { ...running, record: { ...running.record, step, ...more } };
     PubSub.publishUnsafe(shifts, undefined);
   };
 
@@ -371,6 +383,51 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     };
     const standing = (): Promise<string | null> =>
       options.landed === undefined ? Promise.resolve(null) : options.landed().catch(() => null);
+    let stepRefused: InstallRefusal | undefined;
+    const ahead = async (offer: 'head' | 'tree'): Promise<readonly [BuildEnded['outcome'], string | null, string] | null> => {
+      const refusedBy = (code: string, reason: string, thread?: InstallRefusal['thread']) => {
+        stepRefused = { code, reason, unblock: ['update again once that is settled'], thread };
+        return ['failed', null, reason] as const;
+      };
+      const listed = await Effect.runPromise(Effect.result(steps.of(checkout)));
+      if (listed._tag === 'Failure') return refusedBy('build-step-failed', listed.failure.message);
+      const titles = listed.success.map((one) => one.title);
+      for (const [at, one] of listed.success.entries()) {
+        stepped('before', { before: { titles, at } });
+        await say(`\n--- ${one.title}: ${one.app} before the build (in ${checkout}) ---`);
+        for (;;) {
+          if (stopping !== null) return ['stopped', null, `stopped at the ${one.title} step; nothing landed`];
+          const fiber = Effect.runFork(Effect.result(one.ask({ offer, checkout })));
+          asking = fiber;
+          const answer = await Effect.runPromise(Fiber.await(fiber)).finally(() => {
+            asking = null;
+          });
+          if (stopping !== null) return ['stopped', null, `stopped at the ${one.title} step; nothing landed`];
+          if (Exit.isFailure(answer)) return refusedBy('build-step-failed', `${one.app} ended its step without an answer`);
+          if (answer.value._tag === 'Failure') return refusedBy('build-step-failed', answer.value.failure.message);
+          const verdict = answer.value.success;
+          await say(`${one.title}: ${verdict.verdict}${verdict.verdict === 'stop' ? ` — ${verdict.reason}` : ''}`);
+          if (verdict.verdict === 'go') break;
+          if (verdict.verdict === 'stop')
+            return refusedBy(
+              'build-step-stopped',
+              `${one.title} stopped the update: ${verdict.reason}`,
+              verdict.thread === undefined ? undefined : { projectId: one.projectId, threadId: verdict.thread },
+            );
+          await Bun.sleep(PENDING_ASKED_AGAIN_MS);
+        }
+      }
+      if (titles.length > 0) {
+        const frame = await Effect.runPromise(source.read);
+        const head = frame.checkout?.head ?? null;
+        if (head !== null) {
+          stepped(running?.record.step ?? 'before', {
+            revision: revisionLabel({ head, dirty: offer === 'tree' && (frame.checkout?.dirty ?? false) }),
+          });
+        }
+      }
+      return null;
+    };
     const decided = async (): Promise<readonly [BuildEnded['outcome'], string | null, string]> => {
       if (started.from === 'back') {
         const code = await step('back', [runtime, 'run', 'tagma:build', '--back', '--no-restart'], checkout);
@@ -378,6 +435,8 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         const build = await standing();
         return ['landed', build, build === null ? 'the previous installation stands' : `installation ${build} stands again`];
       }
+      const held = await ahead(started.from);
+      if (held !== null) return held;
       cut = started.from === 'head' ? join(options.worktrees, `head-${started.since.replace(/[-:.]/g, '')}`) : null;
       stepped('build');
       const origin = cut === null ? [] : ['--origin', checkout];
@@ -410,14 +469,14 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       const [outcome, build, detail] = decision[0] !== 'failed' || stopping === null ? decision : await stoppedAs(stoppedAt);
       const failed = outcome === 'failed';
       const last = endedAs(
-        started,
+        { ...started, revision: running?.record.revision ?? started.revision },
         outcome,
         build,
         detail,
         failed ? tailOf(options.log, running?.offset ?? 0, TAIL_LINES) : [],
-        failed ? refusedIn(refusedNote) : undefined,
+        failed ? (stepRefused ?? refusedIn(refusedNote)) : undefined,
       );
-      await say(`=== tagma build ${started.from} ${started.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
+      await say(`=== tagma build ${started.from} ${last.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
       return last;
     } finally {
       if (cut !== null && existsSync(cut)) await reap(null, cut);

@@ -28,7 +28,7 @@ export type CheckoutFrame = {
 export const buildFromSchema = Schema.Literals(['head', 'tree', 'back']);
 export type BuildFrom = typeof buildFromSchema.Type;
 
-export const buildStepSchema = Schema.Literals(['worktree', 'install', 'build', 'back', 'restart']);
+export const buildStepSchema = Schema.Literals(['before', 'worktree', 'install', 'build', 'back', 'restart']);
 export type BuildStep = typeof buildStepSchema.Type;
 
 export const buildRunningSchema = Schema.Struct({
@@ -38,6 +38,7 @@ export const buildRunningSchema = Schema.Struct({
   log: Schema.String,
   then: Schema.NullOr(thenSchema),
   step: buildStepSchema,
+  before: Schema.optional(Schema.Struct({ titles: Schema.Array(Schema.String), at: Schema.Int })),
   tail: Schema.NullOr(Schema.String),
   usually: Schema.NullOr(Schema.Number),
 });

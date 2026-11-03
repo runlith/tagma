@@ -7,11 +7,20 @@ import { Context, Effect, Layer, Option, Stream } from 'effect';
 import { NextInstallation } from '../installation/contract/service/next.js';
 import { SourceChanges } from './contract/service/changes.js';
 import { type CheckoutBuildsOptions, checkoutBuildsLayer } from './runner.js';
+import { BuildSteps } from './contract/service/steps.js';
+import type { StepVerdict } from './contract/wire/steps.js';
 import { spawnedEffect } from '../platform/testing/spawn.js';
 
 const still = Layer.succeed(SourceChanges, { watch: () => Stream.never });
-const runner = (options: CheckoutBuildsOptions) =>
-  Effect.map(Layer.build(checkoutBuildsLayer(options).pipe(Layer.provide(still))), (context) => Context.get(context, NextInstallation));
+const runner = (options: CheckoutBuildsOptions, steps: BuildSteps = BuildSteps.defaultValue()) =>
+  Effect.map(
+    Layer.build(checkoutBuildsLayer(options).pipe(Layer.provide(still), Layer.provide(Layer.succeed(BuildSteps, steps)))),
+    (context) => Context.get(context, NextInstallation),
+  );
+
+const stepping = (ask: () => Effect.Effect<StepVerdict>): BuildSteps => ({
+  of: () => Effect.succeed([{ app: 'pin', title: 'Core pin', projectId: 7, ask }]),
+});
 
 const git = Effect.fnUntraced(function* (cwd: string, ...args: string[]) {
   const ran = yield* spawnedEffect(['git', '-C', cwd, ...args], {
@@ -46,15 +55,18 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
   yield* git(checkout, 'add', '.');
   yield* git(checkout, 'commit', '-q', '-m', 'first');
   const log = join(dir, 'data', 'build.log');
-  const builds = (more: Partial<CheckoutBuildsOptions> = {}) =>
-    runner({
-      checkout,
-      log,
-      worktrees: join(dir, 'data', 'build'),
-      record: join(dir, 'data', 'build.json'),
-      landed: () => Promise.resolve('v9'),
-      ...more,
-    });
+  const builds = (more: Partial<CheckoutBuildsOptions> = {}, steps?: BuildSteps) =>
+    runner(
+      {
+        checkout,
+        log,
+        worktrees: join(dir, 'data', 'build'),
+        record: join(dir, 'data', 'build.json'),
+        landed: () => Promise.resolve('v9'),
+        ...more,
+      },
+      steps,
+    );
   return { dir, checkout, submodule: join(checkout, 'lib'), builds, log, writeScript };
 });
 
@@ -123,6 +135,49 @@ it.live('HEAD builds use a disposable worktree, tree builds use the checkout, an
       unblock: ['fix the tree'],
     });
     expect(yield* successor.installing).toBeNull();
+  }),
+);
+
+it.live('a step is asked again while pending, and the commit it lands before the cut is the one built', () =>
+  Effect.gen(function* () {
+    const { checkout, builds, log } = yield* checkoutOf('git log -1 --format=%s');
+    let asked = 0;
+    const running = yield* builds(
+      {},
+      stepping(() =>
+        Effect.suspend((): Effect.Effect<StepVerdict> => {
+          asked += 1;
+          return asked < 3
+            ? Effect.succeed({ verdict: 'pending' })
+            : Effect.as(Effect.orDie(git(checkout, 'commit', '-q', '--allow-empty', '-m', 'landed by the step')), { verdict: 'go' });
+        }),
+      ),
+    );
+    const started = yield* running.install('head', null, null);
+    const ended = yield* settled(running, started.installing.since);
+    expect(ended?.outcome).toBe('landed');
+    expect(asked).toBe(3);
+    expect(readFileSync(log, 'utf8')).toContain('landed by the step\n');
+    expect(ended?.target).not.toBe(started.installing.target);
+  }),
+);
+
+it.live('a step that stops ends the update unbuilt, carrying its reason and the thread it names', () =>
+  Effect.gen(function* () {
+    const { builds, log } = yield* checkoutOf('echo built-anyway');
+    const running = yield* builds(
+      {},
+      stepping(() => Effect.succeed({ verdict: 'stop' as const, reason: 'the pin does not converge', thread: 'thread-1' })),
+    );
+    const started = yield* running.install('head', null, null);
+    const ended = yield* settled(running, started.installing.since);
+    expect(ended).toMatchObject({
+      outcome: 'failed',
+      build: null,
+      refused: { code: 'build-step-stopped', thread: { projectId: 7, threadId: 'thread-1' } },
+    });
+    expect(ended?.refused?.reason).toContain('the pin does not converge');
+    expect(readFileSync(log, 'utf8')).not.toContain('built-anyway');
   }),
 );
 

@@ -24,10 +24,13 @@
   import { shortBuild } from './newHost.js';
   import SurfaceRow from './SurfaceRow.svelte';
   import { WireState } from './WireState.svelte.js';
+  import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
+  import { Notices } from '$lib/features/notices/Service.svelte.js';
 
   const standing = Standing.use();
   const restart = Restart.use();
   const wire = WireState.use();
+  const shell = shellActs(ShellOps.use(), Notices.use());
   const trouble = $derived(LIVE_TROUBLE[wire.status]);
 
   let open = $state(false);
@@ -543,6 +546,7 @@
               {failed}
               title={`${failed.title} ${short(failed.target)} was not installed ${ago(failed.endedAt, now)} ago; the version you have keeps working.`}
               retry={standing.offer(failed.offer)?.disabled === null ? () => retry(failed.offer, failed.then !== null) : undefined}
+              openThread={(thread) => void shell.openThread(thread, 'main')}
             />
           </div>
         {/if}

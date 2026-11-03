@@ -49,6 +49,7 @@ import { push } from '../push/push.js';
 import { schedule } from '../schedule/schedule.js';
 import { translations } from '../translations/translations.js';
 import { ticks } from './ticks.js';
+import { buildSteps } from './buildSteps.js';
 import { ThreadGraphs } from '../native-harness/contract/service/graphs.js';
 import { SetupReadings } from '../native-harness/contract/service/setups.js';
 import { CapabilityOffers } from '../native-harness/contract/service/execution.js';
@@ -283,7 +284,7 @@ const translatedOf = (assembly: Assembly) => {
   const notified = notify.lifetimes.serving.pipe(Layer.provideMerge(outcomes), Layer.provideMerge(landed));
   const waited = mcp.lifetimes.serving.pipe(Layer.provideMerge(notified));
   const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(waited));
-  const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(pushed));
+  const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(buildSteps), Layer.provideMerge(pushed));
   return translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
 };
 

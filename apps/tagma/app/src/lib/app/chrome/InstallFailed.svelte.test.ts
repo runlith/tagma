@@ -27,10 +27,10 @@ const failed = (refused?: Installed['refused']): Installed => ({
   refused,
 });
 
-const card = (given: Installed): HTMLElement => {
+const card = (given: Installed, openThread?: (thread: { projectId: number; threadId: string }) => void): HTMLElement => {
   const target = document.createElement('div');
   document.body.append(target);
-  mounted.push(mount(InstallFailed, { target, props: { failed: given, title: 'not installed', retry: undefined } }));
+  mounted.push(mount(InstallFailed, { target, props: { failed: given, title: 'not installed', retry: undefined, openThread } }));
   flushSync();
   return target;
 };
@@ -54,4 +54,20 @@ test('a failed build shows the refusal’s reason with its unblock acts under Sh
 
 test('a failure that carries no refusal reads its own detail as the reason', () => {
   expect(card(failed()).textContent).toContain('bun run tagma:build ended with code 2');
+});
+
+test('a step that stopped the update and named a thread opens that thread', () => {
+  const opened: { projectId: number; threadId: string }[] = [];
+  const shown = card(
+    failed({
+      code: 'build-step-stopped',
+      reason: 'Core pin stopped the update: the pin does not converge',
+      unblock: ['update again once that is settled'],
+      thread: { projectId: 42, threadId: 'thread-1' },
+    }),
+    (thread) => opened.push(thread),
+  );
+  shown.querySelector<HTMLButtonElement>('[data-install-thread]')!.click();
+  expect(opened).toEqual([{ projectId: 42, threadId: 'thread-1' }]);
+  expect(card(failed()).querySelector('[data-install-thread]')).toBeNull();
 });

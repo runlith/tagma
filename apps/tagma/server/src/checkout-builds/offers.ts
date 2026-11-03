@@ -19,7 +19,9 @@ const STEPS: Readonly<Record<'prepare' | 'build' | 'back' | 'restart', NextStep>
   restart: { id: 'restart', title: 'Restart', weight: 1.5 },
 };
 
-const STAGE: Readonly<Record<BuildStep, keyof typeof STEPS>> = {
+const BEFORE_WEIGHT = 2;
+
+const STAGE: Readonly<Record<Exclude<BuildStep, 'before'>, keyof typeof STEPS>> = {
   worktree: 'prepare',
   install: 'prepare',
   build: 'build',
@@ -181,6 +183,8 @@ export const actsOf = (running: BuildRunning | null): readonly MachineAct[] => [
   },
 ];
 
+const beforeId = (at: number): string => `before-${at}`;
+
 export const installingOf = (running: BuildRunning): Installing => ({
   offer: running.from,
   title: TITLES[running.from],
@@ -188,8 +192,11 @@ export const installingOf = (running: BuildRunning): Installing => ({
   since: running.since,
   log: running.log,
   then: running.then,
-  steps: stepsOf(running.from, running.then === 'restart'),
-  step: STAGE[running.step],
+  steps: [
+    ...(running.before?.titles ?? []).map((title, at) => ({ id: beforeId(at), title, weight: BEFORE_WEIGHT })),
+    ...stepsOf(running.from, running.then === 'restart'),
+  ],
+  step: running.step === 'before' ? beforeId(running.before?.at ?? 0) : STAGE[running.step],
   progress: null,
   tail: running.tail,
   usually: running.usually,

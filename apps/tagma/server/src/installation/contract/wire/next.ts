@@ -70,6 +70,7 @@ export const installRefusalSchema = Schema.Struct({
   code: Schema.String,
   reason: Schema.String,
   unblock: Schema.Array(Schema.String),
+  thread: Schema.optional(Schema.Struct({ projectId: Schema.Int, threadId: Schema.String })),
 });
 export type InstallRefusal = typeof installRefusalSchema.Type;
 
