@@ -12,7 +12,7 @@ import type { ConfigVersion } from '../../config/contract/service/configs.js';
 import { descriptionsAt } from './descriptions.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { UnreadableTag } from '../../graph/contract/wire/tags/table.js';
-import { COMMIT_OPERATIONS, LANDING_TRIGGER } from '../contract/wire/checks.js';
+import { COMMIT_OPERATIONS, LANDING_TRIGGER } from '../contract/wire/landings.js';
 import { RuleRevision } from '../contract/service/ruleRevision.js';
 import { assembleMap } from './moduleMap.js';
 

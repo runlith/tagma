@@ -2,7 +2,7 @@ import type { InspectionFailure, JudgeRefusalReport, RuleBodies, RuleCrossing } 
 import { findingLines } from './findings.js';
 import { MAP_RECOVERY } from './document.js';
 import type { Words } from '../../../platform/contract/wire/refusal.js';
-import { COMMIT_OPERATIONS } from './checks.js';
+import { COMMIT_OPERATIONS } from './landings.js';
 
 export const MERGE_OP = 'merge_worktree';
 

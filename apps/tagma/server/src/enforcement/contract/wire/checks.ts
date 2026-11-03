@@ -31,12 +31,6 @@ export const checkedTriggers = Effect.fnUntraced(function* (
   return on;
 });
 
-export const GIT_COMMIT = 'git_commit';
-
-export const LANDING_TRIGGER = 'submit_work';
-
-export const COMMIT_OPERATIONS: readonly string[] = [GIT_COMMIT, 'commit_checkout'];
-
 export type JudgedLine = { readonly file: string; readonly line: number };
 
 export type LineHolders = (lines: readonly JudgedLine[]) => Effect.Effect<readonly (readonly string[])[], GateRefusal<'walk-cut'>>;

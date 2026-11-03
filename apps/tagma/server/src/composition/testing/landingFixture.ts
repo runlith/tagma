@@ -16,7 +16,7 @@ import {
   withLanes,
   workerLanes,
 } from '../../enforcement/testing/wiring.js';
-import { GIT_COMMIT } from '../../enforcement/contract/wire/checks.js';
+import { GIT_COMMIT } from '../../enforcement/contract/wire/landings.js';
 import { type ActChecks, actChecks, RuleChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import {

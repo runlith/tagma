@@ -18,7 +18,7 @@ import type { Caller } from '../platform/contract/wire/caller.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
 import { measuredRoot } from '../graph/contract/service/serving.js';
 import { Projects } from '../projects/contract/service/registry.js';
-import { GIT_COMMIT } from './contract/wire/checks.js';
+import { GIT_COMMIT } from './contract/wire/landings.js';
 import { PreparedChanges } from '../change-record/contract/service/prepared.js';
 import { saidByGit } from '../change-record/prepared/subject.js';
 import { notAdmitted, OwnGitFailed } from '../platform/git/ownGit.js';
