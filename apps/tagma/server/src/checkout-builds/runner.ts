@@ -20,7 +20,7 @@ import {
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
 import { previousRelease } from '../installation/closure/versions.js';
-import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/snapshot.js';
+import { declaredSubmodules, SUBMODULE_PATHS } from '../cut/snapshot.js';
 import { type InstallRefused, NextInstallation, RestartRefused, type StopRefused } from '../installation/contract/service/next.js';
 import { askedRestart, occupied, restarting } from '../installation/next/asking.js';
 import type { InstallationFailure } from '../installation/contract/wire/manifest.js';

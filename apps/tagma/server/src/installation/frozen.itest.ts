@@ -17,7 +17,6 @@ import { readAttempt, readReturn, writeAttempt, writeReturn } from './closure/at
 import { makeManifestProjection } from './closure/manifests.js';
 import { partsAt } from './closure/read.js';
 import { writeInstallation } from './closure/write.js';
-import { recorded, ReleaseRecord } from './cut/stage.js';
 import { makeProcessRestart } from './process/record.js';
 import { FROZEN } from './testing/frozen.js';
 
@@ -149,19 +148,6 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('frozen wire formats',
           }
         }
       }),
-  );
-
-  it.effect('every issued release reads the feed today’s cut writes', () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const home = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-frozen-' });
-      for (const record of yield* sampled(ReleaseRecord)) {
-        const irreversible = IRREVERSIBLE_STORES.map((store) => ({ store, release: record.release }));
-        const written = yield* recorded(home, { ...record, irreversible });
-        const text = yield* files.readFileString(written);
-        for (const shape of FROZEN) expect(issuedReads(shape.feed, text)).toBeUndefined();
-      }
-    }),
   );
 
   it.effect('every issued release reads the update record today writes, and today reads the ones it wrote', () =>

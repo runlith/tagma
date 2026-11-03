@@ -3,7 +3,7 @@ import type { Manifest } from '../platform/contract/service/manifest.js';
 import type { Route } from '../platform/contract/service/route.js';
 import type { DoorServices } from './http/handlers.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
-import type { Distribution } from '../installation/cut/descriptor.js';
+import type { Distribution } from '../cut/descriptor.js';
 import { type BindingChoice, type Bindings, boundOf } from './next.js';
 import type { CoreBindings, VerbBindings, VerbModule } from './cli/binding.js';
 import type { LiveDoorOf, SocketDoor } from './socketBinding.js';

@@ -44,7 +44,7 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
   writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mini', scripts: { 'tagma:build': 'bun build.ts' } }));
   writeFileSync(
     join(checkout, 'build.ts'),
-    `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../installation/testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
+    `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../cut/testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
   );
   const writeScript = (command: string) => writeFileSync(join(checkout, 'build.command'), command);
   writeScript(script);

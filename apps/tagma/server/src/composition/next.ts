@@ -14,7 +14,7 @@ import type { TerminalScreens } from '../executions/contract/service/records.js'
 import type { HostManagement } from '../executions/contract/service/host.js';
 import type { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 import type { SurfaceApp } from '../checkout-builds/surface.js';
-import type { Distribution } from '../installation/cut/descriptor.js';
+import type { Distribution } from '../cut/descriptor.js';
 import { relative } from 'node:path';
 
 export const appOf = ({ roots, client }: Distribution): SurfaceApp => ({

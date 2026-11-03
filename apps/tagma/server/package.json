@@ -453,9 +453,9 @@
       "node": "./src/installation/contract/wire/probe.ts",
       "default": "./src/installation/contract/wire/probe.ts"
     },
-    "./installation/setup/signing": {
-      "types": "./src/installation/setup/signing.ts",
-      "bun": "./src/installation/setup/signing.ts"
+    "./cut/signing": {
+      "types": "./src/cut/signing.ts",
+      "bun": "./src/cut/signing.ts"
     },
     "./installation/contract/wire/channel": {
       "types": "./src/installation/contract/wire/channel.ts",
@@ -1467,6 +1467,12 @@
       "bun": "./src/config/contract/*.ts",
       "default": null
     },
+    "./cut/*": {
+      "types": "./src/cut/*.ts",
+      "bun": "./src/cut/*.ts",
+      "default": null
+    },
+    "./cut/testing/*": null,
     "./desktop-browser/contract/*": {
       "types": "./src/desktop-browser/contract/*.ts",
       "bun": "./src/desktop-browser/contract/*.ts",
