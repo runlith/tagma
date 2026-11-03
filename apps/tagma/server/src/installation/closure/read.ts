@@ -103,7 +103,7 @@ export const readInstallation = Effect.fn('installation.read')(function* (root: 
 
 export const manifestIssue = (manifest: InstallationManifest): string | undefined => {
   const seen = new Set<string>();
-  const roles = new Set<InstallationRole>();
+  const roles = new Set<string>();
   for (const part of manifest.parts) {
     if (!insideClosure(part.path)) return `the part ${part.path} is named outside the closure`;
     if (seen.has(part.path)) return `the part ${part.path} is named twice`;

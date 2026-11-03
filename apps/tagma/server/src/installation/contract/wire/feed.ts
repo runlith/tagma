@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Array as Arr, Effect, Schema, SchemaGetter, SchemaIssue } from 'effect';
 import { IrreversibleChange, type InstallationPlatform } from './manifest.js';
 
 export const RELEASE_NUMBER = /^\d+(\.\d+){0,2}$/u;
@@ -62,7 +62,19 @@ export const feedReleaseSchema = Schema.Struct({
 });
 export type FeedRelease = typeof feedReleaseSchema.Type;
 
-export const feedSchema = Schema.Struct({ releases: Schema.NonEmptyArray(feedReleaseSchema) });
+const readableRelease = Schema.is(feedReleaseSchema);
+
+export const feedSchema = Schema.Struct({ releases: Schema.Array(Schema.Unknown) }).pipe(
+  Schema.decodeTo(Schema.Struct({ releases: Schema.NonEmptyArray(feedReleaseSchema) }), {
+    decode: SchemaGetter.transformEffect(({ releases }) => {
+      const read = releases.filter(readableRelease);
+      return Arr.isReadonlyArrayNonEmpty(read)
+        ? Effect.succeed({ releases: read })
+        : Effect.fail(new SchemaIssue.InvalidValue({ message: `none of its ${releases.length} releases reads as a release` }, releases));
+    }),
+    encode: SchemaGetter.transform((feed) => feed),
+  }),
+);
 export type Feed = typeof feedSchema.Type;
 
 export const newestOf = (feed: Feed): FeedRelease =>

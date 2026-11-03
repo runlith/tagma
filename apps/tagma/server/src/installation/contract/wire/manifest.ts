@@ -50,7 +50,7 @@ export const ENGINE_LAYOUT: ReadonlyArray<readonly [InstallationRole, string]> =
 export const ENGINE_ABSENCE_LAYOUT: ReadonlyArray<readonly [InstallationRole, string]> = [['server', WHISPER_ABSENCE_PART]];
 
 export const InstallationPart = Schema.Struct({
-  role: InstallationRole,
+  role: Schema.String,
   path: Schema.NonEmptyString,
   kind: Schema.Literals(['file', 'link']),
   bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -71,13 +71,16 @@ export const InstallationIdentity = Schema.Struct({
 });
 export type InstallationIdentity = typeof InstallationIdentity.Type;
 
-export const InstallationProvenance = Schema.Struct({ checkout: Schema.NonEmptyString });
+export const InstallationProvenance = Schema.Struct({
+  checkout: Schema.NonEmptyString,
+  inputs: Schema.optional(Schema.Array(Schema.String)),
+});
 export type InstallationProvenance = typeof InstallationProvenance.Type;
 
 export const IRREVERSIBLE_STORES = ['machine-store', 'host-store', 'graph', 'journal'] as const;
 
 export const IrreversibleChange = Schema.Struct({
-  store: Schema.Literals(IRREVERSIBLE_STORES),
+  store: Schema.String,
   release: Schema.NonEmptyString,
 });
 export type IrreversibleChange = typeof IrreversibleChange.Type;

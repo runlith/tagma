@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import type {
   Installed,
   Installing,
@@ -9,7 +10,7 @@ import type {
   NextStep,
   Said,
 } from '../installation/contract/wire/next.js';
-import type { IrreversibleChange } from '../installation/contract/wire/manifest.js';
+import { IRREVERSIBLE_STORES, type IrreversibleChange } from '../installation/contract/wire/manifest.js';
 import { compareReleases, type Feed, type FeedRelease, isRelease, newestOf } from '../installation/contract/wire/feed.js';
 import { crossesNoWayBack, newerThan, type ReleaseChoice } from './feed.js';
 
@@ -66,17 +67,21 @@ const plain = (text: string): Said => ({ text, strong: false });
 const strong = (text: string): Said => ({ text, strong: true });
 const counted = (count: number, one: string): string => `${count} ${count === 1 ? one : `${one}s`}`;
 
-const STORES: Readonly<Record<IrreversibleChange['store'], string>> = {
+const STORES: Readonly<Record<(typeof IRREVERSIBLE_STORES)[number], string>> = {
   'machine-store': "this machine's store",
   'host-store': "the execution host's store",
   graph: 'the graph format',
   journal: 'the thread journal shape',
 };
 
+const knownStore = Schema.is(Schema.Literals(IRREVERSIBLE_STORES));
+
+const storeText = (store: string): string => (knownStore(store) ? STORES[store] : store);
+
 export const noWayBackTo = (changes: readonly IrreversibleChange[], previous: string, running: string): string | null => {
   const crossed = changes.filter((one) => !isRelease(previous) || !isRelease(one.release) || compareReleases(one.release, previous) > 0);
   if (crossed.length === 0) return null;
-  const what = crossed.map((one) => `${STORES[one.store]} in ${one.release}`).join(', ');
+  const what = crossed.map((one) => `${storeText(one.store)} in ${one.release}`).join(', ');
   return `${running} carries changes ${previous} cannot read (${what}), so there is no way back to it`;
 };
 
