@@ -18,9 +18,10 @@ const answered = (text: string, finishReason: FinishReason): LLMResponse =>
     usage: new Usage({ inputTokens: 1, outputTokens: 1, totalTokens: 2 }),
     finishReason,
   });
-const modelThat = (call: () => Effect.Effect<LLMResponse, LLMError>): CompactionModels => ({
+const modelThat = (call: () => Effect.Effect<LLMResponse, LLMError>, account?: string): CompactionModels => ({
   request: () => ({
     plannedOutputTokens: 32_000,
+    signedAccount: () => account,
     text: call,
     stream: () => Stream.empty,
     object: () => Effect.die('This summary uses text.'),
@@ -42,8 +43,8 @@ const segment: ThreadCompactionSegment = {
   usableTokens: () => 100_000,
   summaryBudgetTokens: 3_000,
 };
-const failure = (call: () => Effect.Effect<LLMResponse, LLMError>) =>
-  Effect.flip(makeThreadSummaryStrategy({ models: modelThat(call), prompt }).summarize(segment));
+const failure = (call: () => Effect.Effect<LLMResponse, LLMError>, account?: string) =>
+  Effect.flip(makeThreadSummaryStrategy({ models: modelThat(call, account), prompt }).summarize(segment));
 describe('ThreadSummaryStrategy refusals', () => {
   it.effect.each([
     ['a summary the model cut short', () => Effect.succeed(answered('## State\n- partial', 'length')), 'unfinished'],
@@ -59,12 +60,13 @@ describe('ThreadSummaryStrategy refusals', () => {
     }),
   );
   it.effect(
-    'a model failure carries its original cause, and a quota failure still falls through',
+    'a model failure carries its original cause and the account it ran on, and a quota failure still falls through',
     Effect.fnUntraced(function* () {
       const quota = new LLMError({ module: 'LLM', method: 'text', reason: new QuotaExceededReason({ message: 'out of quota' }) });
-      const refused = yield* failure(() => Effect.fail(quota));
+      const refused = yield* failure(() => Effect.fail(quota), 'resolved-login');
       expect(refused.reason).toBe('model');
       expect(refused.failure).toBe(quota);
+      expect(refused.account).toBe('resolved-login');
       expect(fallThrough(refused)).toBe('quota');
     }),
   );

@@ -17,12 +17,13 @@ export class AskRefused extends Data.TaggedError('AskRefused')<{
   readonly message: string;
   readonly failure?: unknown;
   readonly usage?: Usage;
+  readonly account?: string;
 }> {}
 
 export const askGate = (refused: AskRefused, unblock: Unblock): GateRefusal<AskRefusal> =>
   new GateRefusal(refused.refusal, refused.message, unblock);
 
-export const askFailure = (failure: LLMError): AskRefused => {
+export const askFailure = (failure: LLMError, account?: string): AskRefused => {
   const refusal: AskRefusal = isContextOverflowFailure(failure)
     ? 'ask-input-too-large'
     : failure.reason._tag === 'Authentication' || failure.reason._tag === 'NotInstalled' || failure.reason._tag === 'AdapterFailed'
@@ -32,7 +33,7 @@ export const askFailure = (failure: LLMError): AskRefused => {
         : failure.reason._tag === 'InvalidProviderOutput'
           ? 'ask-unreadable-answer'
           : 'ask-provider-failed';
-  return new AskRefused({ refusal, message: failure.message, failure });
+  return new AskRefused({ refusal, message: failure.message, failure, account });
 };
 
 export type NamedModel = { readonly provider: string; readonly model: string };
@@ -81,7 +82,7 @@ export type ProgramRun = {
   readonly ask: ProgramAsk;
   readonly entries: readonly EnvironmentEntry[];
   readonly input: string;
-  readonly stallMs: number | null;
+  readonly stallMs: number;
 };
 
 export class ProgramFailed extends Data.TaggedError('ProgramFailed')<{ readonly message: string }> {}

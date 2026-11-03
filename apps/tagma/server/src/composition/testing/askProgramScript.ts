@@ -39,7 +39,7 @@ if (log !== undefined && log !== '')
   );
 
 if (input.includes('ASK-MOVING'))
-  for (let beat = 0; beat < 12; beat += 1) {
+  for (let beat = 0; beat < 25; beat += 1) {
     process.stdout.write('\n');
     await Bun.sleep(100);
   }

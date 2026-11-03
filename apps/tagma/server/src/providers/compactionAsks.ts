@@ -80,7 +80,10 @@ export const makeCompactionAsks = Effect.gen(function* () {
                 finishReason: 'stop',
               });
             }),
-            Effect.mapError(failureOf),
+            Effect.mapError((refusal) => {
+              account = refusal.account;
+              return failureOf(refusal);
+            }),
           ),
     };
   };

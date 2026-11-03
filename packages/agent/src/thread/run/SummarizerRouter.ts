@@ -16,6 +16,7 @@ import { type ThreadCompactionPolicy, threadUsableTokens } from '../compaction/p
 import { previousThreadCompactionBoundary } from '../compaction/prefix';
 import type { ResolvedSummarizer, ThreadSummarizing } from '../compaction/summarizer';
 import { ThreadSummarizerWindowError, fallThrough } from '../compaction/summarizerFailure';
+import { summarizedBy } from '../compaction/summaryStrategy';
 import type {
   ThreadCompactionRefused,
   ThreadCompactionSegment,
@@ -321,7 +322,9 @@ export const makeSummarizerRouter = ({
                 continue;
               }
               return yield* Effect.failCause(attempt.cause).pipe(
-                Effect.mapError((refused) => new ThreadSummaryFailedError(segment, 'model', refused.message, refused)),
+                Effect.mapError(
+                  (refused) => new ThreadSummaryFailedError(summarizedBy(segment, request), 'model', refused.message, refused),
+                ),
               );
             }
             const { summary, response } = attempt.value;

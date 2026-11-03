@@ -34,7 +34,7 @@ const run = (
   input: string,
   entries: readonly { readonly _tag: 'Set'; readonly name: string; readonly value: string }[] = [],
   program: AskProgram = askProgramFixture,
-  stallMs: number | null = null,
+  stallMs = 60_000,
 ) =>
   Effect.flatMap(AskPrograms, (programs) =>
     programs.run({
@@ -84,9 +84,9 @@ layer(filler, { excludeTestServices: true })('ask programs', (it) => {
 
   it.effect('a program reporting progress is waited for while it moves and stalls once it falls silent', () =>
     Effect.gen(function* () {
-      const moving = yield* run('ASK-MOVING ASK-BYTES', [], reporting, 400);
+      const moving = yield* run('ASK-MOVING ASK-BYTES', [], reporting, 2_000);
       expect(reporting.answer(moving)).toMatchObject({ _tag: 'Text', text: String(Buffer.byteLength('ASK-MOVING ASK-BYTES')) });
-      expect(yield* Effect.flip(run('ASK-HANG', [], reporting, 400))).toMatchObject({ _tag: 'ProgramStalled', idleMs: 400 });
+      expect(yield* Effect.flip(run('ASK-HANG', [], reporting, 2_000))).toMatchObject({ _tag: 'ProgramStalled', idleMs: 2_000 });
     }),
   );
 
@@ -151,6 +151,13 @@ layer(filler, { excludeTestServices: true })('ask programs', (it) => {
       expect(answered).toMatchObject({ path: 'program', value: String(Buffer.byteLength('ASK-BYTES words')) });
       expect(selected).toEqual([undefined]);
       expect(yield* logged(log)).toEqual([expect.objectContaining({ account: 'default-login', model: ASK_PROGRAM_MODEL, effort: 'high' })]);
+      const quota = yield* Effect.flip(
+        asks.text(
+          { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL, reasoning: 'high', account: null },
+          { system: 'Answer.', input: 'ASK-QUOTA' },
+        ),
+      );
+      expect(quota).toMatchObject({ refusal: 'ask-quota', account: 'default-login' });
     }).pipe(Effect.orDie),
   );
 });

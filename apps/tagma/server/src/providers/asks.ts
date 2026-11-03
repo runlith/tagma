@@ -1,4 +1,5 @@
 import { ActivityLog } from '@runlith/activity/log';
+import { AGENT_IDLE_MS } from '@runlith/agent/callProgress';
 import type { ModelRequest } from '@runlith/agent/modelPort';
 import { estimateThreadTokens } from '@runlith/agent/thread/compaction/measurement';
 import { decodeJsonAnswer } from '@runlith/llm/call';
@@ -40,8 +41,10 @@ type ProgramRoute = Extract<AskRoute, { readonly path: 'program' }>;
 
 type Spoken<A> = { readonly value: A; readonly usage: Usage | undefined; readonly account: string | undefined };
 
-const refused = (refusal: AskRefusal, message: string, failure?: unknown, usage?: Usage) =>
-  new AskRefused({ refusal, message, failure, usage });
+const refused = (refusal: AskRefusal, message: string, failure?: unknown, usage?: Usage, account?: string) =>
+  new AskRefused({ refusal, message, failure, usage, account });
+
+const silenceOf = (ask?: FreshAsk): number => ask?.stallMs ?? AGENT_IDLE_MS;
 
 const optionOf = (catalog: ProviderCatalog, provider: string, model: string): ModelOption | undefined =>
   catalog.models.registered(provider) ? catalog.models.modelsOf(provider).find((option) => option.id === model) : undefined;
@@ -142,7 +145,7 @@ export const makeModelAsks = Effect.gen(function* () {
       instructions: system,
       cache: 'none',
       reasoningOutput: false,
-      stallMs: ask?.stallMs,
+      stallMs: silenceOf(ask),
     });
     return request.refusal === undefined ? Effect.succeed(request) : Effect.fail(askFailure(request.refusal));
   };
@@ -196,12 +199,12 @@ export const makeModelAsks = Effect.gen(function* () {
           ask: { model: selection.model, rung: selection.reasoning, system, schema: native ? schema : undefined },
           entries: environment.entries,
           input: ask.input,
-          stallMs: ask.stallMs ?? null,
+          stallMs: silenceOf(ask),
         }),
       )
-      .pipe(Effect.mapError((failure) => refused('ask-provider-failed', failure.message, failure)));
+      .pipe(Effect.mapError((failure) => refused('ask-provider-failed', failure.message, failure, undefined, environment.account)));
     const answer: ProgramAnswer = route.program.answer(ran);
-    if (answer._tag === 'Refused') return yield* refused(answer.refusal, answer.message, undefined, answer.usage);
+    if (answer._tag === 'Refused') return yield* refused(answer.refusal, answer.message, undefined, answer.usage, environment.account);
     return { answer, usage: answer.usage, account: environment.account };
   }, Effect.scoped);
 
@@ -212,7 +215,9 @@ export const makeModelAsks = Effect.gen(function* () {
       return { value, usage, account } satisfies Spoken<string>;
     }
     const request = yield* requestOf(route, selection, ask.system, ask);
-    const response = yield* request.text({ prompt: ask.input, stallMs: ask.stallMs }).pipe(Effect.mapError(askFailure));
+    const response = yield* request
+      .text({ prompt: ask.input, stallMs: silenceOf(ask) })
+      .pipe(Effect.mapError((failure) => askFailure(failure, request.signedAccount?.())));
     return { value: response.text, usage: LLMResponse.usage(response), account: request.signedAccount?.() } satisfies Spoken<string>;
   });
 
@@ -229,19 +234,19 @@ export const makeModelAsks = Effect.gen(function* () {
         answer._tag === 'Object'
           ? answer.object
           : yield* parsedObject(answer._tag === 'Text' ? answer.text : '').pipe(
-              Effect.mapError((failure) => refused(failure.refusal, failure.message, failure.failure, usage)),
+              Effect.mapError((failure) => refused(failure.refusal, failure.message, failure.failure, usage, account)),
             );
       const value = yield* decodeJsonAnswer(schema)(given).pipe(
         Effect.mapError((issue) =>
-          refused('ask-unreadable-answer', `The answer does not match the requested shape: ${issue.message}`, issue, usage),
+          refused('ask-unreadable-answer', `The answer does not match the requested shape: ${issue.message}`, issue, usage, account),
         ),
       );
       return { value, usage, account } satisfies Spoken<unknown>;
     }
     const request = yield* requestOf(route, selection, ask.system, ask);
     const answered = yield* request
-      .object({ prompt: ask.input, schema: Schema.Unknown, jsonSchema: schema, stallMs: ask.stallMs })
-      .pipe(Effect.mapError(askFailure));
+      .object({ prompt: ask.input, schema: Schema.Unknown, jsonSchema: schema, stallMs: silenceOf(ask) })
+      .pipe(Effect.mapError((failure) => askFailure(failure, request.signedAccount?.())));
     return {
       value: answered.object,
       usage: LLMResponse.usage(answered.response),

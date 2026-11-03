@@ -87,7 +87,7 @@ export function makeThreadSummaryStrategy({ models, prompt }: ThreadSummaryStrat
         });
       const noFit = (cause: unknown) =>
         new ThreadSummaryFailedError(
-          segment,
+          summarizedBy(segment, request),
           'no-fit',
           cause === null ? 'no model-message prefix fits the summary request.' : messageOf(cause),
           cause,
@@ -98,7 +98,7 @@ export function makeThreadSummaryStrategy({ models, prompt }: ThreadSummaryStrat
             onSuccess: (response) => summaryOf(segment, request, selected.coveredMessageCount, response),
             onFailure: (failure) => {
               if (!isContextOverflowFailure(failure))
-                return Effect.fail(new ThreadSummaryFailedError(segment, 'model', messageOf(failure), failure));
+                return Effect.fail(new ThreadSummaryFailedError(summarizedBy(segment, request), 'model', messageOf(failure), failure));
               const previous = previousThreadCompactionBoundary(segment.messages, segment.alreadyCovered, selected.coveredMessageCount);
               const next = previous === null ? null : select(previous);
               return next === null ? Effect.fail(noFit(failure)) : summarize(next);
@@ -115,6 +115,10 @@ function messageOf(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
 }
 
+export function summarizedBy(segment: ThreadCompactionSegment, request: ModelRequest) {
+  return { threadId: segment.threadId, provider: segment.provider, account: request.signedAccount?.() ?? segment.account };
+}
+
 function summaryOf(
   segment: ThreadCompactionSegment,
   request: ModelRequest,
@@ -122,7 +126,7 @@ function summaryOf(
   response: LLMResponse,
 ): Effect.Effect<ThreadCompactionSummary, ThreadSummaryFailedError> {
   const broken = (reason: ThreadSummaryFailedError['reason'], detail: string) =>
-    Effect.fail(new ThreadSummaryFailedError(segment, reason, detail));
+    Effect.fail(new ThreadSummaryFailedError(summarizedBy(segment, request), reason, detail));
   if (response.finishReason !== 'stop') return broken('unfinished', `the model did not finish (finish reason: ${response.finishReason}).`);
   const summary = response.text.trim();
   if (!summary) return broken('empty', 'the model produced an empty summary.');
