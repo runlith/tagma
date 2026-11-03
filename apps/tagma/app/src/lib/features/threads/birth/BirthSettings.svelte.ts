@@ -82,8 +82,9 @@ export class BirthSettings implements ModelView {
 
   signedOut = $derived.by<SignedOut | null>(() => {
     const settings = this.settings;
-    if (settings === null || settings.account === '') return null;
-    const row = this.accounts.signing(settings.provider).find((one) => String(one.account) === settings.account);
+    const account = this.draft.account ?? this.defaults.value?.account ?? settings?.account ?? '';
+    if (settings === null || account === '') return null;
+    const row = this.accounts.signing(settings.provider).find((one) => String(one.account) === account);
     return row?.problem?.kind === 'signed-out' ? { provider: row.provider, account: String(row.account), label: row.label } : null;
   });
 
