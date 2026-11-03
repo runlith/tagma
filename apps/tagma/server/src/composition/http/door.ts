@@ -123,7 +123,8 @@ export const doorLayer = (options: DoorOptions) => {
     Layer.provide(schemaRefusalLayer),
     Layer.provide(callLogLayer),
   );
-  const app = options.appDist === undefined ? Layer.empty : HttpStaticServer.layer({ root: options.appDist, spa: true });
+  const app =
+    options.appDist === undefined ? Layer.empty : HttpStaticServer.layer({ root: options.appDist, spa: true, cacheControl: 'no-cache' });
   return Layer.mergeAll(api, retiredRoutes, unknownApiPath, moduleRoutes(options.routes), app, doorMiddleware);
 };
 
