@@ -43,6 +43,8 @@ import { keepAwake } from '../../power/keys.js';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { Exposure } from '../../remote/contract/service/exposure.js';
 import { tenant } from './tenant.js';
+import { BUILTIN_ADAPTERS } from '../adapters.js';
+import { installLogins, type Logins, type LoginsParams, noLogins, relocatedAdapters } from './logins.js';
 
 type CallOptions = {
   readonly method?: string;
@@ -65,6 +67,7 @@ type DoorParams = {
   readonly drivers?: readonly DriverId[];
   readonly artifactOrigin?: string;
   readonly sandboxPort?: number;
+  readonly logins?: LoginsParams;
 };
 
 type Seams = {
@@ -198,11 +201,12 @@ const built = Effect.fnUntraced(
     if (installed !== undefined && hostBundlePath !== undefined) {
       yield* Effect.orDie((yield* FileSystem.FileSystem).symlink(hostBundlePath, join(installed.root, EXECUTIONS)));
     }
+    const logins: Logins = options.logins === undefined ? noLogins : yield* installLogins(fixture, options.logins);
     const runtime = yield* makeRuntime(
       {
         ...COMPOSED,
-        adapters: TESTING_ADAPTERS,
-        accountCli,
+        adapters: options.logins === undefined ? TESTING_ADAPTERS : relocatedAdapters(BUILTIN_ADAPTERS, logins),
+        accountCli: options.logins === undefined ? accountCli : undefined,
         grants: testGrantSigner,
         profileWindowMs: () => 0,
         spanFloorMicros: options.everySpan === true ? () => 0 : undefined,
@@ -224,13 +228,15 @@ const built = Effect.fnUntraced(
       Layer.empty,
       processes,
     );
-    const registry = Context.get(runtime.owners as Context.Context<ProviderRegistry>, ProviderRegistry);
-    const { sections, wires } = registry.current();
-    const ownModes = sections.flatMap((section) =>
-      section.options.filter((option) => wires.registered(option.provider)).map((option) => [section.id, option.id] as const),
-    );
-    yield* Effect.forEach(ownModes, ([section, mode]) => Effect.orDie(registry.selectMode(section, mode)));
-    yield* Effect.orDie(chosenModel(runtime));
+    if (options.logins === undefined) {
+      const registry = Context.get(runtime.owners as Context.Context<ProviderRegistry>, ProviderRegistry);
+      const { sections, wires } = registry.current();
+      const ownModes = sections.flatMap((section) =>
+        section.options.filter((option) => wires.registered(option.provider)).map((option) => [section.id, option.id] as const),
+      );
+      yield* Effect.forEach(ownModes, ([section, mode]) => Effect.orDie(registry.selectMode(section, mode)));
+      yield* Effect.orDie(chosenModel(runtime));
+    }
     yield* Effect.orDie(Context.get(runtime.graph, Settings).write({ scope: 'user', key: keepAwake.id, value: 'off' }));
 
     const routed = routedContext(runtime.graph, runtime.pool);
@@ -322,6 +328,7 @@ const built = Effect.fnUntraced(
       root: fixture.root,
       dataHome: storageHomes(join(data, 'tagma.sqlite')).appHome,
       lend,
+      logins,
     };
   },
   (effect) => Effect.provide(effect, BunFileSystem.layer),
@@ -341,19 +348,25 @@ const paramsOf = (options: WorldOptions): DoorParams => ({
   drivers: options.drivers,
   artifactOrigin: options.artifactOrigin,
   sandboxPort: options.sandboxPort,
+  logins: options.logins,
 });
 
 const lends = (options: WorldOptions) => SEAMS.some((name) => options[name] !== undefined);
 
-const taken = (options: WorldOptions) =>
-  options.own === undefined ? shared(doorWorld, paramsOf(options)) : own(doorWorld, paramsOf(options), options.own);
+const ownReason = (options: WorldOptions) =>
+  options.own ?? (options.logins === undefined ? undefined : 'a fresh machine whose CLI logins nothing preselects');
+
+const taken = (options: WorldOptions) => {
+  const reason = ownReason(options);
+  return reason === undefined ? shared(doorWorld, paramsOf(options)) : own(doorWorld, paramsOf(options), reason);
+};
 
 export const makeDoorWorld = (options: WorldOptions = {}) =>
   lends(options) ? Effect.tap(taken(options), (door) => door.lend(options)) : taken(options);
 
 export const doorFixture = (options: WorldOptions = {}) => {
-  const standing =
-    options.own === undefined ? world(doorWorld, paramsOf(options)) : world(doorWorld, paramsOf(options), { own: options.own });
+  const reason = ownReason(options);
+  const standing = reason === undefined ? world(doorWorld, paramsOf(options)) : world(doorWorld, paramsOf(options), { own: reason });
   if (!lends(options)) return standing;
   return Layer.effect(
     DoorFixture,

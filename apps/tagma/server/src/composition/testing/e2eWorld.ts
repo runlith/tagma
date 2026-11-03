@@ -6,7 +6,7 @@ import { ActivityRecord } from '@runlith/activity/store/record';
 import type { threadSendSchema } from '@runlith/agent/protocol/realtime';
 import { subscriptionDescription } from '@runlith/builtin-catalog/subscription/description';
 import { onFailure } from '@runlith/e2e/artifacts';
-import { kind, shared, world as workerWorld } from '@runlith/testbed/worlds';
+import { kind, own, shared, world as workerWorld } from '@runlith/testbed/worlds';
 import { Clock, Context, Effect, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
 import { FetchHttpClient, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
@@ -29,44 +29,54 @@ import { liveServing } from '../socketBinding.js';
 import { ASSEMBLY } from './composed.js';
 import { makeDoorWorld, projectLeaving } from './doorFixture.js';
 import { doorServing } from './doorServices.js';
+import type { LoginsParams } from './logins.js';
+import type { VendorWire } from '../../providers/accounts/signIns.js';
 import { scriptedModel } from './scriptedModel.js';
 import { surfaceBundleRoot } from './surfaceBundle.js';
 
 export type E2eOptions = {
   readonly models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
+  readonly vendorWire?: VendorWire;
+  readonly logins?: LoginsParams;
 };
 
+type E2eParams = null | { readonly logins: LoginsParams };
+
+const LOGINS_WORLD = 'a fresh machine whose CLI logins nothing preselects';
+
 const built = Effect.fnUntraced(
-  function* (home: string) {
+  function* (params: E2eParams, home: string) {
     const files = yield* FileSystem.FileSystem;
     const appDist = yield* surfaceBundleRoot;
     const listener = yield* Layer.build(BunHttpServer.layer({ hostname: '127.0.0.1', port: 0, gracefulShutdownTimeout: '20 millis' }));
     const server = Context.get(listener, HttpServer.HttpServer);
     if (server.address._tag === 'UnixPathAddress') return yield* Effect.die(new Error('the e2e world requires a loopback TCP listener'));
     const origin = `http://127.0.0.1:${server.address.port}`;
-    const world = yield* makeDoorWorld({ artifactOrigin: origin, sandboxPort: server.address.port });
-    yield* world.lend({ models: scriptedModel() });
-    const bootstrap = Effect.fn('testing.E2eWorld.bootstrap')(function* (id: string, input: unknown) {
-      const answer = yield* world.op(id, input);
-      if (answer.status !== 200) return yield* Effect.die(new Error(`${id} refused the e2e world: ${JSON.stringify(answer.body)}`));
-    });
-    yield* bootstrap('read_provider_token', {
-      provider: subscriptionDescription.id,
-      credential: {
-        accessToken: 'e2e-scripted-bearer',
-        refreshToken: 'e2e-scripted-refresh',
-        expiresAt: (yield* Clock.currentTimeMillis) + 3_600_000,
-        scope: 'user:inference',
-        account: { uuid: 'e2e-scripted', email: 'e2e@example.invalid' },
-        organization: { uuid: 'e2e-scripted', name: 'E2e' },
-      },
-    });
-    yield* bootstrap('set_model_defaults', {
-      provider: subscriptionDescription.id,
-      model: subscriptionDescription.defaultTextModel,
-      reasoning: null,
-      account: 'e2e-scripted',
-    });
+    const world = yield* makeDoorWorld({ artifactOrigin: origin, sandboxPort: server.address.port, logins: params?.logins });
+    if (params === null) {
+      yield* world.lend({ models: scriptedModel() });
+      const bootstrap = Effect.fn('testing.E2eWorld.bootstrap')(function* (id: string, input: unknown) {
+        const answer = yield* world.op(id, input);
+        if (answer.status !== 200) return yield* Effect.die(new Error(`${id} refused the e2e world: ${JSON.stringify(answer.body)}`));
+      });
+      yield* bootstrap('read_provider_token', {
+        provider: subscriptionDescription.id,
+        credential: {
+          accessToken: 'e2e-scripted-bearer',
+          refreshToken: 'e2e-scripted-refresh',
+          expiresAt: (yield* Clock.currentTimeMillis) + 3_600_000,
+          scope: 'user:inference',
+          account: { uuid: 'e2e-scripted', email: 'e2e@example.invalid' },
+          organization: { uuid: 'e2e-scripted', name: 'E2e' },
+        },
+      });
+      yield* bootstrap('set_model_defaults', {
+        provider: subscriptionDescription.id,
+        model: subscriptionDescription.defaultTextModel,
+        reasoning: null,
+        account: 'e2e-scripted',
+      });
+    }
     yield* files.makeDirectory(home, { recursive: true });
     const routes = doorServing(
       Layer.mergeAll(
@@ -180,17 +190,17 @@ const built = Effect.fnUntraced(
         }),
       );
     });
-    return { origin, world, tenant, activity };
+    return { origin, world, tenant, activity, logins: world.logins };
   },
   (effect) => Effect.provide(effect, BunFileSystem.layer),
 );
 
 export class E2eWorld extends Context.Service<E2eWorld, Effect.Success<ReturnType<typeof built>>>()('testing/E2eWorld') {}
 
-const e2eWorld = kind(E2eWorld, (_params: null, home: string) => built(home));
+const e2eWorld = kind(E2eWorld, (params: E2eParams, home: string) => built(params, home));
 
 const prepare = Effect.fnUntraced(function* (served: E2eWorld['Service'], options: E2eOptions) {
-  yield* served.world.lend(options);
+  yield* served.world.lend({ models: options.models, vendorWire: options.vendorWire });
   yield* Effect.acquireRelease(
     Effect.sync(() => onFailure((directory) => Effect.runPromise(served.activity(directory)).then(() => undefined))),
     (stop) => Effect.sync(stop),
@@ -198,10 +208,20 @@ const prepare = Effect.fnUntraced(function* (served: E2eWorld['Service'], option
   return served;
 });
 
-export const makeE2eWorld = (options: E2eOptions = {}) => Effect.flatMap(shared(e2eWorld, null), (served) => prepare(served, options));
+export const makeE2eWorld = (options: E2eOptions = {}) =>
+  Effect.flatMap(
+    options.logins === undefined ? shared(e2eWorld, null) : own(e2eWorld, { logins: options.logins }, LOGINS_WORLD),
+    (served) => prepare(served, options),
+  );
 
 export const e2eFixture = (options: E2eOptions = {}) =>
   Layer.effect(
     E2eWorld,
     Effect.flatMap(E2eWorld, (served) => prepare(served, options)),
-  ).pipe(Layer.provide(workerWorld(e2eWorld, null)));
+  ).pipe(
+    Layer.provide(
+      options.logins === undefined
+        ? workerWorld(e2eWorld, null)
+        : workerWorld(e2eWorld, { logins: options.logins }, { own: LOGINS_WORLD }),
+    ),
+  );
