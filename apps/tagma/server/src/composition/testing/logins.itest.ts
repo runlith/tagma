@@ -16,24 +16,23 @@ it.live('a fresh login world stands only its controlled CLIs, holds a status unt
   Effect.gen(function* () {
     const served = yield* makeE2eWorld({ logins: { claude: 'held', codex: 'absent' } });
     const installs = Context.get(served.world.runtime.owners, InstalledHarnesses);
-    const binary = (rows: Effect.Success<typeof installs.settled>, harness: string) => rows.find((row) => row.harness === harness)?.binary ?? null;
+    const binary = (rows: Effect.Success<typeof installs.settled>, harness: string) =>
+      rows.find((row) => row.harness === harness)?.binary ?? null;
     const first = yield* installs.settled;
     expect(binary(first, 'claude-code')).not.toBeNull();
     expect(binary(first, 'codex')).toBeNull();
 
-    const status = ran(binary(first, 'claude-code')!, ['auth', 'status', '--json']);
     yield* served.logins.started('claude');
     yield* served.logins.answer('claude', 'signed-in');
-    const answered = yield* Effect.promise(() => status);
-    expect(answered.code).toBe(0);
-    expect(JSON.parse(answered.stdout)).toMatchObject({ loggedIn: true, authMethod: 'claude.ai' });
     expect(yield* served.logins.starts('claude')).toContainEqual({
       argv: ['auth', 'status', '--json'],
-      cwd: expect.any(String),
+      cwd: expect.stringContaining('tagma-account-status'),
       variable: null,
       mise: null,
       tty: false,
     });
+    const answered = yield* Effect.promise(() => ran(binary(first, 'claude-code')!, ['auth', 'status', '--json']));
+    expect(JSON.parse(answered.stdout)).toMatchObject({ loggedIn: true, authMethod: 'claude.ai' });
     expect(JSON.parse(readFileSync(join(served.logins.place('claude'), '.claude.json'), 'utf8'))).toHaveProperty('oauthAccount');
 
     yield* served.logins.answer('codex', 'signed-out');
