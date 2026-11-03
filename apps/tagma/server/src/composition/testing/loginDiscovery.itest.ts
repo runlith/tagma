@@ -17,7 +17,7 @@ import { HarnessAdapters } from '../../external-harnesses/contract/service/adapt
 import { UserEnvironment, type ProfileAnswer } from '../../installation/contract/service/userEnvironment.js';
 import { makeUserEnvironment } from '../../installation/process/userEnvironment.js';
 import { Projects } from '../../projects/contract/service/registry.js';
-import { FileWatcher } from '../../platform/contract/service/watch.js';
+import { FileWatcher, WatchRefused } from '../../platform/contract/service/watch.js';
 import { DefaultLogins, defaultLoginsLayer, type DefaultLoginBook } from '../../providers/accounts/defaultLogins.js';
 import { HarnessDirectories, makeHarnessDirectoryStore, type HarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
 import { AccountCli, LoginPlaces } from '../../providers/contract/service/cli.js';
@@ -364,6 +364,41 @@ layer(Layer.merge(watchProcessLayer, BunFileSystem.layer), { excludeTestServices
         { program: 'codex', args: ['login', 'status'] },
         { program: 'codex', args: ['login', 'status'] },
       ]);
+    }),
+  );
+
+  it.effect('a refused watch does not settle discovery without a verdict, and focus restores file observation', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const watcher = yield* FileWatcher;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'login-watch-refusal-' });
+      const bin = join(root, 'bin');
+      const claudeDefault = join(root, 'claude-default');
+      const codexDefault = join(root, 'codex-default');
+      yield* Effect.forEach([bin, claudeDefault, codexDefault], (directory) => files.makeDirectory(directory, { recursive: true }));
+      yield* files.writeFileString(join(root, 'runs.jsonl'), '');
+      yield* files.writeFileString(join(codexDefault, 'auth.json'), JSON.stringify({ signed: true }));
+      yield* files.writeFileString(join(bin, 'codex'), executable(root, { claude: claudeDefault, codex: codexDefault }), { mode: 0o755 });
+      let refused = false;
+      const recovering = FileWatcher.of({
+        ...watcher,
+        subscribe: (at, options, hearing) => {
+          if (refused) return watcher.subscribe(at, options, hearing);
+          refused = true;
+          return Effect.fail(new WatchRefused({ message: 'the watch service is temporarily unavailable' }));
+        },
+      });
+      const codexCli = withDefault(codex, codexDefault);
+      const { book, rows } = yield* makeRig({ root, providers: [codexCli], variables: {} }).pipe(
+        Effect.provideService(FileWatcher, recovering),
+      );
+      yield* book.ready;
+      expect(yield* rows.of(codexCli.id)).toMatchObject([{ directory: null, signed: true, problem: null }]);
+      yield* book.focus;
+      const signedOut = yield* Effect.forkScoped(whenRow(book, rows, codexCli.id, (row) => row?.problem?.kind === 'signed-out'));
+      yield* replaceLogin(files, join(codexDefault, 'auth.json'), { signed: false });
+      yield* Fiber.join(signedOut);
+      expect(yield* rows.of(codexCli.id)).toMatchObject([{ directory: null, signed: false, problem: { kind: 'signed-out' } }]);
     }),
   );
 
