@@ -325,6 +325,7 @@
         tabindex="0"
         class="group/step flex min-w-0 flex-1 cursor-pointer items-baseline gap-x-1.5 overflow-hidden text-left text-ui whitespace-nowrap"
         aria-expanded={isOpen}
+        data-entry={entry.id}
         onclick={() => openStep(entry, isOpen)}
         onkeydown={(event) => keyStep(event, entry, isOpen)}
       >
