@@ -1,11 +1,8 @@
 import { expect, test } from 'bun:test';
-import { contentDigest } from '@runlith/files/content';
 import { workspaceChangeHunk } from '@runlith/files/hunk';
 import { stepsIn } from '@runlith/utils/sequenceDiff';
 import { foldPath, type FoldInput } from './fold.js';
 import { contentOf, type FoldRow } from './folding.js';
-import type { MarkedLine } from './projection.js';
-import { selectFold } from './selection.js';
 
 function shortest(a: readonly string[], b: readonly string[]): number {
   let previous = new Array<number>(b.length + 1).fill(0);
@@ -19,7 +16,7 @@ function shortest(a: readonly string[], b: readonly string[]): number {
 }
 
 for (const seed of [1, 3, 29, 97])
-  test(`three-writer ownership conserves minimal diffs and separable landings, seed ${seed}`, () => {
+  test(`three-writer ownership conserves minimal diffs, seed ${seed}`, () => {
     let state = seed;
     const random = () => (state = (state * 1103515245 + 12345) & 0x7fffffff) / 0x80000000;
     const pick = <A>(values: readonly A[]): A => values[Math.floor(random() * values.length)] as A;
@@ -84,47 +81,5 @@ for (const seed of [1, 3, 29, 97])
       };
       const answer = check(value);
       expect(answer.result.nobody, context).toEqual({ added: 0, removed: 0 });
-      for (const carrier of new Set(rows.map((row) => row.holder))) {
-        const selected = selectFold(answer.result, value.head, value.working, { holders: new Set([carrier]), nobody: false }, new Set());
-        if ('refuse' in selected || selected.kind === 'none' || answer.record === null) continue;
-        const landed = selected.kind === 'whole' ? work.join('') : selected.text;
-        const composed =
-          selected.kind === 'text' && selected.text !== null
-            ? [
-                {
-                  digest: contentDigest(selected.text),
-                  head: contentDigest(base.join('')),
-                  working: contentDigest(work.join('')),
-                  pieces: selected.pieces,
-                },
-              ]
-            : [];
-        const next = { ...value, head: contentOf(landed), rows: [], landed: composed };
-        const residue = check(next, foldPath(next, stepsIn(100_000), { kind: 'after', state: answer.record, row: answer.record.last }));
-        expect(
-          residue.result.hands.find((hand) => hand.holder === carrier),
-          context,
-        ).toBeUndefined();
-        const sliced = answer.result.regions.flatMap((region) => region.lines);
-        const carried = new Set((selected.kind === 'text' ? selected.lines : sliced).map((line) => line.unit));
-        const placed = new Set(sliced.map((line) => `${line.kind}:${line.at}`));
-        const owned = (line: MarkedLine) => JSON.stringify([line.mark === 'external' ? null : line.mark.holder, line.kind, line.text]);
-        const gone = new Map<string, number>();
-        for (const line of [...sliced, ...answer.lines.filter((one) => !placed.has(`${one.kind}:${one.at}`))])
-          if (line.mark !== 'external' && !carried.has(line.unit)) gone.set(owned(line), (gone.get(owned(line)) ?? 0) + 1);
-        for (const line of residue.lines) {
-          expect(gone.get(owned(line)) ?? 0, `${context} ${owned(line)}`).toBeGreaterThan(0);
-          gone.set(owned(line), gone.get(owned(line))! - 1);
-        }
-        const balance = new Map<string, number>();
-        for (const [key, count] of gone) {
-          const [, kind, text] = JSON.parse(key) as [string | null, MarkedLine['kind'], string];
-          balance.set(text, (balance.get(text) ?? 0) + (kind === 'added' ? count : -count));
-        }
-        expect(
-          [...balance].filter(([, count]) => count !== 0),
-          context,
-        ).toEqual([]);
-      }
     }
   });

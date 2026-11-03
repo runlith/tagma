@@ -13,6 +13,7 @@ import {
   reachSaid,
 } from './contract/wire/enforcement.js';
 import { findingLines } from './contract/wire/findings.js';
+import { authorNote } from './contract/wire/refusals.js';
 import { triggersSaid } from '../graph/contract/wire/enforcement.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { provenanceLine } from '../platform/contract/wire/provenance.js';
@@ -123,14 +124,8 @@ export const inspectionsText = (answer: Answered<InspectionsReading>): string =>
   });
 };
 
-const heldSaid = ({ holders, withheld }: CheckedViolation): string => {
-  if (holders !== undefined)
-    return `held by ${holders.join(', ')}${withheld === undefined ? '' : `, standing only on ${withheld}, which they hold uncommitted`}`;
-  return withheld === undefined ? '' : `standing only on ${withheld}, which this session holds and this change leaves out`;
-};
-
 const checkedNote = (one: CheckedViolation): string =>
-  [one.owed === true ? 'debt' : '', heldSaid(one)].filter((part) => part !== '').join(', ');
+  [one.owed === true ? 'debt' : '', authorNote(one)].filter((part) => part !== '').join(', ');
 
 export const checkedText = (answer: Answered<CheckAnswer>): string => {
   if (answer.status !== 'ok') return refusalLines(answer).join('\n');
@@ -142,8 +137,8 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
           ? 'the index could not be judged'
           : `checked the index against ${answer.head}: ${answer.paths.join(', ') || 'no staged paths'}`
         : answer.paths.length === 0
-          ? `nothing to check — this session holds nothing the branch does not already carry (HEAD ${answer.head})`
-          : `checked this session's change against ${answer.head}: ${answer.paths.join(', ')}`;
+          ? `nothing to check — submit_work would carry no change against HEAD ${answer.head}`
+          : `checked the tree submit_work would land against ${answer.head}: ${answer.paths.join(', ')}`;
   const named = (one: CheckAnswer['rules'][number]) =>
     `${one.rule === '' ? 'the inspection' : one.rule}${one.strictness === undefined ? '' : ` (${one.strictness}, ${triggersSaid(one.on ?? [])})`}`;
   const ran = (one: CheckAnswer['rules'][number]) =>
@@ -172,7 +167,7 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
       ? []
       : [
           answer.refuses
-            ? 'submit_work would refuse this change: a rule at gate triggered before it finds a new crossing on your own lines, or cannot run'
+            ? 'submit_work would refuse this change: a rule at gate triggered before it finds a new crossing in the tree it would land, or cannot run'
             : 'submit_work would land this change as far as its rules go',
         ]),
     ...(rules.length === 0 ? [] : [`rules (${rules.length}):`, ...rules]),

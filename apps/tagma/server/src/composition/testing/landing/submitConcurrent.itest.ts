@@ -107,7 +107,7 @@ it.live('concurrent landings of one session report only the lines still uncommit
       const { submitted } = yield* Schema.decodeUnknownEffect(Schema.Struct({ submitted: SubmitReceipt }))(answer.value);
       expect(submitted.status).toBe('landed');
       if (submitted.status !== 'landed') return;
-      expect(submitted.left).toEqual(['pending.txt']);
+      expect(submitted.left).toEqual([{ path: 'pending.txt', reason: 'paths' }]);
       expect(submitted.unrecorded ?? []).toEqual([]);
     }
     expect(yield* suiteGit(root, 'ls-tree', '--name-only', 'HEAD', '--', 'first.txt')).toBe('');

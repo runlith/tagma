@@ -15,9 +15,6 @@ export const holdersOf = (holding: Holding): readonly string[] =>
     ? holding.verdict.hands.map((hand) => holderKey(hand.holder))
     : holding.verdict.writers.map(holderKey);
 
-export const owes = (holding: Holding, holder: string): boolean =>
-  (holding.verdict.verdict === 'unknown' || holding.git !== 'ignored') && holdersOf(holding).includes(holder);
-
 export class Totals {
   private readonly checkouts = new Map<string, CheckoutCounted>();
 
@@ -43,16 +40,6 @@ export class Totals {
       total.outside += counted.outside;
     }
     return total;
-  }
-
-  checkoutsOf(holders: readonly string[]): readonly string[] {
-    return [
-      ...new Set(
-        holders.flatMap((holder) =>
-          [...(this.holders.get(holder) ?? [])].flatMap(([checkout, counted]) => (counted.paths + counted.unproven > 0 ? [checkout] : [])),
-        ),
-      ),
-    ];
   }
 
   forget(checkout: string): ReadonlySet<string> {

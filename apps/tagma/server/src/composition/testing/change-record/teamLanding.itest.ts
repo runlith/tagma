@@ -55,26 +55,17 @@ const teamWrite = Effect.fnUntraced(function* () {
   return { s, text, verdicts };
 });
 
-const takingLeft = [{ threadId: LEFT, label: LEFT }];
-
 layer(commandLayer, { excludeTestServices: true })('team command landing', (it) => {
-  it.effect(
-    'a write met only by commands of one thread tree is the team’s: its root lands it by taking a member, and neither the member alone nor a sibling taking it does',
-    () =>
-      Effect.gen(function* () {
-        const { s, text, verdicts } = yield* teamWrite();
-        expect(verdicts).toEqual([[{ name: 'src/a.ts', verdict: 'team' }], [{ name: 'src/a.ts', verdict: 'team' }]]);
-        expect(s.commands.unattributed({ projectId: s.w.projectId, threadId: LEFT })).toMatchObject([
-          { path: 'src/a.ts', reason: TEAM_REASON, team: ROOT },
-        ]);
-        expect(yield* s.w.submit(LEFT, { commands: s.commands })).toMatchObject({ status: 'nothing' });
-        expect(yield* s.w.submit(RIGHT, { commands: s.commands, taking: takingLeft })).toMatchObject({ status: 'nothing' });
-        expect(yield* s.w.submit(ROOT, { commands: s.commands, taking: takingLeft })).toMatchObject({
-          status: 'landed',
-          committed: ['src/a.ts'],
-        });
-        expect(yield* s.w.run(['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
-      }),
+  it.effect('a write met only by commands of one thread tree lands whole with the root’s bare submit once its members rest', () =>
+    Effect.gen(function* () {
+      const { s, text, verdicts } = yield* teamWrite();
+      expect(verdicts).toEqual([[{ name: 'src/a.ts', verdict: 'team' }], [{ name: 'src/a.ts', verdict: 'team' }]]);
+      expect(s.commands.unattributed({ projectId: s.w.projectId, threadId: LEFT })).toMatchObject([
+        { path: 'src/a.ts', reason: TEAM_REASON, team: ROOT },
+      ]);
+      expect(yield* s.w.submit(ROOT, { commands: s.commands })).toMatchObject({ status: 'landed', committed: ['src/a.ts'] });
+      expect(yield* s.w.run(['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
+    }),
   );
   it.effect('a named birth never adopts an off-path team-observed deletion as a move', () =>
     Effect.gen(function* () {
@@ -126,13 +117,12 @@ layer(commandLayer, { excludeTestServices: true })('team command landing', (it) 
       life.close();
       yield* s.decided(LEFT);
       expect(yield* s.held('outside.ts')).toEqual([]);
-      expect(yield* s.w.submit(LEFT, { commands: s.commands })).toMatchObject({ status: 'landed', committed: ['new.ts'] });
-      expect(yield* s.w.head('outside.ts')).toBe(text);
+      expect((yield* s.held('new.ts')).map(([thread]) => thread)).toEqual([LEFT]);
     }),
   );
-  it.effect('a team path another session’s command also met stays out of the root’s landing without paths', () =>
+  it.effect('a path the commands of two thread trees met lands with a bare submit of either', () =>
     Effect.gen(function* () {
-      const { s } = yield* teamWrite();
+      const { s, text } = yield* teamWrite();
       const at = yield* Clock.currentTimeMillis;
       s.commands.remembered([
         {
@@ -147,7 +137,8 @@ layer(commandLayer, { excludeTestServices: true })('team command landing', (it) 
           at,
         },
       ]);
-      expect(yield* s.w.submit(ROOT, { commands: s.commands, taking: takingLeft })).toMatchObject({ status: 'nothing' });
+      expect(yield* s.w.submit(THEIRS, { commands: s.commands })).toMatchObject({ status: 'landed', committed: ['src/a.ts'] });
+      expect(yield* s.w.run(['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
     }),
   );
 });

@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { OwnGitFailed, actingGit, runGit } from '../../platform/git/ownGit.js';
 import { treeEntriesAt } from '@runlith/git/entries';
-import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { CommitShape } from '../contract/service/shape.js';
 import type { PreparedEmptied, PreparedRow } from '../contract/service/prepared.js';
 import type { Reshaped } from '../contract/wire/reshape.js';
@@ -9,7 +9,6 @@ import type { ShapeRefusal } from '../contract/wire/shape.js';
 import { emptyTree } from './subject.js';
 import { type Built, type Landing, named } from './tree.js';
 import { derivationOf } from './deriving.js';
-import type { StoreFailure } from '../../platform/contract/service/store.js';
 
 export type Finished<Row extends PreparedRow> = Built<Row> & {
   readonly from: string;
@@ -28,7 +27,7 @@ export const shapeBuilt = Effect.fn('prepared.shape')(function* <Row extends Pre
   built: Built<Row>,
   shape: CommitShape['Service'],
   merging = false,
-): Effect.fn.Return<Shaping<Row>, OwnGitFailed | StoreFailure | GateRefusal<ShapeRefusal | 'landing-busy' | 'walk-cut'>> {
+): Effect.fn.Return<Shaping<Row>, OwnGitFailed | GateRefusal<ShapeRefusal | 'landing-busy'>> {
   const { git, root, input, job } = landing;
   const base = built.base ?? (yield* emptyTree(git, root));
   const shaped = yield* shape.shape({
@@ -44,17 +43,7 @@ export const shapeBuilt = Effect.fn('prepared.shape')(function* <Row extends Pre
     skipping: input.withoutFormat === true,
     merging,
     derive: input.derive,
-    derivation: (declared) =>
-      derivationOf(landing, built, declared).pipe(
-        Effect.mapError((failure) =>
-          failure instanceof OwnGitFailed || failure instanceof GateRefusal
-            ? failure
-            : new GateRefusal('walk-cut', `the derivation's program-origin and holder evidence could not be read: ${failure.message}`, [
-                'submit again once the change record reads',
-                'leave the derived outputs out of this landing',
-              ]),
-        ),
-      ),
+    derivation: (declared) => derivationOf(landing, built, declared),
   });
   const formatSkipped = shaped.skipped;
   const { declaration } = shaped;

@@ -7,12 +7,7 @@ import type { Reshaped } from '../wire/reshape.js';
 import type { ShapeRefusal } from '../wire/shape.js';
 import type { DeriveCommand } from '../wire/derivation.js';
 
-export type DerivationNeed = {
-  readonly paths: readonly string[];
-  readonly recognized: readonly string[];
-  readonly excluded: readonly { readonly path: string; readonly holders: readonly string[] }[];
-  readonly commands: readonly string[];
-};
+export type DerivationNeed = { readonly paths: readonly string[] };
 
 export type ShapeAct = ActorRef;
 
@@ -29,7 +24,7 @@ export type ShapeAsk = {
   readonly skipping: boolean;
   readonly merging?: boolean;
   readonly derive?: readonly DeriveCommand[];
-  readonly derivation?: (declared: boolean) => Effect.Effect<DerivationNeed | undefined, OwnGitFailed | GateRefusal<'walk-cut'>>;
+  readonly derivation?: (declared: boolean) => Effect.Effect<DerivationNeed | undefined, OwnGitFailed>;
 };
 
 export type Shaped = {

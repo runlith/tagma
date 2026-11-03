@@ -23,6 +23,7 @@ import type {
   PreparedEmptied,
   PreparedLanding,
   PreparedSubject,
+  TeamMember,
 } from '../../change-record/contract/service/prepared.js';
 import { type Forming, judgedInForm } from './formed.js';
 import { headOf, readMerge } from '../../change-record/prepared/subject.js';
@@ -88,6 +89,7 @@ type Selection = {
   readonly unmatched: readonly string[];
   readonly paths: readonly string[];
   readonly unattributed: readonly string[];
+  readonly team: readonly TeamMember[];
 };
 
 type Published =
@@ -100,8 +102,7 @@ type LandingRefusal = GateRefusal<
   | 'git-unavailable'
   | 'git-not-admitted'
   | 'tree-mid-merge'
-  | 'walk-cut'
-  | 'lines-held'
+  | 'path-unread'
   | 'landing-busy'
   | 'landing-cut'
   | 'commit-unsigned'
@@ -227,6 +228,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
     readonly unmatched: readonly string[];
     readonly paths: readonly string[];
     readonly unattributed: readonly string[];
+    readonly team: readonly TeamMember[];
   },
   LandingRefusal | OwnGitFailed | StoreFailure | HookRefused
 > {
@@ -250,7 +252,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
       if (unfinished.length > 0) return yield* busy(root, unfinished.join('; '));
       let prepares = 0;
       let rebased: PreparedLanding<Lander> | null = null;
-      let selection: Selection = { unmatched: [], paths: [], unattributed: [] };
+      let selection: Selection = { unmatched: [], paths: [], unattributed: [], team: [] };
       const onto = (prepared: PreparedLanding<Lander>, head: string | null) =>
         head === null ? Effect.succeed(null) : produce.rebase(git, root, prepared, head);
       for (let attempt = 1; ; attempt += 1) {
@@ -260,7 +262,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
         let prepared: PreparedLanding<Lander>;
         if (rebased === null) {
           prepares += 1;
-          yield* stage(`attempt ${attempt}: selecting this session's lines and shaping them by the commit steps`);
+          yield* stage(`attempt ${attempt}: selecting the files to land and shaping them by the commit steps`);
           const outcome = yield* produce.prepare({
             projectId: input.projectId,
             git,
@@ -274,7 +276,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
             caller,
             act: caller === undefined ? { kind: 'operator' } : actorRefOfTerminal(caller),
           });
-          selection = { unmatched: outcome.unmatched, paths: outcome.paths, unattributed: outcome.unattributed };
+          selection = { unmatched: outcome.unmatched, paths: outcome.paths, unattributed: outcome.unattributed, team: outcome.team };
           if (outcome.prepared === null) {
             return { landed: null, emptied: outcome.emptied, ...selection };
           }
@@ -339,15 +341,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
             ]),
           );
           changed = listed.split('\0').filter((path) => path !== '');
-          const hooks = yield* hooked(
-            Effect.mapError(
-              stepHunks(git, root, built.tree, committing.tree, []),
-              (failure) =>
-                new GateRefusal('walk-cut', `what the hooks changed could not be read to attribute lines: ${failure.message}`, [
-                  'commit again, or land without the hooks that rewrite files',
-                ]),
-            ),
-          );
+          const hooks = yield* hooked(stepHunks(git, root, built.tree, committing.tree, []));
           const edited = {
             ...prepared.subject,
             built: committing.tree,
@@ -371,16 +365,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
             sign: committing.sign,
           }),
         );
-        yield* hooked(
-          retirement.landing({
-            checkout: RootId.make(checkout),
-            commit,
-            tree: built.from,
-            landed: built.plan.flatMap((one) =>
-              one.land === 'own' && one.landed !== null ? [{ path: one.path, landed: one.landed }] : [],
-            ),
-          }),
-        );
+        yield* hooked(retirement.landing({ checkout: RootId.make(checkout), commit, tree: built.from }));
         const intent = built.base === null ? null : `${job}:${attempt}`;
         if (intent !== null && built.base !== null)
           yield* hooked(
@@ -403,12 +388,11 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
           subject: committing.message.split(/\r?\n/, 1)[0] ?? committing.message,
           committed: [...changed].sort(),
           carried: built.plan.flatMap((one) =>
-            one.holders.length > 0 && carriedPaths.has(one.path) ? [{ path: one.path, holders: one.holders }] : [],
+            one.writers.length > 0 && carriedPaths.has(one.path) ? [{ path: one.path, holders: one.writers }] : [],
           ),
           unattributed: selection.unattributed.length === 0 ? undefined : selection.unattributed,
           unmatched: selection.unmatched.length === 0 ? undefined : selection.unmatched,
           watched: judged.watched.length === 0 ? undefined : judged.watched,
-          carriedViolations: judged.carriedViolations.length === 0 ? undefined : judged.carriedViolations,
           rechecked: judged.rechecked === undefined || judged.rechecked.length === 0 ? undefined : judged.rechecked,
           bodies: judged.bodies === undefined || Object.keys(judged.bodies).length === 0 ? undefined : judged.bodies,
           unjudged: judged.unjudged.length === 0 ? undefined : judged.unjudged,

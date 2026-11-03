@@ -51,11 +51,9 @@ export class Holdings extends Context.Service<
       steps: readonly IntroducedStep[],
       decide: IntroducedVerdicts<E>,
     ): Effect.Effect<void, HoldingsFailure | E>;
-    lease<A, E, R>(checkout: RootId, paths: readonly string[], work: Effect.Effect<A, E, R>): Effect.Effect<A, E | HoldingsFailure, R>;
     moved(checkout: RootId, paths: readonly string[] | 'all'): Effect.Effect<void>;
     follow(checkout: RootId): Effect.Effect<void, HoldingsFailure, Scope.Scope>;
     threads(threadIds: readonly string[]): Effect.Effect<ReadonlyMap<string, ThreadTotals>, StoreFailure>;
-    heldCheckouts(holders: readonly string[]): Effect.Effect<readonly string[], HoldingsFailure>;
     changed(listener: (change: HoldingsChange) => Effect.Effect<void>): () => void;
     subscribe(checkout: RootId): Stream.Stream<HoldingsFrame, HoldingsFailure>;
   }

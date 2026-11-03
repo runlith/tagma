@@ -15,8 +15,8 @@ import { WorkingOrigins } from '../../../workspace/contract/service/places.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { Tags } from '../../../graph/contract/service/vocabulary.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
-import { sharedPrepared } from '../../preparedChanges.js';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
+import { preparedChangesOver } from '../../../change-record/serving.js';
+import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
 import { claimPreparedInstance, preparedBase } from '../../../change-record/testing/doubles.js';
 import { steppedOver } from '../stepsFixture.js';
 import { Git } from '@runlith/git/Git';
@@ -160,14 +160,14 @@ const makePlace = Effect.gen(function* () {
   const store = Context.get(world.runtime.graph, MachineStore);
   const instance = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(store)), (instance) => instance.release);
   const stepped = yield* Effect.provideService(steppedOver(store), Git, Context.get(world.runtime.graph, Git));
-  producer = sharedPrepared(
-    instance.dir,
-    makeLandingHolds(),
+  producer = preparedChangesOver(
     Context.get(world.runtime.owners, CommandChanges),
+    instance.dir,
+    CHECKOUT_DIRECTORY,
     Context.get(world.runtime.owners, Holdings),
     yield* Effect.acquireRelease(Effect.sync(makeWalks), (owned) => owned.close),
     stepped.shape,
-  ).changes;
+  );
   const project = Effect.fnUntraced(function* (name: string) {
     const root = yield* files.realPath(yield* world.directory(name));
     yield* seedRepository(root);
@@ -297,17 +297,14 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         (yield* op('write_document', { path: 'shared.ts', text: both, base: contentDigest(peerText), write: 'operator-write' })).status,
       ).toBe(200);
       const landed = yield* native('submit_work', { subject: 'foreign work', paths: ['shared.ts'], tasks: [task] });
-      expect(landed).toMatchObject({ submitted: { status: 'landed', committed: ['shared.ts'], carried: [] } });
-      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
-      expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(both.replace('100;   ', '100;'));
+      expect(landed).toMatchObject({
+        submitted: { status: 'landed', committed: ['shared.ts'], carried: [{ path: 'shared.ts', holders: [peer.threadId, 'operator'] }] },
+      });
+      const formed = both.replace('100;   ', '100;');
+      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(formed.trimEnd());
+      expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(formed);
       expect(yield* out(target.root, ['log', '-1', '--format=%s'])).toBe('foreign work');
       expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
-      const view = yield* held(target.root);
-      const hands = view.paths.find((one) => one.path === 'shared.ts')?.verdict;
-      expect(hands?.verdict === 'proven' ? hands.hands.map((hand) => hand.holder) : null).toEqual(
-        expect.arrayContaining([{ kind: 'operator' }, { kind: 'thread', thread: peer.threadId }]),
-      );
-      expect(hands?.verdict === 'proven' ? hands.hands.length : null).toBe(2);
 
       const side = yield* world.directory('side');
       yield* git(target.root, 'worktree', 'add', '-q', '-b', 'side', side);
@@ -336,7 +333,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         submitted: { status: 'landed', watched: [{ rule }] },
       });
       expect(yield* out(side, ['show', 'HEAD:shared.ts'])).toBe(bad.trim());
-      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
+      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(formed.trimEnd());
       const mainText = both.replace('100;   ', '101;');
       yield* write(target.root, mainText.replace('export const n0 = 101;', "export * from './value';"));
       expect(yield* native('submit_work', { project: target.id })).toMatchObject({
@@ -345,9 +342,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         reason: expect.stringContaining(rule),
       });
       yield* write(target.root, mainText);
-      expect(
-        yield* native('submit_work', { project: target.id, subject: 'taken work', taking: [peer.threadId, 'operator'] }),
-      ).toMatchObject({
+      expect(yield* native('submit_work', { project: target.id, subject: 'whole file' })).toMatchObject({
         submitted: { status: 'landed', committed: ['shared.ts'] },
       });
       expect((yield* held(target.root)).totals.held).toBe(0);
@@ -355,7 +350,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
     }),
   );
 
-  it.effect('the checkout graph gates new merge-resolution violations through submit_work, even when the caller holds no lines', () =>
+  it.effect('the checkout graph gates new merge-resolution violations through submit_work naming the merge’s paths', () =>
     Effect.gen(function* () {
       const { files, target, rule, native, out } = yield* PlaceFixture;
       yield* git(target.root, 'checkout', '-qb', 'incoming');
@@ -372,7 +367,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
       yield* files.writeFileString(join(target.root, 'incoming.ts'), "export * from './value';\n");
       yield* git(target.root, 'add', '--', 'incoming.ts');
 
-      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
+      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming', paths: ['incoming.ts'] })).toMatchObject({
         status: 'refused',
         code: 'rule-violated',
         reason: expect.stringContaining(rule),
@@ -381,7 +376,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
       expect(yield* out(target.root, ['rev-parse', 'MERGE_HEAD'])).toBe(tip);
       yield* files.writeFileString(join(target.root, 'incoming.ts'), 'export const incoming = 1;\n');
       yield* git(target.root, 'add', '--', 'incoming.ts');
-      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
+      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming', paths: ['incoming.ts'] })).toMatchObject({
         submitted: { status: 'landed', committed: ['incoming.ts'] },
       });
       const commit = yield* out(target.root, ['rev-parse', 'HEAD']);
@@ -392,7 +387,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
   );
 
   it.effect(
-    'a thread born in a worktree lands later main edits through HTTP, with implicit selection, project selection and parent taking',
+    'a thread born in a worktree lands later main edits through HTTP, with implicit selection, and its parent lands them once it rests',
     () =>
       Effect.gen(function* () {
         const { world, files, op, write, held, out } = yield* PlaceFixture;
@@ -445,9 +440,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
           status: 200,
           body: { paths: ['shared.ts'] },
         });
-        expect(
-          yield* op('submit_work', { subject: 'parent takes main by project', taking: [child.threadId] }, project.id, parent),
-        ).toMatchObject({
+        expect(yield* op('submit_work', { subject: 'parent lands its rested child by project' }, project.id, parent)).toMatchObject({
           status: 200,
           body: { submitted: { status: 'landed', committed: ['shared.ts'] } },
         });

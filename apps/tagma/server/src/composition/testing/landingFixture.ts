@@ -37,10 +37,7 @@ import type { WorkingOrigin } from '../../workspace/contract/wire/place.js';
 import { TEST_CHECKOUT, testPlace } from '../../workspace/testing/doubles.js';
 import { PLACE } from './checkoutFixture.js';
 import { submitOver } from '../../landing/testing/doubles.js';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmission } from '../preparedChanges.js';
-import { evidenceInGroups } from '../../change-record/testing/doubles.js';
-import { pathsOfThread } from '../../change-record/testing/doubles.js';
+import { preparedReads } from '../../change-record/testing/doubles.js';
 import { recordWrite } from '../../change-record/testing/doubles.js';
 import { claimPreparedInstance, preparedBase } from '../../change-record/testing/doubles.js';
 import type { PreparedInstance } from '../../change-record/prepared/subject.js';
@@ -68,7 +65,6 @@ import { forProject, inWorkspace, withGraphCall } from '../../invocation/testing
 const bodies = enforcementBodies(checkSubjectOf);
 
 export type Asked = {
-  readonly whole?: readonly string[];
   readonly paths?: readonly string[];
   readonly faces?: Lanes;
   readonly checks?: ActChecks;
@@ -138,13 +134,7 @@ const makeLanding = Effect.fnUntraced(function* (demo: EffectDemo, workers: Lane
     return actChecks(checksOver({ graphOf }), 'submit_work');
   };
 
-  const producerAt = (dir: string) =>
-    makePreparedChanges(
-      { commands: quietCommands, pathsOfThread, evidenceInGroups },
-      landingAdmission(makeLandingHolds()),
-      judgingFns(CHECKOUT_DIRECTORY),
-      dir,
-    );
+  const producerAt = (dir: string) => makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), dir);
 
   const landing = Effect.fnUntraced(function* (threadId: string, asked: Asked = {}) {
     const inst = yield* claimPreparedInstance(preparedBase(demo.graph.store));
@@ -157,14 +147,7 @@ const makeLanding = Effect.fnUntraced(function* (demo: EffectDemo, workers: Lane
           demo.graph.store,
           demo.graph.units,
           originFor(threadId),
-          {
-            projectId: demo.projectId,
-            tasks: [],
-            taking: [],
-            coAuthored: true,
-            whole: asked.whole,
-            paths: asked.paths,
-          },
+          { projectId: demo.projectId, tasks: [], coAuthored: true, paths: asked.paths, everything: false },
           asked.checks ?? checksWith(asked.faces ?? workers),
           producer,
         ),
@@ -247,28 +230,19 @@ const makeLanding = Effect.fnUntraced(function* (demo: EffectDemo, workers: Lane
       function* (threadId: string, asked: Asked = {}) {
         const ask = { projectId: demo.projectId, caller: null, rules: 'all' as const };
         if (prepared === undefined) prepared = yield* claimPreparedInstance(preparedBase(demo.graph.store));
-        const { prepared: made } = yield* prepareChange(
-          { commands: quietCommands, pathsOfThread, evidenceInGroups },
-          judgingFns(CHECKOUT_DIRECTORY),
-          prepared.dir,
-          {
-            projectId: demo.projectId,
-            git: demo.graph.git,
-            root: demo.demoRoot,
-            store: demo.graph.store,
-            units: demo.graph.units,
-            origin: originFor(threadId),
-            checkout: TEST_CHECKOUT,
-            input: {
-              taking: [],
-              whole: asked.whole,
-              paths: asked.paths,
-            },
-            job: `check:${randomUUID()}`,
-            caller: { _tag: 'Thread' as const, threadId: ThreadId.make(threadId), projectId: demo.projectId },
-            act: { kind: 'thread', threadId, projectId: demo.projectId },
-          },
-        );
+        const { prepared: made } = yield* prepareChange(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), prepared.dir, {
+          projectId: demo.projectId,
+          git: demo.graph.git,
+          root: demo.demoRoot,
+          store: demo.graph.store,
+          units: demo.graph.units,
+          origin: originFor(threadId),
+          checkout: TEST_CHECKOUT,
+          input: { paths: asked.paths },
+          job: `check:${randomUUID()}`,
+          caller: { _tag: 'Thread' as const, threadId: ThreadId.make(threadId), projectId: demo.projectId },
+          act: { kind: 'thread', threadId, projectId: demo.projectId },
+        });
         if (made === null) return null;
         const version = {
           projectId: demo.projectId,

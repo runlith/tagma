@@ -220,7 +220,6 @@ const unsyncedOf = (unsynced: readonly string[]) => (unsynced.length === 0 ? {} 
 
 const judgedFields = (judgement: Checked | null) => ({
   watched: judgement === null || judgement.watched.length === 0 ? undefined : judgement.watched,
-  carriedViolations: judgement === null || judgement.carriedViolations.length === 0 ? undefined : judgement.carriedViolations,
   bodies: judgement?.bodies === undefined || Object.keys(judgement.bodies).length === 0 ? undefined : judgement.bodies,
   unjudged: judgement === null || judgement.unjudged.length === 0 ? undefined : judgement.unjudged,
 });

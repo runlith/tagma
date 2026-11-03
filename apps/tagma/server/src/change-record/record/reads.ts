@@ -7,6 +7,9 @@ import { type StoreShape, within } from './places.js';
 import { held, standing as unended, workspaceChange } from '../store/tables.js';
 import { projectRoot } from '../../workspace/store/tables.js';
 import { readHolder } from '../store/homes.js';
+import { retirementProof } from '../store/retirement.js';
+import { chunk, unique } from '@runlith/utils/collection';
+import { rowsPerStatement } from '../../platform/store/binds.js';
 import { DURABLE_OUTCOME, type RowOutcome } from './outcomes.js';
 
 export type ThreadPathRecord = {
@@ -42,6 +45,95 @@ export const pathsOfThread = Effect.fn('WorkspaceChangeLog.pathsOfThread')(funct
       return [...standing.values()].sort((left, right) => left.path.localeCompare(right.path));
     }),
   );
+});
+
+export const heldPathsOf = Effect.fn('WorkspaceChangeLog.heldPathsOf')(function* (
+  units: MachineUnits['Service'],
+  store: StoreShape,
+  checkout: string,
+  holders: readonly string[],
+): Effect.fn.Return<ReadonlyMap<string, readonly string[]>, StoreFailure> {
+  const paths = new Map<string, string[]>();
+  for (const group of chunk(unique(holders), rowsPerStatement(2))) {
+    const rows = yield* units.read((unit) =>
+      unit.run(
+        store.db
+          .selectDistinct({ holder: workspaceChange.holder, path: workspaceChange.path })
+          .from(workspaceChange)
+          .where(and(inArray(workspaceChange.holder, group), eq(workspaceChange.checkout, checkout), held)),
+      ),
+    );
+    for (const row of rows) paths.set(row.holder, [...(paths.get(row.holder) ?? []), row.path]);
+  }
+  return paths;
+});
+
+export const checkoutsOfHolders = Effect.fn('WorkspaceChangeLog.checkoutsOfHolders')(function* (
+  units: MachineUnits['Service'],
+  store: StoreShape,
+  holders: readonly string[],
+): Effect.fn.Return<readonly string[], StoreFailure> {
+  const checkouts = new Set<string>();
+  for (const group of chunk(unique(holders), rowsPerStatement(1))) {
+    const rows = yield* units.read((unit) =>
+      unit.run(
+        store.db
+          .selectDistinct({ checkout: workspaceChange.checkout })
+          .from(workspaceChange)
+          .where(and(inArray(workspaceChange.holder, group), held)),
+      ),
+    );
+    for (const row of rows) checkouts.add(row.checkout);
+  }
+  return [...checkouts];
+});
+
+export const commitsOfHolders = Effect.fn('WorkspaceChangeLog.commitsOfHolders')(function* (
+  units: MachineUnits['Service'],
+  store: StoreShape,
+  checkout: string,
+  holders: readonly string[],
+  count: number,
+): Effect.fn.Return<readonly string[], StoreFailure> {
+  const found = new Map<string, number>();
+  for (const group of chunk(unique(holders), rowsPerStatement(2))) {
+    const durable = yield* units.read((unit) =>
+      unit.run(
+        store.db
+          .select({ commit: workspaceChange.commit, at: sql<number>`max(${workspaceChange.committedAt})` })
+          .from(workspaceChange)
+          .where(and(inArray(workspaceChange.holder, group), eq(workspaceChange.checkout, checkout), isNotNull(workspaceChange.commit)))
+          .groupBy(workspaceChange.commit)
+          .orderBy(desc(sql`max(${workspaceChange.committedAt})`))
+          .limit(count),
+      ),
+    );
+    const pending = yield* units.read((unit) =>
+      unit.run(
+        store.db
+          .selectDistinct({ commit: retirementProof.commit })
+          .from(workspaceChange)
+          .innerJoin(
+            retirementProof,
+            and(eq(retirementProof.row, workspaceChange.id), sql`${retirementProof.after} is ${workspaceChange.afterHash}`),
+          )
+          .where(
+            and(
+              inArray(workspaceChange.holder, group),
+              eq(workspaceChange.checkout, checkout),
+              eq(workspaceChange.state, 'held'),
+              eq(retirementProof.reason, 'committed'),
+            ),
+          ),
+      ),
+    );
+    for (const row of pending) found.set(row.commit, Number.MAX_SAFE_INTEGER);
+    for (const row of durable) if (row.commit !== null) found.set(row.commit, Math.max(found.get(row.commit) ?? 0, Number(row.at ?? 0)));
+  }
+  return [...found]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, count)
+    .map(([commit]) => commit);
 });
 
 export const movedTo = Effect.fn('WorkspaceChangeLog.movedTo')(function (

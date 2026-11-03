@@ -44,7 +44,7 @@ export const makeCommitShape = Effect.gen(function* () {
       const { git } = ask;
       let need: DerivationNeed | undefined;
       if (ask.skipping) {
-        need = ask.derivation === undefined ? undefined : yield* ask.derivation((ask.derive?.length ?? 0) > 0);
+        need = ask.derivation === undefined ? undefined : yield* ask.derivation(true);
         if (need === undefined) return UNCHANGED(ask, []);
       }
       const config = yield* configs.read({
@@ -64,7 +64,7 @@ export const makeCommitShape = Effect.gen(function* () {
           : (yield* runGit(git, 'commit-derived-outputs', ['-C', ask.root, 'ls-tree', '-r', '--name-only', '-z', ask.tree]))
               .split('\0')
               .filter((path) => path !== '' && outsideGraph(path, graphDirectory));
-      const derivations = yield* derivationsFor(need, config?.derive ?? [], ask.derive ?? [], available, graphDirectory);
+      const derivations = derivationsFor(need, config?.derive ?? [], ask.derive ?? [], available, graphDirectory);
       if (steps.length === 0 && derivations.length === 0) return UNCHANGED(ask, declaration);
       const candidates = steps.length === 0 ? [] : yield* candidatesOf(git, ask.root, ask.base, ask.tree, graphDirectory);
       const plans = steps.map((step) => ({ step, files: globbed(selectorOf(step.command), candidates) }));

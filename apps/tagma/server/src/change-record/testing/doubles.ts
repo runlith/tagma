@@ -14,7 +14,6 @@ import { CheckoutRows, GraphDirectory } from '../../workspace/contract/service/c
 import type { CommandChanges } from '../contract/service/commands.js';
 import type { PreparedFns, PreparedPlace, PreparedRow } from '../contract/service/prepared.js';
 import { preparedFnsOver, servingChangeRecord } from '../serving.js';
-import { CarrierAdmission } from '../contract/service/carriers.js';
 import { Holdings } from '../contract/service/holdings.js';
 import { LineWrites } from '../contract/service/lineWrites.js';
 import { makeRetirer } from '../retire/driver.js';
@@ -38,7 +37,8 @@ import { Lives } from '../record/lives.js';
 import { WRITER } from '../record/roles.js';
 import type { CommandFacts } from '@runlith/agent-tools/WorkspaceChanges';
 import { makeCommandQueue } from '../record/queue.js';
-import { pathsOfThread as pathsOfThreadFn } from '../record/reads.js';
+import { checkoutsOfHolders, heldPathsOf, pathsOfThread as pathsOfThreadFn } from '../record/reads.js';
+import { teamOf } from '../record/sessions.js';
 import { type RowIntake, makeRowIntake } from '../record/intake.js';
 import { insertRow, keepVersions } from '../record/inserts.js';
 import { makeGitMetadata } from '../record/metadata.js';
@@ -128,7 +128,6 @@ export const servedOver = (ports: ServedPorts) =>
         Context.add(CheckoutRows, ports.checkouts),
         Context.add(FileRoots, ports.roots),
         Context.add(Coverage, ports.coverage),
-        Context.add(CarrierAdmission, { admit: () => Effect.succeed(() => undefined) }),
         Context.add(CommitShape, UNSHAPED),
       ),
     ),
@@ -319,13 +318,20 @@ export const recordOfPath = (store: MachineStore['Service'], place: PlacedPath) 
     .where(and(eq(workspaceChangeTable.checkout, place.checkout), eq(workspaceChangeTable.path, place.path), heldRows))
     .orderBy(desc(workspaceChangeTable.at), desc(workspaceChangeTable.id));
 
+export const preparedReads = (commands: CommandChanges['Service']) => ({
+  commands,
+  team: teamOf,
+  heldPaths: heldPathsOf,
+  heldCheckouts: checkoutsOfHolders,
+  evidenceInGroups: evidenceInGroupsFn,
+});
+
 export const makePreparedChanges = <Row extends PreparedRow>(
   reads: Parameters<typeof makePreparedChangesFn<Row>>[0],
-  admission: Parameters<typeof makePreparedChangesFn<Row>>[1],
-  fns: Parameters<typeof makePreparedChangesFn<Row>>[2],
+  fns: Parameters<typeof makePreparedChangesFn<Row>>[1],
   instanceDir: string,
   shape: CommitShape['Service'] = UNSHAPED,
-) => makePreparedChangesFn<Row>(reads, admission, fns, instanceDir, shape);
+) => makePreparedChangesFn<Row>(reads, fns, instanceDir, shape);
 
 export const prepareChange = <Row extends PreparedRow, Caller>(
   reads: Parameters<typeof prepareChangeFn<Row, Caller>>[0],
@@ -368,8 +374,6 @@ const judgedBy = <A, E>(place: PreparedPlace, use: (holdings: Holdings['Service'
   );
 
 export const judgingFns = (graphDirectory = '.tagma'): PreparedFns => ({
-  foreignPaths: (place, carriers, unborne) =>
-    judgedBy(place, (holdings) => preparedFnsOver(holdings, testWalks, graphDirectory).foreignPaths(place, carriers, unborne)),
   judged: (place, paths) => judgedBy(place, (holdings) => preparedFnsOver(holdings, testWalks, graphDirectory).judged(place, paths)),
   eligiblePaths: eligiblePathsFn(graphDirectory),
   pathChunks: pathChunksFn,

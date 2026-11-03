@@ -287,9 +287,9 @@ export const ENFORCEMENT_OPERATIONS = {
     doors: { http: 'perform' },
     tool: { capability: 'shell', needs: ['shared', 'history'] },
     meaning:
-      "Run enforced rules, or one unsaved inspection, over this session's change, over what a checkout's index would commit, or over HEAD now, and answer what they find — recording nothing.",
+      "Run enforced rules, or one unsaved inspection, over the tree this session's submit_work would land, over what a checkout's index would commit, or over HEAD now, and answer what they find — recording nothing.",
     grammar:
-      "`over: \"change\"` (the default) selects one checkout as submit_work does — explicit `checkout`, the main checkout of `project`, or the only checkout holding this session's lines — and builds the tree submit_work would land from its selected lines on a temporary index, judging it against HEAD and, while a merge stands open, against each head it merges: a crossing standing in any parent is not new. The tree is shaped by the `format` commands of its `tagma.config.ts` as submit_work shapes it, and `formed` names the files they rewrote, whose lines and counts read that form. `paths` selects work; `whole` carries named paths intact. `violations` are the new crossings outside each rule's debt, `holders` naming the live peers a crossing's line belongs to. When the change alters an enforced key's description, that rule also measures its whole reach in the built version, with `owed` marking debt; standing findings introduced by the description alone do not make `refuses` true. `over: \"all\"` reads the reach at HEAD whole: every violation found, `owed` marking the debt. `rules` names enforced rules, or `all` (the default) for every enforced rule the change reaches, or every one over HEAD. `inspection` runs that key of `tagma.config.ts` instead — read from the version judged, so a key the session's uncommitted config adds runs over the change before it lands — over the reach of `blockId`'s region or the whole project, as enforce_rule would measure it: over the change, every violation it finds in that reach of the built version, the residue the change would leave. Over the change, `refuses` says whether submit_work would refuse it: a violation on this session's own lines, or a failed run, of a rule at gate triggered before submit_work. `over: \"staged\"` judges the tree the index of `root` holds against its HEAD, and against each head MERGE_HEAD names, exactly as a commit is judged — the rules triggered before submit_work, by the project that holds `root`, every line counted as the committer's — and answers `refuses` with the `refusal` a commit would meet; `rules`, `inspection` and the change's inputs do not apply to it. The answer is a page of violations with the total, every distinct fingerprint, the unjudged specifiers, and each rule's strictness, triggers, duration, whether the change reached it, and why it failed. A continuation runs again, and a moved HEAD or change refuses the cursor stale.",
+      "`over: \"change\"` (the default) selects one checkout as submit_work does — explicit `checkout`, the main checkout of `project`, or the only checkout holding this session's lines — and builds on a temporary index the tree submit_work would land, whole files selected and carried as it carries them, judging it against HEAD and, while a merge stands open, against each head it merges: a crossing standing in any parent is not new. The tree is shaped by the `format` commands of its `tagma.config.ts` as submit_work shapes it, and `formed` names the files they rewrote, whose lines and counts read that form. `paths` selects files as submit_work's `paths` does. `violations` are the new crossings outside each rule's debt, `holders` naming the other writers whose lines a crossing stands in. When the change alters an enforced key's description, that rule also measures its whole reach in the built version, with `owed` marking debt; standing findings introduced by the description alone do not make `refuses` true. `over: \"all\"` reads the reach at HEAD whole: every violation found, `owed` marking the debt. `rules` names enforced rules, or `all` (the default) for every enforced rule the change reaches, or every one over HEAD. `inspection` runs that key of `tagma.config.ts` instead — read from the version judged, so a key the session's uncommitted config adds runs over the change before it lands — over the reach of `blockId`'s region or the whole project, as enforce_rule would measure it: over the change, every violation it finds in that reach of the built version, the residue the change would leave. Over the change, `refuses` says whether submit_work would refuse that tree: a new crossing anywhere in it, or a failed run, of a rule at gate triggered before submit_work. `over: \"staged\"` judges the tree the index of `root` holds against its HEAD, and against each head MERGE_HEAD names, exactly as a commit is judged — the rules triggered before submit_work, by the project that holds `root`, every line counted as the committer's — and answers `refuses` with the `refusal` a commit would meet; `rules`, `inspection` and the change's inputs do not apply to it. The answer is a page of violations with the total, every distinct fingerprint, the unjudged specifiers, and each rule's strictness, triggers, duration, whether the change reached it, and why it failed. A continuation runs again, and a moved HEAD or change refuses the cursor stale.",
     input: Schema.Struct({
       project: projectField,
       rules: Schema.optional(Schema.Union([Schema.Literal('all'), Schema.Array(blockRef)])).annotate({
@@ -297,10 +297,10 @@ export const ENFORCEMENT_OPERATIONS = {
       }),
       over: Schema.optional(Schema.Literals(CHECK_OVER)).annotate({
         description:
-          '`change` (default): this session\u2019s uncommitted change against HEAD; `all`: the reach at HEAD; `staged`: what the index of `root` would commit.',
+          '`change` (default): this session\u2019s submit_work would land, against HEAD; `all`: the reach at HEAD; `staged`: what the index of `root` would commit.',
       }),
       checkout: Schema.optional(Schema.NonEmptyString.annotate(placeRole('checkout'))).annotate({
-        description: 'With `change`: the registered checkout root whose selected session lines are judged.',
+        description: 'With `change`: the registered checkout root whose landing tree is judged.',
       }),
       root: Schema.optional(Schema.NonEmptyString.annotate(placeRole('checkout'))).annotate({
         description: 'With `staged`: an absolute path inside the checkout whose index is judged, a worktree\u2019s own among them.',
@@ -318,14 +318,7 @@ export const ENFORCEMENT_OPERATIONS = {
       }),
       paths: Schema.optional(Schema.Array(Schema.String.annotate(placeRole('value')))).annotate({
         description:
-          'Over the change: files or directories narrowing it to that part of this session\u2019s own work; absent, everything it holds here.',
-      }),
-      whole: Schema.optional(Schema.Array(Schema.String.annotate(placeRole('value')))).annotate({
-        description: 'Over the change: files or directories to carry intact within selected paths, peer lines included.',
-      }),
-      taking: Schema.optional(Schema.Array(Schema.String)).annotate({
-        description:
-          'Over the change: sessions whose held paths it carries beside this one\u2019s, by team name or thread id, as submit_work takes them.',
+          'Over the change: files or directories whose changed files are selected, whoever wrote them, as submit_work selects them; absent, the files this session and its finished children wrote.',
       }),
       limit: limitOf(VIOLATIONS),
       cursor: placedCursor,
@@ -345,8 +338,7 @@ export const ENFORCEMENT_OPERATIONS = {
       'root-unproven',
       'multiple-checkouts',
       'tree-mid-merge',
-      'walk-cut',
-      'lines-held',
+      'path-unread',
       'landing-busy',
       ...SHAPE_REFUSALS,
       'bad-cursor',

@@ -15,7 +15,6 @@ import {
   type FoldState,
 } from './folding.js';
 import { alignBase, projectFold, type BaseAlignment, type Proven } from './projection.js';
-import { selectFold } from './selection.js';
 
 const row = (id: string, holder: string, before: string | null, after: string | null): FoldRow => ({
   id,
@@ -32,7 +31,6 @@ const input = (base: string | null, work: string | null, rows: readonly FoldRow[
   normalized: false,
 });
 const budget = () => stepsIn(100_000);
-const carrying = (holder: string) => ({ holders: new Set([holder]), nobody: false });
 function counts(proven: Proven, added: number, removed: number): void {
   expect(proven.counts).toEqual({ added, removed });
   expect(proven.hands.reduce((sum, hand) => sum + hand.added, proven.nobody.added)).toBe(added);
@@ -89,8 +87,6 @@ test('deleting part of an uncommitted replacement leaves its base deletion with 
   const value = input('c\n', 'x\n', [row('a', 'A', 'c\n', 'x\ny\n'), row('b', 'B', 'x\ny\n', 'x\n')]);
   const answer = prove(value);
   expect(answer.result.hands).toEqual([{ holder: 'A', added: 1, removed: 1 }]);
-  expect(selectFold(answer.result, value.head, value.working, carrying('A'), new Set())).toMatchObject({ kind: 'whole', rows: ['a'] });
-  expect(selectFold(answer.result, value.head, value.working, carrying('B'), new Set())).toEqual({ kind: 'none' });
   const final = prove(input('c\n', 'z\n', [...value.rows, row('c', 'C', 'x\n', 'z\n')]));
   expect(final.result.hands).toEqual([{ holder: 'C', added: 1, removed: 1 }]);
 });
@@ -110,7 +106,7 @@ test('the actual LCS transfers a displaced anchor across three writers without i
   ]);
 });
 
-test('unknown folds cannot supply a reusable record and whole still names candidate rows', () => {
+test('unknown folds cannot supply a reusable record', () => {
   const value = input('a\n', 'c\n', [
     row('a', 'A', 'a\n', 'b\n'),
     { id: 'b', holder: 'B', before: contentOf('b\n'), after: { kind: 'opaque', digest: 'lost' } },
@@ -119,11 +115,6 @@ test('unknown folds cannot supply a reusable record and whole still names candid
   expect(answer.result).toMatchObject({ verdict: 'unknown', reason: 'opaque', side: 'after', row: 'b' });
   expect(answer.record).toBeNull();
   expect(answer.working).toBeNull();
-  expect(selectFold(answer.result, value.head, value.working, carrying('B'), new Set(), true)).toMatchObject({
-    kind: 'whole',
-    rows: ['a', 'b'],
-    carried: { holders: ['A'], unknown: true },
-  });
 });
 
 test('cached complete inputs skip folded ids and suffixes require the exact frontier cursor', () => {
@@ -304,27 +295,6 @@ test('distant function edits in 12000 repetitive lines fit a small walk budget',
   expect(used).toBeLessThan(1000);
 });
 
-test('a three-line edit of a large file lands apart from a peer migration that reindented every line', () => {
-  const tests = Array.from({ length: 900 }, (_, at) => [
-    `test('t${at}', () => {`,
-    `  const v = ${at};`,
-    `  expect(v).toBe(${at});`,
-    '});',
-    '',
-  ]).flat();
-  const text = (rows: readonly string[]) => `${rows.join('\n')}\n`;
-  const migrated = ["describe('runner', () => {", ...tests.map((line) => (line === '' ? '' : `  ${line}`)), '});'];
-  const added = ['// stop reason', 'expect(stopped).toBe(true);', '// end'];
-  const work = [...migrated.slice(0, 2006), ...added, ...migrated.slice(2006)];
-  const value = input(text(tests), text(work), [row('m', 'M', text(tests), text(migrated)), row('a', 'A', text(migrated), text(work))]);
-  const answer = foldPath(value, stepsIn(2_000_000));
-  expect(selectFold(answer.result, value.head, value.working, carrying('A'), new Set())).toMatchObject({
-    kind: 'text',
-    text: text([...tests.slice(0, 2005), ...added, ...tests.slice(2005)]),
-    carried: { holders: [] },
-  });
-});
-
 test('a peer replacing a block joined by commit steps owns the formed line’s deletion', () => {
   const base = 'one\nconst three =\n  3;\nfour\n';
   const work = 'one\nconst three = 3; // peer\nfour\n';
@@ -336,10 +306,6 @@ test('a peer replacing a block joined by commit steps owns the formed line’s d
   const answer = prove(value).result;
   expect(answer.hands).toEqual([{ holder: 'A', added: 1, removed: 1 }]);
   expect(answer.nobody).toEqual({ added: 0, removed: 0 });
-  expect(selectFold(answer, value.head, value.working, carrying('A'), new Set())).toMatchObject({
-    kind: 'whole',
-    carried: { holders: [], external: false },
-  });
 });
 
 test('one changed line of a joined block carries its untouched residue with the formed line', () => {
@@ -353,33 +319,6 @@ test('one changed line of a joined block carries its untouched residue with the 
   const answer = prove(value).result;
   expect(answer.hands).toEqual([{ holder: 'A', added: 2, removed: 1 }]);
   expect(answer.nobody).toEqual({ added: 0, removed: 0 });
-  expect(selectFold(answer, value.head, value.working, carrying('A'), new Set())).toMatchObject({
-    kind: 'whole',
-    carried: { holders: [], external: false },
-  });
-});
-
-test('a joined block whose source lines two writers hold is selected whole with the other author named', () => {
-  const base = 'one\nconst three =\n  3;\nfour\n';
-  const peer = 'one\nconst three: number =\n  3;\nfour\n';
-  const work = 'one\nconst three: number =\n  33;\nfour\n';
-  const value: FoldInput = {
-    ...input(base, work, [row('peer', 'A', base, peer), row('mine', 'B', peer, work)]),
-    head: contentOf('one\nconst three = 33;\nfour\n'),
-    formed: [{ formed: 'const three = 33;\n', from: ['const three =\n', '  33;\n'] }],
-  };
-  const answer = prove(value).result;
-  expect(answer.nobody).toEqual({ added: 0, removed: 0 });
-  expect(selectFold(answer, value.head, value.working, carrying('A'), new Set())).toMatchObject({
-    kind: 'text',
-    text: work,
-    carried: { holders: ['B'], external: false },
-  });
-  expect(selectFold(answer, value.head, value.working, carrying('B'), new Set())).toMatchObject({
-    kind: 'text',
-    text: work,
-    carried: { holders: ['A'], external: false },
-  });
 });
 
 test('inserted unformed text never takes an unrecorded deletion of the line commit steps formed', () => {
@@ -394,9 +333,4 @@ test('inserted unformed text never takes an unrecorded deletion of the line comm
   const answer = prove(value).result;
   expect(answer.hands).toEqual([{ holder: 'A', added: 2, removed: 0 }]);
   expect(answer.nobody).toEqual({ added: 0, removed: 1 });
-  expect(selectFold(answer, value.head, value.working, carrying('A'), new Set())).toMatchObject({
-    kind: 'text',
-    text: 'one\nconst three = 3;   \nconst three = 3;   \nconst three = 3;\nfour\n',
-    carried: { holders: [], external: false },
-  });
 });

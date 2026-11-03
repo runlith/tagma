@@ -12,7 +12,7 @@ type World = Effect.Success<ReturnType<typeof commandWorld>>;
 const git = (s: World, args: readonly string[]) => s.w.run(args);
 
 layer(commandLayer, { excludeTestServices: true })('retained command landing', (it) => {
-  it.effect('a peer-held retained path refuses an empty selection, preserves own slicing and lands whole when requested', () =>
+  it.effect('a retained command path holding a peer’s lines lands whole with a bare submit and credits the peer', () =>
     Effect.gen(function* () {
       const s = yield* commandWorld();
       const theirs = base.replace('const one = 1;', 'const one = 10;');
@@ -51,18 +51,9 @@ layer(commandLayer, { excludeTestServices: true })('retained command landing', (
       }
       yield* s.decided(MINE);
       expect(s.commands.unattributed({ projectId: s.w.projectId, threadId: MINE }).map((one) => one.path)).toEqual(['src/a.ts']);
-      const head = yield* git(s, ['rev-parse', 'HEAD']);
-      const refused = yield* Effect.flip(s.w.submit(MINE, { commands: s.commands, paths: ['src/a.ts'] }));
-      expect(refused).toMatchObject({ code: 'lines-held', reason: expect.stringContaining(THEIRS) });
-      expect(yield* git(s, ['rev-parse', 'HEAD'])).toBe(head);
-      const mine = text.replace('const five = 50;', 'const five = 500;');
-      yield* s.w.wrote(MINE, mine.trimEnd().split('\n'));
-      const partial = yield* s.w.submit(MINE, { commands: s.commands, paths: ['src/a.ts'] });
-      expect(partial).toMatchObject({ status: 'landed', committed: ['src/a.ts'], carried: [] });
-      expect(yield* git(s, ['show', 'HEAD:src/a.ts'])).toBe(base.replace('const five = 5;', 'const five = 500;').trimEnd());
-      const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['src/a.ts'], whole: ['src/a.ts'] });
+      const landed = yield* s.w.submit(MINE, { commands: s.commands });
       expect(landed).toMatchObject({ status: 'landed', committed: ['src/a.ts'], carried: [{ path: 'src/a.ts', holders: [THEIRS] }] });
-      expect(yield* git(s, ['show', 'HEAD:src/a.ts'])).toBe(mine.trimEnd());
+      expect(yield* git(s, ['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
     }),
   );
 });

@@ -63,7 +63,7 @@ export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Re
     options.tools ?? ['submit_work'],
   );
   const born = Effect.fnUntraced(function* (parent?: string) {
-    const input = parent === undefined ? { approvalMode: 'trust' } : { parent, task: 'format the shared test' };
+    const input = parent === undefined ? { approvalMode: 'trust' } : { parent, task: '' };
     const response = yield* world.op('create_thread', input, `project=${projectId}`);
     const {
       snapshot: { thread },

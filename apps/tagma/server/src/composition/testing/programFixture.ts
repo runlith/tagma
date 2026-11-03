@@ -2,18 +2,15 @@ import { kind, shared } from '@runlith/testbed/worlds';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import type { ProgramInvocation } from '@tagma/inspection/program';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmission } from '../preparedChanges.js';
 import { Context, Effect, FileSystem, Layer, PlatformError, Scope } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { claimPreparedInstance, preparedBase } from '../../change-record/testing/doubles.js';
 import { judgingFns } from '../../change-record/testing/doubles.js';
 import { eligiblePaths, pathChunks } from '../../change-record/testing/doubles.js';
 import {
-  evidenceInGroups,
   makePreparedChanges,
+  preparedReads,
   quietCommands,
-  pathsOfThread,
   prepareChange,
   recordWrite,
   releasePrepared,
@@ -168,14 +165,9 @@ const makeProgram = Effect.fnUntraced(function* (
 
   const checks = actChecks(checksOver({ graphOf: () => Effect.succeed(served()) }), 'submit_work');
 
-  const landing = Effect.fnUntraced(function* (paths?: readonly string[], whole = false) {
+  const landing = Effect.fnUntraced(function* (paths?: readonly string[]) {
     const inst = yield* claimPreparedInstance(preparedBase(demo.graph.store));
-    const producer = makePreparedChanges(
-      { commands: quietCommands, pathsOfThread, evidenceInGroups },
-      landingAdmission(makeLandingHolds()),
-      judgingFns(CHECKOUT_DIRECTORY),
-      inst.dir,
-    );
+    const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir);
     return yield* Effect.ensuring(
       submitOver(
         demo.graph.git,
@@ -183,14 +175,7 @@ const makeProgram = Effect.fnUntraced(function* (
         demo.graph.store,
         demo.graph.units,
         originFor(MINE),
-        {
-          projectId: demo.projectId,
-          tasks: [],
-          taking: [],
-          coAuthored: true,
-          paths,
-          whole: whole ? ['.'] : undefined,
-        },
+        { projectId: demo.projectId, tasks: [], coAuthored: true, paths, everything: false },
         checks,
         producer,
       ).pipe(Effect.provideContext(services)),
@@ -201,28 +186,23 @@ const makeProgram = Effect.fnUntraced(function* (
   const inputOf = (launch: ProgramLaunch | undefined): ProgramInvocation => JSON.parse(launch?.stdin ?? 'null') as ProgramInvocation;
 
   const checkedChange = Effect.fnUntraced(
-    function* (whole = false) {
+    function* () {
       const caller = { _tag: 'Thread' as const, threadId: ThreadId.make(MINE), projectId: demo.projectId };
       const ask = { projectId: demo.projectId, caller, rules: 'all' as const };
       if (prepared === undefined) prepared = yield* claimPreparedInstance(preparedBase(demo.graph.store));
-      const { prepared: made } = yield* prepareChange(
-        { commands: quietCommands, pathsOfThread, evidenceInGroups },
-        judgingFns(CHECKOUT_DIRECTORY),
-        prepared.dir,
-        {
-          projectId: demo.projectId,
-          git: demo.graph.git,
-          root: demo.demoRoot,
-          store: demo.graph.store,
-          units: demo.graph.units,
-          origin: originFor(MINE),
-          checkout: TEST_CHECKOUT,
-          input: { taking: [], whole: whole ? ['.'] : undefined },
-          job: `check:${randomUUID()}`,
-          caller,
-          act: { kind: 'thread', ...originFor(MINE).work },
-        },
-      );
+      const { prepared: made } = yield* prepareChange(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), prepared.dir, {
+        projectId: demo.projectId,
+        git: demo.graph.git,
+        root: demo.demoRoot,
+        store: demo.graph.store,
+        units: demo.graph.units,
+        origin: originFor(MINE),
+        checkout: TEST_CHECKOUT,
+        input: {},
+        job: `check:${randomUUID()}`,
+        caller,
+        act: { kind: 'thread', ...originFor(MINE).work },
+      });
       if (made === null) return null;
       const version = { projectId: demo.projectId, actor: caller, root: made.subject.root, tree: made.subject.built };
       return yield* targetsOf(ask, version).pipe(
@@ -230,7 +210,7 @@ const makeProgram = Effect.fnUntraced(function* (
         Effect.ensuring(releasePrepared(made)),
       );
     },
-    (effect, _whole = false) => Effect.provide(effect, served()),
+    (effect) => Effect.provide(effect, served()),
   );
 
   return {

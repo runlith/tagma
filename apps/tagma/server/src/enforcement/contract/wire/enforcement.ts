@@ -204,7 +204,13 @@ export const RuleCrossing = Schema.Struct({
   withheld: Schema.optional(
     Schema.NonEmptyString.annotate({
       description:
-        'The one path the crossing stands on that the working tree holds uncommitted and the judged tree lacks: landing it ends the crossing. It is held by `holders` when the crossing is carried, by this session otherwise.',
+        'The one path the crossing stands on that the working tree holds uncommitted and the judged tree lacks: a commit that also carries it ends the crossing.',
+    }),
+  ),
+  holders: Schema.optional(
+    Schema.Array(Schema.NonEmptyString).annotate({
+      description:
+        "The other writers whose uncommitted lines the crossing stands in, or who wrote `withheld`; the caller's own lines name none.",
     }),
   ),
 });
@@ -229,7 +235,13 @@ export const shownBodies = (bodies: RuleBodies | undefined, rows: readonly { rea
 const messageOf = (violation: RuleViolation): string =>
   violation.message === undefined || violation.message === '' ? (violation.specifier ?? '') : violation.message;
 
-export const crossingOf = (norm: Norm, check: Assembled | Programmed, violation: RuleViolation, withheld?: string): RuleCrossing => ({
+export const crossingOf = (
+  norm: Norm,
+  check: Assembled | Programmed,
+  violation: RuleViolation,
+  withheld?: string,
+  holders?: readonly string[],
+): RuleCrossing => ({
   ...violation,
   rule: norm.rule,
   title: norm.title,
@@ -237,6 +249,7 @@ export const crossingOf = (norm: Norm, check: Assembled | Programmed, violation:
   message: messageOf(violation),
   generalFix: generalFix(check),
   withheld,
+  holders: holders === undefined || holders.length === 0 ? undefined : holders,
 });
 
 export const toldOf = (violation: RuleViolation): { readonly said: string; readonly fix: string | undefined } => ({
@@ -293,7 +306,6 @@ export type CheckOver = (typeof CHECK_OVER)[number];
 
 export const CheckedViolation = Schema.Struct({
   ...RuleCrossing.fields,
-  holders: Schema.optional(Schema.Array(Schema.String)),
   owed: Schema.optional(Schema.Literal(true)),
 });
 export type CheckedViolation = typeof CheckedViolation.Type;

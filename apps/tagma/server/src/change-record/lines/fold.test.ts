@@ -15,7 +15,6 @@ import {
 } from './folding.js';
 import { FoldMemory } from './memory.js';
 import { alignBase, projectFold, type Proven, type Verdict } from './projection.js';
-import { selectFold } from './selection.js';
 
 type Folded = ReturnType<typeof foldPath>;
 
@@ -82,10 +81,8 @@ const by = (verdict: Proven, kind: 'added' | 'removed') =>
     : verdict.lines
         .filter((line) => line.kind === kind)
         .map((line) => [line.text, line.mark === 'external' ? 'external' : line.mark.holder]);
-const select = (answer: Folded, value: FoldInput, holder = B, retired: readonly string[] = []) =>
-  selectFold(answer.result, value.head, value.working, { holders: new Set([holder]), nobody: false }, new Set(retired));
 
-test('a sole carrier lands both inserted lines beside a duplicate base brace', () => {
+test('a sole writer owns both inserted lines beside a duplicate base brace', () => {
   const base = text('a', '}', 'b');
   const work = text('a', 'x', '}', '}', 'b');
   const value = input(base, work, [
@@ -94,45 +91,23 @@ test('a sole carrier lands both inserted lines beside a duplicate base brace', (
       hunk: { firstLine: 2, oldLines: 0, newLines: 2, windowBefore: 0, oldText: '', newText: text('x', '}') },
     },
   ]);
-  const answer = folded(value);
-  expect(by(answer.result, 'added')).toEqual([
+  expect(by(folded(value).result, 'added')).toEqual([
     ['x\n', A],
     ['}\n', A],
   ]);
-  expect(select(answer, value, A)).toEqual({ kind: 'whole', rows: ['a1'], carried: { holders: [], external: false, unknown: false } });
 });
 
-test('an edit inside a peer’s inserted function carries the function with its original authors', () => {
+test('an edit inside a peer’s inserted function keeps the function with its original authors', () => {
   const base = text('before', 'after');
   const first = text('before', 'function f() {', '  one();', '  two();', '}', 'after');
   const work = first.replace('  two();', '  changed();');
   const value = input(base, work, [row('a1', A, base, first), row('b1', B, first, work)]);
-  const answer = folded(value);
-  expect(by(answer.result, 'added')).toEqual([
+  expect(by(folded(value).result, 'added')).toEqual([
     ['function f() {\n', A],
     ['  one();\n', A],
     ['  changed();\n', B],
     ['}\n', A],
   ]);
-  expect(select(answer, value)).toMatchObject({ kind: 'text', text: work, carried: { holders: [A] } });
-  expect(select(answer, value, A)).toMatchObject({ kind: 'text', text: work, carried: { holders: [B] } });
-});
-
-test('a surviving edit carries its displaced initialization without taking an independent holder', () => {
-  const base = text('fields: empty', 'middle', 'begin()', 'init: empty', 'middle', 'independent: base');
-  const field = base.replace('fields: empty', 'fields: hydration');
-  const initialized = field.replace('begin()', 'begin(hydration)').replace('init: empty', 'init: hydration');
-  const extended = initialized
-    .replace('begin(hydration)', 'begin(hydration, signal)')
-    .replace('init: hydration', 'init: hydration, signal');
-  const working = extended.replace('independent: base', 'independent: peer');
-  const value = input(base, working, [
-    row('a1', A, base, field),
-    row('a2', A, field, initialized),
-    row('b1', B, initialized, extended),
-    row('c1', 'independent', extended, working),
-  ]);
-  expect(select(folded(value), value, A)).toMatchObject({ kind: 'text', text: extended, carried: { holders: [B] } });
 });
 
 test('a replacement transfers both sides to its last writer and undo restores the displaced marks', () => {
@@ -144,7 +119,6 @@ test('a replacement transfers both sides to its last writer and undo restores th
   expect(by(answer.result, 'added')).toEqual([[work, B]]);
   expect(by(answer.result, 'removed')).toEqual([[base, B]]);
   expect(answer.result.overwritten.get('a1')).toEqual(['b1']);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['b1'] });
   const restored = restoreFold(stateOf(answer), new Set(['b1']), budget());
   if ('reason' in restored) throw new Error(restored.reason);
   expect(restored.text).toBe(first);
@@ -209,24 +183,19 @@ test('deleting a file supersedes the earlier edit and owns all removed base line
     ['b\n', B],
   ]);
   expect(answer.result.overwritten.get('a1')).toEqual(['b1']);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['b1'] });
 });
 
 test('line-ending normalization does not attribute a whole CRLF rewrite', () => {
   const base = 'a\r\nb\r\n';
   const work = 'a\nB\n';
-  const value = input(base, work, [row('b1', B, base, work)], true);
-  const answer = folded(value);
+  const answer = folded(input(base, work, [row('b1', B, base, work)], true));
   expect(by(answer.result, 'added')).toEqual([['B\n', B]]);
   expect(by(answer.result, 'removed')).toEqual([['b\r\n', B]]);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['b1'] });
 });
 
 test('empty-file existence is owned separately from an absent file', () => {
-  const created = input(null, '', [row('a1', A, null, '')]);
-  const added = folded(created);
+  const added = folded(input(null, '', [row('a1', A, null, '')]));
   expect(added.result.hands).toEqual([{ holder: A, added: 0, removed: 0 }]);
-  expect(select(added, created, A)).toMatchObject({ kind: 'whole', rows: ['a1'] });
   const deleted = input('', null, [row('b1', B, '', null)]);
   expect(folded(deleted).result.hands).toEqual([{ holder: B, added: 0, removed: 0 }]);
   expect(folded(input(null, null, [row('a1', A, null, ''), row('b1', B, '', null)])).result.hands).toEqual([]);
@@ -237,23 +206,19 @@ test('external edits between recorded rows affect only the divergent window', ()
   const first = text('A', 'b', 'c', 'd');
   const gap = text('A', 'b', 'external', 'd');
   const work = text('A', 'b', 'external', 'B');
-  const value = input(base, work, [row('a1', A, base, first), row('b1', B, gap, work)]);
-  const answer = folded(value);
+  const answer = folded(input(base, work, [row('a1', A, base, first), row('b1', B, gap, work)]));
   expect(by(answer.result, 'added')).toEqual([
     ['A\n', A],
     ['external\n', 'external'],
     ['B\n', B],
   ]);
   expect(answer.result.nobody).toEqual({ added: 1, removed: 1 });
-  expect(select(answer, value)).toMatchObject({ kind: 'text', text: text('a', 'b', 'c', 'B'), carried: { external: false } });
 });
 
 test.each([null, ''])('removing a recorded insertion still belongs to its writer after HEAD carries the insertion (%s)', (working) => {
   const created = text('created');
   const value = { ...input(null, working, [row('a1', A, null, created), row('b1', B, created, working)]), head: contentOf(created) };
-  const answer = folded(value);
-  expect(answer.result.hands).toEqual([{ holder: B, added: 0, removed: 1 }]);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['b1'], carried: { holders: [], external: false } });
+  expect(folded(value).result.hands).toEqual([{ holder: B, added: 0, removed: 1 }]);
 });
 
 test('a new head reuses the fold and removes committed lines from its projection', () => {
@@ -319,13 +284,7 @@ test('unrecoverable history is unknown, never an external guess, until file-leve
   const value = input(base, text('unrelated'), [
     { id: 'opaque', holder: B, before: contentOf(base), after: { kind: 'opaque', digest: 'lost' } },
   ]);
-  const answer = foldPath(value, budget());
-  expect(answer.result).toMatchObject({ verdict: 'unknown', reason: 'opaque' });
-  expect(select(answer, value)).toEqual({ refuse: 'walk-cut' });
-  expect(selectFold(answer.result, value.head, value.working, { holders: new Set([B]), nobody: false }, new Set(), true)).toMatchObject({
-    kind: 'whole',
-    carried: { unknown: true },
-  });
+  expect(foldPath(value, budget()).result).toMatchObject({ verdict: 'unknown', reason: 'opaque' });
   const clean = { ...value, working: value.head };
   expect(folded(clean).result.hands).toEqual([]);
   expect(folded({ ...clean, base: { kind: 'unread', cause: 'lost starting snapshot' } }).result.hands).toEqual([]);
@@ -349,12 +308,11 @@ test('binary and large files use the last matching raw digest without line count
   const answer = folded(value);
   expect(answer.result.hands).toEqual([{ holder: B, added: 0, removed: 0 }]);
   expect([...answer.result.standing]).toEqual(['b1']);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['b1'] });
   expect(folded({ ...value, working: { kind: 'whole', digest: 'external' } }).result.existence).toBe('external');
   expect(Array.isArray(folded(input('a\0', 'b\0', [row('b1', B, 'a\0', 'b\0')])).result.lines)).toBe(true);
 });
 
-test('an inserted block keeps its closing lines in its own slice while two peers delete equal lines beside it', () => {
+test('two peers deleting equal lines beside an inserted block leave its closing lines with its writer', () => {
   const C = 'holder-c';
   const entry = (name: string, ...keys: string[]) => [
     `    "./${name}": {`,
@@ -388,181 +346,11 @@ test('an inserted block keeps its closing lines in its own slice while two peers
     { ...row('b1', B, inserted, stateless), hunk: workspaceChangeHunk(inserted, stateless)! },
     { ...row('c1', C, stateless, work), hunk: workspaceChangeHunk(stateless, work)! },
   ]);
-  const answer = folded(value);
-  expect(answer.result.hands).toEqual([
+  expect(folded(value).result.hands).toEqual([
     { holder: C, added: 0, removed: 3 },
     { holder: A, added: 6, removed: 0 },
     { holder: B, added: 0, removed: 5 },
   ]);
-  const own = { holders: [], external: false, unknown: false };
-  expect(select(answer, value, A)).toMatchObject({ kind: 'text', text: inserted, carried: own });
-  expect(select(answer, value, B)).toMatchObject({ kind: 'text', text: manifest(reports, []), carried: own });
-  expect(select(answer, value, C)).toMatchObject({ kind: 'text', text: manifest(state, cloud), carried: own });
-});
-
-test('a surviving block stays whole in every slice when peers delete all blocks before it and append blocks after it', () => {
-  const C = 'holder-c';
-  const block = (name: string, calls: number) => [
-    `function ${name}() {`,
-    ...Array.from({ length: calls }, (_, at) => `  ${name}${at}();`),
-    '}',
-  ];
-  const blocks = {
-    n0: block('n0', 2),
-    n1: block('n1', 1),
-    n2: block('n2', 3),
-    n3: block('n3', 1),
-    n4: block('n4', 1),
-    n5: block('n5', 3),
-    n6: block('n6', 1),
-  };
-  const file = (...names: (keyof typeof blocks)[]) => text(...names.flatMap((name) => blocks[name]));
-  const states = [
-    file('n0', 'n1', 'n2', 'n3'),
-    file('n0', 'n2', 'n3'),
-    file('n0', 'n2', 'n3', 'n4'),
-    file('n0', 'n2', 'n3', 'n4', 'n5'),
-    file('n2', 'n3', 'n4', 'n5'),
-    file('n3', 'n4', 'n5'),
-    file('n3', 'n4', 'n6', 'n5'),
-  ];
-  const holders = [A, A, B, B, C, C];
-  const rows = holders.map((holder, at) => ({
-    ...row(`r${at}`, holder, states[at]!, states[at + 1]!),
-    hunk: workspaceChangeHunk(states[at]!, states[at + 1]!)!,
-  }));
-  const value = input(states[0]!, states.at(-1)!, rows);
-  const answer = folded(value);
-  const own = { holders: [], external: false, unknown: false };
-  expect(select(answer, value, A)).toMatchObject({ kind: 'text', text: file('n0', 'n2', 'n3', 'n4'), carried: own });
-  expect(select(answer, value, B)).toMatchObject({ kind: 'text', text: file('n1', 'n2', 'n3', 'n5'), carried: own });
-  expect(select(answer, value, C)).toMatchObject({ kind: 'text', text: file('n0', 'n1', 'n3', 'n6'), carried: own });
-});
-
-test('an inserted block lands after the line it was inserted after even when a peer deletes that line later', () => {
-  const C = 'holder-c';
-  const entry = (name: string, value = 'v') => [`    "./${name}": {`, `      "${name}0": "${value}",`, '    },'];
-  const blocks = {
-    n0: entry('n0'),
-    edited: entry('n0', 'w'),
-    n1: entry('n1'),
-    n2: entry('n2'),
-    n3: entry('n3'),
-    n4: entry('n4'),
-    n5: entry('n5'),
-  };
-  const file = (...names: (keyof typeof blocks)[]) => text('{', '  "exports": {', ...names.flatMap((name) => blocks[name]), '  }', '}');
-  const states = [
-    file('n0', 'n1', 'n2', 'n3'),
-    file('edited', 'n1', 'n2', 'n3'),
-    file('edited', 'n1', 'n2', 'n4', 'n3'),
-    file('edited', 'n1', 'n2', 'n4', 'n5', 'n3'),
-    file('edited', 'n1', 'n2', 'n4', 'n5'),
-    file('edited', 'n1', 'n4', 'n5'),
-  ];
-  const holders = [A, A, B, B, C];
-  const rows = holders.map((holder, at) => ({
-    ...row(`r${at}`, holder, states[at]!, states[at + 1]!),
-    hunk: workspaceChangeHunk(states[at]!, states[at + 1]!)!,
-  }));
-  const value = input(states[0]!, states.at(-1)!, rows);
-  const answer = folded(value);
-  const own = { holders: [], external: false, unknown: false };
-  expect(select(answer, value, A)).toMatchObject({ kind: 'text', text: file('edited', 'n1', 'n2', 'n4', 'n3'), carried: own });
-  expect(select(answer, value, B)).toMatchObject({ kind: 'text', text: file('n0', 'n1', 'n2', 'n5'), carried: own });
-  expect(select(answer, value, C)).toMatchObject({ kind: 'text', text: file('n0', 'n1', 'n3'), carried: own });
-});
-
-test('an insertion stays after the line HEAD replaced at the start of the file', () => {
-  const base = text('old', 'tail');
-  const work = text('old', 'insert', 'tail');
-  const value = { ...input(base, work, [row('a1', A, base, work)]), head: contentOf(text('new', 'tail')) };
-  expect(select(folded(value), value, A)).toMatchObject({ kind: 'text', text: text('new', 'insert', 'tail') });
-});
-
-test('a peer whose only line the shortest diff cancels against the carrier’s stays out of the carrier’s landing', () => {
-  const base = text('}', 'keep');
-  const mine = text('x', '}', '}', 'keep');
-  const work = text('x', '}', 'keep');
-  const value = input(base, work, [
-    { ...row('a1', A, base, mine), hunk: workspaceChangeHunk(base, mine)! },
-    { ...row('b1', B, mine, work), hunk: workspaceChangeHunk(mine, work)! },
-  ]);
-  expect(select(folded(value), value, A)).toMatchObject({
-    kind: 'text',
-    text: mine,
-    carried: { holders: [], external: false, unknown: false },
-  });
-});
-
-test('separable peer regions stay on disk and carry no carrier lines', () => {
-  const base = text('a', 'middle', 'z');
-  const first = text('A', 'middle', 'z');
-  const work = text('A', 'middle', 'B');
-  const value = input(base, work, [row('a1', A, base, first), row('b1', B, first, work)]);
-  const answer = folded(value);
-  const chosen = select(answer, value);
-  expect(chosen).toMatchObject({ kind: 'text', text: text('a', 'middle', 'B'), rows: ['b1'], carried: { holders: [], external: false } });
-  if (!('kind' in chosen) || chosen.kind !== 'text') throw new Error('no partial landing');
-  const after = { ...input(base, work, []), head: contentOf(chosen.text) };
-  const residue = foldPath(
-    after,
-    budget(),
-    answer.record === null ? undefined : { kind: 'after', state: answer.record, row: answer.record.last },
-  );
-  expect(prove(residue.result, after).hands).toEqual([{ holder: A, added: 1, removed: 1 }]);
-});
-
-test('carrying a peer’s edited insertion carries the declaration that peer wrote in an earlier edit of the file', () => {
-  const base = text('export const shown = (words: string[]) => {', '  return words;', '};');
-  const declared = text('export const shown = (words: string[]) => {', '  const filenames: string[] = [];', '  return words;', '};');
-  const used = text(
-    'export const shown = (words: string[]) => {',
-    '  const filenames: string[] = [];',
-    '  for (const word of words) {',
-    '    filenames.push(word);',
-    '  }',
-    '  return words;',
-    '};',
-  );
-  const edited = used.replace('    filenames.push(word);', '    filenames.push(word.trim());');
-  const value = input(base, edited, [row('a1', A, base, declared), row('a2', A, declared, used), row('b1', B, used, edited)]);
-  const answer = folded(value);
-  expect(select(answer, value)).toMatchObject({ kind: 'text', text: edited, carried: { holders: [A] } });
-});
-
-test('an ended holder’s change rides along whole once a carried region takes any of it, while a live peer’s stays on disk', () => {
-  const C = 'holder-ended';
-  const base = text('one', 'two', 'three', 'four', 'five');
-  const ended = text('one ended', 'two', 'three', 'four ended', 'five');
-  const peer = text('one ended', 'two peer', 'three', 'four ended', 'five');
-  const work = text('one ended', 'two peer', 'three', 'four ended', 'five mine');
-  const value = input(base, work, [row('c1', C, base, ended), row('a1', A, ended, peer), row('b1', B, peer, work)]);
-  const answer = folded(value);
-  expect(select(answer, value, B, [C])).toMatchObject({
-    kind: 'text',
-    text: text('one ended', 'two', 'three', 'four ended', 'five mine'),
-    carried: { holders: [C] },
-  });
-});
-
-test('an ended holder’s line that a live peer overwrote does not come back with the carrier’s landing', () => {
-  const C = 'holder-ended';
-  const base = text('one', 'two', 'three', 'four', 'five');
-  const ended = text('one ended', 'two', 'three', 'four', 'five');
-  const peer = text('one peer', 'two', 'three', 'four', 'five');
-  const work = text('one peer', 'two', 'three', 'four', 'five mine');
-  const value = input(base, work, [row('c1', C, base, ended), row('a1', A, ended, peer), row('b1', B, peer, work)]);
-  const answer = folded(value);
-  expect(select(answer, value, B, [C])).toMatchObject({ kind: 'text', text: text('one', 'two', 'three', 'four', 'five mine') });
-});
-
-test('external-only regions stay outside the sole carrier’s selection', () => {
-  const base = text('a', 'middle', 'z');
-  const first = text('B', 'middle', 'z');
-  const value = input(base, text('B', 'middle', 'external'), [row('b1', B, base, first)]);
-  const answer = folded(value);
-  expect(select(answer, value)).toMatchObject({ kind: 'text', text: first, rows: ['b1'], carried: { external: false } });
 });
 
 test('a positional hunk advances a large frontier under a hunk-sized work budget', () => {
@@ -613,11 +401,6 @@ test('a write whose shortest diff moves a line across lines it removed holds eve
   const answer = folded(value);
   expect(answer.result.nobody).toEqual({ added: 0, removed: 0 });
   expect(answer.result.hands.map((hand) => hand.holder)).toEqual([A]);
-  expect(select(answer, value, A)).toMatchObject({
-    kind: 'whole',
-    rows: ['a1'],
-    carried: { holders: [], external: false, unknown: false },
-  });
 });
 
 test('a replaced new file has no residual creation holder', () => {
@@ -704,7 +487,7 @@ test('a binary writer who returns last wins even when another holder appeared la
   expect(answer.verdict === 'proven' && answer.hands.map((hand) => hand.holder)).toEqual([A]);
 });
 
-test('a binary built on another holder’s uncommitted version carries the whole writer chain', () => {
+test('a binary built on another holder’s uncommitted version credits the whole writer chain', () => {
   const base: Content = { kind: 'whole', digest: 'base' };
   const changed: Content = { kind: 'whole', digest: 'changed' };
   const work: Content = { kind: 'whole', digest: 'after' };
@@ -718,9 +501,7 @@ test('a binary built on another holder’s uncommitted version carries the whole
       { id: 'b1', holder: B, before: changed, after: work },
     ],
   };
-  const answer = folded(value);
-  expect(answer.result.hands.map((hand) => hand.holder)).toEqual([A, B]);
-  expect(select(answer, value)).toMatchObject({ kind: 'whole', rows: ['a1', 'b1'], carried: { holders: [A] } });
+  expect(folded(value).result.hands.map((hand) => hand.holder)).toEqual([A, B]);
 });
 
 test('fold memory evicts the least recently used path within its byte budget', () => {

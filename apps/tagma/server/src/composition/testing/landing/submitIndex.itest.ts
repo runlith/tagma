@@ -81,24 +81,22 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
       })(),
     ),
   );
-  it.effect('a peer’s staged version remains staged when it is also the preimage of the landing session’s edit', () =>
+  it.effect('a peer’s staged version that the landing carries whole is brought level with the commit in the index', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
         const theirs = [FILE[0] as string, 'const two = 22;', ...FILE.slice(2)];
         yield* world.wrote(THEIRS, theirs);
         yield* world.run(['add', '--', 'src/a.ts']);
-        const staged = yield* world.run(['rev-parse', ':src/a.ts']);
         const both = [...theirs.slice(0, 4), 'const five = 55;'];
         yield* world.wrote(MINE, both);
         const answer = yield* world.submit(MINE);
         expect(answer.status).toBe('landed');
         if (answer.status !== 'landed') return;
-        expect(answer.carried).toEqual([]);
-        expect(yield* world.committed()).toEqual([...FILE.slice(0, 4), 'const five = 55;']);
+        expect(answer.carried).toEqual([{ path: 'src/a.ts', holders: [THEIRS] }]);
+        expect(yield* world.committed()).toEqual(both);
         expect(readFileSync(world.file, 'utf8')).toBe(`${both.join('\n')}\n`);
-        expect(yield* world.run(['rev-parse', ':src/a.ts'])).toBe(staged);
-        expect(yield* world.run(['diff', '--cached', '--name-only'])).toBe('src/a.ts');
+        expect(yield* world.run(['diff', '--cached', '--name-only'])).toBe('');
       })(),
     ),
   );

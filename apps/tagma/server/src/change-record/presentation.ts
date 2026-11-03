@@ -25,7 +25,7 @@ const whyOf = (why: NobodyWhy): string =>
       ? `commit steps of ${why.commit.slice(0, 7)}`
       : why.kind === 'released'
         ? `released by ${why.thread}: ${why.reason}`
-        : `changed while commands ran that could each have written it, so none is its author: ${why.windows.map((one) => `${one.thread} (${one.team === null ? one.reason : `${one.reason} of ${one.team}, which lands it by taking a member`})`).join(', ')}`;
+        : `changed while commands ran that could each have written it, so none is its author: ${why.windows.map((one) => `${one.thread} (${one.team === null ? one.reason : `${one.reason} of ${one.team}`})`).join(', ')}`;
 
 const unprovenOf = (reason: UnprovenReason): string =>
   reason.kind === 'opaque'

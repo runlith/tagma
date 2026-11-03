@@ -1,6 +1,5 @@
 import { layer } from '@runlith/effect-test';
-import { holdingsOver, retiredAt } from '../../../change-record/testing/holdings.js';
-import { RootId } from '../../../workspace/contract/wire/ids.js';
+import { retiredAt } from '../../../change-record/testing/holdings.js';
 import { fixedCheckoutPaths, TEST_CHECKOUT } from '../../../workspace/testing/doubles.js';
 import { expect } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -192,55 +191,6 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           const read = yield* s.execute(s.record.runFiles(s.checkout, { threadId, runIds: [run] }, { limit: 1 }));
           expect(read.files[0]?.committed.map((row) => row.counts)).toEqual([{ added: 1, removed: 1 }]);
         }
-      }),
-    ),
-  );
-  it.effect('a landed row keeps its hunk while a row written before it on the path still stands, and trades it once that row leaves', () =>
-    withCheckout((checkout) =>
-      Effect.gen(function* () {
-        const s = yield* stand(checkout);
-        const hunks = Effect.map(s.w.rows(), (rows) =>
-          rows
-            .sort((one, two) => one.holder.localeCompare(two.holder))
-            .map((row) => [row.holder, row.committedAt !== null, row.oldText !== null, row.added]),
-        );
-        yield* s.edit(THEIRS, 'peer', 'const three = 3;', 'const three = 30;');
-        yield* s.edit(MINE, 'landed', 'const two = 2;', 'const two = 20;');
-        expect((yield* s.w.submit(MINE)).status).toBe('landed');
-        yield* retiredAt(s.w.store, s.w.units, s.w.git, s.w.root, TEST_CHECKOUT);
-        yield* collectionSweep(s.w.units, s.w.store, s.walks)('test');
-        expect(yield* hunks).toEqual([
-          [THEIRS, false, true, null],
-          [MINE, true, true, null],
-        ]);
-        yield* s.w.run(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-am', 'the peer’s line by hand']);
-        yield* retiredAt(s.w.store, s.w.units, s.w.git, s.w.root, TEST_CHECKOUT);
-        yield* collectionSweep(s.w.units, s.w.store, s.walks)('test');
-        expect(yield* hunks).toEqual([
-          [THEIRS, true, false, 1],
-          [MINE, true, false, 1],
-        ]);
-      }),
-    ),
-  );
-  it.effect('a fresh judgement still proves the path when a landed row behind a standing one lost the text after an external change', () =>
-    withCheckout((checkout) =>
-      Effect.gen(function* () {
-        const s = yield* stand(checkout);
-        const lines = (...changed: (readonly [number, string])[]) =>
-          FILE.map((line, at) => changed.find(([index]) => index === at)?.[1] ?? line);
-        yield* s.w.wrote(THEIRS, lines([2, 'const three = 30;']));
-        writeFileSync(s.w.file, `${lines([0, 'const one = 10;'], [2, 'const three = 30;']).join('\n')}\n`);
-        yield* s.w.wrote(MINE, lines([0, 'const one = 10;'], [2, 'const three = 30;'], [4, 'const five = 50;']));
-        expect((yield* s.w.submit(MINE)).status).toBe('landed');
-        yield* retiredAt(s.w.store, s.w.units, s.w.git, s.w.root, TEST_CHECKOUT);
-        yield* collectionSweep(s.w.units, s.w.store, s.walks)('test');
-        const rig = yield* holdingsOver(s.w.store, s.w.units, s.w.git, s.w.root, s.walks);
-        const verdict = (yield* rig.holdings.judged(RootId.make(TEST_CHECKOUT), ['src/a.ts'])).get('src/a.ts')?.verdict;
-        expect(verdict?.verdict === 'proven' ? verdict.hands.map((hand) => [hand.holder, hand.added, hand.removed]) : verdict).toEqual([
-          [THEIRS, 1, 1],
-        ]);
-        yield* rig.close;
       }),
     ),
   );

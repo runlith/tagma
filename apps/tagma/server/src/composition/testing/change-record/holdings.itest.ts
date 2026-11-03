@@ -63,11 +63,7 @@ layer(layers, { excludeTestServices: true })('Holdings of one checkout', (it) =>
       expect(yield* judges.read(world.rootId, 'settled')).toMatchObject({ state: { kind: 'current' }, paths: [] });
       yield* written(world, 'kept.txt', GROWN);
       yield* edited(world.mine, world.paths.join(world.root, 'kept.txt'), BORN, GROWN);
-      const view = yield* judges.lease(
-        world.rootId,
-        ['kept.txt'],
-        Effect.andThen(judges.moved(world.rootId, ['kept.txt']), judges.read(world.rootId, 'settled')),
-      );
+      const view = yield* Effect.andThen(judges.moved(world.rootId, ['kept.txt']), judges.read(world.rootId, 'settled'));
       expect(view.state).toEqual({ kind: 'current' });
       const holders = yield* judges.holdersOf(world.rootId, ['kept.txt']);
       expect(holders.get('kept.txt')?.map((hand) => holderKey(hand.holder))).toEqual([MINE]);

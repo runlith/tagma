@@ -59,7 +59,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
       }),
     ),
   );
-  it.effect('a write that overwrites a neighbour uncommitted line lands it alone, the neighbour line overwritten', () =>
+  it.effect('a write that overwrites a neighbour’s uncommitted line lands the file and names the neighbour whose row it holds', () =>
     withCheckout((checkout) =>
       Effect.gen(function* () {
         const w = checkout;
@@ -78,13 +78,13 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           status: 'landed',
           commit: yield* w.run(['rev-parse', 'HEAD']),
           committed: ['src/a.ts'],
-          carried: [],
+          carried: [{ path: 'src/a.ts', holders: [THEIRS] }],
         });
         expect(yield* w.committed()).toContain('const one = 101;');
       }),
     ),
   );
-  it.effect('a path this session holds lands its own lines and leaves bytes no row explains on disk', () =>
+  it.effect('a path this session holds lands whole with bytes no row explains, and is named unattributed', () =>
     withCheckout((checkout) =>
       Effect.gen(function* () {
         const w = checkout;
@@ -92,10 +92,8 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         yield* w.wrote(MINE, made);
         const working = `${textOf(made)}const rowless = 1;\n`;
         writeFileSync(join(w.root, 'src/a.ts'), working);
-        const receipt = yield* w.submit(MINE);
-        expect(receipt.status).toBe('landed');
-        expect(yield* w.committed()).toEqual(made);
-        expect(readFileSync(join(w.root, 'src/a.ts'), 'utf8')).toBe(working);
+        expect(yield* w.submit(MINE)).toMatchObject({ status: 'landed', unattributed: ['src/a.ts'] });
+        expect(yield* w.committed()).toEqual([...made, 'const rowless = 1;']);
       }),
     ),
   );

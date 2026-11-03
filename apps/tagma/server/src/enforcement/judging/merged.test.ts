@@ -13,7 +13,9 @@ const at = (line: number): RuleViolation => ({ fingerprint: KEY, file: 'src/dup.
 const adding =
   (added: readonly number[]): Evidence =>
   () =>
-    Effect.succeed(new Map([['src/dup.ts', { added: (line: number) => added.includes(line), removed: () => false }]]));
+    Effect.succeed(
+      new Map([['src/dup.ts', { added: (line: number) => (added.includes(line) ? 0 : undefined), removed: () => undefined }]]),
+    );
 
 type Parent = { readonly reading: Reading; readonly added: readonly number[] };
 

@@ -112,7 +112,6 @@ export const makeJudge = ({
   const now = new Set<string>();
   const later = new Set<string>();
   const requests = new Requests();
-  const leased = new Map<string, number>();
   const urgent = new Set<string>();
   const first = Deferred.makeUnsafe<void>();
   const logged = new Map<string, string>();
@@ -529,10 +528,8 @@ export const makeJudge = ({
     if (batch.length === 0)
       for (const path of later) {
         if (batch.length >= SLICE) break;
-        if (!leased.has(path) || views.size > 0) {
-          batch.push(path);
-          if (views.size > 0) urgent.add(path);
-        }
+        batch.push(path);
+        if (views.size > 0) urgent.add(path);
       }
     for (const path of batch) {
       now.delete(path);
@@ -551,7 +548,7 @@ export const makeJudge = ({
     }
     settled = true;
     yield* Deferred.succeed(first, undefined);
-    if (now.size > 0 || whole || [...later].some((path) => !leased.has(path) || views.size > 0)) yield* kick();
+    if (now.size > 0 || whole || later.size > 0) yield* kick();
     else {
       const owed = quiets;
       quiets = [];
@@ -625,7 +622,7 @@ export const makeJudge = ({
     shift,
     judged,
     quiet: Effect.suspend(() => {
-      if (!running && !whole && now.size === 0 && [...later].every((path) => leased.has(path))) return Effect.void;
+      if (!running && !whole && now.size === 0 && later.size === 0) return Effect.void;
       const owed = Deferred.makeUnsafe<void>();
       quiets.push(owed);
       return Deferred.await(owed);
@@ -648,8 +645,7 @@ export const makeJudge = ({
       }),
       Scope.close(scope, Exit.void),
     ),
-    empty: (): boolean =>
-      entries.size === 0 && followers === 0 && !running && now.size === 0 && later.size === 0 && leased.size === 0 && requests.empty,
+    empty: (): boolean => entries.size === 0 && followers === 0 && !running && now.size === 0 && later.size === 0 && requests.empty,
     view,
     marked: (scopes: readonly string[] | undefined): Effect.Effect<void> =>
       shift(scopes === undefined ? 'all' : descendants.within(scopes)),
@@ -664,24 +660,6 @@ export const makeJudge = ({
       else if (!unjudged) yield* shift('all');
       yield* announce();
     }),
-    lease: <A, E, R>(paths: readonly string[], work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => {
-          for (const path of paths) leased.set(path, (leased.get(path) ?? 0) + 1);
-        }),
-        () => work,
-        () =>
-          Effect.andThen(
-            Effect.sync(() => {
-              for (const path of paths) {
-                const count = (leased.get(path) ?? 1) - 1;
-                if (count === 0) leased.delete(path);
-                else leased.set(path, count);
-              }
-            }),
-            Effect.asVoid(judged(paths.filter((path) => later.has(path)))).pipe(Effect.withSpan('Holdings.lease.release')),
-          ),
-      ),
     follow: (shown: readonly string[], revisionRow: number): Effect.Effect<void> => {
       if (row === revisionRow) return Effect.void;
       const graph = parts.graphDirectory;

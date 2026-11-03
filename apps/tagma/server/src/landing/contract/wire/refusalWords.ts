@@ -15,9 +15,9 @@ export const REFUSAL_WORDS = {
   'no-base-branch': 'No base branch recorded',
   'no-gh': 'GitHub CLI unavailable',
   'not-pending': 'No merge waiting',
+  'not-work': 'Named block is not work',
   'rebase-merges': 'Rebase would change the result',
   'reshape-unreadable': 'Hook or formatter changes unreadable',
   'source-dirty': 'Worktree has uncommitted changes',
   'source-held': 'Worktree lines held by another session',
-  'task-not-held': 'Declared task is not held by a committing session',
 } as const satisfies RefusalWords;

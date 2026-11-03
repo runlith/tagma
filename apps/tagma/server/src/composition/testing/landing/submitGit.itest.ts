@@ -7,7 +7,6 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { GitNotAdmitted, GitUnavailable, type Git, type GitAnswer } from '@runlith/git/Git';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import { FILE, MINE, THEIRS, unstartedOn, type makeCheckout, checkoutFixture, withCheckout } from '../checkoutFixture.js';
-import { declaration, FORMATTER, steppedOver, tool } from '../stepsFixture.js';
 const ENVELOPE = 16384;
 const enveloped = (git: Git['Service']): Git['Service'] => ({
   run: (args, options) =>
@@ -121,49 +120,28 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
         ),
     );
   }
-  it.effect(
-    'steps and a post-commit hook owe their conflicting edits while the hook runs at the published commit and preserves peer work',
-    () =>
-      withCheckout((checkout) =>
-        Effect.fnUntraced(function* () {
-          const world = checkout;
-          const mine = [...FILE.slice(0, 4), 'const five = 5; // mine'];
-          const peer = ['const one = 100;', ...mine.slice(1)];
-          const step = 'src/step.ts';
-          writeFileSync(join(world.root, step), `${[...FILE.slice(0, 2), 'const three = 3;   ', ...FILE.slice(3)].join('\n')}\n`);
-          yield* tool(world.root, 'fmt.sh', FORMATTER);
-          yield* declaration(world.root, [{ run: ['tools/fmt.sh'], files: [step] }]);
-          yield* world.run(['add', '-A']);
-          yield* world.run(['commit', '-qm', 'declare the step over an unformed file']);
-          const stepped = yield* steppedOver(world.store);
-          const stepPeer = [...FILE.slice(0, 2), 'const three = 3; // theirs', ...FILE.slice(3)];
-          yield* world.wrote(THEIRS, stepPeer, { path: step });
-          const stepBoth = [...stepPeer.slice(0, 4), mine[4]!];
-          yield* world.wrote(MINE, stepBoth, { path: step });
-          yield* world.wrote(THEIRS, ['const one = 100;', ...FILE.slice(1)]);
-          yield* world.wrote(MINE, peer);
-          writeFileSync(join(world.root, 'src', 'theirs.ts'), 'const theirs = 1;\n');
-          writeFileSync(
-            join(world.root, '.git', 'hooks', 'post-commit'),
-            '#!/bin/sh\ngit rev-parse HEAD > "$(git rev-parse --git-dir)/posted"\ngit reset -q --hard && git clean -fdq\nsed "s|^const one = 1;$|const one = 1; // posted|" src/a.ts > src/a.ts.next && mv src/a.ts.next src/a.ts\n',
-          );
-          chmodSync(join(world.root, '.git', 'hooks', 'post-commit'), 0o755);
-          const answer = yield* world.submit(MINE, { shape: stepped.shape });
-          expect(answer.status).toBe('landed');
-          if (answer.status !== 'landed') return;
-          expect(answer.owed?.toSorted()).toEqual(['src/a.ts', step]);
-          expect(answer.kept?.map(({ path, why }) => ({ path, why })).toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
-            { path: 'src/a.ts', why: 'conflict' },
-            { path: step, why: 'conflict' },
-          ]);
-          expect(yield* world.run(['show', `HEAD:${step}`])).toBe(mine.join('\n'));
-          expect(readFileSync(join(world.root, step), 'utf8')).toBe(`${stepBoth.join('\n')}\n`);
-          expect(readFileSync(join(world.root, '.git', 'posted'), 'utf8').trim()).toBe(answer.commit);
-          expect(readFileSync(join(world.root, 'src', 'theirs.ts'), 'utf8')).toBe('const theirs = 1;\n');
-          expect(yield* world.committed()).toEqual(mine);
-          expect(readFileSync(world.file, 'utf8')).toBe(`${peer.join('\n')}\n`);
-        })(),
-      ),
+  it.effect('a post-commit hook runs at the published commit and preserves work the commit does not carry', () =>
+    withCheckout((checkout) =>
+      Effect.fnUntraced(function* () {
+        const world = checkout;
+        const both = ['const one = 100;', ...FILE.slice(1, 4), 'const five = 5; // mine'];
+        yield* world.wrote(THEIRS, ['const one = 100;', ...FILE.slice(1)]);
+        yield* world.wrote(MINE, both);
+        writeFileSync(join(world.root, 'src', 'theirs.ts'), 'const theirs = 1;\n');
+        writeFileSync(
+          join(world.root, '.git', 'hooks', 'post-commit'),
+          '#!/bin/sh\ngit rev-parse HEAD > "$(git rev-parse --git-dir)/posted"\ngit reset -q --hard && git clean -fdq\n',
+        );
+        chmodSync(join(world.root, '.git', 'hooks', 'post-commit'), 0o755);
+        const answer = yield* world.submit(MINE);
+        expect(answer).toMatchObject({ status: 'landed', carried: [{ path: 'src/a.ts', holders: [THEIRS] }] });
+        if (answer.status !== 'landed') return;
+        expect(readFileSync(join(world.root, '.git', 'posted'), 'utf8').trim()).toBe(answer.commit);
+        expect(readFileSync(join(world.root, 'src', 'theirs.ts'), 'utf8')).toBe('const theirs = 1;\n');
+        expect(yield* world.committed()).toEqual(both);
+        expect(readFileSync(world.file, 'utf8')).toBe(`${both.join('\n')}\n`);
+      })(),
+    ),
   );
   it.effect('refusing and index-locking hooks preserve unpublished work, carry their edits back and allow the next landing', () =>
     withCheckout((checkout) =>
@@ -224,7 +202,7 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
           chmodSync(join(world.root, '.git', 'hooks', 'pre-commit'), 0o755);
           chmodSync(join(world.root, '.git', 'hooks', 'commit-msg'), 0o755);
           const answer = yield* world.submit(MINE);
-          expect(answer).toMatchObject({ status: 'landed', edited: ['src/a.ts', left], left: [left] });
+          expect(answer).toMatchObject({ status: 'landed', edited: ['src/a.ts', left], left: [{ path: left, reason: 'written' }] });
           expect(readFileSync(theirs, 'utf8')).toBe('const theirs = 2; // unfinished\n');
           expect(yield* world.run(['show', 'HEAD:src/theirs.ts'])).toBe('const theirs = 1;');
           expect(

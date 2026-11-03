@@ -3,12 +3,11 @@ import { Git } from '@runlith/git/Git';
 import { textChanges } from '@runlith/utils/patch';
 import { Effect } from 'effect';
 import { actingGit } from '../../platform/git/ownGit.js';
-import type { JudgedLine, LineHolders, LineRemovers } from '../contract/wire/checks.js';
+import type { JudgedLine, LineHolders } from '../contract/wire/checks.js';
 import type { RuleViolation } from '../contract/wire/enforcement.js';
 import { InspectionFailed } from '../workers/inspectionLanes.js';
-import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import type { PreparedHold, PreparedHolds, WorkingPathUnread } from '../../change-record/contract/service/prepared.js';
+import type { LinesUnread, PreparedHold, PreparedHolds, WorkingPathUnread } from '../../change-record/contract/service/prepared.js';
 import { type Absent, siteRows } from '@tagma/inspection/verdict';
 
 export type Found = RuleViolation & { readonly absent?: Absent };
@@ -21,16 +20,18 @@ type Counted = {
   readonly baseOccurrences?: readonly Found[];
 };
 
-type Touch = { readonly added: (line: number) => boolean; readonly removed: (line: number) => boolean };
+type Touch = { readonly added: (line: number) => number | undefined; readonly removed: (line: number) => number | undefined };
 
-const EVERY: Touch = { added: () => true, removed: () => true };
+const WHOLE = 0;
+
+const EVERY: Touch = { added: () => WHOLE, removed: () => WHOLE };
 
 export type Evidence = (files: readonly string[]) => Effect.Effect<ReadonlyMap<string, Touch>, InspectionFailed, Git>;
 
-const spanned = (ranges: readonly { readonly start: number; readonly end: number }[]): ((line: number) => boolean) => {
-  const lines = new Set<number>();
-  for (const { start, end } of ranges) for (let at = start; at < end; at += 1) lines.add(at + 1);
-  return (line) => lines.has(line);
+const hunkOf = (ranges: readonly { readonly start: number; readonly end: number }[]): ((line: number) => number | undefined) => {
+  const hunks = new Map<number, number>();
+  for (const [hunk, { start, end }] of ranges.entries()) for (let at = start; at < end; at += 1) hunks.set(at + 1, hunk);
+  return (line) => hunks.get(line);
 };
 
 export const evidenceOf = (root: string, base: string, built: string): Evidence => {
@@ -67,7 +68,7 @@ export const evidenceOf = (root: string, base: string, built: string): Evidence 
           path,
           changed.timedOut
             ? EVERY
-            : { added: spanned(changed.changes.map((one) => one.after)), removed: spanned(changed.changes.map((one) => one.before)) },
+            : { added: hunkOf(changed.changes.map((one) => one.after)), removed: hunkOf(changed.changes.map((one) => one.before)) },
         );
       }
     }
@@ -89,7 +90,6 @@ export type Judged = {
   readonly base: string;
   readonly built: string;
   readonly holders?: LineHolders;
-  readonly removers?: LineRemovers;
   readonly holds?: PreparedHolds;
 };
 
@@ -107,16 +107,15 @@ const grouped = (rows: readonly Found[]): ReadonlyMap<string, readonly Found[]> 
   return groups;
 };
 
-const cutShort = (refused: GateRefusal<'walk-cut'>): InspectionFailed =>
-  new InspectionFailed({ cause: 'deadline', reason: refused.reason });
+const unattributed = (failure: LinesUnread): InspectionFailed => new InspectionFailed({ cause: 'source', reason: failure.reason });
 
-const unheld = (failure: StoreFailure | WorkingPathUnread | GateRefusal<'walk-cut'>): InspectionFailed =>
+const unheld = (failure: StoreFailure | WorkingPathUnread): InspectionFailed =>
   new InspectionFailed({
     cause: 'source',
     reason:
       failure._tag === 'WorkingPathUnread'
         ? `the working tree could not be read at ${failure.path}, so whether a violation stands only on it is unknown: ${failure.reason}`
-        : `the change record could not say who holds the paths a violation stands on: ${failure.message}`,
+        : `the change record could not say who wrote the paths a violation stands on: ${failure.message}`,
   });
 
 const lineOf = (one: Found): JudgedLine | undefined => (one.line === undefined ? undefined : { file: one.file, line: one.line });
@@ -138,57 +137,50 @@ export const attributed = Effect.fn('enforcement.excess.attributed')(function* (
   };
   if (subject.holders === undefined) return verdict.violations.map((one): Attribution => ({ violation: wireOf(one), ...UNHELD }));
   const core = grouped(verdict.violations);
-  const built = grouped(verdict.occurrences ?? []);
-  const standing = grouped(verdict.baseOccurrences ?? []);
+  const built = grouped(verdict.occurrences);
+  const standing = grouped(verdict.baseOccurrences);
   const touched =
     built.size === 0
       ? new Map<string, Touch>()
-      : yield* evidence([...(verdict.occurrences ?? []), ...(verdict.baseOccurrences ?? [])].map((one) => one.file));
-  const added = new Map<string, readonly Found[]>();
-  const removed = new Map<string, readonly Found[]>();
-  for (const [key, rows] of built)
-    added.set(
-      key,
-      rows.filter((one) => one.line === undefined || touched.get(one.file)?.added(one.line) === true),
-    );
-  for (const key of built.keys())
-    removed.set(
-      key,
-      (standing.get(key) ?? []).filter((one) => one.line !== undefined && touched.get(one.file)?.removed(one.line) === true),
-    );
-  const judged = [...verdict.violations, ...[...added.values()].flat()];
-  const asked = linesOf(judged);
-  const held = asked.length === 0 ? [] : yield* Effect.mapError(subject.holders(asked), cutShort);
+      : yield* evidence([...verdict.occurrences, ...verdict.baseOccurrences].map((one) => one.file));
+  const hunkKey = (one: Found, side: 'added' | 'removed'): string | undefined => {
+    const hunk = one.line === undefined ? undefined : touched.get(one.file)?.[side](one.line);
+    return hunk === undefined ? undefined : `${one.file}\0${hunk}`;
+  };
+  const chosen = new Map<string, readonly Found[]>();
+  for (const [key, rows] of built) {
+    const added = rows.filter((one) => one.line === undefined || hunkKey(one, 'added') !== undefined);
+    const removed = new Map<string, number>();
+    for (const one of standing.get(key) ?? []) {
+      const hunk = hunkKey(one, 'removed');
+      if (hunk !== undefined) removed.set(hunk, (removed.get(hunk) ?? 0) + 1);
+    }
+    const addedIn = new Map<string, number>();
+    for (const one of added) {
+      const hunk = hunkKey(one, 'added');
+      if (hunk !== undefined) addedIn.set(hunk, (addedIn.get(hunk) ?? 0) + 1);
+    }
+    const fresh = added.filter((one) => {
+      const hunk = hunkKey(one, 'added');
+      return hunk === undefined || (addedIn.get(hunk) ?? 0) > (removed.get(hunk) ?? 0);
+    });
+    chosen.set(key, fresh.length > 0 ? fresh : added.length > 0 ? added : (core.get(key) ?? []));
+  }
+  const violations = [...verdict.violations.filter((one) => !chosen.has(one.fingerprint)), ...[...chosen.values()].flat()];
+  const asked = linesOf(violations);
+  const held = asked.length === 0 ? [] : yield* Effect.mapError(subject.holders(asked), unattributed);
   const byLine = new Map(asked.map((line, at) => [placeOf(line), held[at] ?? []] as const));
-  const absent = [...new Set(judged.flatMap((one) => one.absent ?? []))];
+  const absent = [...new Set(violations.flatMap((one) => one.absent ?? []))];
   const answered = subject.holds === undefined || absent.length === 0 ? [] : yield* Effect.mapError(subject.holds(absent), unheld);
   const holds = new Map<string, PreparedHold | undefined>(absent.map((path, at) => [path, answered[at]]));
   const holdingOf = (one: Found): Holding => {
     const line = lineOf(one);
     const writers = line === undefined ? [] : (byLine.get(placeOf(line)) ?? []);
-    if (writers.length > 0) return { holders: writers };
-    const stands = (one.absent ?? []).filter((path) => (holds.get(path)?._tag ?? 'missing') !== 'missing');
+    const stands = (one.absent ?? []).filter((path) => holds.get(path)?._tag === 'stands');
     const [only] = stands;
-    if (stands.length !== 1 || only === undefined) return UNHELD;
-    const hold = holds.get(only);
-    if (hold?._tag === 'own') return { holders: [], withheld: only };
-    return hold?._tag === 'peers' ? { holders: hold.holders, withheld: only } : UNHELD;
+    const hold = only === undefined ? undefined : holds.get(only);
+    if (stands.length !== 1 || hold?._tag !== 'stands') return { holders: writers };
+    return { holders: [...new Set([...writers, ...hold.writers])], withheld: only };
   };
-  const holdersOf = (one: Found): readonly string[] => holdingOf(one).holders;
-  const gone = linesOf([...removed.values()].flat());
-  const proven = subject.removers === undefined || gone.length === 0 ? [] : yield* Effect.mapError(subject.removers(gone), cutShort);
-  const ownRemoval = new Set(gone.filter((_, at) => proven[at]?._tag === 'own').map(placeOf));
-  const chosen = new Map<string, readonly Found[]>();
-  for (const [key, rows] of added) {
-    const session = rows.filter((one) => holdersOf(one).length === 0);
-    const peers = rows.filter((one) => holdersOf(one).length > 0);
-    const credit = (removed.get(key) ?? []).filter((one) => {
-      const line = lineOf(one);
-      return line !== undefined && ownRemoval.has(placeOf(line));
-    }).length;
-    const picked = session.length - credit > 0 ? [...session, ...peers] : peers;
-    chosen.set(key, picked.length === 0 ? (core.get(key) ?? []) : picked);
-  }
-  const violations = [...verdict.violations.filter((one) => !chosen.has(one.fingerprint)), ...[...chosen.values()].flat()];
   return violations.map((one): Attribution => ({ violation: wireOf(one), ...holdingOf(one) }));
 });

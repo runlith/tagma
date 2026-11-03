@@ -55,7 +55,6 @@ import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChangeRecord } from '../../change-record/contract/service/record.js';
 import { Git } from '@runlith/git/Git';
-import type { CarrierAdmission } from '../../change-record/contract/service/carriers.js';
 import type { PreparedChanges } from '../../change-record/contract/service/prepared.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { OperationCatalog } from '../../invocation/contract/service/catalog.js';
@@ -112,7 +111,6 @@ export type RuntimeDoor =
   | SignIns
   | ArtifactStore
   | WorkspaceInputs
-  | CarrierAdmission
   | PreparedChanges
   | ScratchAreas
   | SessionResolution

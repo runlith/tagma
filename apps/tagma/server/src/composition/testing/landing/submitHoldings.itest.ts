@@ -39,7 +39,7 @@ layer(Layer.mergeAll(checkoutFixture, commandWalksLayer, BunFileSystem.layer), {
         expect(answer.status).toBe('landed');
         if (answer.status !== 'landed') return;
         expect(answer.committed).toEqual(['src/carried.ts']);
-        expect(answer.left).toEqual(['src/pending.ts']);
+        expect(answer.left).toEqual([{ path: 'src/pending.ts', reason: 'paths' }]);
         expect(yield* world.run(['status', '--porcelain', '--', 'src/a.ts', 'src/temporary.ts', 'src/carried.ts'])).toBe('');
         expect(readFileSync(world.file, 'utf8')).toBe(base);
         const rows = yield* world.rows();
@@ -84,7 +84,7 @@ layer(Layer.mergeAll(checkoutFixture, commandWalksLayer, BunFileSystem.layer), {
               expect(answer.status).toBe('landed');
               if (answer.status !== 'landed') return;
               expect(answer.committed).toEqual(['src/a.ts']);
-              expect(answer.left).toEqual(['src/pending.ts']);
+              expect(answer.left).toEqual([{ path: 'src/pending.ts', reason: 'paths' }]);
             }),
           () => Effect.provide(journal.closed([window]), world.context),
         );

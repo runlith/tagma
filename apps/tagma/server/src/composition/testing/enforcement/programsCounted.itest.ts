@@ -13,32 +13,31 @@ const standingDuplicate = Effect.fnUntraced(function* (gate: ProgramFixture, tex
 });
 
 layer(programFixture(), { excludeTestServices: true })('counted program judgement', (it) => {
-  it.effect('an excess occurrence added beside a peer edit is judged in the session’s selected tree and in explicit whole', () =>
+  it.effect('an excess occurrence added beside a peer edit refuses the landing and the change check alike', () =>
     withProgram((gate) =>
       Effect.gen(function* () {
         yield* standingDuplicate(gate, `export const x = 1; // ${DUP}\nexport const w = 1;\n`);
         yield* gate.wroteAs(THEIRS, 'src/dup.ts', `export const x = 2; // ${DUP}\nexport const w = 2;\n`);
         yield* gate.wroteAs(MINE, 'src/dup.ts', `// ${DUP}\nexport const x = 2; // ${DUP}\nexport const w = 3;\n`);
         expect((yield* refusalOf(gate.landing())).code).toBe('rule-violated');
-        expect((yield* refusalOf(gate.landing(undefined, true))).code).toBe('rule-violated');
-        expect((yield* gate.checkedChange(true))?.refuses).toBe(true);
+        expect((yield* gate.checkedChange())?.refuses).toBe(true);
       }),
     ),
   );
-  it.effect('a peer insertion above an old occurrence the session only edits is the peer’s excess when the file is carried whole', () =>
-    withProgram((gate) =>
-      Effect.gen(function* () {
-        yield* standingDuplicate(gate, `export const x = 1; // ${DUP}\nexport const y = 1;\n`);
-        yield* gate.wroteAs(THEIRS, 'src/dup.ts', `export const p = 1; // ${DUP}\nexport const x = 1; // ${DUP}\nexport const y = 2;\n`);
-        yield* gate.wroteAs(MINE, 'src/dup.ts', `export const p = 1; // ${DUP}\nexport const x = 2; // ${DUP}\nexport const y = 3;\n`);
-        const checked = yield* gate.checkedChange(true);
-        expect(checked?.refuses).toBe(false);
-        expect(checked?.violations.map(({ line, holders }) => ({ line, holders }))).toEqual([{ line: 1, holders: [THEIRS] }]);
-        const receipt = yield* gate.landing(undefined, true);
-        expect(
-          receipt.status === 'landed' ? receipt.carriedViolations?.map(({ file, line, holders }) => ({ file, line, holders })) : receipt,
-        ).toEqual([{ file: 'src/dup.ts', line: 1, holders: [THEIRS] }]);
-      }),
-    ),
+  it.effect(
+    'an old occurrence edited in place is no excess, while a peer’s insertion elsewhere in the file is, and refuses the landing',
+    () =>
+      withProgram((gate) =>
+        Effect.gen(function* () {
+          const middle = 'export const a = 1;\nexport const b = 1;\nexport const c = 1;\n';
+          yield* standingDuplicate(gate, `export const x = 1; // ${DUP}\n${middle}`);
+          yield* gate.wroteAs(THEIRS, 'src/dup.ts', `export const x = 1; // ${DUP}\n${middle}export const p = 1; // ${DUP}\n`);
+          yield* gate.wroteAs(MINE, 'src/dup.ts', `export const x = 2; // ${DUP}\n${middle}export const p = 1; // ${DUP}\n`);
+          const checked = yield* gate.checkedChange();
+          expect(checked?.refuses).toBe(true);
+          expect(checked?.violations.map(({ line, holders }) => ({ line, holders }))).toEqual([{ line: 5, holders: [THEIRS] }]);
+          expect((yield* refusalOf(gate.landing())).code).toBe('rule-violated');
+        }),
+      ),
   );
 });

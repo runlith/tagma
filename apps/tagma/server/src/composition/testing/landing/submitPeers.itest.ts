@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FILE, MINE, checkoutFixture, withCheckout } from '../checkoutFixture.js';
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
-  it.effect('an ended session’s change rides along whole and a failed one’s adjacent independent lines stay held', () =>
+  it.effect('an ended session’s and a failed one’s lines ride along whole and both are named', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
@@ -15,14 +15,13 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         yield* world.wrote('old-owl', retired);
         const failed = [...retired.slice(0, 3), 'const four = 4; // failed', FILE[4] as string];
         yield* world.wrote('lost-lynx', failed);
-        yield* world.wrote(MINE, [...failed.slice(0, 2), 'const three = 3; // mine', failed[3] as string, 'const five = 5; // mine']);
-        expect(yield* world.submit(MINE)).toMatchObject({ status: 'landed', carried: [{ path: 'src/a.ts', holders: ['old-owl'] }] });
-        expect(yield* world.committed()).toEqual([
-          ...retired.slice(0, 2),
-          'const three = 3; // mine',
-          FILE[3] as string,
-          'const five = 5; // mine',
-        ]);
+        const mine = [...failed.slice(0, 2), 'const three = 3; // mine', failed[3] as string, 'const five = 5; // mine'];
+        yield* world.wrote(MINE, mine);
+        expect(yield* world.submit(MINE)).toMatchObject({
+          status: 'landed',
+          carried: [{ path: 'src/a.ts', holders: ['old-owl', 'lost-lynx'] }],
+        });
+        expect(yield* world.committed()).toEqual(mine);
       })(),
     ),
   );

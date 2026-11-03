@@ -8,14 +8,11 @@ import type { MachineUnits } from '../../../platform/contract/service/units.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { ActorRef } from '../../../platform/contract/wire/actor.js';
 import type { PlacedPath, WorkingRoot, WorkOrigin } from '../../../workspace/contract/wire/place.js';
-import type { CarrierAdmission } from './carriers.js';
 import type { CommandChanges } from './commands.js';
 import type { Reshaped } from '../wire/reshape.js';
 import type { ShapeRefusal } from '../wire/shape.js';
 import type { Judged } from './holdings.js';
-import type { ChangeTaking } from '../wire/handover.js';
 import type { Walks } from '../../lines/walks.js';
-import type { Landed } from '../../lines/landed.js';
 import type { DeriveCommand } from '../wire/derivation.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
@@ -24,23 +21,16 @@ type UnitsShape = Context.Service.Shape<typeof MachineUnits>;
 
 export type LandingOrigin = WorkingRoot & { readonly work: WorkOrigin | null };
 
+export type TeamMember = { readonly projectId: number | null; readonly threadId: string };
+
 export type ChangeInput = {
   readonly paths?: readonly string[];
-  readonly whole?: readonly string[];
+  readonly everything?: boolean;
   readonly withoutFormat?: boolean;
   readonly derive?: readonly DeriveCommand[];
-  readonly taking: readonly ChangeTaking[];
 };
 
-export type PreparedPlan =
-  | {
-      readonly path: string;
-      readonly land: 'own';
-      readonly landed: Landed | null;
-      readonly holders: readonly string[];
-      readonly ids: readonly string[];
-    }
-  | { readonly path: string; readonly land: 'whole'; readonly holders: readonly string[]; readonly ids: readonly string[] };
+export type PreparedPlan = { readonly path: string; readonly writers: readonly string[]; readonly ids: readonly string[] };
 
 export type PreparedHashes = {
   readonly carried: ReadonlySet<string>;
@@ -85,28 +75,18 @@ export type PreparedLanding<Caller> = PreparedChange<Caller> & { readonly places
 
 export type PreparedLine = { readonly file: string; readonly line: number };
 
-export type PreparedLineHolders = (
-  lines: readonly PreparedLine[],
-) => Effect.Effect<readonly (readonly string[])[], GateRefusal<'walk-cut'>>;
+export class LinesUnread extends Data.TaggedError('LinesUnread')<{ readonly reason: string }> {}
 
-export type PreparedRemoval = { readonly _tag: 'own' } | { readonly _tag: 'peer'; readonly holder: string } | { readonly _tag: 'unknown' };
+export type PreparedLineHolders = (lines: readonly PreparedLine[]) => Effect.Effect<readonly (readonly string[])[], LinesUnread>;
 
-export type PreparedRemovers = (lines: readonly PreparedLine[]) => Effect.Effect<readonly PreparedRemoval[], GateRefusal<'walk-cut'>>;
-
-export type PreparedHold =
-  | { readonly _tag: 'missing' }
-  | { readonly _tag: 'unheld' }
-  | { readonly _tag: 'own' }
-  | { readonly _tag: 'peers'; readonly holders: readonly string[] };
+export type PreparedHold = { readonly _tag: 'missing' } | { readonly _tag: 'stands'; readonly writers: readonly string[] };
 
 export class WorkingPathUnread extends Data.TaggedError('WorkingPathUnread')<{
   readonly path: string;
   readonly reason: string;
 }> {}
 
-export type PreparedHolds = (
-  paths: readonly string[],
-) => Effect.Effect<readonly PreparedHold[], StoreFailure | WorkingPathUnread | GateRefusal<'walk-cut'>>;
+export type PreparedHolds = (paths: readonly string[]) => Effect.Effect<readonly PreparedHold[], StoreFailure | WorkingPathUnread>;
 
 export type PreparedSubject<Caller> = {
   readonly kind: 'tree';
@@ -118,7 +98,6 @@ export type PreparedSubject<Caller> = {
   readonly merged?: readonly string[];
   readonly paths: readonly string[];
   readonly holders?: PreparedLineHolders;
-  readonly removers?: PreparedRemovers;
   readonly holds?: PreparedHolds;
   readonly caller?: Caller;
   readonly job?: string;
@@ -146,8 +125,6 @@ export type PreparedRow = {
   readonly unresolved: boolean;
 };
 
-export type PreparedThread = { readonly threadId: string; readonly agentName: string | null };
-
 export type PreparedPlace = {
   readonly git: Git['Service'];
   readonly root: string;
@@ -157,12 +134,7 @@ export type PreparedPlace = {
 };
 
 export type PreparedFns = {
-  readonly foreignPaths: (
-    place: PreparedPlace,
-    carriers: ReadonlySet<string>,
-    unborne: (path: string) => boolean,
-  ) => Effect.Effect<ReadonlySet<string>, GateRefusal<'walk-cut'>>;
-  readonly judged: (place: PreparedPlace, paths: readonly string[]) => Effect.Effect<ReadonlyMap<string, Judged>, GateRefusal<'walk-cut'>>;
+  readonly judged: (place: PreparedPlace, paths: readonly string[]) => Effect.Effect<ReadonlyMap<string, Judged>, LinesUnread>;
   readonly eligiblePaths: (git: Git['Service'], root: string, paths: readonly string[]) => Effect.Effect<readonly string[]>;
   readonly pathChunks: (paths: readonly string[]) => readonly (readonly string[])[];
   readonly walks: Walks;
@@ -170,13 +142,18 @@ export type PreparedFns = {
 
 export type PreparedReads<Row extends PreparedRow> = {
   readonly commands: CommandChanges['Service'];
-  readonly pathsOfThread: (
+  readonly team: (units: UnitsShape, store: StoreShape, work: WorkOrigin) => Effect.Effect<readonly TeamMember[], StoreFailure>;
+  readonly heldPaths: (
     units: UnitsShape,
     store: StoreShape,
-    projectId: number | null,
-    threadId: string,
     checkout: string,
-  ) => Effect.Effect<readonly { readonly path: string }[], StoreFailure>;
+    holders: readonly string[],
+  ) => Effect.Effect<ReadonlyMap<string, readonly string[]>, StoreFailure>;
+  readonly heldCheckouts: (
+    units: UnitsShape,
+    store: StoreShape,
+    holders: readonly string[],
+  ) => Effect.Effect<readonly string[], StoreFailure>;
   readonly evidenceInGroups: <A, E>(
     units: UnitsShape,
     store: StoreShape,
@@ -191,8 +168,7 @@ export type PreparedRefusal =
   | 'git-unavailable'
   | 'git-not-admitted'
   | 'tree-mid-merge'
-  | 'walk-cut'
-  | 'lines-held'
+  | 'path-unread'
   | 'landing-busy'
   | ShapeRefusal;
 
@@ -205,6 +181,7 @@ export type PreparedEmptied = {
 export type PreparedOutcome<Caller> = {
   readonly prepared: PreparedLanding<Caller> | null;
   readonly emptied: PreparedEmptied | null;
+  readonly team: readonly TeamMember[];
   readonly unmatched: readonly string[];
   readonly paths: readonly string[];
   readonly unattributed: readonly string[];
@@ -222,12 +199,13 @@ export class PreparedChanges extends Context.Service<
       prepared: PreparedLanding<Caller>,
       head: string,
     ): Effect.Effect<PreparedLanding<Caller> | null, OwnGitFailed>;
-    lease(input: ChangeInput): Effect.Effect<() => void>;
     release(prepared: PreparedChange<unknown>): Effect.Effect<void>;
+    remaining(place: PreparedPlace, team: readonly TeamMember[]): Effect.Effect<readonly string[], StoreFailure | OwnGitFailed>;
+    teamCheckouts(
+      units: UnitsShape,
+      store: StoreShape,
+      work: WorkOrigin,
+    ): Effect.Effect<{ readonly team: readonly TeamMember[]; readonly checkouts: readonly string[] }, StoreFailure>;
+    carriedBy(place: PreparedPlace, team: readonly TeamMember[]): Effect.Effect<readonly string[], StoreFailure>;
   }
 >()('tagma/change-record/PreparedChanges') {}
-
-export type SharedPrepared = {
-  readonly admission: CarrierAdmission['Service'];
-  readonly changes: PreparedChanges['Service'];
-};

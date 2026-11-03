@@ -3,7 +3,6 @@ import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
 export const REFUSAL_WORDS = {
   'context-too-wide': 'Too much context asked',
   'file-write-failed': 'File write failed',
-  'lines-held': 'Lines held by another session',
   'multiple-checkouts': 'Lines in several checkouts',
   'no-record': 'No session record',
   'path-oversized': 'File too large to read',

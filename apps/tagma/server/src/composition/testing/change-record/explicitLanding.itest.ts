@@ -13,7 +13,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         writeFileSync(join(world.root, 'outside.ts'), 'export const outside = 1;\n');
         rmSync(world.file);
         expect(yield* world.submit(MINE)).toMatchObject({ status: 'nothing' });
-        const landed = yield* world.submit(MINE, { paths: ['src/'], whole: ['src/'] });
+        const landed = yield* world.submit(MINE, { paths: ['src/'] });
         expect(landed).toMatchObject({ status: 'landed', committed: ['src/a.ts', 'src/free.ts'], carried: [] });
         expect(yield* world.run(['show', 'HEAD:src/free.ts'])).toBe('export const free = 1;');
         expect(yield* world.run(['ls-tree', '--name-only', 'HEAD', '--', 'src/a.ts'])).toBe('');

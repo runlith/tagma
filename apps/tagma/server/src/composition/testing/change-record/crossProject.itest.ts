@@ -23,7 +23,7 @@ import { readChangeRows } from '../../../change-record/operations/changes.js';
 import { readThreadHistory } from '../../../change-record/operations/history.js';
 import { recordReported } from '../../../change-record/operations/record.js';
 import { commitOverlay } from '../../../change-record/record/overlay.js';
-import { namesOfHolders, resolveHandover } from '../../../change-record/record/sessions.js';
+import { namesOfHolders } from '../../../change-record/record/sessions.js';
 import { threadChangesOver } from '../../../change-record/changes/stream.js';
 import { workspaceChange } from '../../../change-record/store/tables.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
@@ -279,9 +279,6 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           (yield* second.read({ agent: 'builder' })).checkouts.flatMap((checkout) => checkout.entries.map((entry) => entry.path)).sort(),
         ).toEqual(['peer-only.txt', 'shared.txt']);
         expect((yield* namesOfHolders(store, [ACTOR, PEER])).get(ACTOR)?.name).toBe('writer');
-        expect(yield* resolveHandover(store, home, ACTOR, ['builder', PEER])).toEqual([
-          { projectId: target.id, threadId: PEER, label: 'builder', running: false },
-        ]);
         const bound = yield* roots.read(RootId.make(placed.checkout));
         const origin = yield* Schema.decodeUnknownEffect(WorkingOrigin)({
           environment: {
@@ -296,8 +293,7 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           generation: 0,
           work: { projectId: home, threadId: ACTOR },
         });
-        const taken = yield* resolveHandover(store, home, ACTOR, ['operator', 'builder']);
-        const prepared = yield* second.served.prepared.changes.prepare({
+        const prepared = yield* second.served.prepared.prepare({
           projectId: target.id,
           git: liveGit,
           root,
@@ -305,18 +301,18 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           units,
           origin,
           checkout: placed.checkout,
-          input: { taking: taken, paths: ['operator-only.txt', 'peer-only.txt'] },
-          job: 'taking-foreign',
+          input: { paths: ['operator-only.txt', 'peer-only.txt'] },
+          job: 'foreign-paths',
           caller: second.caller,
           act: { kind: 'thread', ...origin.work },
         });
-        if (prepared.prepared === null) return yield* Effect.die('taking produced no change');
+        if (prepared.prepared === null) return yield* Effect.die('the named paths produced no change');
         expect(prepared.prepared.built.changed).toContain('operator-only.txt');
         expect(prepared.prepared.built.changed).toContain('peer-only.txt');
         const tree = prepared.prepared.subject.built;
         expect((yield* liveGit.run(['show', `${tree}:operator-only.txt`], { cwd: root })).stdout).toBe('operator-only\n');
         expect((yield* liveGit.run(['show', `${tree}:peer-only.txt`], { cwd: root })).stdout).toBe('peer-only\n');
-        yield* second.served.prepared.changes.release(prepared.prepared);
+        yield* second.served.prepared.release(prepared.prepared);
         const byPath = yield* second.read({ path: shared });
         expect(byPath.holdings[0]?.holding.verdict.verdict).toBe('proven');
         expect(yield* files.readFileString(shared)).toBe(mixed);

@@ -1,5 +1,4 @@
 import { Context, Effect, Option } from 'effect';
-import { CarrierAdmission } from '../change-record/contract/service/carriers.js';
 import { ChangeRecord } from '../change-record/contract/service/record.js';
 import { HeldFeed } from '../change-record/contract/service/held.js';
 import { TerminalAdopters } from '../executions/contract/service/adopters.js';
@@ -42,7 +41,6 @@ export type AssembledPorts =
   | CommitOverlay
   | HeldFeed
   | ChangeRecord
-  | CarrierAdmission
   | TerminalAdopters
   | FileWatcher;
 
@@ -60,7 +58,6 @@ export const admitAssembled = (context: Context.Context<AssembledPorts>): Effect
     ['CommitOverlay', CommitOverlay],
     ['HeldFeed', HeldFeed],
     ['ChangeRecord', ChangeRecord],
-    ['CarrierAdmission', CarrierAdmission],
     ['TerminalAdopters', TerminalAdopters],
     ['FileWatcher', FileWatcher],
   ]);

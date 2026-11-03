@@ -9,7 +9,6 @@ type World = Effect.Success<ReturnType<typeof makeCheckout>>;
 const crlf = (lines: readonly string[]) => `${lines.join('\r\n')}\r\n`;
 const THEIRS_LINES = [FILE[0] as string, 'const two = 2; // theirs', ...FILE.slice(2)];
 const BOTH = [...THEIRS_LINES.slice(0, 4), 'const five = 5; // mine'];
-const MINE_LINES = [...FILE.slice(0, 4), 'const five = 5; // mine'];
 const NEW = ['const b = 1;', 'const c = 2;'];
 const underUserConfig = Effect.fnUntraced(function* <A, E, R>(config: string, act: () => Effect.Effect<A, E, R>) {
   const files = yield* FileSystem.FileSystem;
@@ -56,7 +55,7 @@ const holdNew = Effect.fnUntraced(function* (world: World) {
 });
 layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: true })('checkout', (it) => {
   it.effect(
-    'under core.autocrlf=true and a clean filter in the user config, own lines, filtered own lines and whole files land as the user’s git add stores them',
+    'under core.autocrlf=true and a clean filter in the user config, landed files are stored as the user’s git add stores them',
     () =>
       withCheckout((checkout) =>
         Effect.fnUntraced(function* () {
@@ -71,14 +70,17 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
               const answer = yield* world.submit(MINE);
               expect(answer.status).toBe('landed');
               if (answer.status !== 'landed') return;
-              expect(answer.carried).toEqual([]);
-              expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/a.ts'])).toBe(MINE_LINES.join('\n'));
+              expect(answer.carried).toEqual([
+                { path: 'src/a.ts', holders: [THEIRS] },
+                { path: 'src/c.ts', holders: [THEIRS] },
+              ]);
+              expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/a.ts'])).toBe(BOTH.join('\n'));
               expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/b.ts'])).toBe(NEW.join('\n'));
-              expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/c.ts'])).toBe(MINE_LINES.join('\n').toUpperCase());
+              expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/c.ts'])).toBe(BOTH.join('\n').toUpperCase());
               for (const [path, lines] of [
-                ['src/a.ts', MINE_LINES],
+                ['src/a.ts', BOTH],
                 ['src/b.ts', NEW],
-                ['src/c.ts', MINE_LINES],
+                ['src/c.ts', BOTH],
               ] as const)
                 yield* landsAsAdded(world, path, lines);
             }),
@@ -86,28 +88,26 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
         })(),
       ),
   );
-  it.effect(
-    'under core.autocrlf=true, a file the session staged itself and landed in part is brought level with the commit in the index',
-    () =>
-      withCheckout((checkout) =>
-        Effect.fnUntraced(function* () {
-          const world = checkout;
-          yield* underUserConfig(
-            '[core]\n\tautocrlf = true\n',
-            Effect.fnUntraced(function* () {
-              yield* holdBoth(world, 'src/a.ts');
-              Bun.spawnSync(['git', '-C', world.root, 'add', '--', 'src/a.ts'], { env: { ...process.env } });
-              const answer = yield* world.submit(MINE);
-              expect(answer.status).toBe('landed');
-              if (answer.status !== 'landed') return;
-              expect(answer.carried).toEqual([]);
-              expect(yield* world.run(['diff', '--cached', '--name-only'])).toBe('');
-            }),
-          );
-        })(),
-      ),
+  it.effect('under core.autocrlf=true, a file the session staged itself is brought level with the commit in the index', () =>
+    withCheckout((checkout) =>
+      Effect.fnUntraced(function* () {
+        const world = checkout;
+        yield* underUserConfig(
+          '[core]\n\tautocrlf = true\n',
+          Effect.fnUntraced(function* () {
+            yield* holdBoth(world, 'src/a.ts');
+            Bun.spawnSync(['git', '-C', world.root, 'add', '--', 'src/a.ts'], { env: { ...process.env } });
+            const answer = yield* world.submit(MINE);
+            expect(answer.status).toBe('landed');
+            if (answer.status !== 'landed') return;
+            expect(answer.carried).toEqual([{ path: 'src/a.ts', holders: [THEIRS] }]);
+            expect(yield* world.run(['diff', '--cached', '--name-only'])).toBe('');
+          }),
+        );
+      })(),
+    ),
   );
-  it.effect('under core.autocrlf=true with `* -text`, own lines and whole files keep CRLF as the user’s git add does', () =>
+  it.effect('under core.autocrlf=true with `* -text`, landed files keep CRLF as the user’s git add does', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
@@ -120,11 +120,11 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
             const answer = yield* world.submit(MINE);
             expect(answer.status).toBe('landed');
             if (answer.status !== 'landed') return;
-            expect(answer.carried).toEqual([]);
-            expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/a.ts'])).toBe(MINE_LINES.join('\r\n'));
+            expect(answer.carried).toEqual([{ path: 'src/a.ts', holders: [THEIRS] }]);
+            expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/a.ts'])).toBe(BOTH.join('\r\n'));
             expect(yield* world.run(['cat-file', 'blob', 'HEAD:src/b.ts'])).toBe(NEW.join('\r\n'));
             for (const [path, lines] of [
-              ['src/a.ts', MINE_LINES],
+              ['src/a.ts', BOTH],
               ['src/b.ts', NEW],
             ] as const)
               yield* landsAsAdded(world, path, lines);

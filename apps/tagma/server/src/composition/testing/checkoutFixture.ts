@@ -29,14 +29,11 @@ import { ProvedRoot } from '../../workspace/contract/wire/place.js';
 import { UNCHECKED } from '../../enforcement/contract/wire/checks.js';
 import type { ActChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import { TEST_CHECKOUT, testPlace } from '../../workspace/testing/doubles.js';
-import { evidenceInGroups } from '../../change-record/testing/doubles.js';
-import { pathsOfThread } from '../../change-record/testing/doubles.js';
+import { preparedReads } from '../../change-record/testing/doubles.js';
 import { changeDebt, changeLanded, changeLanding, checkoutSeen } from '../../change-record/store/retirement.js';
 import { recordWrite } from '../../change-record/testing/doubles.js';
 import { submitOver } from '../../landing/testing/doubles.js';
 import { landingServices } from './landingServices.js';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmission } from '../preparedChanges.js';
 import { makePreparedChanges } from '../../change-record/testing/doubles.js';
 import { quietCommands } from '../../change-record/testing/doubles.js';
 import type { CommandChanges } from '../../change-record/contract/service/commands.js';
@@ -131,8 +128,7 @@ export const PLACE = Schema.decodeUnknownSync(ProvedRoot)({
 export type SubmitOptions = {
   subject?: string;
   paths?: readonly string[];
-  whole?: readonly string[];
-  taking?: readonly { threadId: string; label: string }[];
+  everything?: boolean;
   git?: Git['Service'];
   checks?: ActChecks;
   commands?: CommandChanges['Service'];
@@ -238,15 +234,8 @@ export const makeCheckout = Effect.fnUntraced(
 
     const head = (path: string) => Effect.provide(runGitBytes(git, 'test', ['-C', root, 'show', `HEAD:${path}`]), context);
 
-    const admission = makeLandingHolds();
     const producerOn = (dir: string, options: SubmitOptions) =>
-      makePreparedChanges(
-        { commands: options.commands ?? quietCommands, pathsOfThread, evidenceInGroups },
-        landingAdmission(admission),
-        judgingFns(CHECKOUT_DIRECTORY),
-        dir,
-        options.shape,
-      );
+      makePreparedChanges(preparedReads(options.commands ?? quietCommands), judgingFns(CHECKOUT_DIRECTORY), dir, options.shape);
 
     const submitAs = Effect.fnUntraced(function* (threadId: string, options: SubmitOptions = {}) {
       const inst = yield* claimPreparedInstance(preparedBase(store));
@@ -265,15 +254,10 @@ export const makeCheckout = Effect.fnUntraced(
               {
                 projectId,
                 tasks: [{ name: 'ab12cd34', title: 'the work this commit answers', stealth: false }],
-                taking: (options.taking ?? []).map((session) => ({
-                  projectId: session.threadId === 'operator' ? null : projectId,
-                  threadId: session.threadId,
-                  tasks: [],
-                })),
                 subject: options.subject,
                 coAuthored: true,
                 paths: options.paths,
-                whole: options.whole,
+                everything: options.everything === true,
                 withoutFormat: options.withoutFormat,
               },
               options.checks ?? noRuleInPlay,
@@ -299,7 +283,7 @@ export const makeCheckout = Effect.fnUntraced(
             units,
             origin: originFor(threadId),
             checkout: TEST_CHECKOUT,
-            input: { taking: [], withoutFormat: options.withoutFormat },
+            input: { withoutFormat: options.withoutFormat },
             job: 'built-as',
             caller: undefined,
             act: { kind: 'thread', ...originFor(threadId).work },
@@ -390,7 +374,6 @@ export const makeCheckout = Effect.fnUntraced(
 
     return {
       reset,
-      admission,
       root,
       file,
       projectId,

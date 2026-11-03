@@ -1,16 +1,15 @@
 import { Effect } from 'effect';
-import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import type { SessionName } from '../../thread-record/names.js';
 import { workspaceChange } from '../store/tables.js';
 import type { MachineUnits } from '../../platform/contract/service/units.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { StoreShape } from './places.js';
-import type { HandoverSession } from '../contract/wire/handover.js';
-import { and, eq, exists, inArray, isNotNull } from 'drizzle-orm';
+import type { TeamMember } from '../contract/service/prepared.js';
+import type { WorkOrigin } from '../../workspace/contract/wire/place.js';
+import { and, eq, exists, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { recordFacts } from '../../thread-record/facts.js';
 import { threadRecord } from '../../thread-record/store/table.js';
-import { addressOf } from '../../thread-record/identity.js';
+import { subtreeOf } from '../../thread-record/lineage.js';
 import { chunk, unique } from '@runlith/utils/collection';
 import { rowsPerStatement } from '../../platform/store/binds.js';
 
@@ -95,46 +94,24 @@ export const runningOf = Effect.fn('WorkspaceChangeLog.runningOf')(function (
     .pipe(Effect.map((rows) => rows.map((row) => row.id)));
 });
 
-export const resolveHandover = Effect.fn('WorkspaceChangeLog.resolveHandover')(function (
+export const teamOf = Effect.fn('WorkspaceChangeLog.teamOf')(function (
+  units: MachineUnits['Service'],
   store: StoreShape,
-  projectId: number,
-  caller: string | null,
-  named: readonly string[],
-): Effect.Effect<readonly HandoverSession[], GateRefusal<'no-record'> | StoreFailure> {
-  return Effect.gen(function* () {
-    const taking: HandoverSession[] = [];
-    for (const address of [...new Set(named)]) {
-      if (address === OPERATOR_PRINCIPAL) {
-        taking.push({ projectId: null, threadId: OPERATOR_PRINCIPAL, label: OPERATOR_PRINCIPAL, running: false });
-        continue;
-      }
-      const agent = yield* addressOf(store.db, address, { threadId: caller, projectId });
-      if (agent === null) {
-        return yield* new GateRefusal('no-record', `no session answers to ${address}`, [
-          'read_changes — this session’s own work, or with path who holds its lines',
-          'name the thread id itself where a team name is not unique',
-        ]);
-      }
-      const { threadId } = agent;
-      if (threadId === caller || taking.some((session) => session.threadId === threadId)) continue;
-      const rows = yield* store.db
-        .select({ name: recordFacts.name, status: recordFacts.status })
-        .from(recordFacts)
-        .where(and(eq(recordFacts.id, threadId), eq(recordFacts.projectId, agent.projectId)))
-        .limit(1);
-      const row = rows[0];
-      if (row === undefined) {
-        return yield* new GateRefusal('no-record', `no session answers to ${address}`, [
-          'read_changes — this session’s own work, or with path who holds its lines',
-        ]);
-      }
-      taking.push({
-        projectId: agent.projectId,
-        threadId,
-        label: row.name ?? threadId,
-        running: row.status === 'running',
-      });
-    }
-    return taking;
-  });
+  work: WorkOrigin,
+): Effect.Effect<readonly TeamMember[], StoreFailure> {
+  return units.read((unit) =>
+    unit.run(
+      store.db
+        .select({ id: threadRecord.id, projectId: threadRecord.projectId, status: threadRecord.status })
+        .from(threadRecord)
+        .where(
+          and(
+            sql`${threadRecord.id} in ${subtreeOf(work.threadId)}`,
+            ne(threadRecord.id, work.threadId),
+            ne(threadRecord.status, 'running'),
+          ),
+        )
+        .pipe(Effect.map((rows) => [work, ...rows.map((row) => ({ projectId: row.projectId, threadId: row.id }))])),
+    ),
+  );
 });

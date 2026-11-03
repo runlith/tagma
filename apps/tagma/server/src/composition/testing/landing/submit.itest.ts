@@ -3,21 +3,10 @@ import { Effect } from 'effect';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { expect } from 'bun:test';
-import { FILE, MINE, THEIRS, makeCheckout, CheckoutFixture, checkoutFixture, withCheckout } from '../checkoutFixture.js';
-import {
-  claimPreparedInstance,
-  preparedBase,
-  makePreparedChanges,
-  quietCommands,
-  pathsOfThread,
-  evidenceInGroups,
-  judgingFns,
-} from '../../../change-record/testing/doubles.js';
-import { landingAdmission } from '../../preparedChanges.js';
-import { TEST_CHECKOUT } from '../../../workspace/testing/doubles.js';
+import { FILE, MINE, THEIRS, checkoutFixture, withCheckout } from '../checkoutFixture.js';
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
   it.effect(
-    'the paths this session holds land in one commit, the tasks it holds ride in the subject, and the record reads as committed',
+    'the paths this session holds land in one commit, its declared task rides as a trailer, and the record reads as committed',
     () =>
       withCheckout((checkout) =>
         Effect.fnUntraced(function* () {
@@ -33,14 +22,16 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           expect(answer.committed).toEqual(['src/a.ts', 'src/b.ts']);
           expect(answer.carried).toEqual([]);
           expect(yield* world.committed()).toEqual(mine);
-          expect((yield* world.run(['log', '-1', '--format=%B'])).trimEnd()).toBe(`the work of one session (ab12cd34)${body}`);
+          expect((yield* world.run(['log', '-1', '--format=%B'])).trimEnd()).toBe(
+            `the work of one session (AB12CD34)${body}\n\nTask: ab12cd34 the work this commit answers\nCo-authored-by: Tagma <agent@tagma.dev>`,
+          );
           const rows = yield* world.rows();
           expect(rows.every((row) => row.commit !== null && row.committedAt !== null)).toBe(true);
         })(),
       ),
   );
   it.effect(
-    'paths selects named own or taken files, leaves other own files held, accepts an absolute directory and names unmatched paths',
+    'paths selects named changed files whoever wrote them, leaves the other own files left by paths, accepts an absolute directory and names unmatched paths',
     () =>
       withCheckout((checkout) =>
         Effect.fnUntraced(function* () {
@@ -54,19 +45,18 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
             yield* world.record(holder, '', 'const value = 1;\n', { path, origin: 'write' });
           }
           expect(yield* world.submit(MINE, { paths: ['lib/'] })).toEqual({ status: 'nothing', unmatched: ['lib/'] });
-          const taken = yield* world.submit(MINE, { paths: ['src/b.ts'], taking: [{ threadId: THEIRS, label: THEIRS }] });
-          expect(taken.status).toBe('landed');
-          if (taken.status !== 'landed') return;
-          expect(taken.committed).toEqual(['src/b.ts']);
-          expect(taken.unmatched).toBeUndefined();
+          const theirs = yield* world.submit(MINE, { paths: ['src/b.ts'] });
+          expect(theirs.status).toBe('landed');
+          if (theirs.status !== 'landed') return;
+          expect(theirs.committed).toEqual(['src/b.ts']);
+          expect(theirs.carried).toEqual([{ path: 'src/b.ts', holders: [THEIRS] }]);
+          expect(theirs.unmatched).toBeUndefined();
           const named = yield* world.submit(MINE, { paths: ['src/a.ts', 'lib/'] });
           expect(named.status).toBe('landed');
           if (named.status !== 'landed') return;
           expect(named.committed).toEqual(['src/a.ts']);
           expect(named.unmatched).toEqual(['lib/']);
-          const held = (yield* world.rows()).filter((row) => row.path === 'src/c.ts');
-          expect(held.length).toBe(1);
-          expect(held[0]?.commit).toBeNull();
+          expect(named.left).toEqual([{ path: 'src/c.ts', reason: 'paths' }]);
           const directory = yield* world.submit(MINE, { paths: [join(world.root, 'src')] });
           expect(directory.status).toBe('landed');
           if (directory.status !== 'landed') return;
@@ -74,14 +64,15 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         })(),
       ),
   );
-  it.effect('a session whose held path the branch already carries answers nothing and holds it no longer', () =>
+  it.effect('a session whose files another commit already carried answers nothing and names that commit', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
         yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine']);
         yield* world.run(['commit', '-qam', 'landed outside submit_work']);
-        expect(yield* world.submit(MINE)).toEqual({ status: 'nothing' });
-        expect((yield* world.rows()).map((row) => row.commit)).toEqual([yield* world.run(['rev-parse', 'HEAD'])]);
+        const head = yield* world.run(['rev-parse', 'HEAD']);
+        expect(yield* world.submit(MINE)).toEqual({ status: 'nothing', commits: [head] });
+        expect((yield* world.rows()).map((row) => row.commit)).toEqual([head]);
       })(),
     ),
   );
@@ -107,37 +98,6 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         expect(yield* world.run(['status', '--porcelain', '--', 'src/b.ts'])).toBe('');
         expect(yield* world.run(['diff', '--cached', '--name-only'])).toBe('src/a.ts');
       })(),
-    ),
-  );
-  it.effect('preparing a landing refuses when Holdings does not answer a recorded candidate', () =>
-    withCheckout((world) =>
-      Effect.gen(function* () {
-        yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 55;']);
-        const instance = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(world.store)), (held) => held.release);
-        const prepared = makePreparedChanges(
-          { commands: quietCommands, pathsOfThread, evidenceInGroups },
-          landingAdmission(world.admission),
-          { ...judgingFns(), judged: () => Effect.succeed(new Map()) },
-          instance.dir,
-        );
-        const refused = yield* Effect.flip(
-          prepared.prepare({
-            projectId: world.projectId,
-            git: world.git,
-            root: world.root,
-            store: world.store,
-            units: world.units,
-            origin: world.originFor(MINE),
-            checkout: TEST_CHECKOUT,
-            input: { taking: [] },
-            job: 'unanswered-judgement',
-            caller: undefined,
-            act: { kind: 'thread', ...world.originFor(MINE).work },
-          }),
-        );
-        expect(refused).toMatchObject({ code: 'walk-cut' });
-        expect(yield* world.committed()).toEqual(FILE);
-      }),
     ),
   );
   it.effect('a session that holds no path of this checkout answers nothing, and no commit is made', () =>

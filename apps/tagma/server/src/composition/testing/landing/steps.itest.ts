@@ -153,33 +153,26 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
       })(),
     ),
   );
-  it.effect(
-    "a file with another session's lines lands only this session's lines in the step's form, the peer's lines stay on disk, and the delta is nobody's",
-    () =>
-      withCheckout((checkout) =>
-        Effect.fnUntraced(function* () {
-          const world = checkout;
-          yield* declared(world);
-          const stepped = yield* steppedOver(world.store);
-          const theirs = [FILE[0] as string, 'const two = 2; // theirs  ', ...FILE.slice(2)];
-          yield* world.wrote(THEIRS, theirs);
-          yield* world.wrote(MINE, [...theirs.slice(0, 4), 'const five = 5; // mine  ']);
-          const mine = yield* world.submit(MINE, { shape: stepped.shape });
-          expect(mine).toMatchObject({ status: 'landed', edited: ['src/a.ts'] });
-          expect(yield* world.committed()).toEqual([...FILE.slice(0, 4), 'const five = 5; // mine']);
-          expect(bytes(world)).toBe(`${[...theirs.slice(0, 4), 'const five = 5; // mine'].join('\n')}\n`);
-          expect((yield* world.rows()).filter((row) => row.holder === MINE).every((row) => row.commit !== null)).toBe(true);
-          const peer = yield* world.submit(THEIRS, { shape: stepped.shape });
-          expect(peer.status).toBe('landed');
-          expect(yield* world.committed()).toEqual([
-            FILE[0] as string,
-            'const two = 2; // theirs',
-            ...FILE.slice(2, 4),
-            'const five = 5; // mine',
-          ]);
-          expect(yield* world.run(['status', '--porcelain'])).toBe('');
-        })(),
-      ),
+  it.effect("a file with another session's lines lands whole in the step's form, and the working file takes the same form", () =>
+    withCheckout((checkout) =>
+      Effect.fnUntraced(function* () {
+        const world = checkout;
+        yield* declared(world);
+        const stepped = yield* steppedOver(world.store);
+        const theirs = [FILE[0] as string, 'const two = 2; // theirs  ', ...FILE.slice(2)];
+        yield* world.wrote(THEIRS, theirs);
+        yield* world.wrote(MINE, [...theirs.slice(0, 4), 'const five = 5; // mine  ']);
+        const formed = [FILE[0] as string, 'const two = 2; // theirs', ...FILE.slice(2, 4), 'const five = 5; // mine'];
+        expect(yield* world.submit(MINE, { shape: stepped.shape })).toMatchObject({
+          status: 'landed',
+          edited: ['src/a.ts'],
+          carried: [{ path: 'src/a.ts', holders: [THEIRS] }],
+        });
+        expect(yield* world.committed()).toEqual(formed);
+        expect(bytes(world)).toBe(`${formed.join('\n')}\n`);
+        expect(yield* world.run(['status', '--porcelain'])).toBe('');
+      })(),
+    ),
   );
   const refusal = Effect.fnUntraced(function* (world: World, work: ReturnType<World['submitAs']>) {
     const refused = yield* Effect.provide(Effect.flip(work), world.context);
@@ -262,7 +255,7 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
                 : Effect.succeed(UNCHECKED),
             after: () => Effect.void,
           };
-          const answer = yield* world.submit(MINE, { shape: (yield* steppedOver(world.store)).shape, checks, whole: ['src/a.ts'] });
+          const answer = yield* world.submit(MINE, { shape: (yield* steppedOver(world.store)).shape, checks });
           expect(answer).toMatchObject({ status: 'landed', carried: [{ path: 'src/a.ts', holders: [THEIRS] }] });
           expect(held).toEqual([[[], [], [THEIRS]]]);
         })(),

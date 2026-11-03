@@ -7,7 +7,6 @@ export const commitSteps = manifest({
   operations: async () => ({
     declarations: {},
     refusals: {
-      'derive-required': 'Derived output needs a command',
       'derive-missing': 'Derivation program not found',
       'derive-failed': 'Derivation failed',
       'derive-cut': 'Derivation ran too long',

@@ -39,7 +39,6 @@ import { GraphSyncing } from '../landing/contract/service/graphSyncing.js';
 import { graphSyncOf } from '../landing/graphSync.js';
 
 import { runAdmissionLayer } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmissionLayer } from './preparedChanges.js';
 import { operationChecks } from './operationChecks.js';
 import { landing } from '../landing/landing.js';
 import { mcp } from '../mcp/mcp.js';
@@ -161,14 +160,7 @@ const configured = config.lifetimes.serving.pipe(Layer.provide(programs));
 const shaped = commitSteps.lifetimes.serving.pipe(Layer.provide(Layer.merge(programs, configured)));
 
 const recorded = changeRecord.lifetimes.serving.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      shaped,
-      configured,
-      landingAdmissionLayer.pipe(Layer.provideMerge(runAdmissionLayer)),
-      Layer.succeed(LineWrites, lineWrites),
-    ),
-  ),
+  Layer.provideMerge(Layer.mergeAll(shaped, configured, runAdmissionLayer, Layer.succeed(LineWrites, lineWrites))),
 );
 
 const written = workspace.lifetimes.serving.pipe(Layer.provideMerge(recorded));

@@ -347,7 +347,7 @@ export const makeWorktreeDeletion = Effect.fnUntraced(function* (input: {
         from: tree.trim(),
         changed: [...paths],
         entries: { base, tree: tree.trim(), before: new Map(), after: new Map() },
-        plan: paths.map((path) => ({ path, land: 'whole' as const, holders: [...holders], ids: [] })),
+        plan: paths.map((path) => ({ path, writers: [...holders], ids: [] })),
         hashes: new Map(),
         reshaped: [],
         formatSkipped: false,

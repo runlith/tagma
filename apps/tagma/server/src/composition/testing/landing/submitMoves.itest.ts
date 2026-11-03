@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { expect } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { FILE, MINE, THEIRS, makeCheckout, CheckoutFixture, checkoutFixture, withCheckout } from '../checkoutFixture.js';
+import { FILE, MINE, makeCheckout, CheckoutFixture, checkoutFixture, withCheckout } from '../checkoutFixture.js';
 const base = `${FILE.join('\n')}\n`;
 const edited = [...FILE.slice(0, 4), 'const five = 55;'];
 const moved = Effect.fnUntraced(function* (world: Effect.Success<ReturnType<typeof makeCheckout>>) {
@@ -12,26 +12,14 @@ const moved = Effect.fnUntraced(function* (world: Effect.Success<ReturnType<type
   return world;
 });
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
-  it.effect('a staged move selected by its old path lands its unrecorded destination bytes when explicitly carried whole', () =>
+  it.effect('a staged move selected by its old path lands its destination as it stands', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = yield* moved(checkout);
         yield* world.wrote(MINE, edited, { path: 'lib/a.ts' });
-        const landed = yield* world.submit(MINE, { paths: ['src/a.ts'], whole: ['lib/a.ts'] });
+        const landed = yield* world.submit(MINE, { paths: ['src/a.ts'] });
         expect(landed).toMatchObject({ status: 'landed', committed: ['lib/a.ts', 'src/a.ts'] });
         expect(yield* world.run(['show', 'HEAD:lib/a.ts'])).toBe(edited.join('\n'));
-        expect(yield* world.run(['status', '--porcelain'])).toBe('');
-      })(),
-    ),
-  );
-  it.effect('a staged move another session holds lands with its source deletion when taken whole', () =>
-    withCheckout((checkout) =>
-      Effect.fnUntraced(function* () {
-        const world = yield* moved(checkout);
-        yield* world.namedAgent(THEIRS, { name: THEIRS, task: 'their move' });
-        yield* world.wrote(THEIRS, edited, { path: 'lib/a.ts' });
-        const landed = yield* world.submit(MINE, { taking: [{ threadId: THEIRS, label: THEIRS }], whole: ['.'] });
-        expect(landed).toMatchObject({ status: 'landed', committed: ['lib/a.ts', 'src/a.ts'] });
         expect(yield* world.run(['status', '--porcelain'])).toBe('');
       })(),
     ),
