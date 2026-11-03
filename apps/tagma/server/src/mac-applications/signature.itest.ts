@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
-import { RELEASE_INSIDE } from '../installation/contract/wire/layout.js';
+import { RELEASE_INSIDE } from './bundle.js';
 import { signatureRefusal } from './placement.js';
 
 const carriedRelease = (bundle: string): string => join(bundle, RELEASE_INSIDE);

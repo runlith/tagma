@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serverPort, surfaceDevPort } from '@tagma/server/installation/contract/wire/ports';
-import { hostBinary } from '@tagma/server/installation/contract/wire/layout';
+import { hostBinary } from '@tagma/server/mac-applications/bundle';
 import { CHANNEL } from '@tagma/server/composition/developer/channel';
 import { runDev } from '@runlith/dev-runner';
 

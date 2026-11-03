@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, Layer, Option, Stream } from 'effect';
-import { NextInstallation } from '../installation/contract/service/next.js';
+import { NextInstallation, RestartRefused } from '../installation/contract/service/next.js';
+import { InstallationUnreadable } from '../installation/contract/wire/manifest.js';
 import { SourceChanges } from './contract/service/changes.js';
 import { type CheckoutBuildsOptions, checkoutBuildsLayer } from './runner.js';
 import { BuildSteps } from './contract/service/steps.js';
@@ -43,7 +44,7 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
   writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mini', scripts: { 'tagma:build': 'bun build.ts' } }));
   writeFileSync(
     join(checkout, 'build.ts'),
-    `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../installation/testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
+    `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../cut/testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
   );
   const writeScript = (command: string) => writeFileSync(join(checkout, 'build.command'), command);
   writeScript(script);
@@ -65,7 +66,7 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
         log,
         worktrees: join(dir, 'data', 'build'),
         record: join(dir, 'data', 'build.json'),
-        landed: () => Promise.resolve('v9'),
+        landed: Effect.succeed('v9'),
         ...more,
       },
       steps,
@@ -225,7 +226,7 @@ it.live('stopping a HEAD build ends its descendants and worktrees, and a success
         git(repository, 'worktree', 'list', '--porcelain'),
         (listed) => listed.split('\n').filter((line) => line.startsWith('worktree ')).length,
       );
-    const running = yield* builds({ restart: () => Promise.resolve('restart must not be reached after a stop') });
+    const running = yield* builds({ restart: Effect.fail(new RestartRefused({ message: 'restart must not be reached after a stop' })) });
     const first = yield* running.install('head', 'restart', null);
     const grandchild = join(dir, 'data', 'build', 'grandchild');
     yield* appears(grandchild);
@@ -249,5 +250,22 @@ it.live('stopping a HEAD build ends its descendants and worktrees, and a success
     while (alive(orphan)) yield* Effect.sleep('10 millis');
     expect(alive(orphan)).toBe(false);
     while ((yield* worktrees(submodule)) > 1 || (yield* worktrees(checkout)) > 1) yield* Effect.sleep('10 millis');
+  }),
+);
+
+it.live('a landed build whose standing installation cannot be read still lands, and a refused restart is recorded with its reason', () =>
+  Effect.gen(function* () {
+    const { builds } = yield* checkoutOf('echo built');
+    const unread = new InstallationUnreadable({ root: '/install', role: 'manifest', path: '/install/current', detail: 'unreadable' });
+    const running = yield* builds({
+      landed: Effect.fail(unread),
+      restart: Effect.fail(new RestartRefused({ message: 'the successor could not stand by' })),
+    });
+    const started = yield* running.install('head', 'restart', null);
+    expect(yield* settled(running, started.installing.since)).toMatchObject({
+      outcome: 'landed',
+      build: null,
+      restartRefused: 'the successor could not stand by',
+    });
   }),
 );

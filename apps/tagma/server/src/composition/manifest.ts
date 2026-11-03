@@ -25,6 +25,7 @@ import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/not
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
 import { LIVE_WORK, type LiveWork } from '../platform/contract/service/live.js';
+import { MACHINE_REGISTRY, type RegistryOwner } from '../platform/contract/service/machineRegistry.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { NamedRight } from '../platform/contract/service/access.js';
 import { BRIDGE_METHODS } from '../views/contract/service/bridge.js';
@@ -68,6 +69,7 @@ export type Assembly = {
   readonly notes: readonly BuiltinNote[];
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
+  readonly machineRegistry: readonly RegistryOwner[];
   readonly liveWork: readonly LiveWork[];
   readonly bridgeMethods: readonly BridgeMethod[];
   readonly creationSteps: readonly CreationStep[];
@@ -183,6 +185,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     notes: BUILTIN_NOTES.collect(modules).map(({ entry }) => entry),
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
+    machineRegistry: MACHINE_REGISTRY.collect(modules).map(({ entry }) => entry),
     liveWork: LIVE_WORK.collect(modules).map(({ entry }) => entry),
     bridgeMethods: BRIDGE_METHODS.collect(modules).map(({ entry }) => entry),
     creationSteps,

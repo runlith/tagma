@@ -28,7 +28,8 @@ import {
   WHISPER_ENGINE_PART,
 } from '../installation/contract/wire/layout.js';
 import { CURRENT } from '../platform/contract/wire/versions.js';
-import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
+import type { Installation } from '../installation/contract/wire/manifest.js';
+import { applications } from '../mac-applications/placement.js';
 import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { speech } from '../speech/speech.js';
@@ -52,7 +53,7 @@ export type SpeechPlace = {
 export const speechPlace = (channel: Channel, sourcePath: string, installation: Installation | undefined, data: string): SpeechPlace => {
   const tools = installation === undefined ? resolve(sourcePath, '..', '..', '..', 'packages', 'speech-whisper', 'bin') : undefined;
   return {
-    hostApp: releaseApplication(installation?.root ?? join(installationRoot(channel), CURRENT), channel.name),
+    hostApp: applications.kept(installation?.root ?? join(installationRoot(channel), CURRENT), channel.name),
     engine: tools === undefined ? join(installation!.root, WHISPER_ENGINE_PART) : join(tools, 'whisper-engine'),
     silero: tools === undefined ? join(installation!.root, SILERO_PART) : join(tools, 'silero.bin'),
     absence: tools === undefined ? join(installation!.root, WHISPER_ABSENCE_PART) : join(tools, 'whisper-engine.absent'),

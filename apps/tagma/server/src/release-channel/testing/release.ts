@@ -6,8 +6,13 @@ import { Effect, FileSystem } from 'effect';
 import { partsAt } from '../../installation/closure/read.js';
 import { writeInstallation } from '../../installation/closure/write.js';
 import type { Applications } from '../../installation/contract/service/applications.js';
-import { RELEASE_INSIDE } from '../../installation/contract/wire/layout.js';
-import { type InstallationPlatform, type InstallationRole, type IrreversibleChange } from '../../installation/contract/wire/manifest.js';
+import {
+  DESKTOP,
+  type InstallationPlatform,
+  type InstallationRole,
+  type IrreversibleChange,
+} from '../../installation/contract/wire/manifest.js';
+import { hostBundle, RELEASE_INSIDE } from '../../mac-applications/bundle.js';
 import { EXECUTIONS_RUNTIME } from '../../installation/contract/wire/archive.js';
 import type { Weigh } from '../install.js';
 
@@ -77,6 +82,8 @@ export const syntheticReleaseEffect = Effect.fn('releaseFixture.build')(function
 });
 
 export const trustedApplications: Applications = {
+  kept: (root, name) => join(root, DESKTOP, hostBundle(name)),
+  inside: carriedIn,
   carrier: (dir) => (dir.endsWith(`.app/${RELEASE_INSIDE}`) ? dir.slice(0, -RELEASE_INSIDE.length - 1) : null),
   carried: (dir) => {
     const bundles = readdirSync(dir).filter((name) => name.endsWith('.app'));

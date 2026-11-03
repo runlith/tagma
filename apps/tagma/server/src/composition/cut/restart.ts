@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { WORLD_COMMAND, dataDirectory, hostBinary, installationsRoot } from '../../installation/contract/wire/layout.js';
+import { WORLD_COMMAND, dataDirectory, installationsRoot } from '../../installation/contract/wire/layout.js';
+import { hostBinary } from '../../mac-applications/bundle.js';
 import { worldDirectory } from '../../installation/setup/launcher.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { TAGMA_APP_ENVIRONMENT } from '../../tagma-apps/contract/wire/environment.js';

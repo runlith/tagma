@@ -308,7 +308,7 @@ export const processState = Command.make('process-state', { data: Flag.String('d
     );
     yield* Schema.encodeUnknownEffect(processStateSchema)(state).pipe(Effect.flatMap((answer) => print(answer, true)));
   }),
-);
+).pipe(Command.withDescription("print as JSON who holds the data directory and whether a restart lives, for the window's carried CLI"));
 
 export const quitting = Command.make('quit', { json }, (o) =>
   Effect.gen(function* () {

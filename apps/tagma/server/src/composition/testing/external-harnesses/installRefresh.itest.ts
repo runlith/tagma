@@ -12,7 +12,7 @@ import { declaredHarness } from '../../../external-harnesses/adapter/declared.js
 import { grok } from '@runlith/adapter-xai/harness';
 import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { declareInto } from '../../../external-harnesses/installs/mcpDeclaration.js';
-import { besideEnv } from '../../../installation/cut/beside.js';
+import { besideEnv } from '../../../installation/contract/wire/beside.js';
 import { declaredForLaunch, refreshedFor, refreshInstallations } from '../../../external-harnesses/installs/upgrade.js';
 import { skillTarget } from '../../../external-harnesses/testing/doubles.js';
 import { MCP_KEY_VARIABLE } from '../../../platform/contract/wire/session.js';

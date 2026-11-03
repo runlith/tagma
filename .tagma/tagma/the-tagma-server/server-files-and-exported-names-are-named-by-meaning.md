@@ -220,14 +220,6 @@ fields:
           "owner": "02c71a0d"
         },
         {
-          "fingerprint": "S4 installation:Trial @ installation/cut/trial.ts",
-          "owner": "02c71a0d"
-        },
-        {
-          "fingerprint": "S4 installation:Trial @ installation/process/trial.ts",
-          "owner": "02c71a0d"
-        },
-        {
           "fingerprint": "S4 landing:Landed @ landing/land/commit.ts",
           "owner": "02c71a0d"
         },

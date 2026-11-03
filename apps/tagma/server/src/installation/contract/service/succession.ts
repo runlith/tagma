@@ -46,7 +46,7 @@ export class Succession extends Context.Service<
     readonly current: Effect.Effect<Installation | null, InstallationFailure>;
     readonly leaving: Effect.Effect<boolean>;
     restart(host?: RestartHost): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
-    weigh(root: string, release: string): Effect.Effect<HostVerdict>;
+    weigh(root: string): Effect.Effect<HostVerdict>;
     readonly refused: Effect.Effect<PendingRefusal | null>;
     readonly refusals: Stream.Stream<void>;
     readonly release: (failure: string | null) => Effect.Effect<void, SuccessorFailed>;

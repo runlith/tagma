@@ -17,17 +17,17 @@ import {
   BUILD_MAPS_ENV,
   BUILD_TARGET_ENV,
   buildConditionsIn,
-  hostBundle,
   HOST_ASSETS_ENV,
   HOST_CHANNEL_ENV,
   HOST_MAIN,
-  RELEASE_INSIDE,
   RELEASE_NUMBER_ENV,
   SIGNING_IDENTITY_ENV,
+  sourceMapOriginIn,
 } from '@tagma/server/installation/contract/wire/layout';
+import { hostBundle, RELEASE_INSIDE } from '@tagma/server/mac-applications/bundle';
 import { DESKTOP, EXECUTIONS } from '@tagma/server/installation/contract/wire/manifest';
 import { EXECUTIONS_RUNTIME } from '@tagma/server/installation/contract/wire/archive';
-import { signingIdentity, signingNotice } from '@tagma/server/installation/setup/signing';
+import { signingIdentity, signingNotice } from '@tagma/server/cut/signing';
 import { channelSchema } from '@tagma/server/installation/contract/wire/channel';
 import { Effect, Layer, Schema } from 'effect';
 import { type BuildOptions, build, context } from 'esbuild';
@@ -161,7 +161,9 @@ function bundleOptions(entry: string, outfile: string, format: 'esm' | 'cjs'): B
             for (const file of result.outputFiles ?? []) {
               const shelved = mapsTo !== null && file.path.endsWith('.map');
               const path = shelved ? join(mapsTo, relative(out, file.path)) : file.path;
-              const contents = shelved ? Buffer.from(absoluteSources(file.text, dirname(file.path))) : Buffer.from(file.contents);
+              const contents = shelved
+                ? Buffer.from(absoluteSources(file.text, dirname(file.path), sourceMapOriginIn(process.env)))
+                : Buffer.from(file.contents);
               if (existsSync(path) && readFileSync(path).equals(contents)) continue;
               mkdirSync(dirname(path), { recursive: true });
               writeFileSync(path, contents);

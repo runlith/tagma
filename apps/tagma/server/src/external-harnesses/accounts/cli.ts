@@ -1,9 +1,8 @@
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
-import { AccountCli, LoginPlaces, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
+import { AccountCli, LoginPlaces, type AccountCommand } from '../../providers/contract/service/cli.js';
 import { ProgramFailed } from '../../providers/contract/service/asks.js';
-import { HarnessAdapters } from '../contract/service/adapters.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { Terminals, TerminalRequests } from '../../executions/contract/service/terminals.js';
@@ -21,9 +20,15 @@ const COMMAND_MS = 60_000;
 const cliFailed = (reason: string): GateRefusal =>
   new GateRefusal('account-cli-failed', reason, ['check the installed CLI and retry on this account']);
 
-const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null, scratch: string) {
+const run = Effect.fn('AccountCli.run')(function* (
+  users: UserEnvironment['Service'],
+  command: AccountCommand,
+  program: HarnessProgram | null,
+  scratch: string,
+) {
   const limitMs = command.timeoutMs === undefined ? COMMAND_MS : command.timeoutMs;
   const running = runProgram(
+    users,
     {
       program: command.program,
       args: command.args,
@@ -54,26 +59,18 @@ const makeAccountCli = Effect.gen(function* () {
   const endings = yield* TerminalEndings;
   const projects = yield* Projects;
   const requests = yield* TerminalRequests;
-  const adapters = yield* HarnessAdapters;
   const stops = new Map<string, number>();
   const users = yield* UserEnvironment;
   const files = yield* FileSystem.FileSystem;
   const scratch = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-account-status-' }).pipe(Effect.orDie);
   const account = AccountCli.of({
-    installed: (program) =>
-      Effect.map(installs.read, (rows): ProgramState => {
-        const row = rows.find((one) => adapters.find(one.harness)?.binary === program);
-        if (row === undefined)
-          return adapters.all().length === 0 ? { _tag: 'Searching' } : { _tag: 'Missing', reason: `no harness runs ${program}` };
-        if (row.binary !== null) return { _tag: 'Found' };
-        return row.searching ? { _tag: 'Searching' } : { _tag: 'Missing', reason: row.missing ?? `${program} was not found` };
-      }),
+    installed: installs.availability,
     changes: installs.changes,
     run: (command) =>
       Effect.flatMap(command.located ? installs.locate(command.program) : installs.program(command.program), (program) =>
         program === null && command.located
           ? Effect.fail(cliFailed(`${command.program} could not be located.`))
-          : run(command, program, scratch),
+          : run(users, command, program, scratch),
       ),
     ended: (execution, projectId) => Effect.asVoid(endings.decided({ projectId, execution })),
     stop: Effect.fn('AccountCli.stop')(

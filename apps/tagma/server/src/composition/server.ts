@@ -55,7 +55,7 @@ import {
 import { closingDeadline, stopServer } from './stop.js';
 import { frozenBuildsLayer, surfaceRoot } from '../installation/builds/frozen.js';
 import { FrozenBuilds } from '../installation/contract/service/builds.js';
-import { NextInstallation } from '../installation/contract/service/next.js';
+import { NextInstallation, RestartRefused } from '../installation/contract/service/next.js';
 import { FileRoots } from '../workspace/contract/service/roots.js';
 import { CheckoutWatch } from '../workspace/contract/service/watch.js';
 import { storeRefusal } from './storeReads.js';
@@ -239,7 +239,9 @@ export const serve = async (build: Build): Promise<void> => {
               : `${source.revision.head}${source.revision.dirty ? '-dirty' : ''}`,
         }
       : { _tag: 'Closure', path: join(installation.root, EXECUTIONS) };
-  const attempting = installation !== undefined && standingAttempt(installations)?.to === basename(installation.root);
+  const standingNow = standingAttempt(installations);
+  const attempting =
+    installation !== undefined && (Result.isFailure(standingNow) || standingNow.success?.to === basename(installation.root));
   const placedHost =
     predecessor === undefined || hostState === undefined || attempting
       ? undefined
@@ -375,6 +377,7 @@ export const serve = async (build: Build): Promise<void> => {
             installation,
             installations,
             serveLog,
+            (root) => build.cut.applications.inside(build.cut.applications.kept(root, build.channel.name)),
             () => {
               closingSignal('restart');
               Deferred.doneUnsafe(restartExit, Exit.void);
@@ -524,21 +527,14 @@ export const serve = async (build: Build): Promise<void> => {
                 installations,
                 installation,
                 source,
-                restart: () =>
-                  Effect.runPromise(
-                    succession.restart().pipe(
-                      Effect.as(null),
-                      Effect.catchTag(['SuccessionRefused', 'SuccessorFailed', 'HostUnprepared'], (refused) =>
-                        Effect.succeed(refused.detail),
-                      ),
-                    ),
+                restart: succession.restart().pipe(
+                  Effect.asVoid,
+                  Effect.catchTag(['SuccessionRefused', 'SuccessorFailed', 'HostUnprepared'], (refused) =>
+                    Effect.fail(new RestartRefused({ message: refused.detail })),
                   ),
-                landed: () =>
-                  Effect.runPromise(succession.current).then(
-                    (standing) => standing?.manifest.identity.build ?? null,
-                    () => null,
-                  ),
-                refuses: storeRefusal(tagma.runtime),
+                ),
+                landed: Effect.map(succession.current, (standing) => standing?.manifest.identity.build ?? null),
+                refuses: storeRefusal(tagma.graph),
                 downgrade: Context.get(tagma.door, DowngradeSteps),
                 roots: Context.get(tagma.workspace, FileRoots),
                 watch: Context.get(tagma.workspace, CheckoutWatch),

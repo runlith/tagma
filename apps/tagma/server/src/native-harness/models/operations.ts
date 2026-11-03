@@ -24,6 +24,18 @@ export const MODEL_PAIRS: { readonly [K in ModelOperationId]: OperationPair<(typ
         ),
     }),
   ),
+  read_model_connection: pair(
+    OPS.read_model_connection,
+    body(OPS.read_model_connection, {
+      execute: () =>
+        declaredRefusals(OPS.read_model_connection)(
+          Effect.map(
+            Effect.flatMap(ModelPreferences, (models) => models.modelConnection()),
+            (connection) => ({ status: 'read' as const, ...connection }),
+          ),
+        ),
+    }),
+  ),
   set_model_defaults: pair(
     OPS.set_model_defaults,
     body(OPS.set_model_defaults, {

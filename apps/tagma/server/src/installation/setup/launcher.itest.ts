@@ -5,7 +5,7 @@ import { layer } from '@runlith/effect-test';
 import { Effect, FileSystem, Layer, PlatformError } from 'effect';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { ensuredPath, runningWorld, writeLauncher } from './launcher.js';
-import { besideEnv } from '../cut/beside.js';
+import { besideEnv } from '../contract/wire/beside.js';
 
 const homeOf = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;

@@ -7,7 +7,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/speech.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/engine.ts
+    ref: apps/tagma/server/src/cut/engine.ts
   - kind: file
     ref: packages/audio-darwin/src/channel.ts
 ---

@@ -17,9 +17,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/cut/try.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/engine.ts
+    ref: apps/tagma/server/src/cut/engine.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
   - kind: file
     ref: packages/speech-whisper/scripts/build.ts
   - kind: file

@@ -9,7 +9,7 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 **What we get.** In the tagma repo every code commit — agent's, operator's, or contributor's — is written in one shape that shows the change type and module, and release notes assemble themselves from history.
 

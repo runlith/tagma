@@ -3,7 +3,13 @@ import { threadModelSchema } from '@runlith/agent/protocol/realtime';
 import { arms, operation } from '../../../../platform/contract/wire/operation.js';
 import { ThreadId } from '../../../../platform/contract/wire/thread.js';
 import { threadWireSnapshotPayloadSchema } from '../../../../threads/contract/wire/snapshot.js';
-import { favoriteModelsSchema, modelDefaultsSchema, modelDefaultsWriteSchema, rememberedSwitchesSchema } from '../modelSelection.js';
+import {
+  favoriteModelsSchema,
+  modelConnectionSchema,
+  modelDefaultsSchema,
+  modelDefaultsWriteSchema,
+  rememberedSwitchesSchema,
+} from '../modelSelection.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../../platform/contract/wire/conditions.js';
 
 const operatorOnly = {
@@ -22,7 +28,7 @@ export const MODEL_OPERATIONS = {
     ...operatorOnly,
     meaning: 'Read the model, reasoning, switches and account a new thread is born on when its birth names none.',
     grammar:
-      'Without a saved model, the default is the first provider in catalog order — subscriptions before keys — that a Tagma agent runs on and that holds an account or a signed-in CLI login; `unconnected` answers when none does, with `plans`: the subscription providers a Tagma agent runs on, in that order. A saved model that no installed adapter serves gives way to that default; the saved one stays stored and answers again once its adapter is back. `remembered` holds, by provider and model, the switches each served model keeps; a model that takes the operator defaults takes its own.',
+      'Without a served saved model, the first usable provider in catalog order — subscriptions before keys — is offered after discovery. That provisional model stays offered across sign-out; the first accepted send saves its actual choice. `unconnected` answers when none is usable, with `plans`: the subscription providers a Tagma agent runs on, in that order. A saved model that no installed adapter serves gives way to that default; the saved one stays stored and answers again once its adapter is back. `remembered` holds, by provider and model, the switches each served model keeps; a model that takes the operator defaults takes its own.',
     input: Schema.Struct({}),
     answer: arms({
       read: { ...modelDefaultsSchema.fields, remembered: rememberedSwitchesSchema },
@@ -35,6 +41,21 @@ export const MODEL_OPERATIONS = {
     confirmation: () => ({ summary: 'Read the model defaults?' }),
     confirmLabel: 'Read defaults',
     presentation: { running: 'Reading the model defaults', done: 'Read the model defaults' },
+  }),
+  read_model_connection: operation('read_model_connection', {
+    approval: ASKS_NEVER,
+    ...operatorOnly,
+    meaning: 'Read the connection state and subscription plans a Tagma agent can run on, without waiting for login discovery.',
+    grammar: 'Plans follow the hosting providers in catalog order and remain available while discovery is running.',
+    input: Schema.Struct({}),
+    answer: arms({ read: modelConnectionSchema.fields }),
+    refusals: [],
+    effect: 'read',
+    identity: 'none',
+    subjects: nobody,
+    confirmation: () => ({ summary: 'Read the model connection?' }),
+    confirmLabel: 'Read connection',
+    presentation: { running: 'Reading the model connection', done: 'Read the model connection' },
   }),
   set_model_defaults: operation('set_model_defaults', {
     approval: ASKS_IN_REVIEW,

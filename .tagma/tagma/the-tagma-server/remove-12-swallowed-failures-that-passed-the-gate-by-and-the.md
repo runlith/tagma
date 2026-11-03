@@ -17,7 +17,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/enforcement/workers/calibration.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
   - kind: file
     ref: apps/tagma/server/src/installation/process/succession.ts
   - kind: file

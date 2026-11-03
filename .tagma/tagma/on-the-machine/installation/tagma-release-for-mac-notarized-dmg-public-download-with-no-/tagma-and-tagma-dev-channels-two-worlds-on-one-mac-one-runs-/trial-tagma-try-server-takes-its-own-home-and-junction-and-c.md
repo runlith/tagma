@@ -13,7 +13,7 @@ edges:
     to: 01a13c9b-c2eb-7fa3-95cc-fb7ce00dc24e
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/try.ts
+    ref: apps/tagma/server/src/cut/try.ts
 ---
 The `tagma:try` server takes the junction (`active.lock`, entry point) from the calling `HOME` — the same as the operator's Tagma Dev — and fails with `channel-active` while Tagma Dev runs. Spec: a trial instance with its own `HOME` has its own junction.
 

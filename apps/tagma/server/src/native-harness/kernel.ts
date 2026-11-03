@@ -51,7 +51,7 @@ import { ThreadLookup } from '../threads/contract/service/reads.js';
 import { BirthModelSelection } from '../threads/contract/service/birth.js';
 import { AccountCredentials } from '../providers/contract/service/access.js';
 import { AccountQuota } from '../providers/contract/service/quota.js';
-import { ProviderAccounts } from '../providers/contract/service/accounts.js';
+import { DefaultAccounts, ProviderAccounts } from '../providers/contract/service/accounts.js';
 import { ProviderRegistry } from '../providers/contract/service/registry.js';
 import { cacheWarmth } from './evidence/warmth.js';
 import { type ChoiceReader, makeChoiceReader } from './compaction/choice.js';
@@ -122,6 +122,7 @@ export type NativeKernelRequirements =
   | AccountCredentials
   | AccountQuota
   | ProviderAccounts
+  | DefaultAccounts
   | ProviderRegistry
   | HarnessRegistry
   | DeclaredCapabilities

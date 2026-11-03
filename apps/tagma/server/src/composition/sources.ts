@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Distribution } from '../installation/cut/descriptor.js';
+import type { Distribution } from '../cut/descriptor.js';
 import { CHANNELS } from '../installation/contract/wire/channel.js';
 import { applications } from '../mac-applications/placement.js';
 

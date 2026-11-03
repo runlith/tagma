@@ -4,7 +4,7 @@ import { Clock, Data, Effect, Result } from 'effect';
 import { holdDirectory } from '../../platform/lock/directoryLease.js';
 import type { Attempt } from '../contract/wire/attempt.js';
 import { INSTALL_LOCK } from '../contract/wire/layout.js';
-import { beginAttempt, clearReturn, servedRelease, standingAttempt, writeReturn } from './attempt.js';
+import { beginAttempt, clearReturn, type RecordUnreadable, servedRelease, standingAttempt, writeReturn } from './attempt.js';
 import { type Claimed, claimLeased, pruneReleases } from './leases.js';
 import { releaseAt } from './manifests.js';
 import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
@@ -43,14 +43,13 @@ export const moving = <A, E, R>(root: string, work: (lock: InstallLock) => Effec
     Effect.withSpan('installation.moving'),
   );
 
-export const moveFrom = (lock: InstallLock): Effect.Effect<Move, AttemptStanding> =>
-  Effect.suspend(() => {
-    const standing = currentVersion(lock.root);
-    const attempt = standingAttempt(lock.root);
-    if (attempt === null) return Effect.succeed({ standing, from: servedRelease(lock.root) ?? standing });
-    if (attempt.starts > 0 || attempt.ended !== null) return Effect.fail(new AttemptStanding({ attempt }));
-    return Effect.succeed({ standing, from: attempt.from });
-  });
+export const moveFrom = Effect.fnUntraced(function* (lock: InstallLock): Effect.fn.Return<Move, AttemptStanding | RecordUnreadable> {
+  const standing = currentVersion(lock.root);
+  const attempt = yield* Effect.fromResult(standingAttempt(lock.root));
+  if (attempt === null) return { standing, from: (yield* Effect.fromResult(servedRelease(lock.root))) ?? standing };
+  if (attempt.starts > 0 || attempt.ended !== null) return yield* new AttemptStanding({ attempt });
+  return { standing, from: attempt.from };
+});
 
 export const staging = (root: string): Effect.Effect<Claimed, MoveFailed | InstallHeld> =>
   moving(root, () => Effect.flatMap(Clock.currentTimeMillis, (now) => done('stage', () => claimLeased(root, new Date(now)))));

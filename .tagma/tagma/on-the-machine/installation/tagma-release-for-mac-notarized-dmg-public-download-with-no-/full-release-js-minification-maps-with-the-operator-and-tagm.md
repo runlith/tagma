@@ -13,7 +13,7 @@ edges:
     to: 01a13209-1c70-7d0c-87f4-40b2e7b7be7f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
 ---
 Section "Public build" of the spec. Release Bun.build, Vite and esbuild minify whitespace, syntax and names; `keepNames` only where code reads a class or function `name` (found by reading, not guessing). Maps are written outside the archive to the operator's shelf by release number; `bun run tagma:stack <release>` translates a stack from stdin. The "no sources" check stays.
 

@@ -1,12 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { Data, Effect, Option, Predicate, Result, Schema } from 'effect';
+import { Clock, Data, Effect, Option, Predicate, Result, Schema } from 'effect';
 import { type Words, wordsSchema } from '../../platform/contract/wire/refusal.js';
 import { type CloneFailed, cloneTree } from '../../platform/durable/clone.js';
-import { cloneFile, moveFile, removeFile, replaceFile } from '../../platform/durable/files.js';
+import { cloneFile, DurableWriteFailed, moveFile, removeFile, replaceFile } from '../../platform/durable/files.js';
 import { dataSpaceWords } from '../../platform/durable/space.js';
-import { passAttempt, readAttempt, stands, writeAttempt, writeServed } from '../closure/attempt.js';
+import { passAttempt, readAttempt, type RecordUnreadable, setAsideAttempt, stands, writeAttempt, writeServed } from '../closure/attempt.js';
 import { moving } from '../closure/moves.js';
 import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { ATTEMPT_STARTS, type Attempt, type AttemptEnd } from '../contract/wire/attempt.js';
@@ -127,10 +127,35 @@ const droppedAll = (files: readonly string[]): Effect.Effect<void> =>
 
 const copiesLeft = (place: TrialPlace): boolean => strays(place).some((path) => COPIES.some((suffix) => existsSync(`${path}${suffix}`)));
 
+const setAside = Effect.fnUntraced(function* (place: TrialPlace, unreadable: RecordUnreadable) {
+  const stamp = yield* Clock.currentTimeMillis;
+  const copies = strays(place)
+    .flatMap((path) => COPIES.map((suffix) => `${path}${suffix}`))
+    .filter((copy) => existsSync(copy));
+  const moved = yield* Effect.result(
+    forEachFile(copies, (copy) => moveFile(copy, `${copy}.unread-${stamp}`)).pipe(
+      Effect.andThen(
+        Effect.try({
+          try: () => setAsideAttempt(place.installRoot, stamp),
+          catch: (cause) => new DurableWriteFailed({ path: unreadable.path, step: 'rename', reason: String(cause) }),
+        }),
+      ),
+    ),
+  );
+  console.error(
+    Result.isSuccess(moved)
+      ? `[tagma] ${unreadable.message}; it and the ${copies.length} data copies it may name are set aside as *.unread-${stamp}, and this start serves with no update attempt`
+      : `[tagma] ${unreadable.message}; it could not be set aside (${moved.failure.path}: ${moved.failure.reason}), so it and every copy stay and the next start tries again`,
+  );
+  return 'serve' as const;
+});
+
 const admitted = Effect.fnUntraced(function* (place: TrialPlace) {
   const { installRoot } = place;
   const version = ownVersion(place);
-  const record = readAttempt(installRoot);
+  const read = readAttempt(installRoot);
+  if (Result.isFailure(read)) return yield* setAside(place, read.failure);
+  const record = read.success;
   const current = currentVersion(installRoot);
   const standing = record !== null && stands(record, current);
   if (!standing || !record.copied) yield* droppedAll(strays(place));
@@ -145,7 +170,8 @@ const admitted = Effect.fnUntraced(function* (place: TrialPlace) {
 });
 
 export const arrive = Effect.fn('Trial.arrive')(function* (place: TrialPlace) {
-  if (readAttempt(place.installRoot) === null && !copiesLeft(place)) return 'serve' as const;
+  const read = readAttempt(place.installRoot);
+  if (Result.isSuccess(read) && read.success === null && !copiesLeft(place)) return 'serve' as const;
   return yield* moving(place.installRoot, () => admitted(place));
 });
 
@@ -220,7 +246,12 @@ const settledOn = Effect.fnUntraced(function* (place: TrialPlace, record: Attemp
 
 const rolled = Effect.fnUntraced(function* (place: TrialPlace, detail: string, words?: Words) {
   const version = ownVersion(place);
-  const record = readAttempt(place.installRoot);
+  const read = readAttempt(place.installRoot);
+  if (Result.isFailure(read)) {
+    console.error(`[tagma] the attempt cannot roll back, and its copies stay for the next start to set aside: ${read.failure.message}`);
+    return;
+  }
+  const record = read.success;
   if (version === null || record === null || record.to !== version || currentVersion(place.installRoot) !== version) return;
   if (record.ended === null) {
     const data = record.copied ? yield* returnedAll(place) : 'untouched';
@@ -252,7 +283,15 @@ const copiedAll = (place: TrialPlace): Effect.Effect<void, TrialRefused> =>
 
 const entered = Effect.fnUntraced(function* (place: TrialPlace, version: string) {
   const { installRoot } = place;
-  const record = readAttempt(installRoot);
+  const read = readAttempt(installRoot);
+  if (Result.isFailure(read)) {
+    console.error(
+      `[tagma] this start serves with no update attempt, and the copies stay for the next start to set aside: ${read.failure.message}`,
+    );
+    writeServed(installRoot, version);
+    return null;
+  }
+  const record = read.success;
   const current = currentVersion(installRoot);
   const stale = staleOf(record, current, version);
   if (stale !== null) return yield* stale;

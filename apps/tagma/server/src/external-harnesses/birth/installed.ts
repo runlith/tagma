@@ -283,25 +283,35 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
     };
   };
 
-  let observed: readonly HarnessInstall[] = [];
+  const observed = new Map<string, HarnessInstall>();
+  const moves = (row: HarnessInstall, before: HarnessInstall | undefined): boolean =>
+    before === undefined ||
+    row.binary !== before.binary ||
+    row.version !== before.version ||
+    row.unreadable !== before.unreadable ||
+    row.searching !== before.searching ||
+    row.missing !== before.missing;
   const rows = Effect.fnUntraced(function* (paths: UserPaths) {
     const found = yield* Effect.forEach(adapters.all(), (adapter) => standing(adapter, paths), { concurrency: 3 });
-    const changed =
-      found.length !== observed.length ||
-      found.some((row) => {
-        const before = observed.find((one) => one.harness === row.harness);
-        return (
-          before === undefined ||
-          row.binary !== before.binary ||
-          row.version !== before.version ||
-          row.unreadable !== before.unreadable ||
-          row.searching !== before.searching ||
-          row.missing !== before.missing
-        );
-      });
-    observed = found;
+    const changed = found.length !== observed.size || found.some((row) => moves(row, observed.get(row.harness)));
+    observed.clear();
+    for (const row of found) observed.set(row.harness, row);
     if (changed) yield* PubSub.publish(moved, undefined);
     return found;
+  });
+  const availability = Effect.fn('InstalledHarnesses.availability')(function* (binary: string) {
+    const declared = adapters.all();
+    const adapter = declared.find((one) => one.binary === binary);
+    if (adapter === undefined)
+      return declared.length === 0 ? ({ _tag: 'Searching' } as const) : ({ _tag: 'Missing', reason: `no harness runs ${binary}` } as const);
+    const row = yield* Effect.flatMap(users.now, (paths) => standing(adapter, paths));
+    const before = observed.get(row.harness);
+    observed.set(row.harness, row);
+    if (before !== undefined && moves(row, before)) yield* PubSub.publish(moved, undefined);
+    if (row.binary !== null) return { _tag: 'Found' } as const;
+    return row.searching
+      ? ({ _tag: 'Searching' } as const)
+      : ({ _tag: 'Missing', reason: row.missing ?? `${binary} was not found` } as const);
   });
 
   yield* Effect.forkScoped(Effect.andThen(users.ready, PubSub.publish(moved, undefined)));
@@ -330,6 +340,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       yield* PubSub.publish(moved, undefined);
       return answered;
     }).pipe(Effect.withSpan('InstalledHarnesses.refresh')),
+    availability,
     locate: Effect.fn('InstalledHarnesses.locate')(function* (name) {
       const adapter = adapters.all().find((one) => one.binary === name);
       if (adapter === undefined) return null;

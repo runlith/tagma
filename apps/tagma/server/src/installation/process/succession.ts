@@ -75,6 +75,7 @@ export const successionLayer = (
   runsFrom: Installation | undefined,
   installRoot: string,
   log: string,
+  carried: (root: string) => string,
   signal?: () => void,
   launch?: SuccessorLaunch,
   record?: ProcessRestart,
@@ -103,6 +104,7 @@ export const successionLayer = (
         own,
         handoff,
         chain,
+        carried,
       });
       return Context.make(Succession, succession).pipe(Context.add(RestartRecords, records));
     }),
@@ -120,8 +122,9 @@ const processSuccession = Effect.fnUntraced(function* (input: {
   readonly own: readonly string[];
   readonly handoff: () => Readonly<Record<string, string>>;
   readonly chain: Chain;
+  readonly carried: (root: string) => string;
 }) {
-  const { runsFrom, installRoot, log, record, signal, launch, preparation, steps, own, handoff, chain } = input;
+  const { runsFrom, installRoot, log, record, signal, launch, preparation, steps, own, handoff, chain, carried } = input;
   let left: Restart | null = null;
   let candidate: Candidate | null = null;
   let stopping = false;
@@ -141,7 +144,9 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     if (stopping) return;
     if (chain !== null) yield* chain.check.pipe(Effect.mapError((failure) => new SuccessorFailed({ detail: failure.detail, log })));
     const tried = readAttempt(installRoot);
-    const retried = runsFrom !== undefined && tried !== null && tried.ended === null && tried.starts > 0;
+    const retried =
+      runsFrom !== undefined &&
+      (Result.isFailure(tried) || (tried.success !== null && tried.success.ended === null && tried.success.starts > 0));
     const command = retried
       ? [join(installRoot, CURRENT, RUNTIME_PART), ...SERVE_FLAGS, join(installRoot, CURRENT, CLI_ENTRY), 'serve']
       : own;
@@ -297,7 +302,8 @@ const processSuccession = Effect.fnUntraced(function* (input: {
 
   const unasked = (detail: string): HostVerdict => ({ _tag: 'Unasked', detail });
 
-  const weighed = Effect.fn('Succession.weigh')(function* (root: string, release: string) {
+  const weighed = Effect.fn('Succession.weigh')(function* (root: string) {
+    const release = carried(root);
     if (left !== null) return unasked('this server is already handing over to its successor');
     if (steps === undefined) return unasked('this server has no execution host to ask');
     const successor = yield* Effect.match(readInstallation(root).pipe(Effect.provide(BunFileSystem.layer)), {
@@ -521,7 +527,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     }),
     refusals: Stream.fromPubSub(refusals),
     refused: Effect.sync(() => refusal),
-    weigh: (root, release) => asking.withPermit(weighed(root, release)),
+    weigh: (root) => asking.withPermit(weighed(root)),
     restart: (host = 'hand-over') =>
       Effect.andThen(
         adopted(host),

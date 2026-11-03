@@ -187,6 +187,76 @@ const release0_2 = Schema.Struct({
 
 const feed0_2 = Schema.Struct({ releases: Schema.NonEmptyArray(release0_2) });
 
+const byteCount0_2 = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const installing0_2 = Schema.Struct({
+  offer: Schema.String,
+  title: Schema.String,
+  target: Schema.String,
+  since: Schema.String,
+  log: Schema.String,
+  then: Schema.NullOr(Schema.Literals(['restart'])),
+  steps: Schema.Array(Schema.Struct({ id: Schema.String, title: Schema.String, weight: Schema.Number })),
+  step: Schema.String,
+  progress: Schema.NullOr(Schema.Struct({ done: byteCount0_2, total: Schema.NullOr(byteCount0_2) })),
+  tail: Schema.NullOr(Schema.String),
+  usually: Schema.NullOr(Schema.Number),
+});
+
+const installed0_2 = Schema.Struct({
+  offer: Schema.String,
+  title: Schema.String,
+  target: Schema.String,
+  outcome: Schema.Literals(['landed', 'failed', 'stopped']),
+  build: Schema.NullOr(Schema.String),
+  detail: Schema.String,
+  endedAt: Schema.String,
+  log: Schema.String,
+  since: Schema.NullOr(Schema.String),
+  tail: Schema.Array(Schema.String),
+  then: Schema.NullOr(Schema.Literals(['restart'])),
+  restartRefused: Schema.NullOr(Schema.String),
+});
+
+const update0_2 = Schema.Struct({
+  feed: Schema.NullOr(feed0_2),
+  installing: Schema.NullOr(installing0_2),
+  installed: Schema.NullOr(installed0_2),
+  took: Schema.NullOr(Schema.Number),
+});
+
+const member0_2 = Schema.Struct({ projectId: Schema.Number, groupId: Schema.Number, ord: Schema.Number });
+
+const setting0_2 = Schema.Struct({
+  id: Schema.Number,
+  scope: Schema.Literals(['user', 'project']),
+  key: Schema.String,
+  projectId: Schema.NullOr(Schema.Number),
+  value: Schema.NullOr(Schema.String),
+  declined: Schema.optional(Schema.Boolean),
+  updatedAt: Schema.String,
+});
+
+const registry0_2 = Schema.Struct({
+  projects: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      name: Schema.String,
+      repoKey: Schema.String,
+      rootPath: Schema.String,
+      storage: Schema.Literals(['stealth', 'team', 'plain']),
+      createdAt: Schema.String,
+      strictProvenance: Schema.optional(Schema.Boolean),
+      private: Schema.optional(Schema.Boolean),
+      kind: Schema.optional(Schema.Literals(['folder', 'global', 'group'])),
+      global: Schema.optional(Schema.Boolean),
+      removedAt: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
+  ),
+  members: Schema.optional(Schema.Array(member0_2)),
+  settings: Schema.Array(setting0_2),
+});
+
 const changeNext = Schema.Struct({ store: Schema.String, release: Schema.NonEmptyString });
 
 const manifestNext = Schema.Struct({
@@ -215,6 +285,71 @@ const feedNext = Schema.Struct({ releases: Schema.Array(Schema.Unknown) }).pipe(
   }),
 );
 
+const refusalNext = Schema.Struct({
+  code: Schema.String,
+  reason: Schema.String,
+  unblock: Schema.Array(Schema.String),
+  thread: Schema.optional(Schema.Struct({ projectId: Schema.Int, threadId: Schema.String })),
+});
+
+const placementNext = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal('landed'),
+    version: Schema.String,
+    root: Schema.String,
+    build: Schema.String,
+    previous: Schema.NullOr(Schema.String),
+    application: Schema.String,
+    launcher: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal('held'),
+    version: Schema.String,
+    root: Schema.String,
+    build: Schema.String,
+    standing: Schema.NullOr(Schema.String),
+    detail: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal('ask'),
+    reason: Schema.Literals(['stepped-back', 'irreversible', 'failed']),
+    said: Schema.String,
+  }),
+]);
+
+const updateNext = Schema.Struct({
+  ...update0_2.fields,
+  feed: Schema.NullOr(feedNext),
+  installed: Schema.NullOr(
+    Schema.Struct({
+      ...installed0_2.fields,
+      refused: Schema.optional(refusalNext),
+      placement: Schema.optional(placementNext),
+    }),
+  ),
+  placement: Schema.optional(placementNext),
+});
+
+const registryNext = Schema.Struct({
+  projects: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      name: Schema.String,
+      repoKey: Schema.String,
+      rootPath: Schema.String,
+      createdAt: Schema.String,
+      kind: Schema.optional(Schema.Literals(['folder', 'global', 'group'])),
+      global: Schema.optional(Schema.Boolean),
+      removedAt: Schema.optional(Schema.NullOr(Schema.String)),
+      strictProvenance: Schema.optional(Schema.Boolean),
+      private: Schema.optional(Schema.Boolean),
+      storage: Schema.Literals(['stealth', 'team', 'plain']),
+    }),
+  ),
+  members: Schema.optional(Schema.Array(member0_2)),
+  settings: Schema.Array(setting0_2),
+});
+
 export const NEXT = {
   issued: [],
   manifest: manifestNext,
@@ -225,6 +360,8 @@ export const NEXT = {
   returned: returned0_2,
   restart: restartNext,
   feed: feedNext,
+  update: updateNext,
+  registry: registryNext,
 } as const;
 
 export const FROZEN = [
@@ -238,6 +375,8 @@ export const FROZEN = [
     returned: returned0_2,
     restart: restart0_2,
     feed: feed0_2,
+    update: update0_2,
+    registry: registry0_2,
   },
   NEXT,
 ] as const;

@@ -4,8 +4,9 @@ import { mkdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { Data, Effect } from 'effect';
 import { ApplicationNotCopied, type Applications } from '../installation/contract/service/applications.js';
-import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
+import { RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { DESKTOP } from '../installation/contract/wire/manifest.js';
+import { hostBundle, RELEASE_INSIDE } from './bundle.js';
 import { currentVersion } from '../platform/lock/versionedDirectories.js';
 import { answered, refusalOf } from '../platform/command.js';
 import { cloneTree } from '../platform/durable/clone.js';
@@ -177,6 +178,8 @@ export const signatureRefusal = Effect.fn('macApplications.signature')(function*
 });
 
 export const applications: Applications = {
+  kept: (root, name) => join(root, DESKTOP, hostBundle(name)),
+  inside: carriedRelease,
   carrier: carrierOf,
   carried: carriedIn,
   verify: verifiedBundle,

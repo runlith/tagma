@@ -15,6 +15,6 @@ edges:
     to: 01a1361b-0306-7539-b5f1-3cd46c675b20
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 The tag was created before the source maps were saved, and `ship` answered a tagged HEAD as released, so a stop between the two lost the maps once the next cut removed the cut directory. The maps are copied beside and renamed into place before the tag; `ship` on a tagged HEAD whose standing cut is of that release and whose maps are not kept goes on to publish, which takes up what stands and completes them.

@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import { Git } from '@runlith/git/Git';
 import { demoGraphLayer, refusalOf, withDemo } from '../../composition/testing/graphFixture.js';
 import { fixtureGraph } from '../../composition/testing/fixtureGraph.js';
-import { fixtureGraphMigrations, fixtureMigrations } from '../../composition/testing/migrations.js';
+import { fixtureGraphMigrations, fixtureMigrations, fixtureRegistry } from '../../composition/testing/migrations.js';
 import { testSessionIdentity, testSessionIdentityLayer } from '../../platform/testing/identity.js';
 import { GraphStore, MachineStore } from '../../platform/contract/service/store.js';
 import { GraphUnits, MachineUnits } from '../../platform/contract/service/units.js';
@@ -57,7 +57,7 @@ const openMachine = Effect.fnUntraced(function* (home: string, sourcePath: strin
       unitsLayer(MachineUnits, MachineStore),
       unitsLayer(GraphUnits, GraphStore),
     ).pipe(
-      Layer.provideMerge(machineStoreLayer(join(home, 'tagma.sqlite'), fixtureMigrations, yield* sharedPool)),
+      Layer.provideMerge(machineStoreLayer(join(home, 'tagma.sqlite'), fixtureMigrations, yield* sharedPool, fixtureRegistry)),
       Layer.provideMerge(testSessionIdentityLayer),
     ),
   ).pipe(Scope.provide(scope));

@@ -9,7 +9,7 @@ import { surfaceOut } from '../surfaceOut.js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, defaultClientConditions, defaultServerConditions, type Plugin, type Rollup, type UserConfig } from 'vite';
-import { BUILD_INPUTS_ENV, BUILD_MAPS_ENV, buildConditionsIn } from '@tagma/server/installation/contract/wire/layout';
+import { BUILD_INPUTS_ENV, BUILD_MAPS_ENV, buildConditionsIn, sourceMapOriginIn } from '@tagma/server/installation/contract/wire/layout';
 
 export type SurfaceOptions = {
   readonly runtime?: string;
@@ -145,7 +145,7 @@ function mapsUnder(directory: string): string[] {
 
 function moved(from: string, to: string): void {
   mkdirSync(dirname(to), { recursive: true });
-  writeFileSync(to, absoluteSources(readFileSync(from, 'utf8'), dirname(from)));
+  writeFileSync(to, absoluteSources(readFileSync(from, 'utf8'), dirname(from), sourceMapOriginIn(process.env)));
   rmSync(from);
 }
 

@@ -7,6 +7,7 @@ export type SourceShift = {
   readonly paths: Iterable<string> | null;
 };
 
-export class SourceChanges extends Context.Service<SourceChanges, { watch(path: string): Stream.Stream<SourceShift, NextIssue> }>()(
-  'tagma/checkout-builds/SourceChanges',
-) {}
+export class SourceChanges extends Context.Service<
+  SourceChanges,
+  { watch(path: string, inputs: readonly string[]): Stream.Stream<SourceShift, NextIssue> }
+>()('tagma/checkout-builds/SourceChanges') {}

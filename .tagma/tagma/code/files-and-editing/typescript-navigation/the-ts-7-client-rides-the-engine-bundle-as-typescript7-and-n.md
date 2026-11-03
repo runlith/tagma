@@ -5,7 +5,7 @@ ord: 4
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/tools.ts
+    ref: apps/tagma/server/src/cut/tools.ts
   - kind: file
     ref: packages/navigation-ts/package.json
 ---

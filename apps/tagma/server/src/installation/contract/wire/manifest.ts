@@ -1,14 +1,6 @@
 import { Data, Schema } from 'effect';
 import { Digest } from '@runlith/executions/protocol/artifact';
-import {
-  hostBundle,
-  RIPGREP_PART,
-  RUNTIME_PART,
-  SILERO_PART,
-  TYPESCRIPT_PART,
-  WHISPER_ABSENCE_PART,
-  WHISPER_ENGINE_PART,
-} from './layout.js';
+import { RIPGREP_PART, RUNTIME_PART, SILERO_PART, TYPESCRIPT_PART, WHISPER_ABSENCE_PART, WHISPER_ENGINE_PART } from './layout.js';
 
 export const InstallationRole = Schema.Literals(['runtime', 'cli', 'server', 'migrations', 'surface', 'executions']);
 export type InstallationRole = typeof InstallationRole.Type;
@@ -25,7 +17,6 @@ export const MIGRATIONS = 'drizzle';
 export const SKILLS = 'skills';
 export const SURFACE = 'surface';
 export const DESKTOP = 'desktop';
-export const releaseApplication = (root: string, name: string): string => `${root}/${DESKTOP}/${hostBundle(name)}`;
 export const EXECUTIONS = 'executions';
 
 export const CLOSURE_LAYOUT: ReadonlyArray<readonly [InstallationRole, string]> = [

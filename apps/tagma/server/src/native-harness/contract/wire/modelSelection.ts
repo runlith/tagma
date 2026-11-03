@@ -12,6 +12,12 @@ export type ModelDefaults =
   | { readonly status: 'read'; readonly defaults: ModelPreference; readonly remembered: RememberedSwitches }
   | { readonly status: 'unconnected'; readonly plans: readonly string[] };
 
+export const modelConnectionSchema = Schema.Struct({
+  state: Schema.Literals(['discovering', 'connected', 'unconnected']),
+  plans: Schema.Array(Schema.String),
+});
+export type ModelConnection = typeof modelConnectionSchema.Type;
+
 export type ThreadModelSettings = Omit<ModelPreference, 'account'> & {
   readonly account?: string | null;
 };

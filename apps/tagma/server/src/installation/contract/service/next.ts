@@ -1,4 +1,4 @@
-import { Context, type Effect, type Stream } from 'effect';
+import { Context, Data, type Effect, type Stream } from 'effect';
 import type { Unblock, Words } from '../../../platform/contract/wire/refusal.js';
 import type { Installed, Installing, NextFrame, NextIssue, NextIssueCode, Then } from '../wire/next.js';
 
@@ -12,6 +12,8 @@ type Refused<Code extends string> = {
 export type InstallRefused = Refused<'no-offer' | 'offer-unavailable' | 'install-running' | 'install-restarting' | NextIssueCode>;
 
 export type StopRefused = Refused<'nothing-installing' | 'install-restarting'>;
+
+export class RestartRefused extends Data.TaggedError('RestartRefused')<{ readonly message: string }> {}
 
 export type InstallStart = {
   readonly installing: Installing;

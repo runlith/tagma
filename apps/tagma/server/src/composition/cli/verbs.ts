@@ -44,6 +44,7 @@ export const bindingsOf = (build: Build): VerbBindings => {
         const [{ worldParts }, { modules }] = await Promise.all([import('../worldParts.js'), build.parts()]);
         return worldParts(modules);
       },
+      async () => build.cut.applications,
     ],
     providers: [operations],
     projects: [

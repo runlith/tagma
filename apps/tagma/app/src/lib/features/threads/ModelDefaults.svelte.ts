@@ -20,8 +20,10 @@ export class ModelDefaults extends Service<ModelDefaults>()('ModelDefaults', { t
   plans = $state<readonly string[] | null>(null);
   unconnected = $derived(this.plans !== null);
   known = $state(false);
+  offered = $state<readonly string[] | null>(null);
 
   private generation = 0;
+  private asked = 0;
 
   constructor(
     private readonly threads: ThreadsRepo,
@@ -50,6 +52,7 @@ export class ModelDefaults extends Service<ModelDefaults>()('ModelDefaults', { t
   }
 
   reread(): void {
+    if (!this.known) this.readConnection();
     const at = ++this.generation;
     void this.threads.defaults
       .loadOrThrow({ refresh: true })
@@ -59,6 +62,19 @@ export class ModelDefaults extends Service<ModelDefaults>()('ModelDefaults', { t
         this.remembered = answer.status === 'read' ? answer.remembered : {};
         this.plans = answer.status === 'unconnected' ? answer.plans : null;
         this.known = true;
+      })
+      .catch((error: unknown) => {
+        if (!this.scope.signal.aborted) this.notices.background(error);
+      });
+  }
+
+  readConnection(): void {
+    const at = ++this.asked;
+    void this.threads.connection
+      .loadOrThrow({ refresh: true })
+      .then((plans) => {
+        if (this.scope.signal.aborted || plans === undefined || at !== this.asked) return;
+        this.offered = plans;
       })
       .catch((error: unknown) => {
         if (!this.scope.signal.aborted) this.notices.background(error);

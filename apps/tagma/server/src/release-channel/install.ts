@@ -1,11 +1,11 @@
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Data, Effect } from 'effect';
+import { Data, Effect, Result } from 'effect';
 import type { Words } from '../platform/contract/wire/refusal.js';
 import { type CloneFailed, cloneTree } from '../platform/durable/clone.js';
 import { freeBytes, gigabytes, SpaceShort, standingAt, treeBytes } from '../platform/durable/space.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
-import { readAttempt, readReturn } from '../installation/closure/attempt.js';
+import { readAttempt, readReturn, type RecordUnreadable } from '../installation/closure/attempt.js';
 import { refusalDetail, verifyInstallation } from '../installation/closure/read.js';
 import { currentVersion } from '../platform/lock/versionedDirectories.js';
 import { manifestAt, releaseAt, releaseIdentified } from '../installation/closure/manifests.js';
@@ -24,9 +24,9 @@ import {
 } from '../installation/closure/moves.js';
 import type { ApplicationNotCopied, Applications } from '../installation/contract/service/applications.js';
 import type { HostVerdict } from '../installation/contract/service/steps.js';
-import { type InstallationManifest, releaseApplication } from '../installation/contract/wire/manifest.js';
+import type { InstallationManifest } from '../installation/contract/wire/manifest.js';
 import { writeLauncherBeside } from '../installation/setup/launcher.js';
-import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
+import { RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import type { Asked, Held, Landed } from '../installation/contract/wire/placement.js';
@@ -119,33 +119,41 @@ const spaced = (bundle: string, installRoot: string): Effect.Effect<void, Releas
 const olderThan = (standing: string | undefined, offered: string): boolean =>
   standing !== undefined && isRelease(standing) && isRelease(offered) && compareReleases(offered, standing) < 0;
 
-const askOf = (installRoot: string, offered: InstallationManifest, standing: string | undefined): Asked | null => {
+const askOf = Effect.fnUntraced(function* (installRoot: string, offered: InstallationManifest, standing: string | undefined) {
   const build = offered.identity.build;
-  const last = readAttempt(installRoot);
+  const last = yield* Effect.fromResult(readAttempt(installRoot)).pipe(Effect.mapError(attemptRefusal));
   if (last !== null && last.ended !== null && releaseAt(installRoot, last.to)?.identity.digest === offered.identity.digest) {
     return {
       status: 'ask',
       reason: 'failed',
       said: `Tagma ${build} did not start last time${standing === undefined ? '' : `, so you stayed on ${standing}`}. Try it again?`,
-    };
+    } satisfies Asked;
   }
-  const back = readReturn(installRoot);
+  const returned = readReturn(installRoot);
+  const back = yield* Result.match(returned, {
+    onSuccess: Effect.succeed,
+    onFailure: (unreadable) =>
+      Effect.as(
+        Effect.logWarning(`${unreadable.message}; it holds no data and no release, so the install only skips asking about the step back`),
+        null,
+      ),
+  });
   if (back !== null) {
     return {
       status: 'ask',
       reason: 'stepped-back',
       said: `You went back from Tagma ${back.left} to ${standing ?? 'the earlier version'}. Update to ${build} again?`,
-    };
+    } satisfies Asked;
   }
   if (standing !== undefined && noWayBackTo(offered.irreversible ?? [], standing, build) !== null) {
     return {
       status: 'ask',
       reason: 'irreversible',
       said: `Once Tagma ${build} runs, you cannot go back to ${standing}. Update anyway?`,
-    };
+    } satisfies Asked;
   }
   return null;
-};
+});
 
 const held = Effect.fn('release.reuse')(function* (installRoot: string, digest: string) {
   const known = releaseIdentified(digest, installRoot);
@@ -164,17 +172,30 @@ const lockRefusal = (failure: InstallHeld): ReleaseNotInstalled => refused('lock
 
 const moveRefusal = (failure: MoveFailed): ReleaseNotInstalled => refused(failure.step, failure.detail, UNFINISHED);
 
-const attemptRefusal = ({ attempt: open }: AttemptStanding): ReleaseNotInstalled =>
-  new ReleaseNotInstalled({
-    step: 'attempt',
-    code: ATTEMPT_OPEN,
-    reason:
-      open.ended === null
-        ? `release ${open.to} has started ${open.starts} time(s) as the update from ${open.from ?? 'nothing'} and has not opened its door or rolled back yet`
-        : `release ${open.to} ended before its door opened, and the data from before it has not come back yet: ${open.ended.detail}`,
-    unblock: ['start the server of current: it finishes the update or rolls it back', 'then install-from again'],
-    words: { text: 'Tagma is still finishing the last update. Open Tagma, then try again.' },
-  });
+const STILL_FINISHING: Words = { text: 'Tagma is still finishing the last update. Open Tagma, then try again.' };
+
+const attemptRefusal = (failure: AttemptStanding | RecordUnreadable): ReleaseNotInstalled =>
+  failure._tag === 'RecordUnreadable'
+    ? new ReleaseNotInstalled({
+        step: 'attempt',
+        code: ATTEMPT_OPEN,
+        reason: `${failure.message}, so what the last update holds is unknown and nothing installs over it`,
+        unblock: [
+          'start the server of current: its start sets the record aside with the data copies it may name',
+          'then install-from again',
+        ],
+        words: STILL_FINISHING,
+      })
+    : new ReleaseNotInstalled({
+        step: 'attempt',
+        code: ATTEMPT_OPEN,
+        reason:
+          failure.attempt.ended === null
+            ? `release ${failure.attempt.to} has started ${failure.attempt.starts} time(s) as the update from ${failure.attempt.from ?? 'nothing'} and has not opened its door or rolled back yet`
+            : `release ${failure.attempt.to} ended before its door opened, and the data from before it has not come back yet: ${failure.attempt.ended.detail}`,
+        unblock: ['start the server of current: it finishes the update or rolls it back', 'then install-from again'],
+        words: STILL_FINISHING,
+      });
 
 type Prepared = {
   readonly status: 'prepared';
@@ -211,7 +232,7 @@ const placed = Effect.fn('release.place')(function* (
   }
   const move = yield* moveFrom(lock).pipe(Effect.mapError(attemptRefusal));
   const changing = standingRelease?.identity.digest !== offered.identity.digest;
-  const asked = asking && changing ? askOf(installRoot, offered, standingBuild) : null;
+  const asked = asking && changing ? yield* askOf(installRoot, offered, standingBuild) : null;
   if (asked !== null) return asked;
   const unsigned = yield* applications.verify(carrier);
   if (unsigned !== null) return yield* refused('signature', unsigned, DAMAGED);
@@ -225,13 +246,13 @@ const placed = Effect.fn('release.place')(function* (
     });
   }
   const reused = yield* held(installRoot, manifest.identity.digest);
-  if (reused === null || !existsSync(releaseApplication(reused.root, place.name))) yield* spaced(carrier, installRoot);
+  if (reused === null || !existsSync(applications.kept(reused.root, place.name))) yield* spaced(carrier, installRoot);
   const claimed = reused ?? (yield* attempt('place', () => claimLeased(installRoot, at)));
   const written = Effect.gen(function* () {
-    const kept = releaseApplication(claimed.root, place.name);
+    const kept = applications.kept(claimed.root, place.name);
     if (!existsSync(kept)) yield* applications.copy(carrier, kept).pipe(Effect.mapError(copyRefusal));
     if (reused === null) {
-      yield* cloneTree(join(kept, RELEASE_INSIDE), claimed.root).pipe(Effect.mapError(cloneRefusal));
+      yield* cloneTree(applications.inside(kept), claimed.root).pipe(Effect.mapError(cloneRefusal));
       yield* cloneRuntime(claimed.root, manifest).pipe(Effect.mapError(cloneRefusal));
     }
     const quarantined = yield* applications.unquarantine(claimed.root);
@@ -284,7 +305,7 @@ const landedOn = Effect.fn('release.land')(function* (
     root: join(place.installRoot, version),
     build: prepared.build,
     previous: version === now.from ? null : now.from,
-    application: releaseApplication(join(place.installRoot, version), place.name),
+    application: applications.kept(join(place.installRoot, version), place.name),
     launcher: place.launcher,
   } satisfies Landed;
 });

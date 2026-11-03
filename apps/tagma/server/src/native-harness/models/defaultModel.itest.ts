@@ -12,7 +12,7 @@ import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { CredentialFiles } from '../../providers/contract/service/credentials.js';
 import { type AdapterSource, BuiltinAdapters, ProviderRegistry } from '../../providers/contract/service/registry.js';
-import { ProviderAccounts } from '../../providers/contract/service/accounts.js';
+import { DefaultAccounts, ProviderAccounts } from '../../providers/contract/service/accounts.js';
 import { registryLayer } from '../../providers/registry.js';
 import { HarnessDirectories, makeHarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
 import { makeDefaultLoginBook } from '../../providers/accounts/defaultLogins.js';
@@ -157,6 +157,17 @@ const birthOn = Effect.fnUntraced(function* (
         ProviderAccounts.of({ ...accounts, connected: Effect.die('choosing a default model reads no connected set') }),
       ),
       Context.add(HarnessRegistry, hosting),
+      Context.add(
+        DefaultAccounts,
+        DefaultAccounts.of({
+          defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+          saveDefaultAccount: () => Effect.die('choosing a model saves no account default'),
+          settleDefaultAccount: () => Effect.die('choosing a model settles no account default'),
+          forgetAccount: () => Effect.die('choosing a model forgets no account'),
+          adoptDefaultAccount: () => Effect.die('choosing a model adopts no account'),
+          defaultAccountMoved: Stream.empty,
+        }),
+      ),
     ),
   );
   return yield* Effect.result(births.selection({}));

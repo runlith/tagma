@@ -26,8 +26,13 @@ const homed = Effect.acquireRelease(
   (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
 );
 
-const succeeding = Effect.fnUntraced(function* (...road: Parameters<typeof successionLayer>) {
-  return Context.get(yield* Layer.build(successionLayer(...road)), Succession);
+type Road = Parameters<typeof successionLayer>;
+type Beyond<T> = T extends [unknown, unknown, unknown, unknown, ...infer Rest] ? Rest : never;
+
+const carried = (root: string): string => join(root, 'desktop', 'carried');
+
+const succeeding = Effect.fnUntraced(function* (runsFrom: Road[0], installRoot: Road[1], log: Road[2], ...rest: Beyond<Road>) {
+  return Context.get(yield* Layer.build(successionLayer(runsFrom, installRoot, log, carried, ...rest)), Succession);
 });
 
 const stand = Effect.fnUntraced(function* (root: string, build: string) {
@@ -317,7 +322,7 @@ it.live('a refused installation remains actionable after its server restarts, un
           undefined,
           Effect.succeed(steps),
         );
-        expect((yield* first.weigh(offered.root, join(offered.root, 'desktop', 'carried')))._tag).toBe('Refuses');
+        expect((yield* first.weigh(offered.root))._tag).toBe('Refuses');
         return yield* first.refused;
       }),
     );

@@ -18,6 +18,8 @@ import { noInstalls } from '../../providers/testing/holders.js';
 import { HarnessAccounts } from '../../providers/contract/service/harness.js';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { providerCatalogOf, staticRegistry } from '../../providers/testing/registry.js';
+import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
+import { makeUserEnvironment } from '../../installation/process/userEnvironment.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import { makeAskPrograms } from './asks.js';
 
@@ -25,6 +27,7 @@ const MIB = 1024 * 1024;
 
 const filler = Layer.effect(AskPrograms, makeAskPrograms).pipe(
   Layer.provide(Layer.mock(InstalledHarnesses, { program: () => Effect.succeed(null) })),
+  Layer.provide(Layer.succeed(UserEnvironment, makeUserEnvironment({ shell: null, env: process.env, world: null, home: null }))),
   Layer.provideMerge(BunFileSystem.layer),
 );
 

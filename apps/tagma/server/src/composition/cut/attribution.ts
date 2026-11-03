@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
 import { ChangesAnswer } from '../../change-record/contract/wire/changes.js';
-import type { BuildAttribution, BuildHolding } from '../../installation/cut/source.js';
+import type { BuildAttribution, BuildHolding } from '../../cut/source.js';
 import { failureLines } from '../../platform/cli/verb.js';
 import { holderKey } from '../../workspace/contract/wire/checkout.js';
 import type { ChannelDoor } from '../cli/door.js';

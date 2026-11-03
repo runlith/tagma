@@ -65,6 +65,7 @@ const installs = Layer.succeed(
     refresh: Effect.succeed([]),
     program: () => Effect.succeed(null),
     locate: () => Effect.succeed(null),
+    availability: () => Effect.succeed({ _tag: 'Searching' }),
     changes: Stream.empty,
   }),
 );
@@ -96,7 +97,6 @@ const fixture = Layer.merge(
         requests,
         installs,
         projects,
-        harnessAdaptersLayer,
         BunFileSystem.layer,
         Layer.succeed(UserEnvironment, makeUserEnvironment({ shell: null, env: process.env, world: null, home: null })),
       ),
@@ -143,6 +143,64 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
       expect(yield* cli.installed('gemini')).toEqual({ _tag: 'Found' });
       expect(yield* cli.installed('codex')).toMatchObject({ _tag: 'Missing' });
       expect(existsSync(log)).toBe(false);
+    }),
+  );
+
+  it.effect('headless CLI commands start with the variables the login profile retained, and account entries stay authoritative', () =>
+    Effect.gen(function* () {
+      const disk = yield* FileSystem.FileSystem;
+      const home = yield* disk.makeTempDirectoryScoped({ prefix: 'account-cli-' });
+      const users = makeUserEnvironment({
+        shell: {
+          desktopLaunch: () => true,
+          managers: () => [],
+          fallback: () => [],
+          runtimes: () => [],
+          read: async () => ({
+            outcome: 'read',
+            entries: [],
+            detail: null,
+            environment: { __MISE_DIFF: 'profile-only', CLAUDE_CONFIG_DIR: '~/profile', CODEX_HOME: '~/work' },
+          }),
+        },
+        env: { PATH: '/usr/bin' },
+        world: null,
+        home,
+      });
+      users.retain(['CLAUDE_CONFIG_DIR', 'CODEX_HOME']);
+      yield* users.ready;
+      const built = yield* Layer.build(
+        Layer.fresh(
+          accountCliLayer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                terminals,
+                host,
+                endings,
+                requests,
+                installs,
+                projects,
+                BunFileSystem.layer,
+                Layer.succeed(UserEnvironment, users),
+              ),
+            ),
+          ),
+        ),
+      );
+      const cli = Context.get(built, AccountCli);
+      const output = yield* cli.run({
+        program: process.execPath,
+        args: [
+          '-e',
+          'const e=process.env;process.stdout.write(JSON.stringify({mise:e.__MISE_DIFF??null,claude:e.CLAUDE_CONFIG_DIR??null,codex:e.CODEX_HOME??null}))',
+        ],
+        cwd: home,
+        entries: [
+          { _tag: 'Set', name: 'CLAUDE_CONFIG_DIR', value: '/account/place/' },
+          { _tag: 'Unset', name: 'CODEX_HOME' },
+        ],
+      });
+      expect(JSON.parse(output.stdout)).toEqual({ mise: 'profile-only', claude: '/account/place/', codex: null });
     }),
   );
 
@@ -217,7 +275,6 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
                 endings,
                 installs,
                 projects,
-                harnessAdaptersLayer,
                 BunFileSystem.layer,
                 Layer.succeed(UserEnvironment, makeUserEnvironment({ shell: null, env: process.env, world: null, home: null })),
                 Layer.succeed(Terminals, fakeTerminals),

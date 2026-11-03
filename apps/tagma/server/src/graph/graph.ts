@@ -8,6 +8,7 @@ import { ServedGraphs } from './contract/service/serving.js';
 import { BEHAVIOURS } from './contract/service/behaviours.js';
 import { graphBehaviours } from './behaviours.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
+import { MACHINE_REGISTRY } from '../platform/contract/service/machineRegistry.js';
 import { graphRelocation } from './storage/relocation.js';
 import type { GraphLive } from './contract/service/live.js';
 import { GRAPH_SETTING_KEYS, GRAPH_SETTING_SECTIONS } from './settings.js';
@@ -47,7 +48,11 @@ export const graph = manifest({
   live,
   settings: [...GRAPH_SETTING_KEYS],
   settingSections: GRAPH_SETTING_SECTIONS,
-  contributions: [...BEHAVIOURS.of(...graphBehaviours), ...RELOCATIONS.of(graphRelocation)],
+  contributions: [
+    ...BEHAVIOURS.of(...graphBehaviours),
+    ...RELOCATIONS.of(graphRelocation),
+    ...MACHINE_REGISTRY.of({ id: 'graph/policy', load: async () => (await import('./machineRegistry.js')).policyRows }),
+  ],
   formSteps: [operationContextForm, ruleOperationContextForm],
   pools: graphPools,
   sections: [

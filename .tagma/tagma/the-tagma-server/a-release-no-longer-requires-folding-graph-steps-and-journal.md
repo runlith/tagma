@@ -10,7 +10,7 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/pipeline.ts
+    ref: apps/tagma/server/src/cut/pipeline.ts
 ---
 Cut admits graph steps and journal shapes carried by the previous release: they stay in the stored-shapes accounting, while the demands to delete them and to base on the latest release are removed. Step code in `graph/steps/` and shape application unchanged. Deletion assignments removed in the linked specs and the old task before the first release too.
 

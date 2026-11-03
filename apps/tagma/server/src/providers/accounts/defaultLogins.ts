@@ -16,6 +16,7 @@ export const DEFAULT_LOGIN = AccountKey.make('default');
 export const LISTED_MS = 30_000;
 
 type Reading = { readonly read: Effect.Effect<DirectoryAccount | null, GateRefusal>; readonly forget: Effect.Effect<void> };
+type LoginWatch = { phase: 'opening' | 'watching' | 'lost'; reason: string | null };
 
 export const makeDefaultLoginBook = Effect.gen(function* () {
   const rows = yield* HarnessDirectories;
@@ -113,6 +114,7 @@ export const makeDefaultLoginBook = Effect.gen(function* () {
     place: (registration: CliHarnessProvider, directory: string | null) => places.set(registration, directory),
     revision: () => revision,
     ready: Effect.void as Effect.Effect<void>,
+    settled: Effect.succeed(true),
     focus: Effect.void as Effect.Effect<void>,
     changes: Stream.empty as Stream.Stream<string>,
   };
@@ -146,7 +148,7 @@ export const defaultLoginsLayer = Layer.effect(
           (provider): provider is CliHarnessProvider => provider.auth === 'cli' && provider.accounts?.discovery !== undefined,
         );
     places.retain(declaring().map((provider) => provider.accounts!.discovery!.variable));
-    const watches = new Set<string>();
+    const watches = new Map<string, LoginWatch>();
     const observed = new Set<string>();
     const signed = new Set<string>();
     let profilePending = true;
@@ -183,88 +185,116 @@ export const defaultLoginsLayer = Layer.effect(
     const watch = Effect.fn('DefaultLogins.watch')(function* (provider: CliHarnessProvider, directory: string | null) {
       const discovery = provider.accounts!.discovery!;
       const base = directory ?? discovery.directory;
+      let continuous = true;
       for (const file of discovery.files) {
         const target = resolve(join(base, file));
         const key = `${provider.id}\0${target}`;
-        if (watches.has(key)) continue;
-        watches.add(key);
-        let stamp = yield* fingerprint(target);
-        const refresh = Effect.fnUntraced(function* () {
-          let next = yield* fingerprint(target);
-          while (next !== stamp) {
-            stamp = next;
-            yield* read(provider, directory, true);
-            next = yield* fingerprint(target);
-          }
-        });
-        const events = yield* Effect.acquireRelease(Queue.make<string | null>({ capacity: 1, strategy: 'sliding' }), Queue.shutdown);
-        const open = Effect.fnUntraced(function* () {
-          let root = dirname(target);
-          while (!(yield* files.exists(root))) {
-            const parent = dirname(root);
-            if (parent === root) break;
-            root = parent;
-          }
-          const direct = root === dirname(target);
-          const name = relative(root, target).split('/')[0]!;
-          let active = true;
-          const lost = (reason: string) => {
-            if (!active) return;
-            active = false;
-            Queue.offerUnsafe(events, reason);
-          };
-          const subscription = yield* watcher.subscribe(
-            root,
-            { recursive: false, ignore: [] },
-            {
-              heard: (changes) => {
-                if (active && changes.some((change) => change.path === name || change.path === join(root, name)))
-                  Queue.offerUnsafe(events, null);
-              },
-              dropped: lost,
-              ended: lost,
-            },
-          );
-          const close = Effect.andThen(
+        const previous = watches.get(key);
+        if (previous?.phase === 'watching') continue;
+        continuous = false;
+        if (previous?.phase === 'opening') continue;
+        const lifetime = yield* Scope.fork(scope);
+        const entry: LoginWatch = { phase: 'opening', reason: null };
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            watches.set(key, entry);
+          }),
+          () =>
             Effect.sync(() => {
-              active = false;
+              if (watches.get(key) === entry) watches.delete(key);
             }),
-            subscription.close,
-          );
-          return { direct, close };
-        });
-        let subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
-        yield* refresh();
-        yield* Effect.forkIn(
-          Effect.gen(function* () {
-            for (;;) {
-              const reason = yield* Queue.take(events);
-              if (reason !== null) return yield* new WatchRefused({ message: reason });
-              yield* refresh();
-              if (!subscription.direct) {
-                yield* subscription.close;
-                subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
-                yield* refresh();
-              }
-            }
+        ).pipe(Effect.provideService(Scope.Scope, lifetime));
+        const degraded = (cause: { readonly message: string }) =>
+          Effect.sync(() => {
+            if (!watches.has(key)) watches.set(key, { phase: 'lost', reason: cause.message });
           }).pipe(
-            Effect.catchTags({
-              GateRefusal: (cause) =>
-                Effect.logWarning('the CLI login watch could not keep its observation', { provider: provider.id, target, cause }),
-              PlatformError: (cause) =>
-                Effect.logWarning('the CLI login directory cannot be watched', { provider: provider.id, target, cause }),
-              WatchRefused: (cause) => Effect.logWarning('the CLI login watch was lost', { provider: provider.id, target, cause }),
-            }),
-            Effect.ensuring(
-              Effect.sync(() => {
-                watches.delete(key);
-                signed.delete(provider.id);
+            Effect.andThen(
+              Effect.logWarning('the CLI login watch is unavailable; status remains observable', {
+                provider: provider.id,
+                target,
+                reason: cause.message,
               }),
             ),
-          ),
-          scope,
+          );
+        const closeOnFailure = (exit: Exit.Exit<unknown, unknown>) => (Exit.isFailure(exit) ? Scope.close(lifetime, exit) : Effect.void);
+        const acquiring = Effect.gen(function* () {
+          let stamp = yield* fingerprint(target);
+          const refresh = Effect.fnUntraced(function* () {
+            let next = yield* fingerprint(target);
+            while (next !== stamp) {
+              stamp = next;
+              yield* read(provider, directory, true);
+              next = yield* fingerprint(target);
+            }
+          });
+          const events = yield* Effect.acquireRelease(Queue.make<string | null>({ capacity: 1, strategy: 'sliding' }), Queue.shutdown);
+          const open = Effect.fnUntraced(function* () {
+            let root = dirname(target);
+            while (!(yield* files.exists(root))) {
+              const parent = dirname(root);
+              if (parent === root) break;
+              root = parent;
+            }
+            const direct = root === dirname(target);
+            const name = relative(root, target).split('/')[0]!;
+            let active = true;
+            const lost = (reason: string) => {
+              if (!active) return;
+              active = false;
+              Queue.offerUnsafe(events, reason);
+            };
+            const subscription = yield* watcher.subscribe(
+              root,
+              { recursive: false, ignore: [] },
+              {
+                heard: (changes) => {
+                  if (active && changes.some((change) => change.path === name || change.path === join(root, name)))
+                    Queue.offerUnsafe(events, null);
+                },
+                dropped: lost,
+                ended: lost,
+              },
+            );
+            return {
+              direct,
+              close: Effect.andThen(
+                Effect.sync(() => {
+                  active = false;
+                }),
+                subscription.close,
+              ),
+            };
+          });
+          let subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
+          yield* refresh();
+          entry.phase = 'watching';
+          yield* Effect.forkIn(
+            Effect.gen(function* () {
+              for (;;) {
+                const reason = yield* Queue.take(events);
+                if (reason !== null) return yield* new WatchRefused({ message: reason });
+                yield* refresh();
+                if (!subscription.direct) {
+                  yield* subscription.close;
+                  subscription = yield* Effect.acquireRelease(open(), (opened) => opened.close);
+                  yield* refresh();
+                }
+              }
+            }).pipe(
+              Effect.provideService(Scope.Scope, lifetime),
+              Effect.onExit((exit) => Scope.close(lifetime, exit)),
+              Effect.catchTags({ GateRefusal: degraded, PlatformError: degraded, WatchRefused: degraded }),
+            ),
+            scope,
+          );
+        }).pipe(
+          Effect.provideService(Scope.Scope, lifetime),
+          Effect.onExit(closeOnFailure),
+          Effect.catchTags({ GateRefusal: degraded, PlatformError: degraded, WatchRefused: degraded }),
         );
+        yield* acquiring;
       }
+      return continuous;
     });
 
     const prepare = Effect.fnUntraced(function* (provider: CliHarnessProvider, environment: LoginEnvironment) {
@@ -277,8 +307,8 @@ export const defaultLoginsLayer = Layer.effect(
       const persisted = (yield* rows.of(provider.id)).find((row) => row.directory === directory);
       if (persisted?.signed && persisted.problem == null) signed.add(provider.id);
       else signed.delete(provider.id);
-      yield* watch(provider, directory).pipe(Effect.provideService(Scope.Scope, scope));
-      return persisted ?? null;
+      const continuous = yield* watch(provider, directory);
+      return { row: persisted ?? null, continuous };
     });
     const settle = Effect.fnUntraced(function* () {
       const providers = declaring();
@@ -331,7 +361,6 @@ export const defaultLoginsLayer = Layer.effect(
     }).pipe(
       scans.withPermit,
       Effect.tapCause((cause) => Effect.logWarning('CLI login discovery did not complete', { cause })),
-      Effect.onExit((exit) => (Exit.isFailure(exit) ? Deferred.succeed(ready, undefined) : Effect.void)),
     );
     const revisit = Effect.gen(function* () {
       const environment = yield* places.now;
@@ -341,9 +370,9 @@ export const defaultLoginsLayer = Layer.effect(
         declaring(),
         (provider) =>
           Effect.gen(function* () {
-            yield* prepare(provider, environment);
+            const { continuous } = yield* prepare(provider, environment);
             yield* settle();
-            if (!observed.has(provider.id) && (yield* cli.installed(provider.accounts!.status.program))._tag === 'Found')
+            if ((!continuous || !observed.has(provider.id)) && (yield* cli.installed(provider.accounts!.status.program))._tag === 'Found')
               yield* read(provider);
             yield* settle();
           }),
@@ -361,14 +390,15 @@ export const defaultLoginsLayer = Layer.effect(
     return {
       ...book,
       ready: Deferred.await(ready),
+      settled: Deferred.isDone(ready),
       focus: Effect.gen(function* () {
         const environment = yield* places.ready;
         yield* Effect.forEach(
           declaring(),
           (provider) =>
             Effect.gen(function* () {
-              const row = yield* prepare(provider, environment);
-              if (row?.signed && row.problem == null) return;
+              const { row, continuous } = yield* prepare(provider, environment);
+              if (continuous && row?.signed && row.problem == null) return;
               if ((yield* cli.installed(provider.accounts!.status.program))._tag === 'Found') yield* read(provider);
             }),
           { concurrency: 3 },

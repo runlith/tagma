@@ -2,7 +2,7 @@ import type { BunPlugin } from 'bun';
 import { dirname, resolve } from 'node:path';
 import { Data, Effect } from 'effect';
 import { readComments } from '@runlith/source-comments';
-import { absoluteSources } from './maps';
+import { absoluteSources, type SourceMapOrigin } from './maps';
 
 export class BundleRefused extends Data.TaggedError('BundleRefused')<{
   readonly entry: string;
@@ -21,6 +21,7 @@ export type BundleOptions = {
   readonly define?: Readonly<Record<string, string>>;
   readonly comments?: 'kept' | 'none';
   readonly minify?: boolean;
+  readonly origin?: SourceMapOrigin;
 };
 
 export type Bundled = {
@@ -107,7 +108,7 @@ const built = Effect.fn('bundle.build')(function* (entry: string, options: Bundl
     catch: (error) => new BundleRefused({ entry, detail: `its bundle could not be read: ${String(error)}` }),
   });
   const inputs = Object.entries(contributed.inputs).flatMap(([path, input]) => (input.bytesInOutput > 0 ? [resolve(from, path)] : []));
-  return { text, map: map === null ? null : absoluteSources(map, from), inputs };
+  return { text, map: map === null ? null : absoluteSources(map, from, options.origin), inputs };
 });
 
 const spelled = Effect.fn('bundle.sources')(function* (

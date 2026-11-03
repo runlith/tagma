@@ -453,9 +453,9 @@
       "node": "./src/installation/contract/wire/probe.ts",
       "default": "./src/installation/contract/wire/probe.ts"
     },
-    "./installation/setup/signing": {
-      "types": "./src/installation/setup/signing.ts",
-      "bun": "./src/installation/setup/signing.ts"
+    "./cut/signing": {
+      "types": "./src/cut/signing.ts",
+      "bun": "./src/cut/signing.ts"
     },
     "./installation/contract/wire/channel": {
       "types": "./src/installation/contract/wire/channel.ts",
@@ -513,6 +513,11 @@
       "types": "./src/mac-applications/placement.ts",
       "node": "./src/mac-applications/placement.ts",
       "bun": "./src/mac-applications/placement.ts"
+    },
+    "./mac-applications/bundle": {
+      "types": "./src/mac-applications/bundle.ts",
+      "node": "./src/mac-applications/bundle.ts",
+      "default": "./src/mac-applications/bundle.ts"
     },
     "./graph/contract/wire/journal": {
       "types": "./src/graph/contract/wire/journal.ts",
@@ -1467,6 +1472,12 @@
       "bun": "./src/config/contract/*.ts",
       "default": null
     },
+    "./cut/*": {
+      "types": "./src/cut/*.ts",
+      "bun": "./src/cut/*.ts",
+      "default": null
+    },
+    "./cut/testing/*": null,
     "./desktop-browser/contract/*": {
       "types": "./src/desktop-browser/contract/*.ts",
       "bun": "./src/desktop-browser/contract/*.ts",
@@ -2090,11 +2101,6 @@
     "./projects/resolution": {
       "types": "./src/projects/resolution.ts",
       "bun": "./src/projects/resolution.ts",
-      "default": null
-    },
-    "./projects/store/restore": {
-      "types": "./src/projects/store/restore.ts",
-      "bun": "./src/projects/store/restore.ts",
       "default": null
     },
     "./projects/store/table": {

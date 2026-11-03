@@ -2319,7 +2319,7 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'Disconnect освобождает inspector при закрытии слоя после остановки его sampling fiber. Уже возвращённые и сохранённые профили от него не зависят; синхронный сбой disconnect переводится в typed failure и логируется.',
   },
   {
-    path: 'apps/tagma/server/src/installation/cut/release.ts',
+    path: 'apps/tagma/server/src/cut/release.ts',
     symbol: 'releaseWith',
     form: 'ignore',
     site: '0176a9c6',

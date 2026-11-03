@@ -12,4 +12,4 @@ edges:
   - kind: implements
     to: 01a19371-d3c3-70d3-886f-04320ac072c1
 ---
-Item 6 of [[0ac072c1]]. Where the core must work alone, the owner provides the default and another root overrides it; the two `Bindings` slots of the build descriptor have no core default today.
+Item 6 of [[0ac072c1]]. Where the core must work alone, the owner provides the default and another root overrides it; the two `Bindings` slots of the build descriptor have no core default today. The installation `Applications` port reaches the core from the build descriptor's `cut.applications` in two filling places — the `carried` argument of `successionLayer` in `composition/server.ts` and the applications loader of the installation verbs in `composition/cli/verbs.ts` — so a core default filler replaces each with one edit there.

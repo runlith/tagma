@@ -9,7 +9,7 @@ import { Context, Data, Effect, Fiber, FileSystem, Layer, Queue, Schedule } from
 import { openVersion, swapCurrent } from '../../../installation/testing/doubles.js';
 import { writeInstallation } from '../../../installation/testing/doubles.js';
 import { type InstallationPart, type InstallationRole, REQUIRED_ROLES } from '../../../installation/contract/wire/manifest.js';
-import { hostBundle } from '../../../installation/contract/wire/layout.js';
+import { hostBundle } from '../../../mac-applications/bundle.js';
 import { CURRENT } from '../../../platform/contract/wire/versions.js';
 import { CHANNEL } from '../../developer/channel.js';
 import { CHANNELS } from '../../../installation/contract/wire/channel.js';

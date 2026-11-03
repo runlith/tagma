@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Command, Flag } from 'effect/cli';
 import { installationRootIn } from '../paths.js';
 import { CURRENT } from '../../platform/contract/wire/versions.js';
-import { releaseApplication } from '../contract/wire/manifest.js';
+import type { Applications } from '../contract/service/applications.js';
 import { InstalledChannel } from '../contract/service/channel.js';
 import { refuse, noting, CurrentInvocation } from '../../platform/cli/verb.js';
 import { ensureServer, entryRoot, opened, opening, optional, saidServer } from './server.js';
@@ -29,7 +29,7 @@ The address is printed either way, so \`--no-open\` is how a machine with nobody
 at a screen ensures the server and reads where it stands.`),
   );
 
-const application = Effect.fnUntraced(function* () {
+const application = Effect.fnUntraced(function* (applications: Applications) {
   const { readInstallation, refusalDetail } = yield* Effect.promise(() => import('../closure/read.js'));
   const read = (root: string) => Effect.result(readInstallation(root)).pipe(Effect.provide(BunFileSystem.layer));
   const channel = yield* InstalledChannel;
@@ -52,7 +52,7 @@ const application = Effect.fnUntraced(function* () {
       `${status} — the next installations this machine’s source offers; once one stands, this verb opens its window`,
     ]);
   }
-  const bundle = releaseApplication(root, channel.name);
+  const bundle = applications.kept(root, channel.name);
   if (!existsSync(bundle)) {
     return refuse('no-application-bundle', `the release at ${root} keeps no application at ${bundle}`, [
       `${status} — the next installations this machine’s source offers; installing one again puts its window back`,
@@ -61,7 +61,7 @@ const application = Effect.fnUntraced(function* () {
   return bundle;
 });
 
-export const desktop = (cli: ServerCli) =>
+export const desktop = (cli: ServerCli, applications: Applications) =>
   Command.make(
     'desktop',
     {
@@ -74,7 +74,7 @@ export const desktop = (cli: ServerCli) =>
     },
     ({ open, surface }) =>
       Effect.gen(function* () {
-        const bundle = yield* application();
+        const bundle = yield* application(applications);
         const aimed = optional(surface);
         const standing = yield* ensureServer(cli);
         yield* saidServer(standing);

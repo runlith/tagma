@@ -9,17 +9,21 @@ import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract
 import { modelPreference } from '../store/preferences.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { stored } from '../../platform/store/crossing.js';
+import type { DefaultModel } from '../../providers/contract/service/registry.js';
 
 export type ModelMemory = {
   readonly selection: Omit<ModelPreference, 'account'> | null;
   readonly switches: RememberedSwitches;
 };
 
+export type ModelOffer = DefaultModel & { readonly account: string | null };
+
 export type ModelPreferenceRows = Effect.Success<typeof makeModelPreferenceRows>;
 
 export const makeModelPreferenceRows = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
+  let offered: ModelOffer | null = null;
 
   const memory = (ownerId: string, within?: Unit<'machine'>): Effect.Effect<ModelMemory, ThreadStorageFailed> => {
     const read = (unit: Unit<'machine'>) =>
@@ -53,6 +57,8 @@ export const makeModelPreferenceRows = Effect.gen(function* () {
 
   return {
     memory,
+    offered: () => offered,
+    offer: (selection: ModelOffer) => (offered = selection),
     modelSelection: (ownerId: string, within?: Unit<'machine'>) => Effect.map(memory(ownerId, within), (held) => held.selection),
     defaultSwitches: (ownerId: string, provider: string, model: string): Effect.Effect<ModelSwitches, ThreadStorageFailed> =>
       stored('defaultSwitches')(

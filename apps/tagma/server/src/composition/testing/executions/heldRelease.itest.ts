@@ -4,7 +4,7 @@ import { kind, own } from '@runlith/testbed/worlds';
 import { existsSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { Clock, Context, Effect, Exit, FileSystem, Layer, Schedule, Schema, Scope } from 'effect';
+import { Clock, Context, Effect, Exit, FileSystem, Layer, Result, Schedule, Schema, Scope } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
@@ -14,7 +14,6 @@ import type { InstallationDoor } from '../../../installation/cli/port.js';
 import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { EXECUTIONS } from '../../../installation/contract/wire/manifest.js';
 import { INSTALLATION_OPERATIONS } from '../../../installation/contract/wire/operations.js';
-import { InstalledChannel } from '../../../installation/contract/service/channel.js';
 import { MachineHost } from '../../../installation/contract/service/machineHost.js';
 import { SuccessionSteps } from '../../../installation/contract/service/steps.js';
 import { Succession } from '../../../installation/contract/service/succession.js';
@@ -143,6 +142,7 @@ describe('a published release the standing execution host does not take', () => 
                 runsFrom,
                 installRoot,
                 join(installRoot, '..', 'serve.log'),
+                (root) => trustedApplications.inside(trustedApplications.kept(root, channel.name)),
                 () => {},
                 undefined,
                 undefined,
@@ -159,7 +159,6 @@ describe('a published release the standing execution host does not take', () => 
                   ? Schema.decodeUnknownEffect(INSTALLATION_OPERATIONS.check_successor.input)(payload).pipe(
                       Effect.flatMap((input) => checkSuccessor.body.execute(input, undefined, operator)),
                       Effect.provideService(Succession, succession),
-                      Effect.provideService(InstalledChannel, channel),
                     )
                   : Effect.die(new Error(`install-from asks only check_successor, not ${params.id}`)),
             },
@@ -190,7 +189,7 @@ describe('a published release the standing execution host does not take', () => 
           expect(refused).toMatchObject({ status: 'held', build: '0.2.0', standing: '0.1.0' });
           if (refused.status !== 'held') return;
           expect(readlinkSync(join(installRoot, 'current'))).toBe(first.version);
-          expect(readAttempt(installRoot)?.to).toBe(first.version);
+          expect(Result.getOrThrow(readAttempt(installRoot))?.to).toBe(first.version);
           expect(existsSync(hostBundleNext(Context.get(executions, HostManagement).connection.address.state))).toBe(false);
           const current = yield* succession.current;
           const runs = { build: '0.1.0', digest: runsFrom.manifest.identity.digest };
@@ -211,7 +210,7 @@ describe('a published release the standing execution host does not take', () => 
           const consented = yield* Effect.flip(succession.restart('replace'));
           expect(consented._tag).toBe('SuccessorFailed');
           expect(readlinkSync(join(installRoot, 'current'))).toBe(refused.version);
-          expect(readAttempt(installRoot)?.to).toBe(refused.version);
+          expect(Result.getOrThrow(readAttempt(installRoot))?.to).toBe(refused.version);
 
           const taken = yield* installRelease(
             yield* release('0.3.0', join(standing, EXECUTIONS)),

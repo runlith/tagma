@@ -2,10 +2,12 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { Result } from 'effect';
 import { makeManifestProjection } from '@tagma/server/installation/closure/manifests';
 import { readAttempt } from '@tagma/server/installation/closure/attempt';
 import { currentVersion } from '@tagma/server/platform/lock/versionedDirectories';
-import { RELEASE_INSIDE, RUNTIME_PART, hostBundle } from '@tagma/server/installation/contract/wire/layout';
+import { RUNTIME_PART } from '@tagma/server/installation/contract/wire/layout';
+import { RELEASE_INSIDE, hostBundle } from '@tagma/server/mac-applications/bundle';
 import { DESKTOP } from '@tagma/server/installation/contract/wire/manifest';
 import { compareReleases, isRelease } from '@tagma/server/installation/contract/wire/feed';
 import { CHANNEL } from './channel.js';
@@ -51,7 +53,8 @@ export function standingIn(installRoot: string): Standing | null {
 }
 
 export function fallen(installRoot: string): Fallen | null {
-  const attempt = readAttempt(installRoot);
+  const read = readAttempt(installRoot);
+  const attempt = Result.isSuccess(read) ? read.success : null;
   const ended = attempt?.ended ?? null;
   if (attempt === null || ended === null) return null;
   const current = currentVersion(installRoot);

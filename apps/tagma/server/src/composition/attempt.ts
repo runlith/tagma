@@ -80,7 +80,7 @@ export const arrival = Effect.fn('composition.arrival')(function* (channel: Chan
   const arrived = yield* arrive(place).pipe(Effect.catchTag('InstallHeld', unlocked));
   if (arrived === 'serve') return;
   if (arrived === 'stale') {
-    const open = readAttempt(installRoot.success);
+    const open = Result.getOrNull(readAttempt(installRoot.success));
     console.error(
       `[tagma] ${place.release ?? 'this build'} is not the release that stands: ${open?.to ?? 'another release'} stands as the update from ${open?.from ?? 'nothing'}, and only those two open its data until that update ends`,
     );
