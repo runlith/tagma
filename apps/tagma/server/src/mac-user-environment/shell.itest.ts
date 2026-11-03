@@ -35,10 +35,19 @@ test('a failed profile reports its condition and does not retain startup output'
   expect(await ask(failed)).toEqual({ outcome: 'exit', entries: [], detail: `${failed}: exit 12` });
 });
 
-test('an unexpanded or relative entry is dropped alone, and a home-relative entry is expanded', async () => {
+test('an unexpanded or relative entry is dropped alone, a home-relative entry is expanded, and variables keep their spelling', async () => {
   const shell = join(root, 'mixed-shell');
-  writeFileSync(shell, `#!/bin/sh\nprintf '\\000PATH=$literal:${bin}:~/.dotnet/tools:relative:/usr/bin\\000'\n`, { mode: 0o755 });
-  expect(await ask(shell)).toEqual({ outcome: 'read', entries: [bin, join(root, '.dotnet/tools'), '/usr/bin'], detail: null });
+  writeFileSync(
+    shell,
+    `#!/bin/sh\nprintf '\\000PATH=$literal:${bin}:~/.dotnet/tools:relative:/usr/bin\\000CODEX_HOME=~/.codex-work\\000'\n`,
+    { mode: 0o755 },
+  );
+  expect(await ask(shell)).toMatchObject({
+    outcome: 'read',
+    entries: [bin, join(root, '.dotnet/tools'), '/usr/bin'],
+    detail: null,
+    environment: { CODEX_HOME: '~/.codex-work' },
+  });
 });
 
 test('a profile that does not answer in its deadline is a timeout and ends its rc-spawned child too', async () => {

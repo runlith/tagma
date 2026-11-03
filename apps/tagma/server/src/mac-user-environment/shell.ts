@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
-import type { ProfileAsk, ProfileRead, UserShell } from '../installation/contract/service/userEnvironment.js';
+import type { ProfileAnswer, ProfileAsk, UserShell } from '../installation/contract/service/userEnvironment.js';
 
 const SYSTEM_PATHS = new Set(['/usr/bin', '/bin', '/usr/sbin', '/sbin', '/System/Cryptexes/App/usr/bin']);
 const SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
@@ -107,6 +107,15 @@ export const profileEntries = (path: string, home: string): readonly string[] =>
     .map((entry) => (entry.startsWith('~/') ? join(home, entry.slice(2)) : entry))
     .filter((entry) => entry.startsWith('/') && !entry.includes('$'));
 
+const environmentOf = (output: string): Readonly<Record<string, string>> => {
+  const variables: Record<string, string> = {};
+  for (const entry of output.split('\0')) {
+    const at = entry.indexOf('=');
+    if (at > 0) variables[entry.slice(0, at)] = entry.slice(at + 1);
+  }
+  return variables;
+};
+
 const loginShell = (named: string | null): string | null => {
   if (named !== null) return named;
   try {
@@ -129,7 +138,7 @@ const groupExited = async (pid: number): Promise<void> => {
   }
 };
 
-const read = ({ shell, launchPath, home, deadlineMs }: ProfileAsk): Promise<ProfileRead> => {
+const read = ({ shell, launchPath, home, deadlineMs }: ProfileAsk): Promise<ProfileAnswer> => {
   const program = loginShell(shell);
   if (program === null) return Promise.resolve({ outcome: 'no-shell', entries: [], detail: 'the user directory names no login shell' });
   return new Promise((answer, refuse) => {
@@ -162,7 +171,7 @@ const read = ({ shell, launchPath, home, deadlineMs }: ProfileAsk): Promise<Prof
     });
     child.on('close', (code, signal) => {
       clearTimeout(timeout);
-      const finish = async (): Promise<ProfileRead> => {
+      const finish = async (): Promise<ProfileAnswer> => {
         if (stopped !== undefined && child.pid !== undefined) await groupExited(child.pid);
         if (stopped === 'timeout') {
           return { outcome: 'timeout', entries: [], detail: `${program} did not answer in ${deadlineMs} ms` };
@@ -174,15 +183,12 @@ const read = ({ shell, launchPath, home, deadlineMs }: ProfileAsk): Promise<Prof
             detail: `${program}: ${stopped ?? (signal === null ? `exit ${code}` : `signal ${signal}`)}`,
           };
         }
-        const path = Buffer.concat(chunks)
-          .toString('utf8')
-          .split('\0')
-          .findLast((entry) => entry.startsWith('PATH='))
-          ?.slice(5);
+        const environment = environmentOf(Buffer.concat(chunks).toString('utf8'));
+        const path = environment.PATH;
         const entries = path === undefined ? [] : profileEntries(path, home);
         return entries.length === 0
           ? { outcome: 'empty', entries: [], detail: `${program} printed no usable PATH` }
-          : { outcome: 'read', entries, detail: null };
+          : { outcome: 'read', entries, detail: null, environment };
       };
       void finish().then(answer, refuse);
     });

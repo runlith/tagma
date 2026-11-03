@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { it } from '@runlith/effect-test';
-import { LAUNCH_PATH, PROFILE_PATHS, type ProfileRead, type UserShell } from '../contract/service/userEnvironment.js';
+import { LAUNCH_PATH, PROFILE_PATHS, type ProfileAnswer, type ProfileRead, type UserShell } from '../contract/service/userEnvironment.js';
 import { WORLD_COMMAND } from '../contract/wire/layout.js';
 import { makeUserEnvironment } from './userEnvironment.js';
 
@@ -22,7 +22,7 @@ const fallback = dir('fallback');
 const profileDir = dir('profile');
 const SYSTEM = '/usr/bin:/bin:/usr/sbin:/sbin';
 
-const shellOf = (answers: (() => Promise<ProfileRead>)[]) => {
+const shellOf = (answers: (() => Promise<ProfileAnswer>)[]) => {
   let asked = 0;
   const shell: UserShell = {
     desktopLaunch: (path) => path === SYSTEM,
@@ -116,6 +116,28 @@ it.live('a successor handed a read profile is ready at once without asking the s
     expect(env[LAUNCH_PATH]).toBeUndefined();
     expect(env[PROFILE_PATHS]).toBeUndefined();
     expect(env.PATH?.split(':')[1]).toBe(profileDir);
+  }),
+);
+
+it.live('only retained variables leave the profile read, in the answer and in the handoff, and a successor keeps them', () =>
+  Effect.gen(function* () {
+    const profile = async () => ({
+      outcome: 'read' as const,
+      entries: [profileDir],
+      detail: null,
+      environment: { CODEX_HOME: '~/.codex-work', API_TOKEN: 'secret', __MISE_DIFF: 'diff' },
+    });
+    const first = shellOf([profile]);
+    const predecessor = makeUserEnvironment({ shell: first.shell, env: { PATH: SYSTEM, CODEX_HOME: '/launch' }, world, home: root });
+    predecessor.retain(['CODEX_HOME']);
+    expect((yield* predecessor.ready).variables).toEqual({ CODEX_HOME: '~/.codex-work', __MISE_DIFF: 'diff' });
+    const handed = predecessor.handoff();
+    expect(JSON.stringify(handed)).not.toContain('secret');
+    const next = shellOf([]);
+    const successor = makeUserEnvironment({ shell: next.shell, env: { PATH: SYSTEM, ...handed }, world, home: root });
+    successor.retain(['CODEX_HOME']);
+    expect((yield* successor.ready).variables).toEqual({ CODEX_HOME: '~/.codex-work', __MISE_DIFF: 'diff' });
+    expect(next.asked()).toBe(0);
   }),
 );
 

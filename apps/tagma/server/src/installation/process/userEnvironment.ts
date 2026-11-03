@@ -4,6 +4,8 @@ import { Effect, Option, Schema } from 'effect';
 import {
   LAUNCH_PATH,
   PROFILE_PATHS,
+  PROFILE_VARIABLES,
+  type ProfileAnswer,
   type ProfileRead,
   UserEnvironment,
   type UserPaths,
@@ -13,6 +15,9 @@ import { ensuredPath } from '../setup/launcher.js';
 
 const READ_DEADLINE_MS = 10_000;
 const CANDIDATES = 4;
+const MANAGER_VARIABLES = ['__MISE_DIFF'];
+
+const handedVariables = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)));
 
 const handedProfile = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -87,11 +92,25 @@ export const locatedIn = (name: string, dirs: readonly string[]): readonly strin
 export const makeUserEnvironment = ({ shell, env, world, home, deadlineMs = READ_DEADLINE_MS, told }: EnvironmentInput) => {
   const launchPath = env[LAUNCH_PATH] ?? env.PATH ?? '';
   const inherited = Option.getOrNull(handedProfile(env[PROFILE_PATHS]));
+  const inheritedVariables = Option.getOrNull(handedVariables(env[PROFILE_VARIABLES]));
   delete env[LAUNCH_PATH];
   delete env[PROFILE_PATHS];
+  delete env[PROFILE_VARIABLES];
   const desktop = shell !== null && home !== null && shell.desktopLaunch(launchPath);
   let profile: ProfileRead | null = desktop ? inherited : { outcome: 'not-needed', entries: [], detail: null };
+  let profileVariables: Readonly<Record<string, string>> | null = desktop && inherited !== null ? inheritedVariables : null;
   let reading: Promise<UserPaths> | null = null;
+  const retained = new Set(MANAGER_VARIABLES);
+
+  const retainedVariables = (): Readonly<Record<string, string>> => {
+    const source: Readonly<Record<string, string | undefined>> = profileVariables ?? env;
+    const found: Record<string, string> = {};
+    for (const name of retained) {
+      const value = source[name];
+      if (value !== undefined) found[name] = value;
+    }
+    return found;
+  };
 
   const build = (): string => {
     const assembled =
@@ -100,15 +119,16 @@ export const makeUserEnvironment = ({ shell, env, world, home, deadlineMs = READ
         : launchPath;
     return world === null ? assembled : (ensuredPath(assembled, world) ?? assembled);
   };
-  const current = (): UserPaths => ({ path: env.PATH ?? '', profile, reading: reading !== null });
+  const current = (): UserPaths => ({ path: env.PATH ?? '', profile, reading: reading !== null, variables: retainedVariables() });
   env.PATH = build();
 
   const read = (): Promise<UserPaths> => {
     if (reading !== null) return reading;
     if (!desktop || shell === null || home === null) return Promise.resolve(current());
     const kept = profile?.entries ?? [];
-    const settle = (answer: ProfileRead): UserPaths => {
+    const settle = ({ environment, ...answer }: ProfileAnswer): UserPaths => {
       profile = answer.outcome === 'read' ? answer : { ...answer, entries: kept };
+      if (answer.outcome === 'read') profileVariables = environment ?? {};
       env.PATH = build();
       reading = null;
       told?.(
@@ -136,7 +156,15 @@ export const makeUserEnvironment = ({ shell, env, world, home, deadlineMs = READ
       ),
     handoff: () => ({
       [LAUNCH_PATH]: launchPath,
-      ...(profile === null || profile.outcome === 'not-needed' ? {} : { [PROFILE_PATHS]: JSON.stringify(profile) }),
+      ...(profile === null || profile.outcome === 'not-needed'
+        ? {}
+        : {
+            [PROFILE_PATHS]: JSON.stringify(profile),
+            ...(profileVariables === null ? {} : { [PROFILE_VARIABLES]: JSON.stringify(retainedVariables()) }),
+          }),
     }),
+    retain: (names) => {
+      for (const name of names) retained.add(name);
+    },
   });
 };
