@@ -197,5 +197,11 @@ export const makeCheckoutReading = Effect.fnUntraced(function* (input: {
     }),
   );
 
-  return { read, changes };
+  const fresh: Effect.Effect<CheckoutFrame> = Effect.suspend(() => {
+    epoch += 1;
+    history += 1;
+    return read;
+  });
+
+  return { read, fresh, changes };
 });

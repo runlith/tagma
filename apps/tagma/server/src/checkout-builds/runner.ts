@@ -33,7 +33,6 @@ import {
 import { actsOf, backOf, installedOf, installingOf, offersOf, standingOf, updateOf } from './offers.js';
 import { commandOf, endGroup } from './group.js';
 import { type BuildStepFailed, BuildSteps } from './contract/service/steps.js';
-import type { StepVerdict } from './contract/wire/steps.js';
 
 const HOST = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -161,7 +160,17 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
   const source = yield* makeCheckoutReading({ path: options.checkout, running: options.running ?? null });
   const steps = yield* BuildSteps;
   const shifts = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
-  let asking: Fiber.Fiber<Result.Result<StepVerdict, BuildStepFailed>> | null = null;
+  let asking: Fiber.Fiber<unknown> | null = null;
+
+  const asked = async <A>(work: Effect.Effect<A, BuildStepFailed>): Promise<Exit.Exit<Result.Result<A, BuildStepFailed>>> => {
+    const fiber = Effect.runFork(Effect.result(work));
+    asking = fiber;
+    try {
+      return await Effect.runPromise(Fiber.await(fiber));
+    } finally {
+      asking = null;
+    }
+  };
   let running: { readonly record: BuildRunning; readonly offset: number } | null = null;
   let ended: BuildEnded | null = null;
   let took: Took = { head: null, tree: null, back: null };
@@ -171,8 +180,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
   let stopping: Promise<void> | null = null;
   let offered: NextFrame | null = null;
   let offeredSource: CheckoutFrame | null = null;
-  let offeredSince: string | null = null;
-  let offeredStep: BuildStep | null = null;
+  let offeredRecord: BuildRunning | null = null;
   let revision = 0;
 
   const now = (): number => (options.now === undefined ? Date.now() : options.now());
@@ -183,9 +191,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
   const nextOf = (frame: CheckoutFrame): NextFrame => {
     if (offeredSource !== null && frame.revision < offeredSource.revision) frame = offeredSource;
     const building = running?.record ?? null;
-    const since = building?.since ?? null;
-    const step = building?.step ?? null;
-    if (offered !== null && offeredSource?.revision === frame.revision && offeredSince === since && offeredStep === step) return offered;
+    if (offered !== null && offeredSource?.revision === frame.revision && offeredRecord === building) return offered;
     const denied = frame.issue?.reason ?? (building === null ? null : 'an installation is running');
     offered = {
       instance: frame.instance,
@@ -204,8 +210,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       acts: actsOf(building),
     };
     offeredSource = frame;
-    offeredSince = since;
-    offeredStep = step;
+    offeredRecord = building;
     return offered;
   };
 
@@ -389,19 +394,17 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         stepRefused = { code, reason, unblock: ['update again once that is settled'], thread };
         return ['failed', null, reason] as const;
       };
-      const listed = await Effect.runPromise(Effect.result(steps.of(checkout)));
-      if (listed._tag === 'Failure') return refusedBy('build-step-failed', listed.failure.message);
-      const titles = listed.success.map((one) => one.title);
-      for (const [at, one] of listed.success.entries()) {
+      const listed = await asked(steps.of(checkout));
+      if (stopping !== null) return ['stopped', null, 'stopped before the steps of the build were read; nothing landed'];
+      if (Exit.isFailure(listed)) return refusedBy('build-step-failed', 'the steps before the build ended without an answer');
+      if (listed.value._tag === 'Failure') return refusedBy('build-step-failed', listed.value.failure.message);
+      const titles = listed.value.success.map((one) => one.title);
+      for (const [at, one] of listed.value.success.entries()) {
         stepped('before', { before: { titles, at } });
         await say(`\n--- ${one.title}: ${one.app} before the build (in ${checkout}) ---`);
         for (;;) {
           if (stopping !== null) return ['stopped', null, `stopped at the ${one.title} step; nothing landed`];
-          const fiber = Effect.runFork(Effect.result(one.ask({ offer, checkout })));
-          asking = fiber;
-          const answer = await Effect.runPromise(Fiber.await(fiber)).finally(() => {
-            asking = null;
-          });
+          const answer = await asked(one.ask({ offer, checkout }));
           if (stopping !== null) return ['stopped', null, `stopped at the ${one.title} step; nothing landed`];
           if (Exit.isFailure(answer)) return refusedBy('build-step-failed', `${one.app} ended its step without an answer`);
           if (answer.value._tag === 'Failure') return refusedBy('build-step-failed', answer.value.failure.message);
@@ -418,7 +421,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         }
       }
       if (titles.length > 0) {
-        const frame = await Effect.runPromise(source.read);
+        const frame = await Effect.runPromise(source.fresh);
         const head = frame.checkout?.head ?? null;
         if (head !== null) {
           stepped(running?.record.step ?? 'before', {
@@ -435,12 +438,12 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         const build = await standing();
         return ['landed', build, build === null ? 'the previous installation stands' : `installation ${build} stands again`];
       }
+      await rm(note, { force: true });
       const held = await ahead(started.from);
       if (held !== null) return held;
       cut = started.from === 'head' ? join(options.worktrees, `head-${started.since.replace(/[-:.]/g, '')}`) : null;
       stepped('build');
       const origin = cut === null ? [] : ['--origin', checkout];
-      await rm(note, { force: true });
       const code = await step(
         'build',
         [runtime, 'run', 'tagma:build', '--no-restart', ...(started.from === 'tree' ? ['--tree'] : []), ...origin],
