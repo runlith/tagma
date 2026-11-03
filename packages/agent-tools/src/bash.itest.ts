@@ -711,6 +711,17 @@ it.live('a command answers the files it named and the files its output found', (
   }),
 );
 
+it.live('an operand longer than any file name is no file, and the files beside it are still answered', () =>
+  Effect.gen(function* () {
+    const dir = yield* checkout();
+    yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 1;\n');
+    const tools = createTools(options({ cwd: dir }));
+
+    const ran = yield* answer(tools.bash, { command: `cat alpha.ts '${'x'.repeat(300)}' 2>/dev/null || true`, description: 'Read files' });
+    expect(ran.shown).toEqual([{ path: join(dir, 'alpha.ts'), as: 'read' }]);
+  }),
+);
+
 it.live('a command that only reads reports nothing', () =>
   Effect.gen(function* () {
     const dir = yield* checkout();

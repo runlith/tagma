@@ -1,6 +1,6 @@
 import { basename, isAbsolute, resolve } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import type { ToolShown } from '@runlith/agent/tool';
 import { shellCommands, type ShellWord } from './shellCommands';
 import { gitOperation, withoutPrefixes } from './shellShapes';
@@ -363,6 +363,20 @@ const probed = Effect.fnUntraced(function* <E>(
   const files = yield* Effect.forEach(candidates, ([path]) => isFile(path), { concurrency: PROBES_AT_ONCE });
   return candidates.flatMap(([path, as], at) => (files[at] === true ? [{ path, as }] : []));
 });
+
+const nameTooLong = (cause: unknown): boolean => cause instanceof Error && 'code' in cause && cause.code === 'ENAMETOOLONG';
+
+export const fileProbe = (files: FileSystem.FileSystem) => (path: string) =>
+  files.stat(path).pipe(
+    Effect.map((standing) => standing.type === 'File'),
+    Effect.catchReasons('PlatformError', {
+      NotFound: () => Effect.succeed(false),
+      PermissionDenied: () => Effect.succeed(false),
+      BadResource: () => Effect.succeed(false),
+      BadArgument: () => Effect.succeed(false),
+      Unknown: (reason, error) => (nameTooLong(reason.cause) ? Effect.succeed(false) : Effect.fail(error)),
+    }),
+  );
 
 export const shellShown = Effect.fnUntraced(function* <E>(sight: ShellSight, isFile: (path: string) => Effect.Effect<boolean, E>) {
   const names = named(sight);

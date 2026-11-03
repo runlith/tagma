@@ -1,6 +1,6 @@
 import { Clock, Console, Data, Effect, FileSystem, Option, Schema } from 'effect';
 import type { ToolShown } from '@runlith/agent/tool';
-import { searchShown, shellShown } from '@runlith/agent-tools/shellShown';
+import { fileProbe, searchShown, shellShown } from '@runlith/agent-tools/shellShown';
 import { resolve } from 'node:path';
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../platform/contract/service/credentials.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
@@ -396,20 +396,7 @@ const preToolUse = Effect.fn('hook.preToolUse')(function* (road: Road) {
 });
 
 const postToolUse = Effect.fn('hook.postToolUse')(function* (road: Road) {
-  const files = yield* FileSystem.FileSystem;
-  const isFile = (path: string) =>
-    files.stat(path).pipe(
-      Effect.map((standing) => standing.type === 'File'),
-      Effect.catchReasons('PlatformError', {
-        NotFound: () => Effect.succeed(false),
-        PermissionDenied: () => Effect.succeed(false),
-        BadResource: () => Effect.succeed(false),
-        Unknown: (reason, error) =>
-          reason.cause instanceof Error && 'code' in reason.cause && reason.cause.code === 'ENAMETOOLONG'
-            ? Effect.succeed(false)
-            : Effect.fail(error),
-      }),
-    );
+  const isFile = fileProbe(yield* FileSystem.FileSystem);
   const { delivery } = road;
   const event = yield* hookEvent(road);
   if (event === undefined) return;
