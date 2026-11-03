@@ -8,7 +8,7 @@ const PENDING = '[data-model-pending]';
 const MODEL = 'button[aria-label="Model and reasoning"]';
 
 e2e.effect(
-  'a new thread waits for the Claude Code login, then offers its model with no connect card',
+  'a new thread waits for the Claude Code login, offers other ways meanwhile, then shows its model with no connect card',
   ({ page }) =>
     Effect.gen(function* () {
       const served = yield* makeE2eWorld({ logins: { claude: 'held', codex: 'absent' } });
@@ -18,6 +18,9 @@ e2e.effect(
         await page.goto(`${served.origin}/${encodeURIComponent(tenant.projectName)}/chat`);
         await page.locator(PENDING).waitFor();
         expect(await page.locator(CARD).count()).toBe(0);
+        await page.getByRole('button', { name: 'Connect another way', exact: true }).click();
+        await page.locator(CARD).waitFor();
+        expect(await page.locator(PENDING).count()).toBe(1);
       });
       yield* served.logins.answer('claude', 'signed-in');
       yield* Effect.promise(async () => {

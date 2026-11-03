@@ -47,6 +47,12 @@ export class BirthSettings implements ModelView {
     return !this.defaults.known;
   }
 
+  connecting = $state(false);
+
+  connectAnotherWay(): void {
+    this.connecting = true;
+  }
+
   private pickable = $derived.by(() => pickableProviders(this.catalog.models, undefined, this.types.served, null));
 
   settings = $derived.by<ModelSettings | null>(() => {

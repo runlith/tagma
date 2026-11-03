@@ -6,7 +6,7 @@
   import type { ThreadViews } from '../thread/ThreadViews.js';
   import ModelSummary from './ModelSummary.svelte';
 
-  let { views, panel }: { views: ThreadViews; panel: ModelPanelState } = $props();
+  let { views, panel, onConnect }: { views: ThreadViews; panel: ModelPanelState; onConnect?: (() => void) | undefined } = $props();
 
   const settings = $derived(views.model.settings);
   const open = $derived(panel.current?.mode === 'model');
@@ -48,4 +48,13 @@
     <Waiting class="size-3" />
     Looking for your sign-in…
   </span>
+  {#if onConnect !== undefined}
+    <button
+      type="button"
+      class="inline-flex h-6 shrink-0 items-center rounded-md px-1.5 text-meta text-muted-foreground transition-colors hover:bg-hover hover:text-foreground pointer-coarse:h-8 @min-[30rem]:h-7 @min-[30rem]:px-2 @min-[30rem]:text-small"
+      onclick={onConnect}
+    >
+      Connect another way
+    </button>
+  {/if}
 {/if}

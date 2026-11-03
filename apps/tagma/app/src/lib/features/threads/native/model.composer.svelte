@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ComposerPanel } from '@runlith/chat-ui/composer';
+  import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
   import type { ChatHold } from '../ChatHold.svelte.js';
   import type { ModelPanelState } from '../ModelPanelState.svelte.js';
   import type { ShownThread } from '../ShownThread.js';
@@ -13,6 +14,7 @@
   let {
     shown,
     chat,
+    birth,
     views,
     writes,
     panel,
@@ -22,6 +24,7 @@
   }: {
     shown: ShownThread;
     chat: ChatHold;
+    birth: ThreadBirth;
     views: ThreadViews;
     writes: ThreadWrites;
     panel: ModelPanelState;
@@ -29,6 +32,8 @@
     surface: SlotSurface;
     contributor: string;
   } = $props();
+
+  const connect = $derived(shown.id === null && !birth.settings.connecting ? () => birth.settings.connectAnotherWay() : undefined);
 
   $effect.pre(() => (surface.lead ? undefined : composer.chip(contributor, { id: 'model', region: 'leading', order: 2, body: picker })));
 
@@ -47,7 +52,7 @@
 </script>
 
 {#snippet picker()}
-  <ModelPicker {views} {panel} />
+  <ModelPicker {views} {panel} onConnect={connect} />
 {/snippet}
 
 {#snippet modelPanel(door: ComposerPanel)}

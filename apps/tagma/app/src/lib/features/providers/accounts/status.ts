@@ -86,7 +86,12 @@ export function usageStatus(row: AccountQuotaRow, served: ServedProvider | undef
       return { word: row.problem.method, tone: 'warning', stale: true, note: 'Tagma runs on a subscription sign-in' };
     return row.problem.kind === 'not-installed'
       ? { word: NOT_INSTALLED, tone: 'warning', stale: false, note: 'no installed adapter provides this account' }
-      : { word: 'Credential unreadable', tone: 'alarm', stale: false, note: row.problem.reason };
+      : {
+          word: row.origin.kind === 'cli' ? 'Sign-in unreadable' : 'Credential unreadable',
+          tone: 'alarm',
+          stale: false,
+          note: row.problem.reason,
+        };
   }
   const failure = row.failure;
   const read = readingAt(row);

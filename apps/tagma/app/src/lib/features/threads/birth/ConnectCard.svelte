@@ -20,6 +20,7 @@
   import { type CliInstall, installInTerminal } from '../external/install.js';
   import { AgentTypes } from '../AgentTypes.svelte.js';
   import { ModelDefaults } from '../ModelDefaults.svelte.js';
+  import { pickableProviders } from '../thread/modelSettings.js';
 
   let { projectId }: { projectId: number } = $props();
 
@@ -49,8 +50,12 @@
 
   const cliOf = (provider: string) => agents.launches.find((row) => row.presentation.modelProvider === provider);
 
+  const offered = $derived(defaults.plans ?? pickableProviders(catalog.models, undefined, agents.served, null));
+
   const plans = $derived(
-    (defaults.plans ?? []).flatMap((id) => catalog.served.providers.find((provider) => provider.id === id) ?? []).slice(0, PLANS),
+    offered
+      .flatMap((id) => catalog.served.providers.find((provider) => provider.id === id && provider.auth !== 'api-key') ?? [])
+      .slice(0, PLANS),
   );
 
   const flows = new SvelteMap<string, SignInFlow>();
