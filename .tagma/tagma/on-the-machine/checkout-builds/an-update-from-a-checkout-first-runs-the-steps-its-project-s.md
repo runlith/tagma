@@ -43,7 +43,9 @@ A tool error, an answer outside this shape, or the app's process ending before a
 
 ## Runner and card
 
-- `checkout-builds` declares a port in its own contract (the steps before a cut, by checkout and offer); the apps module fills it from enabled apps' `beforeBuild`; composition binds them. The release composition plugs neither in.
+- `checkout-builds` declares a port in its own contract (the steps before a cut, by checkout and offer); composition fills it from enabled apps' `beforeBuild` in every build, so an app declaring the point is accepted by a release server too, where no checkout build ever asks it.
+- An enabled app still starting is waited for; one whose process failed stops the update, since whether it declares a step cannot be told; a stopped app has none.
+- An ask the MCP request window cut short counts as `pending`.
 - A new step `prepare` stands before `worktree` and `build` for `head` and `tree`; `back` runs no steps. The record carries the running step's title; `stop` during `prepare` ends the update with nothing landed, as at any step before the swap.
 - The revision the record names, and the HEAD a `head` build cuts, are read after the steps: a commit a step lands is the commit built.
 - The card shows the running step's title in place of the build stage while it runs, and a stopped update's reason and thread under the offer that was pressed.
