@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { Applications } from '../installation/contract/service/applications.js';
-import { RELEASE_INSIDE } from '../installation/contract/wire/layout.js';
+import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { DESKTOP } from '../installation/contract/wire/manifest.js';
 import { currentVersion } from '../installation/closure/versions.js';
 import { requireFree, treeBytes } from '../platform/durable/space.js';
@@ -56,6 +56,29 @@ export const recoverBundle = async (target: string): Promise<void> => {
 
 export class BundleRefused extends Error {}
 
+const EXCHANGE = `const { dlopen, ptr, read } = require('bun:ffi');
+const libc = dlopen('libc.dylib', {
+  renamex_np: { args: ['ptr', 'ptr', 'u32'], returns: 'i32' },
+  __error: { args: [], returns: 'ptr' },
+});
+const from = Buffer.from(process.argv[1] + '\\0');
+const to = Buffer.from(process.argv[2] + '\\0');
+if (libc.symbols.renamex_np(ptr(from), ptr(to), 2) !== 0) {
+  throw new Error('atomic application exchange failed: errno ' + read.i32(libc.symbols.__error(), 0));
+}`;
+
+const exchanged = (runtime: string, from: string, to: string): Promise<void> =>
+  new Promise((answer, refuse) => {
+    const child = spawn(runtime, ['-e', EXCHANGE, from, to], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let detail = '';
+    child.stderr.on('data', (chunk: Buffer) => (detail += chunk.toString('utf8')));
+    child.on('error', refuse);
+    child.on('close', (code, signal) => {
+      if (code === 0) answer();
+      else refuse(new Error(`the application exchange ended on ${signal ?? code}: ${detail.trim()}`));
+    });
+  });
+
 export const replaceBundle = async (
   target: string,
   from: string,
@@ -64,23 +87,15 @@ export const replaceBundle = async (
   await mkdir(dirname(target), { recursive: true });
   await recoverBundle(target);
   const incoming = beside(target, 'incoming');
-  const outgoing = beside(target, 'outgoing');
   await cloned(from, incoming);
   const refused = await verify(incoming);
   if (refused !== null) {
     await rm(incoming, { recursive: true, force: true });
     throw new BundleRefused(refused);
   }
-  const standing = existsSync(target);
-  if (standing) await rename(target, outgoing);
-  try {
-    await rename(incoming, target);
-  } catch (error) {
-    if (standing && !existsSync(target)) await rename(outgoing, target);
-    await rm(incoming, { recursive: true, force: true });
-    throw error;
-  }
-  await rm(outgoing, { recursive: true, force: true });
+  if (existsSync(target)) await exchanged(join(from, RELEASE_INSIDE, RUNTIME_PART), incoming, target);
+  else await rename(incoming, target);
+  await rm(incoming, { recursive: true, force: true });
 };
 
 export const copyBundle = (from: string, to: string): Promise<void> => replaceBundle(to, from);
