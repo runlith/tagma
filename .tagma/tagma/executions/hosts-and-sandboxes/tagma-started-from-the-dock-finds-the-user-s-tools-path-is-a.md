@@ -25,7 +25,8 @@ sources:
 **Behaviour.**
 - If the server started with a bare system PATH, it reads PATH from the user's interactive login shell and folds it together with version-manager directories (nvm by its default, Volta, asdf, fnm, mise, bun), the source PATH, and the usual places (Homebrew, /usr/local, Nix, pnpm, yarn, ~/.local/bin).
 - While the profile reads, PATH is already assembled from the rest; the read profile stands first.
-- The successor server receives the read profile from the predecessor and does not read it again.
+- The read also parses the profile's whole environment, kept only in memory. Adapters register the variable names they need (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) with `retain`, and mise's `__MISE_DIFF` is retained by the owner; only retained names are answered, spelled exactly as the profile gives them, and a name the profile does not set is absent. Other variables are never logged, stored or handed over.
+- The successor server receives the read profile and the retained variables from the predecessor and does not read it again.
 - Program lookup also peers into every installed node version from nvm.
 
 **Limits.** macOS only. A profile that did not answer in time, failed, or gave no paths is skipped, and this is written to the log. After a forced stop the reading finishes when the profile process group is gone. Starting from a terminal with a full PATH changes nothing.
