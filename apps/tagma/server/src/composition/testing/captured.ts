@@ -9,8 +9,10 @@ import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { verbsOf } from '../cli/verbs.js';
 import { InstalledChannel } from '../../installation/contract/service/channel.js';
 import { DEVELOPER } from '../developer/build.js';
+import { cliNativeLayer } from '../children.js';
 
 const verbs = verbsOf(DEVELOPER, () => import('../developer/server.js'));
+const native = cliNativeLayer(DEVELOPER.cut.roots.packages);
 
 export type Answer = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -54,6 +56,7 @@ export const capturedEffect = Effect.fnUntraced(function* (
     ),
     Effect.provideService(Console.Console, new NodeConsole({ stdout: out.stream, stderr: err.stream, colorMode: false })),
     Effect.provideService(CurrentInvocation, at),
+    Effect.provide(native),
     Effect.provide(BunServices.layer),
   );
   return { code, out: out.text(), err: err.text() };

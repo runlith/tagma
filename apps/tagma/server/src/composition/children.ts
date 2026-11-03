@@ -9,6 +9,8 @@ import { pathOf, readArtifact } from '@runlith/executions/hostArtifacts';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChildLedger, childLedger } from '../platform/contract/service/children.js';
 import { LogicYield } from '../executions/contract/service/host.js';
+import type { LockHolders } from '../installation/contract/service/lockHolders.js';
+import { lockHoldersLayer } from './hostClaims.js';
 
 type PlatformLibrary = { readonly _tag: 'Found'; readonly path: string } | { readonly _tag: 'Unavailable'; readonly detail: string };
 
@@ -65,6 +67,9 @@ export const ownProcessesLayer = (packages: string): Layer.Layer<Processes> => {
   const installed = holdingProcess(process.execPath);
   return serverProcessesLayer(join(packages, 'execution-host'), installed === null ? undefined : join(installed, EXECUTIONS));
 };
+
+export const cliNativeLayer = (packages: string): Layer.Layer<Processes | LockHolders> =>
+  Layer.merge(ownProcessesLayer(packages), lockHoldersLayer);
 
 export const ownGeneration = (data: string, cli: string, admitted: boolean, native: Context.Context<Processes>) =>
   Effect.runPromise(makeProcessChain(data, cli, admitted).pipe(Effect.provide(native)));

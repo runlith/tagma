@@ -1,4 +1,4 @@
-import { Effect, Layer } from 'effect';
+import { Effect } from 'effect';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { invoke } from '../../cli/invoke.js';
@@ -6,8 +6,7 @@ import { holdingProcess, holdVersion } from '../../installation/closure/leases.j
 import { InstalledChannel } from '../../installation/contract/service/channel.js';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import type { Build } from '../build.js';
-import { ownProcessesLayer } from '../children.js';
-import { lockHoldersLayer } from '../hostClaims.js';
+import { cliNativeLayer } from '../children.js';
 import { ENTERED, NOT_RUNNING } from '../../installation/contract/wire/junction.js';
 import { enteredActive } from '../../installation/setup/active.js';
 
@@ -37,6 +36,5 @@ export const runCli = (build: Build, server: () => Promise<unknown>): void => {
             }),
       )
     : program;
-  const native = Layer.merge(ownProcessesLayer(build.cut.roots.packages), lockHoldersLayer);
-  BunRuntime.runMain(entered || argv[0] !== 'hook' ? routed.pipe(Effect.provide(native)) : program);
+  BunRuntime.runMain(entered || argv[0] !== 'hook' ? routed.pipe(Effect.provide(cliNativeLayer(build.cut.roots.packages))) : program);
 };
