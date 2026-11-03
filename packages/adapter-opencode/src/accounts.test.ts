@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
-import { Effect, Result } from 'effect';
+import { Effect } from 'effect';
 import { accounts } from './accounts';
 import { accountEnvironment } from './environment';
 
@@ -34,30 +34,26 @@ it.effect('official status identifies connected upstreams and preserves signed-o
           connections: [{ type: 'credential', id: 'credential-1', label: 'octocat', method: 'oauth' }],
         },
       ]),
-    ).toEqual({ label: 'GitHub Copilot · octocat' });
-    expect(yield* read([])).toBeNull();
-    const expired = yield* Effect.result(
-      read([
-        {
-          id: 'github-copilot',
-          name: 'GitHub Copilot',
-          connections: [
-            {
-              type: 'credential',
-              id: 'credential-1',
-              label: 'octocat',
-              method: 'oauth',
-              status: { status: 'needs_auth', message: 'Sign in again' },
-            },
-          ],
-        },
-      ]),
-    );
-    expect(Result.isFailure(expired)).toBe(true);
-    if (Result.isFailure(expired)) expect(expired.failure.message).toContain('Sign in again');
-    expect(Result.isFailure(yield* Effect.result(read({ tokens: [] })))).toBe(true);
-    const failed = yield* Effect.result(auth.loggedIn({ stdout: '[]', stderr: 'database unavailable', code: 1 }));
-    expect(Result.isFailure(failed)).toBe(true);
-    if (Result.isFailure(failed)) expect(failed.failure.message).toContain('database unavailable');
+    ).toEqual({ kind: 'signed-in', label: 'GitHub Copilot · octocat' });
+    expect(yield* read([])).toEqual({ kind: 'signed-out' });
+    const expired = yield* read([
+      {
+        id: 'github-copilot',
+        name: 'GitHub Copilot',
+        connections: [
+          {
+            type: 'credential',
+            id: 'credential-1',
+            label: 'octocat',
+            method: 'oauth',
+            status: { status: 'needs_auth', message: 'Sign in again' },
+          },
+        ],
+      },
+    ]);
+    expect(expired).toMatchObject({ kind: 'unreadable', reason: expect.stringContaining('Sign in again') });
+    expect(yield* read({ tokens: [] })).toMatchObject({ kind: 'unreadable' });
+    const failed = yield* auth.loggedIn({ stdout: '[]', stderr: 'database unavailable', code: 1 });
+    expect(failed).toMatchObject({ kind: 'unreadable', reason: expect.stringContaining('database unavailable') });
   }),
 );

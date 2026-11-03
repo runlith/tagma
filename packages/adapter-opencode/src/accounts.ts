@@ -18,26 +18,30 @@ const response = Schema.fromJsonString(
   Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String, connections: Schema.Array(connection) })),
 );
 
-const loggedIn = Effect.fnUntraced(function* (output: HarnessOutput) {
-  if (output.code !== 0) return yield* new AccountRefused({ message: `OpenCode auth list exited ${output.code}: ${output.stderr.trim()}` });
-  const integrations = yield* Schema.decodeUnknownEffect(response)(output.stdout).pipe(
-    Effect.mapError((cause) => new AccountRefused({ message: `OpenCode auth list returned invalid JSON: ${cause.message}` })),
-  );
-  const labels: string[] = [];
-  const problems: string[] = [];
-  for (const integration of integrations) {
-    for (const entry of integration.connections) {
-      if (entry.status !== undefined) {
-        problems.push(`${integration.name}: ${entry.status.message}`);
-        continue;
+const loggedIn = Effect.fnUntraced(
+  function* (output: HarnessOutput) {
+    if (output.code !== 0)
+      return yield* new AccountRefused({ message: `OpenCode auth list exited ${output.code}: ${output.stderr.trim()}` });
+    const integrations = yield* Schema.decodeUnknownEffect(response)(output.stdout).pipe(
+      Effect.mapError((cause) => new AccountRefused({ message: `OpenCode auth list returned invalid JSON: ${cause.message}` })),
+    );
+    const labels: string[] = [];
+    const problems: string[] = [];
+    for (const integration of integrations) {
+      for (const entry of integration.connections) {
+        if (entry.status !== undefined) {
+          problems.push(`${integration.name}: ${entry.status.message}`);
+          continue;
+        }
+        labels.push(`${integration.name} · ${entry.type === 'credential' ? entry.label : entry.name}`);
       }
-      labels.push(`${integration.name} · ${entry.type === 'credential' ? entry.label : entry.name}`);
     }
-  }
-  if (labels.length > 0) return { label: labels.join(', ') };
-  if (problems.length > 0) return yield* new AccountRefused({ message: problems.join('; ') });
-  return null;
-});
+    if (labels.length > 0) return { kind: 'signed-in' as const, label: labels.join(', ') };
+    if (problems.length > 0) return yield* new AccountRefused({ message: problems.join('; ') });
+    return { kind: 'signed-out' as const };
+  },
+  Effect.match({ onFailure: (cause) => ({ kind: 'unreadable' as const, reason: cause.message }), onSuccess: (status) => status }),
+);
 
 export const accounts = (program: string): HarnessAccountAuth => ({
   directory: 'opencode',

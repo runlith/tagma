@@ -1,14 +1,24 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import type { HarnessAccountAuth, HarnessIdentity, HarnessOutput } from '@runlith/tagma/adapter/provider';
+import type { HarnessAccountAuth, HarnessLoginStatus, HarnessOutput } from '@runlith/tagma/adapter/provider';
 
 const SUBSCRIPTION = 'Logged in using ChatGPT';
 const SIGNED_OUT = 'Not logged in';
 
-function loggedIn(output: HarnessOutput): Effect.Effect<HarnessIdentity | null, { readonly message: string }> {
+function loggedIn(output: HarnessOutput): Effect.Effect<HarnessLoginStatus> {
   const said = `${output.stdout}\n${output.stderr}`.trim();
-  if (said.includes(SUBSCRIPTION)) return Effect.succeed({ label: 'ChatGPT' });
-  if (said.includes(SIGNED_OUT)) return Effect.succeed(null);
-  return Effect.fail({ message: `Codex is not signed in with a ChatGPT subscription: ${said || `exit ${output.code}`}` });
+  if (said.includes(SIGNED_OUT)) return Effect.succeed({ kind: 'signed-out' });
+  if (output.code === 0) {
+    if (said.includes(SUBSCRIPTION)) return Effect.succeed({ kind: 'signed-in', label: 'ChatGPT' });
+    if (/^API key configured(?: - .*)?$/mu.test(said)) return Effect.succeed({ kind: 'unsupported-method', method: 'API key' });
+    const method = /^Logged in using (.+?)(?: - .*)?$/mu.exec(said)?.[1];
+    if (method !== undefined) return Effect.succeed({ kind: 'unsupported-method', method });
+  }
+  return Effect.succeed({
+    kind: 'unreadable',
+    reason: `Codex login status answered something unreadable: ${said || `exit ${output.code}`}`,
+  });
 }
 
 const RenewalReply = Schema.Struct({
@@ -27,9 +37,10 @@ export const codexAccounts: HarnessAccountAuth = {
   directory: 'codex',
   login: { program: 'codex', args: ['login'] },
   status: { program: 'codex', args: ['login', 'status'] },
+  discovery: { variable: 'CODEX_HOME', directory: join(homedir(), '.codex'), files: ['auth.json'] },
   renew: {
     program: 'codex',
-    args: ['app-server', '-c', 'cli_auth_credentials_store="file"', '-c', 'analytics.enabled=false', '-c', 'otel.exporter="none"'],
+    args: ['app-server', '-c', 'analytics.enabled=false', '-c', 'otel.exporter="none"'],
     exchange: {
       input:
         [

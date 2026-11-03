@@ -21,7 +21,11 @@ export const adapter = defineAdapter(({ product }) => [
       signInLabel: 'Sign in with ChatGPT',
     },
     accounts: subscriptionAccounts(openaiAccounts),
-    borrows: { provider: codex.id, read: readCodexAccount, renewOnReject: true },
+    borrows: {
+      provider: codex.id,
+      read: readCodexAccount,
+      missing: 'Codex keeps its login in the system keychain, which Tagma does not read',
+    },
   },
   { ...openaiConsoleRegistration, kind: 'wire', icon },
   codex,

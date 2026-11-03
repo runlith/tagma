@@ -81,19 +81,25 @@ export type HarnessCommand = { readonly program: string; readonly args: readonly
 
 export type HarnessOutput = { readonly stdout: string; readonly stderr: string; readonly code: number };
 
-export type HarnessIdentity = { readonly label: string };
+export type HarnessLoginStatus =
+  | { readonly kind: 'signed-in'; readonly label: string }
+  | { readonly kind: 'signed-out' }
+  | { readonly kind: 'unsupported-method'; readonly method: string }
+  | { readonly kind: 'unreadable'; readonly reason: string };
 
 export type HarnessAccountAuth = {
   readonly directory: string;
   readonly login: HarnessCommand;
   readonly status: HarnessCommand;
-  readonly loggedIn: (output: HarnessOutput) => Effect.Effect<HarnessIdentity | null, { readonly message: string }>;
+  readonly loggedIn: (output: HarnessOutput) => Effect.Effect<HarnessLoginStatus>;
+  readonly discovery?: { readonly variable: string; readonly directory: string; readonly files: readonly string[] };
   readonly renew?: HarnessCommand;
 };
 
 export type BorrowedAccounts = {
   readonly provider: string;
   readonly renewOnReject?: true;
+  readonly missing?: string;
   read(directory: string | null): Effect.Effect<StoredCredential | null, { readonly message: string }>;
 };
 

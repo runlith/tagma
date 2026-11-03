@@ -26,27 +26,30 @@ const loginPath = (env: Readonly<Record<string, string | undefined>>): string | 
   return config === null ? null : join(config, 'muse', 'auth.json');
 };
 
-const loggedIn = Effect.fnUntraced(function* (output: HarnessOutput) {
-  if (output.code !== 0)
-    return yield* new AccountUnreadable({ message: `muse --version exited ${output.code}: ${(output.stderr || output.stdout).trim()}` });
-  const version = VERSION.exec(output.stdout)?.[1];
-  const path = loginPath(process.env);
-  if (path === null)
-    return yield* new AccountUnreadable({ message: 'HOME and USERPROFILE name no home directory, so the Muse login cannot be read' });
-  const file = Bun.file(path);
-  if (!(yield* Effect.promise(() => file.exists()))) return null;
-  const text = yield* Effect.tryPromise({
-    try: () => file.text(),
-    catch: (cause) => new AccountUnreadable({ message: `The Muse login record ${path} could not be read: ${String(cause)}` }),
-  });
-  const login = yield* Schema.decodeUnknownEffect(Login)(text).pipe(
-    Effect.mapError((cause) => new AccountUnreadable({ message: `The Muse login record ${path} is unreadable: ${cause.message}` })),
-  );
-  const meta = login.providers.meta;
-  if (meta === undefined) return null;
-  const who = meta.user_full_name ?? meta.user_email ?? 'Meta account';
-  return { label: version === undefined ? who : `${who} · Muse Code ${version}` };
-});
+const loggedIn = Effect.fnUntraced(
+  function* (output: HarnessOutput) {
+    if (output.code !== 0)
+      return yield* new AccountUnreadable({ message: `muse --version exited ${output.code}: ${(output.stderr || output.stdout).trim()}` });
+    const version = VERSION.exec(output.stdout)?.[1];
+    const path = loginPath(process.env);
+    if (path === null)
+      return yield* new AccountUnreadable({ message: 'HOME and USERPROFILE name no home directory, so the Muse login cannot be read' });
+    const file = Bun.file(path);
+    if (!(yield* Effect.promise(() => file.exists()))) return { kind: 'signed-out' as const };
+    const text = yield* Effect.tryPromise({
+      try: () => file.text(),
+      catch: (cause) => new AccountUnreadable({ message: `The Muse login record ${path} could not be read: ${String(cause)}` }),
+    });
+    const login = yield* Schema.decodeUnknownEffect(Login)(text).pipe(
+      Effect.mapError((cause) => new AccountUnreadable({ message: `The Muse login record ${path} is unreadable: ${cause.message}` })),
+    );
+    const meta = login.providers.meta;
+    if (meta === undefined) return { kind: 'signed-out' as const };
+    const who = meta.user_full_name ?? meta.user_email ?? 'Meta account';
+    return { kind: 'signed-in' as const, label: version === undefined ? who : `${who} · Muse Code ${version}` };
+  },
+  Effect.match({ onFailure: (cause) => ({ kind: 'unreadable' as const, reason: cause.message }), onSuccess: (status) => status }),
+);
 
 export const accounts: HarnessAccountAuth = {
   directory: 'muse-code',

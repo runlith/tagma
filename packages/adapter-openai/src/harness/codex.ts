@@ -322,9 +322,9 @@ export const codex: HarnessProvider = {
     default: 'codex',
     id: 'codex',
     label: 'Codex',
-    hint: 'Uses the logins of the codex CLI on this machine. Codex keeps and renews the token.',
+    hint: 'Uses your Codex sign-in on this Mac',
     missing: "codex isn't installed",
-    defaultPlace: '~/.codex',
+    defaultPlace: 'Codex default',
   },
   environment: (directory) => [
     directory === null ? { _tag: 'Unset', name: 'CODEX_HOME' } : { _tag: 'Set', name: 'CODEX_HOME', value: directory },
