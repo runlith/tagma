@@ -13,6 +13,10 @@ const XATTR = '/usr/bin/xattr';
 const LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
 const QUARANTINE = 'com.apple.quarantine';
 
+const BUNDLE = /^(.*?\.app)\/Contents\/MacOS\/[^/]+$/u;
+
+export const bundleOf = (executable: string): string | null => BUNDLE.exec(executable)?.[1] ?? null;
+
 const carriedRelease = (bundle: string): string => join(bundle, RELEASE_INSIDE);
 
 export const carrierOf = (dir: string): string | null => {

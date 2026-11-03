@@ -18,8 +18,6 @@ export type Branch = 'follow' | 'install' | 'equal';
 
 const manifests = makeManifestProjection();
 
-const BUNDLE = /^(.*?\.app)\/Contents\/MacOS\/[^/]+$/u;
-
 const LEASE = `const { dlopen } = require('bun:ffi');
 const libc = dlopen('libc.dylib', { flock: { args: ['i32', 'i32'], returns: 'i32' } });
 const held = require('node:fs').openSync(process.env.TAGMA_LEASED, 'r');
@@ -37,8 +35,6 @@ export type Fallen = {
   readonly said: string | null;
   readonly detail: string;
 };
-
-export const bundleOf = (executable: string): string | null => BUNDLE.exec(executable)?.[1] ?? null;
 
 export const carriedIn = (bundle: string): string => join(bundle, RELEASE_INSIDE);
 

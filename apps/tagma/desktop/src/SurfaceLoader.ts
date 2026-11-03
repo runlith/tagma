@@ -10,7 +10,6 @@ import { activeElsewhere, closureOf, installFrom, switchOver, transferable, tran
 import {
   type Bearing,
   branchOf,
-  bundleOf,
   carriedBy,
   carriedIn,
   type Fallen,
@@ -36,6 +35,7 @@ import {
   startupLeft,
 } from './server.js';
 import { become, replaceAt, settleOwn } from './placing.js';
+import { bundleOf } from '@tagma/server/mac-applications/placement';
 import type { LoaderState } from './waitingPage.js';
 
 export type Opening = {

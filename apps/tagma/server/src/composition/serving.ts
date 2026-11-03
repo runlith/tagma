@@ -91,6 +91,7 @@ import { HomeFollowers } from '../thread-record/contract/service/homes.js';
 import { DeclaredCapabilities } from '../native-harness/contract/service/capabilities.js';
 import { nativeDoor } from './nativeDoor.js';
 import { navigationServing } from './navigation.js';
+import { recoverApplications } from '../mac-applications/recovery.js';
 
 const worldPreferences = Layer.effect(
   WorldPreferences,
@@ -310,7 +311,8 @@ export const servingOf = (assembly: Assembly) => {
     Layer.provideMerge(scratchFolders),
     Layer.provideMerge(translatedOf(assembly)),
   );
-  const navigated = navigationServing.pipe(Layer.provideMerge(filed));
+  const recovered = Layer.effectDiscard(Effect.forkScoped(recoverApplications)).pipe(Layer.provideMerge(filed));
+  const navigated = navigationServing.pipe(Layer.provideMerge(recovered));
   return nativeDoor.pipe(Layer.provideMerge(navigated));
 };
 
