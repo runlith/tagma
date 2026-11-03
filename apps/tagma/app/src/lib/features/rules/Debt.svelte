@@ -82,6 +82,12 @@
   {/if}
 {/snippet}
 
+{#snippet over({ debt, times }: Owed)}
+  {#if ceiling !== null && debt.value !== null}
+    <span class="text-status-stale">+{debt.value - ceiling}</span>
+  {:else if times > 1}×{times}{/if}
+{/snippet}
+
 <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
   {#each groups as group (group.owner)}
     {@const title = group.found?.title || group.owner}
@@ -111,12 +117,8 @@
           {general}
           {link}
           essence={ceiling === null ? undefined : bar}
+          figure={ceiling === null ? undefined : over}
         >
-          {#snippet figure({ debt, times })}
-            {#if ceiling !== null && debt.value !== null}
-              <span class="text-status-stale">+{debt.value - ceiling}</span>
-            {:else if times > 1}×{times}{/if}
-          {/snippet}
           {#snippet detail({ debt, said })}
             <p>
               {#if ceiling !== null && debt.value !== null}{debt.value} lines, the rule allows {ceiling}.{/if}

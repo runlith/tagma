@@ -49,9 +49,14 @@
   const visible = $derived(rows.slice(0, initial + grown));
   const left = $derived(Math.max(0, total - visible.length));
   const timed = $derived(rows.some((row) => row.at !== null));
-  const columns = $derived(
-    timed ? 'grid-cols-[0.875rem_2.25rem_minmax(0,5fr)_minmax(0,7fr)_2.5rem]' : 'grid-cols-[0.875rem_minmax(0,5fr)_minmax(0,7fr)_2.5rem]',
-  );
+  const counted = $derived(figure !== undefined || rows.some((row) => row.times > 1));
+  const COLUMNS = {
+    'timed counted': 'grid-cols-[0.875rem_2.25rem_minmax(0,5fr)_minmax(0,7fr)_2.5rem]',
+    timed: 'grid-cols-[0.875rem_2.25rem_minmax(0,5fr)_minmax(0,7fr)]',
+    counted: 'grid-cols-[0.875rem_minmax(0,5fr)_minmax(0,7fr)_2.5rem]',
+    plain: 'grid-cols-[0.875rem_minmax(0,5fr)_minmax(0,7fr)]',
+  } as const;
+  const columns = $derived(COLUMNS[timed ? (counted ? 'timed counted' : 'timed') : counted ? 'counted' : 'plain']);
 
   function showMore(): void {
     const wanted = visible.length + STEP;
@@ -105,12 +110,14 @@
         {:else if row.file === null}
           <span class="col-span-2"></span>
         {/if}
-        <span class="text-right text-muted-foreground tabular-nums">
-          {#if figure}{@render figure(row)}{:else if row.times > 1}×{row.times}{/if}
-        </span>
+        {#if counted}
+          <span class="text-right text-muted-foreground tabular-nums">
+            {#if figure}{@render figure(row)}{:else if row.times > 1}×{row.times}{/if}
+          </span>
+        {/if}
       {/snippet}
       <div class={cn('grid gap-x-3 px-2 pt-1 pb-3 text-small', columns)}>
-        <div class={cn('grid min-w-0 gap-1.5', timed ? 'col-span-3 col-start-3' : 'col-span-3 col-start-2')}>
+        <div class={cn('grid min-w-0 gap-1.5', timed ? 'col-start-3' : 'col-start-2', counted ? 'col-span-3' : 'col-span-2')}>
           {#if row.file !== null}
             {@const file = row.file}
             {@const where = placeSaid({ file, line: row.line ?? undefined })}
