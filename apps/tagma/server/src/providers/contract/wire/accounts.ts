@@ -26,6 +26,7 @@ export const accountProblemSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('unreadable'), reason: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('not-installed') }),
   Schema.Struct({ kind: Schema.Literal('signed-out') }),
+  Schema.Struct({ kind: Schema.Literal('unsupported-method'), method: Schema.String }),
 ]);
 export type AccountProblem = typeof accountProblemSchema.Type;
 

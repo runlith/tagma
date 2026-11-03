@@ -97,7 +97,7 @@ const providers: Provider[] = ids.flatMap((id): Provider[] => {
       login: { program: 'fixture-cli', args: ['login', id] },
       status: { program: 'fixture-cli', args: ['status', id] },
       renew: { program: 'fixture-cli', args: ['renew', id] },
-      loggedIn: () => Effect.succeed({ label: 'Fixture' }),
+      loggedIn: () => Effect.succeed({ kind: 'signed-in' as const, label: 'Fixture' }),
     },
     environment: () => [],
   };

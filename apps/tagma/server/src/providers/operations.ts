@@ -18,6 +18,7 @@ import { cacheLifetimes } from './quota/cacheLifetimes.js';
 import { listModels, removeInstance, saveInstance } from './adapters/instanceActs.js';
 import { readAdapters, readSettings } from './adapters/reads.js';
 import { ModelCatalogs } from './catalogs.js';
+import { DefaultLogins } from './accounts/defaultLogins.js';
 
 const declared =
   <D extends OperationDeclaration>(declaration: D) =>
@@ -29,6 +30,16 @@ const declared =
     );
 
 export const PROVIDER_PAIRS = {
+  observe_logins: pair(
+    OPS.observe_logins,
+    body(OPS.observe_logins, {
+      execute: () =>
+        Effect.as(
+          Effect.flatMap(DefaultLogins, (logins) => logins.focus),
+          { status: 'observed' as const },
+        ),
+    }),
+  ),
   refresh_model_catalog: pair(
     OPS.refresh_model_catalog,
     body(OPS.refresh_model_catalog, {
@@ -62,6 +73,31 @@ export const PROVIDER_PAIRS = {
     body(OPS.refresh_accounts, {
       execute: Effect.fnUntraced(function* (input) {
         const quota = yield* AccountQuota;
+        const registry = yield* ProviderRegistry;
+        const logins = yield* DefaultLogins;
+        const source = input.provider === undefined ? undefined : registry.current().accountSource(input.provider);
+        yield* Effect.forEach(
+          registry
+            .current()
+            .harnesses.filter(
+              (provider) =>
+                provider.auth === 'cli' && provider.accounts?.discovery !== undefined && (source === undefined || provider.id === source),
+            ),
+          (provider) =>
+            provider.auth === 'cli'
+              ? logins.current(provider).pipe(
+                  Effect.matchEffect({
+                    onSuccess: () => Effect.void,
+                    onFailure: (cause) =>
+                      Effect.logWarning('the account refresh could not observe the CLI login', {
+                        provider: provider.id,
+                        reason: cause.reason,
+                      }),
+                  }),
+                )
+              : Effect.void,
+          { concurrency: 3 },
+        );
         yield* quota.refresh(input.provider, input.account);
         return { status: 'refreshed' as const, accounts: yield* quota.table() };
       }),

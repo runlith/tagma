@@ -23,6 +23,7 @@ import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { ThreadEnding } from '../ending.js';
 import type { ThreadListProjection } from '../list/summary.js';
 import { ReaderMarking } from './reader.js';
+import { BirthModelSelection } from '../contract/service/birth.js';
 
 type SessionCode<K extends keyof typeof THREAD_OPERATIONS> = (typeof THREAD_OPERATIONS)[K]['refusals'][number] | FieldRefusal;
 
@@ -83,6 +84,7 @@ export const makeThreadTurns = Effect.gen(function* () {
   const core = (threadId: string) => harness.threads.handle(threadId, OPERATOR_PRINCIPAL);
   const ending = yield* ThreadEnding;
   const reader = yield* ReaderMarking;
+  const models = yield* BirthModelSelection;
   const pictureRefusal = (row: { readonly provider: string; readonly model: string | null }): string =>
     `${row.provider}/${row.model ?? 'default'} takes no images on this thread, so a picture cannot reach it.`;
 
@@ -108,6 +110,8 @@ export const makeThreadTurns = Effect.gen(function* () {
           }
           const spoken = yield* core(threadId)[road](text, attachments, options);
           if (spoken.replayed !== true) {
+            if (row !== undefined && row.parentThreadId === null && row.transport.adapter !== 'terminal')
+              yield* models.remember({ provider: row.provider, model: row.model, reasoning: row.reasoning, switches: row.switches });
             yield* reader.wrote(threadId);
             yield* reader.spoke(threadId, projectId, text, spoken);
           }

@@ -128,6 +128,37 @@ export const makeModelPreferenceRows = Effect.gen(function* () {
         within === undefined ? units.write(writes('ModelPreferenceRows.saveModelSelection', [modelPreference]), save) : save(within),
       );
     },
+    rememberModelSelection: (ownerId: string, selection: Omit<ModelDefaultsWrite, 'account'>) =>
+      stored('rememberModelSelection')(
+        units.write(writes('ModelPreferenceRows.rememberModelSelection', [modelPreference]), (unit) =>
+          Effect.gen(function* () {
+            const previous = yield* memory(ownerId, unit);
+            if (previous.selection !== null) return;
+            const defaultSwitches =
+              selection.switches === undefined
+                ? previous.switches
+                : {
+                    ...previous.switches,
+                    [selection.provider]: { ...previous.switches[selection.provider], [selection.model]: selection.switches },
+                  };
+            yield* unit.run(
+              db
+                .insert(modelPreference)
+                .values({
+                  principalId: ownerId,
+                  provider: selection.provider,
+                  model: selection.model,
+                  reasoning: selection.reasoning,
+                  defaultSwitches,
+                })
+                .onConflictDoUpdate({
+                  target: modelPreference.principalId,
+                  set: { provider: selection.provider, model: selection.model, reasoning: selection.reasoning, defaultSwitches },
+                }),
+            );
+          }),
+        ),
+      ),
     favoriteModels: (ownerId: string): Effect.Effect<FavoriteModels, ThreadStorageFailed> =>
       stored('favoriteModels')(
         units.read((unit) =>

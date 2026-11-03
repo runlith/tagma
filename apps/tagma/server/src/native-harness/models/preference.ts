@@ -1,4 +1,5 @@
-import { Cause, Clock, Effect, Stream } from 'effect';
+import { Cause, Clock, Effect, Option, Stream } from 'effect';
+import { DefaultLogins } from '../../providers/accounts/defaultLogins.js';
 import { keptSwitches, type ModelSwitch, type ModelSwitches } from '@runlith/llm/models/description';
 import type { ModelCatalog, ModelOption } from '@runlith/llm/models/catalog';
 import { ThreadCallBroke, ThreadMissing } from '@runlith/agent/thread/ThreadBorder';
@@ -50,6 +51,8 @@ const connectedModel = Effect.fnUntraced(function* (
   accounts: ProviderAccounts['Service'],
   harnesses: HarnessRegistry['Service'],
 ): Effect.fn.Return<Connection, HarnessFailure> {
+  const discovery = yield* Effect.serviceOption(DefaultLogins);
+  if (Option.isSome(discovery)) yield* discovery.value.ready;
   const catalog = yield* registry.catalog;
   const hosting: string[] = [];
   for (const provider of catalog.models.providers) {
@@ -62,8 +65,7 @@ const connectedModel = Effect.fnUntraced(function* (
     hosting.push(provider.id);
     if (!catalog.selectable(provider.id)) continue;
     const held = yield* accounts.of(provider.id).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-    if (provider.kind === 'wire' ? held.length > 0 : held.some((row) => row.problem === null))
-      return { model: defaultModelOf(provider), plans: [] };
+    if (held.some((row) => row.problem === null)) return { model: defaultModelOf(provider), plans: [] };
   }
   if (hosting.length === 0)
     return yield* new GateRefusal('no-provider', 'No installed adapter serves a model a Tagma agent runs on.', [
@@ -190,6 +192,7 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
   const registry = yield* ProviderRegistry;
   const accounts = yield* ProviderAccounts;
   const harnesses = yield* HarnessRegistry;
+  const accountDefaults = yield* Effect.serviceOption(DefaultAccounts);
   const accountKeys = accountKeysOf(accounts);
   const birthAccount = (provider: string, draft: string | undefined): Effect.Effect<string | null, HarnessFailure> =>
     draft === undefined
@@ -198,6 +201,13 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
           Effect.flatMap((keys) => (keys.includes(draft) ? Effect.succeed(draft) : unknownAccount(provider, draft, keys))),
         );
   return BirthModelSelection.of({
+    remember: Effect.fn('BirthModelSelection.remember')(function* (selection) {
+      const { models } = yield* registry.catalog;
+      if (selection.model === null) return;
+      const option = textModelOf(models, selection.provider, selection.model);
+      if (option === undefined) return;
+      yield* rows.rememberModelSelection(OPERATOR_PRINCIPAL, { ...selection, model: option.id });
+    }),
     selection: Effect.fnUntraced(function* (input) {
       const memory = yield* rows.memory(OPERATOR_PRINCIPAL);
       const { models } = yield* registry.catalog;
@@ -234,6 +244,16 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
       if (picked === null) return yield* unconnected();
       const selected = picked.option;
       const account = yield* birthAccount(selected.provider, input.account);
+      const fallback = Option.isSome(accountDefaults) ? (yield* accountDefaults.value.defaultAccount(selected.provider)).account : null;
+      const held = yield* accounts
+        .of(registry.current().accountSource(selected.provider))
+        .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+      const effective = held.find((row) => row.key === (account ?? fallback));
+      if (effective?.problem?.kind === 'signed-out')
+        return yield* new GateRefusal('account-signed-out', `${selected.provider} account ${effective.key} is signed out.`, [
+          'sign in again to this account',
+          'choose another account',
+        ]);
       const chosen = yield* declaredSwitches(selected, input.switches);
       return {
         provider: selected.provider,

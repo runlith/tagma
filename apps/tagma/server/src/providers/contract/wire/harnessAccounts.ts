@@ -1,6 +1,7 @@
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { Schema } from 'effect';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
+import { accountProblemSchema } from './accounts.js';
 
 export const DirectoryLogin = Schema.Struct({
   execution: ExecutionRef,
@@ -21,7 +22,10 @@ export const DirectoryAccount = Schema.Struct({
   requested: Schema.optional(Schema.Literal(true)),
   failed: Schema.optional(Schema.Boolean),
   login: Schema.optional(DirectoryLogin),
+  problem: Schema.optional(Schema.NullOr(accountProblemSchema)),
+  observed: Schema.optional(Schema.Literal(true)),
 });
 export type DirectoryAccount = typeof DirectoryAccount.Type;
 
-export const requestedAccount = (row: DirectoryAccount): boolean => row.directory !== null || row.requested === true;
+export const requestedAccount = (row: DirectoryAccount): boolean =>
+  row.requested === true || (row.observed !== true && row.directory !== null);

@@ -64,6 +64,20 @@ export const PROVIDER_OPERATIONS = {
     confirmLabel: 'Refresh models',
     presentation: { running: 'Refreshing the models', done: 'Refreshed the models' },
   }),
+  observe_logins: operation('observe_logins', {
+    approval: ASKS_NEVER,
+    ...operatorOnly,
+    meaning: 'Observe declaring CLI logins not known signed in and publish changed accounts.',
+    input: Schema.Struct({}),
+    answer: arms({ observed: {} }),
+    refusals: [],
+    effect: 'external',
+    identity: { key: 'request' },
+    subjects: nobody,
+    confirmation: () => ({ summary: 'Observe the CLI logins?' }),
+    confirmLabel: 'Observe logins',
+    presentation: { running: 'Observing the CLI logins', done: 'Observed the CLI logins' },
+  }),
   list_accounts: operation('list_accounts', {
     approval: ASKS_NEVER,
     ...operatorOnly,
@@ -139,7 +153,8 @@ export const PROVIDER_OPERATIONS = {
   begin_sign_in: operation('begin_sign_in', {
     approval: ASKS_IN_REVIEW,
     ...operatorOnly,
-    meaning: "Begin one of a provider's declared sign-in methods and answer its authorization page, key input or CLI terminal.",
+    meaning:
+      "Begin a provider's sign-in method, adopting an existing CLI login when available; otherwise answer its authorization page, key input or CLI terminal.",
     input: Schema.Struct({
       provider: Schema.String,
       projectId: Schema.optional(Schema.Int),

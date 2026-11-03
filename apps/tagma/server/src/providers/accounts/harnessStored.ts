@@ -16,9 +16,9 @@ export const harnessStored = (
   const directoryRows = (provider: string, problem: AccountProblem | null, unset: AccountProblem | null = null) =>
     Effect.map(directories.of(provider), (rows) =>
       rows
-        .filter((row) => requestedAccount(row) && (!row.pending || row.signed))
+        .filter((row) => (row.observed === true || requestedAccount(row)) && (!row.pending || row.signed))
         .map((row): StoredAccount => {
-          const standing = problem ?? (row.directory === null ? unset : null);
+          const standing = problem ?? row.problem ?? (row.directory === null ? unset : null);
           return {
             key: row.key,
             label: row.label,

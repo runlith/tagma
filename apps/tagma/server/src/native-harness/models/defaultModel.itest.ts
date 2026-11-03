@@ -1,5 +1,5 @@
 import { afterAll, expect } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
@@ -105,7 +105,22 @@ const birthOn = Effect.fnUntraced(function* (
       pending: false,
       requested: true,
     });
-  if (signed.codex)
+  if (signed.codex) {
+    const jwt = (claims: unknown) => `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+    yield* Effect.promise(() =>
+      writeFile(
+        join(path, 'auth.json'),
+        JSON.stringify({
+          auth_mode: 'chatgpt',
+          tokens: {
+            access_token: jwt({ exp: 4102444800 }),
+            refresh_token: 'refresh',
+            id_token: jwt({ email: 'codex@example.com' }),
+            account_id: 'codex-account',
+          },
+        }),
+      ),
+    );
     yield* directories.keep(CODEX_PROVIDER, {
       key: AccountKey.make('codex-login'),
       label: 'codex@example.com',
@@ -115,6 +130,7 @@ const birthOn = Effect.fnUntraced(function* (
       signed: true,
       pending: false,
     });
+  }
   const tokens = makeBorrowingTokens({
     own: createProviderTokens(tokensPath, () => registry.current().wires, vendorWire),
     catalog: registry.current,

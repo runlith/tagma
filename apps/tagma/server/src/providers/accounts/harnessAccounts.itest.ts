@@ -48,7 +48,10 @@ const provider: HarnessProvider = {
     directory: 'fixture',
     login: { program: 'fixture', args: ['login'] },
     status: { program: 'fixture', args: ['status'] },
-    loggedIn: (output) => Effect.succeed(output.code === 0 ? { label: output.stdout || 'Signed in' } : null),
+    loggedIn: (output) =>
+      Effect.succeed(
+        output.code === 0 ? { kind: 'signed-in' as const, label: output.stdout || 'Signed in' } : { kind: 'signed-out' as const },
+      ),
   },
 };
 const registry: ProviderRegistry['Service'] = staticRegistry(providerCatalogOf([provider]));

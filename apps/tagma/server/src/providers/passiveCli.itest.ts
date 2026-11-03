@@ -91,7 +91,10 @@ it.effect('passive catalog and account reads start no CLI until the provider is 
         status: command('status'),
         loggedIn: (output) =>
           Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ label: Schema.String })))(output.stdout).pipe(
-            Effect.mapError((cause) => ({ message: cause.message })),
+            Effect.match({
+              onSuccess: ({ label }) => ({ kind: 'signed-in' as const, label }),
+              onFailure: (cause) => ({ kind: 'unreadable' as const, reason: cause.message }),
+            }),
           ),
       },
       catalog: {

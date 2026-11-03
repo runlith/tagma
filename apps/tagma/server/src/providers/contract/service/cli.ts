@@ -10,6 +10,7 @@ export type AccountCommand = {
   readonly cwd?: string;
   readonly timeoutMs?: number;
   readonly exchange?: CommandExchange;
+  readonly located?: boolean;
 };
 
 export type AccountOutput = { readonly stdout: string; readonly stderr: string; readonly code: number };
@@ -18,6 +19,20 @@ export type ProgramState =
   | { readonly _tag: 'Found' }
   | { readonly _tag: 'Missing'; readonly reason: string }
   | { readonly _tag: 'Searching' };
+
+export type LoginEnvironment = {
+  readonly variables: Readonly<Record<string, string>>;
+  readonly reading: boolean;
+};
+
+export class LoginPlaces extends Context.Service<
+  LoginPlaces,
+  {
+    retain(names: readonly string[]): void;
+    readonly now: Effect.Effect<LoginEnvironment>;
+    readonly ready: Effect.Effect<LoginEnvironment>;
+  }
+>()('tagma/providers/LoginPlaces') {}
 
 export class AccountCli extends Context.Service<
   AccountCli,

@@ -79,6 +79,12 @@ export type BirthFacts = {
 };
 
 export type BirthModels = {
+  readonly remember: (selection: {
+    readonly provider: string;
+    readonly model: string | null;
+    readonly reasoning: string | null;
+    readonly switches: ModelSwitches;
+  }) => Effect.Effect<void, HarnessFailure>;
   readonly selection: (input: {
     readonly profile?: AgentProfile;
     readonly account?: string;

@@ -64,6 +64,7 @@ const installs = Layer.succeed(
     settled: Effect.succeed([]),
     refresh: Effect.succeed([]),
     program: () => Effect.succeed(null),
+    locate: () => Effect.succeed(null),
     changes: Stream.empty,
   }),
 );
@@ -86,7 +87,21 @@ const projects = Layer.succeed(
 );
 const fixture = Layer.merge(
   BunFileSystem.layer,
-  accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, installs, projects, harnessAdaptersLayer))),
+  accountCliLayer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        terminals,
+        host,
+        endings,
+        requests,
+        installs,
+        projects,
+        harnessAdaptersLayer,
+        BunFileSystem.layer,
+        Layer.succeed(UserEnvironment, makeUserEnvironment({ shell: null, env: process.env, world: null, home: null })),
+      ),
+    ),
+  ),
 );
 
 layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
@@ -107,7 +122,22 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
         Layer.provideMerge(harnessAdaptersLayer),
       );
       const context = yield* Layer.build(
-        Layer.fresh(accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, actual, projects)))),
+        Layer.fresh(
+          accountCliLayer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                terminals,
+                host,
+                endings,
+                requests,
+                actual,
+                projects,
+                BunFileSystem.layer,
+                Layer.succeed(UserEnvironment, users),
+              ),
+            ),
+          ),
+        ),
       );
       const cli = Context.get(context, AccountCli);
       expect(yield* cli.installed('gemini')).toEqual({ _tag: 'Found' });
@@ -188,6 +218,8 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
                 installs,
                 projects,
                 harnessAdaptersLayer,
+                BunFileSystem.layer,
+                Layer.succeed(UserEnvironment, makeUserEnvironment({ shell: null, env: process.env, world: null, home: null })),
                 Layer.succeed(Terminals, fakeTerminals),
                 Layer.succeed(TerminalRequests, fakeRequests),
               ),

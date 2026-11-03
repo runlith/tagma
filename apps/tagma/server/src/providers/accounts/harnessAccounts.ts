@@ -47,11 +47,14 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
     const auth = registration.accounts;
     if (auth === undefined) return yield* unavailable(registration.id);
     const output = yield* cli.run({ ...auth.status, entries: registration.environment(directory), timeoutMs: 10_000 });
-    return yield* auth
-      .loggedIn(output)
-      .pipe(
-        Effect.mapError((cause) => new GateRefusal('login-unreadable', cause.message, ['check the CLI authentication status and retry'])),
-      );
+    const status = yield* auth.loggedIn(output);
+    if (status.kind === 'signed-in') return { label: status.label };
+    if (status.kind === 'signed-out') return null;
+    return yield* new GateRefusal(
+      'login-unreadable',
+      status.kind === 'unreadable' ? status.reason : `The CLI uses the unsupported ${status.method} sign-in method.`,
+      ['sign in with a subscription'],
+    );
   });
 
   const status = Effect.fnUntraced(function* (provider: string) {
@@ -83,7 +86,15 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
 
   const finish = Effect.fnUntraced(function* (provider: string, key: AccountKey, label: string) {
     yield* rows
-      .change(provider, key, (current) => ({ ...current, signed: true, pending: false, failed: false, label, login: undefined }))
+      .change(provider, key, (current) => ({
+        ...current,
+        signed: true,
+        pending: false,
+        failed: false,
+        label,
+        login: undefined,
+        problem: null,
+      }))
       .pipe(Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('finish the CLI account', cause))));
     const previous = yield* defaults.defaultAccount(provider);
     yield* defaults.adoptDefaultAccount(provider, key).pipe(Effect.mapError((cause) => credentialRefusal('adopt the CLI account', cause)));
@@ -206,89 +217,106 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
     scope,
   );
 
-  const begin = Effect.fn('HarnessAccountBook.begin')(function* (provider: string, projectId?: number, selected?: string) {
-    const registration = yield* declared(provider);
-    const auth = registration.accounts!;
-    if (projectId === undefined)
-      return yield* new GateRefusal('project-required', 'A login terminal needs the project it is opened in.', [
-        'begin sign-in from a project',
-      ]);
-    const existing = selected === undefined ? null : yield* named(provider, selected);
-    const key = existing?.key ?? AccountKey.make(crypto.randomUUID());
-    const directory = existing === null ? join(rows.home, auth.directory, key) : existing.directory;
-    if (directory !== null)
-      yield* Effect.tryPromise({
-        try: () => mkdir(directory, { recursive: true, mode: 0o700 }),
-        catch: (cause) => credentialRefusal('create the account directory', cause),
-      });
-    const row: DirectoryAccount =
-      existing === null
-        ? {
-            key,
-            label: registration.label,
-            machine: rows.machine,
-            directory,
-            addedAt: yield* Clock.currentTimeMillis,
-            signed: false,
-            pending: true,
-            requested: true,
-            failed: false,
+  const begin = Effect.fn('HarnessAccountBook.begin')(
+    function* (provider: string, projectId?: number, selected?: string) {
+      const registration = yield* declared(provider);
+      const auth = registration.accounts!;
+      let existing = selected === undefined ? null : yield* named(provider, selected);
+      if (selected === undefined && auth.discovery !== undefined) {
+        const held = yield* stored(provider);
+        if (!held.some((row) => (row.signed && row.problem == null) || row.pending)) {
+          const current = yield* logins.current(registration);
+          if (current?.signed && current.problem == null) {
+            const adopted = yield* finish(provider, current.key, current.label);
+            yield* quota.refresh(provider);
+            return { flow: 'adopted' as const, provider, account: adopted.account, label: adopted.label };
           }
-        : { ...existing, pending: true, requested: true, failed: false };
-    const writing: Effect.Effect<void, GateRefusal | CredentialFileFault> =
-      existing === null
-        ? rows.keep(provider, row)
-        : Effect.asVoid(rows.change(provider, key, (current) => ({ ...current, pending: true, requested: true, failed: false })));
-    yield* exclusive(
-      Effect.gen(function* () {
-        if (existing !== null && (yield* named(provider, key)).pending)
-          return yield* new GateRefusal('sign-in-failed', 'This account already has a CLI sign-in attempt.', [
-            'finish or cancel its current attempt first',
-          ]);
-        yield* writing.pipe(
-          Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('keep the new account directory', cause))),
-        );
-      }),
-    );
-    const started = yield* Effect.result(cli.login({ ...auth.login, entries: registration.environment(directory) }, projectId));
-    if (started._tag === 'Failure') {
-      if (started.failure.code === 'account-cli-uncertain')
-        return yield* new GateRefusal(
-          'account-cli-uncertain',
-          `${started.failure.reason} Pending account: ${key}.`,
-          started.failure.unblock,
-        );
+          if (current?.problem?.kind !== 'unsupported-method') existing = current;
+        }
+      }
+      if (projectId === undefined)
+        return yield* new GateRefusal('project-required', 'A login terminal needs the project it is opened in.', [
+          'begin sign-in from a project',
+        ]);
+      const key = existing?.key ?? AccountKey.make(crypto.randomUUID());
+      const directory = existing === null ? join(rows.home, auth.directory, key) : existing.directory;
+      if (directory !== null)
+        yield* Effect.tryPromise({
+          try: () => mkdir(directory, { recursive: true, mode: 0o700 }),
+          catch: (cause) => credentialRefusal('create the account directory', cause),
+        });
+      const row: DirectoryAccount =
+        existing === null
+          ? {
+              key,
+              label: registration.label,
+              machine: rows.machine,
+              directory,
+              addedAt: yield* Clock.currentTimeMillis,
+              signed: false,
+              pending: true,
+              requested: true,
+              failed: false,
+            }
+          : { ...existing, pending: true, requested: true, failed: false, problem: null };
+      const writing: Effect.Effect<void, GateRefusal | CredentialFileFault> =
+        existing === null
+          ? rows.keep(provider, row)
+          : Effect.asVoid(
+              rows.change(provider, key, (current) => ({ ...current, pending: true, requested: true, failed: false, problem: null })),
+            );
       yield* exclusive(
         Effect.gen(function* () {
-          if (existing === null)
-            yield* rows.remove(provider, key).pipe(Effect.mapError((cause) => credentialRefusal('remove the failed sign-in', cause)));
-          else
-            yield* rows
-              .change(provider, key, (current) => ({ ...current, pending: existing.pending, failed: existing.failed }))
-              .pipe(
-                Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('end the failed sign-in', cause))),
-              );
+          if (existing !== null && (yield* named(provider, key)).pending)
+            return yield* new GateRefusal('sign-in-failed', 'This account already has a CLI sign-in attempt.', [
+              'finish or cancel its current attempt first',
+            ]);
+          yield* writing.pipe(
+            Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('keep the new account directory', cause))),
+          );
         }),
       );
-      return yield* Effect.fail(started.failure);
-    }
-    const login: DirectoryLogin = { execution: started.success, projectId, added: existing === null };
-    const recorded = yield* Effect.result(
-      exclusive(
-        rows
-          .change(provider, key, (current) => ({ ...current, login }))
-          .pipe(
-            Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('keep the CLI login execution', cause))),
-          ),
-      ),
-    );
-    if (recorded._tag === 'Failure') {
-      yield* cli.stop(started.success, projectId);
-      return yield* recorded.failure;
-    }
-    yield* watch(provider, key, login);
-    return { flow: 'external-cli' as const, provider, account: key, execution: started.success };
-  });
+      const started = yield* Effect.result(cli.login({ ...auth.login, entries: registration.environment(directory) }, projectId));
+      if (started._tag === 'Failure') {
+        if (started.failure.code === 'account-cli-uncertain')
+          return yield* new GateRefusal(
+            'account-cli-uncertain',
+            `${started.failure.reason} Pending account: ${key}.`,
+            started.failure.unblock,
+          );
+        yield* exclusive(
+          Effect.gen(function* () {
+            if (existing === null)
+              yield* rows.remove(provider, key).pipe(Effect.mapError((cause) => credentialRefusal('remove the failed sign-in', cause)));
+            else
+              yield* rows
+                .change(provider, key, (current) => ({ ...current, pending: existing.pending, failed: existing.failed }))
+                .pipe(
+                  Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('end the failed sign-in', cause))),
+                );
+          }),
+        );
+        return yield* Effect.fail(started.failure);
+      }
+      const login: DirectoryLogin = { execution: started.success, projectId, added: existing === null };
+      const recorded = yield* Effect.result(
+        exclusive(
+          rows
+            .change(provider, key, (current) => ({ ...current, login }))
+            .pipe(
+              Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('keep the CLI login execution', cause))),
+            ),
+        ),
+      );
+      if (recorded._tag === 'Failure') {
+        yield* cli.stop(started.success, projectId);
+        return yield* recorded.failure;
+      }
+      yield* watch(provider, key, login);
+      return { flow: 'external-cli' as const, provider, account: key, execution: started.success };
+    },
+    Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : credentialRefusal('begin the CLI sign-in', cause))),
+  );
 
   const complete = Effect.fnUntraced(function* (provider: string, selected?: string) {
     const registration = yield* declared(provider);
@@ -375,7 +403,7 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
           : named.directory === null && !named.signed;
     const read = leans ? yield* logins.current(registration) : undefined;
     const signed = (read === undefined ? held : [...held.filter((row) => row.directory !== null), ...(read === null ? [] : [read])]).filter(
-      (row) => row.signed,
+      (row) => row.signed && row.problem == null,
     );
     const choice =
       wanted === null

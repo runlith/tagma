@@ -52,7 +52,7 @@ const official: HarnessProvider = {
     directory: 'official',
     login: { program: 'official', args: ['login'] },
     status: { program: 'official', args: ['status'] },
-    loggedIn: () => Effect.succeed(null),
+    loggedIn: () => Effect.succeed({ kind: 'signed-out' as const }),
   },
   accountMode: { section: 'vendor', title: 'Vendor', default: 'cli', id: 'cli', label: 'Official', hint: 'Official account' },
 };

@@ -24,6 +24,7 @@ export const signInBeginSchema = Schema.Union([
   Schema.Struct({ flow: Schema.Literal('device'), authorizeUrl: Schema.String, userCode: Schema.String }),
   Schema.Struct({ flow: Schema.Literal('paste'), authorizeUrl: Schema.String }),
   Schema.Struct({ flow: Schema.Literal('key') }),
+  Schema.Struct({ flow: Schema.Literal('adopted'), provider: Schema.String, account: AccountKey, label: Schema.String }),
   Schema.Struct({ flow: Schema.Literal('external-cli'), provider: Schema.String, account: AccountKey, execution: ExecutionRef }),
 ]);
 export type SignInBegun = typeof signInBeginSchema.Type;

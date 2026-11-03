@@ -66,6 +66,7 @@ export const REFUSAL_WORDS = {
   'no-calling-thread': 'Call is not from a thread',
   'no-lead-thread': 'No thread to take the update',
   'no-model-connected': 'No model connected',
+  'account-signed-out': 'Account signed out',
   'no-provider': 'No model provider installed',
   'no-rollout-home': 'No rollout stored here',
   'not-a-harness-thread': 'Not a CLI thread',

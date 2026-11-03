@@ -18,6 +18,7 @@ const installsOf = (programs: Record<string, HarnessProgram>): InstalledHarnesse
   settled: unused(),
   refresh: unused(),
   program: (binary) => Effect.succeed(programs[binary] ?? null),
+  locate: (binary) => Effect.succeed(programs[binary] ?? null),
   changes: Stream.empty,
 });
 

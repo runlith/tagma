@@ -51,6 +51,7 @@ export const BIRTH_REFUSALS = [
   'unknown-model',
   'no-provider',
   'no-model-connected',
+  'account-signed-out',
   'host-unknown',
   'base-without-new',
   'name-without-new',

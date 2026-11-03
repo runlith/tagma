@@ -330,6 +330,14 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       yield* PubSub.publish(moved, undefined);
       return answered;
     }).pipe(Effect.withSpan('InstalledHarnesses.refresh')),
+    locate: Effect.fn('InstalledHarnesses.locate')(function* (name) {
+      const adapter = adapters.all().find((one) => one.binary === name);
+      if (adapter === undefined) return null;
+      const paths = yield* users.now;
+      const candidates = yield* users.locate(name, adapter.installedIn?.(home) ?? []);
+      const candidate = candidates[0];
+      return candidate === undefined ? null : { path: candidate, runtime: yield* runtimeOf(candidate, paths.path) };
+    }),
     program: Effect.fn('InstalledHarnesses.program')(function* (name, by = 'binary') {
       const adapter = adapters.all().find((one) => one[by] === name);
       if (adapter === undefined) return null;

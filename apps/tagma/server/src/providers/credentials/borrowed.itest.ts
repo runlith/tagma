@@ -225,7 +225,7 @@ it.effect('renewal waits at most one provider request and releases the failed re
   }),
 );
 
-it.live('Codex directory accounts are read from their auth.json and only Codex renews a rejected login', () =>
+it.live('Codex directory accounts read their auth.json and an unchanged rejected file requires reconnecting', () =>
   Effect.gen(function* () {
     const directory = join(home, 'codex');
     yield* Effect.promise(() => mkdir(directory));
@@ -278,6 +278,8 @@ it.live('Codex directory accounts are read from their auth.json and only Codex r
     expect(yield* reading.getAccessToken('openai-oauth', ONE)).toBe(old);
     expect(yield* tokens.getAccessToken('openai-oauth', ONE)).toBe(old);
     expect((yield* tokens.held('openai-oauth')).map((row) => row.key)).toEqual([ONE]);
+    expect(yield* Effect.flip(tokens.recoverAccessToken('openai-oauth', ONE, old))).toMatchObject({ kind: 'reconnect' });
+    yield* writeAuth('fresh');
     expect(yield* tokens.recoverAccessToken('openai-oauth', ONE, old)).toBe(fresh);
     renews = false;
     expect(yield* Effect.flip(tokens.recoverAccessToken('openai-oauth', ONE, fresh))).toMatchObject({ kind: 'reconnect' });

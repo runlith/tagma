@@ -109,6 +109,7 @@ export class InstalledHarnesses extends Context.Service<
     readonly settled: Effect.Effect<readonly HarnessInstall[]>;
     readonly refresh: Effect.Effect<readonly HarnessInstall[]>;
     program(name: string, by?: 'binary' | 'harness'): Effect.Effect<HarnessProgram | null>;
+    locate(name: string): Effect.Effect<HarnessProgram | null>;
     readonly changes: Stream.Stream<void>;
   }
 >()('tagma/threads/InstalledHarnesses') {}

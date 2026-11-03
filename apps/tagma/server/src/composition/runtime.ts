@@ -106,7 +106,7 @@ import { harnessIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
 import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
 import { packageHoldersLayer } from '../external-harnesses/store/packages.js';
-import { AccountCli } from '../providers/contract/service/cli.js';
+import { AccountCli, LoginPlaces } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
 import { makeHarnessAdapters } from '../external-harnesses/adapters.js';
 import { HarnessAdapters } from '../external-harnesses/contract/service/adapters.js';
@@ -534,20 +534,28 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       Layer.provideMerge(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)),
     ),
   );
+  const userEnvironment = Layer.succeed(
+    UserEnvironment,
+    options.userEnvironment ?? makeUserEnvironment({ shell: null, env: process.env, world: null, home: null }),
+  );
   const installedHarnesses = installedHarnessesLayer.pipe(
-    Layer.provide(
-      Layer.succeed(
-        UserEnvironment,
-        options.userEnvironment ?? makeUserEnvironment({ shell: null, env: process.env, world: null, home: null }),
-      ),
-    ),
+    Layer.provide(userEnvironment),
     Layer.provide(BunFileSystem.layer),
     Layer.provideMerge(Layer.succeed(HarnessAdapters, adapters)),
   );
   const accountCli =
     options.accountCli === undefined
-      ? accountCliLayer.pipe(Layer.provide(Layer.merge(executionsLayerWithDeps, installedHarnesses)))
-      : Layer.succeed(AccountCli, options.accountCli);
+      ? accountCliLayer.pipe(
+          Layer.provide(Layer.mergeAll(executionsLayerWithDeps, installedHarnesses, userEnvironment, BunFileSystem.layer)),
+        )
+      : Layer.merge(
+          Layer.succeed(AccountCli, options.accountCli),
+          Layer.succeed(LoginPlaces, {
+            retain: () => undefined,
+            now: Effect.succeed({ variables: {}, reading: false }),
+            ready: Effect.succeed({ variables: {}, reading: false }),
+          }),
+        );
   const readyProviders = providerLayer.pipe(Layer.provide(accountCli));
   const tagmaAppPlace = Layer.succeed(TagmaAppPlace, {
     home: dataPath,

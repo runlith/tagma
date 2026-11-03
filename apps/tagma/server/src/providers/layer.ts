@@ -2,7 +2,7 @@ import { dirname } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { openModelClient } from '@runlith/llm/models/client';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
-import { Context, Effect, Layer, Option, Result } from 'effect';
+import { Context, Effect, Layer, Option, Result, Stream } from 'effect';
 import { homeless, makeMachineAdapters } from './adapters/installs.js';
 import { makeAdapterInstanceRows } from './adapters/instanceRows.js';
 import { AdapterInstalls, PackageHolders } from './contract/service/adapters.js';
@@ -221,15 +221,35 @@ const movedKeys = Layer.effectDiscard(
 );
 
 const catalogDriver = Layer.effectDiscard(Effect.flatMap(ModelCatalogs, (catalogs) => Effect.asVoid(Effect.forkScoped(catalogs.serve))));
+const loginDriver = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const logins = yield* DefaultLogins;
+    const quota = yield* AccountQuota;
+    const defaults = yield* DefaultAccounts;
+    const registry = yield* ProviderRegistry;
+    yield* Effect.forkScoped(
+      Stream.runForEach(logins.changes, (provider) =>
+        Effect.gen(function* () {
+          const registration = registry.current().harnesses.find((one) => one.id === provider);
+          if (registration?.auth === 'cli') {
+            const row = yield* logins.listed(registration);
+            if (row?.signed && row.problem == null) yield* defaults.adoptDefaultAccount(provider, row.key);
+          }
+          yield* quota.refresh(provider);
+        }),
+      ),
+    );
+  }),
+);
 
-export const providersLayer = Layer.mergeAll(access, adapters, signing, movedKeys, catalogDriver).pipe(
+export const providersLayer = Layer.mergeAll(access, adapters, signing, movedKeys, catalogDriver, loginDriver).pipe(
   Layer.provideMerge(modelCatalogsLayer),
   Layer.provideMerge(harnessAccounts),
   Layer.provideMerge(quota),
   Layer.provideMerge(defaults),
   Layer.provideMerge(accounts),
   Layer.provideMerge(credentials),
-  Layer.provideMerge(defaultLoginsLayer),
+  Layer.provideMerge(defaultLoginsLayer.pipe(Layer.provide(BunFileSystem.layer))),
   Layer.provideMerge(harnessDirectoriesLayer),
   Layer.provideMerge(registryLayer.pipe(Layer.provide(BunFileSystem.layer), Layer.provideMerge(instancesLayer))),
 );

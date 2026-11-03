@@ -141,7 +141,7 @@ export const makeBorrowingTokens = (input: {
   const signedIn = (provider: string, borrowed: Borrowed): Effect.Effect<StoredCredential, TokenStoreFailed> =>
     Effect.flatMap(readLent(provider, borrowed), (credential) =>
       credential === null
-        ? reconnect(provider, borrowed, `${borrowed.lending.lender.label} holds no sign-in for it`)
+        ? reconnect(provider, borrowed, borrowed.lending.borrows.missing ?? `${borrowed.lending.lender.label} holds no sign-in for it`)
         : Effect.succeed(credential),
     );
 
@@ -154,7 +154,9 @@ export const makeBorrowingTokens = (input: {
     if (renew === undefined) return yield* reconnect(provider, borrowed, `${lender.lender.label} declares no renewal`);
     const failed = (reason: string) => new TokenStoreFailed({ kind: 'refresh', provider, account: row.key, reason });
     const current = yield* readLent(provider, borrowed);
-    if (current !== null && current.accessToken !== stale && !expiring(current)) return;
+    if (current === null)
+      return yield* reconnect(provider, borrowed, lender.borrows.missing ?? `${lender.lender.label} holds no readable sign-in for it`);
+    if (current.accessToken !== stale && !expiring(current)) return;
     const output = yield* cli
       .run({
         ...renew,
@@ -227,7 +229,7 @@ export const makeBorrowingTokens = (input: {
             read._tag === 'Failure'
               ? read.failure.reason
               : read.success === null
-                ? `${row.lending.lender.label} holds no sign-in for this account`
+                ? (row.lending.borrows.missing ?? `${row.lending.lender.label} holds no sign-in for this account`)
                 : null,
         })),
       { concurrency: 'unbounded' },

@@ -1,7 +1,7 @@
-import { homedir } from 'node:os';
-import { Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
+import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
-import { AccountCli, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
+import { AccountCli, LoginPlaces, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
 import { ProgramFailed } from '../../providers/contract/service/asks.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -21,14 +21,14 @@ const COMMAND_MS = 60_000;
 const cliFailed = (reason: string): GateRefusal =>
   new GateRefusal('account-cli-failed', reason, ['check the installed CLI and retry on this account']);
 
-const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null) {
+const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null, scratch: string) {
   const limitMs = command.timeoutMs ?? COMMAND_MS;
   const ran = yield* runProgram(
     {
       program: command.program,
       args: command.args,
       entries: command.entries,
-      cwd: command.cwd ?? homedir(),
+      cwd: command.cwd ?? scratch,
       stallMs: null,
       exchange: command.exchange,
     },
@@ -52,7 +52,10 @@ const makeAccountCli = Effect.gen(function* () {
   const requests = yield* TerminalRequests;
   const adapters = yield* HarnessAdapters;
   const stops = new Map<string, number>();
-  return AccountCli.of({
+  const users = yield* UserEnvironment;
+  const files = yield* FileSystem.FileSystem;
+  const scratch = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-account-status-' }).pipe(Effect.orDie);
+  const account = AccountCli.of({
     installed: (program) =>
       Effect.map(installs.read, (rows): ProgramState => {
         const row = rows.find((one) => adapters.find(one.harness)?.binary === program);
@@ -61,7 +64,12 @@ const makeAccountCli = Effect.gen(function* () {
         return row.searching ? { _tag: 'Searching' } : { _tag: 'Missing', reason: row.missing ?? `${program} was not found` };
       }),
     changes: installs.changes,
-    run: (command) => Effect.flatMap(installs.program(command.program), (program) => run(command, program)),
+    run: (command) =>
+      Effect.flatMap(command.located ? installs.locate(command.program) : installs.program(command.program), (program) =>
+        program === null && command.located
+          ? Effect.fail(cliFailed(`${command.program} could not be located.`))
+          : run(command, program, scratch),
+      ),
     ended: (execution, projectId) => Effect.asVoid(endings.decided({ projectId, execution })),
     stop: Effect.fn('AccountCli.stop')(
       function* (execution, projectId) {
@@ -147,9 +155,16 @@ const makeAccountCli = Effect.gen(function* () {
       Effect.mapError((cause) => (cause instanceof GateRefusal ? cause : cliFailed(String(cause)))),
     ),
   });
+  return Context.make(AccountCli, account).pipe(
+    Context.add(LoginPlaces, {
+      retain: users.retain,
+      now: Effect.map(users.now, (paths) => ({ variables: paths.variables ?? {}, reading: paths.reading })),
+      ready: Effect.map(users.ready, (paths) => ({ variables: paths.variables ?? {}, reading: paths.reading })),
+    }),
+  );
 });
 
 const stopped = (receipt: StopReceipt): boolean =>
   receipt.nativeExit !== undefined && receipt.cleanup === 'complete' && receipt.residual.length === 0 && receipt.unverifiable.length === 0;
 
-export const accountCliLayer = Layer.effect(AccountCli, makeAccountCli);
+export const accountCliLayer = Layer.effectContext(makeAccountCli);
