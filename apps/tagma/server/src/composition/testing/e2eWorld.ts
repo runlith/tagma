@@ -3,32 +3,26 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { ActivityStore } from '@runlith/activity/store';
 import { ACTIVITY_FIELDS } from '@runlith/activity/store/query';
 import { ActivityRecord } from '@runlith/activity/store/record';
-import type { threadSendSchema } from '@runlith/agent/protocol/realtime';
 import { subscriptionDescription } from '@runlith/builtin-catalog/subscription/description';
 import { onFailure } from '@runlith/e2e/artifacts';
 import { kind, own, shared, world as workerWorld } from '@runlith/testbed/worlds';
-import { Clock, Context, Effect, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { FetchHttpClient, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
 import { join } from 'node:path';
-import { REGISTRY_OPERATIONS } from '../../graph/contract/wire/operations/registry.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { Api } from '../../http/contract/wire/Api.js';
 import { ARTIFACT_PREFIX } from '../../http/contract/wire/served.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
-import { knownAnswer } from '../../platform/contract/wire/operation.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
 import { websocketHttpTracing } from '../../socket/live.js';
-import { ThreadHarness } from '../../threads/contract/service/engine.js';
-import { threadCreateSchema } from '../../threads/contract/wire/creation.js';
-import { ROUTE_OPERATIONS } from '../../threads/contract/wire/operations/routes.js';
-import { TURN_OPERATIONS } from '../../threads/contract/wire/operations/turns.js';
 import { artifactRoutes } from '../http/artifacts.js';
 import { doorLayer, socketOperationsLayer } from '../http/door.js';
 import { liveServing } from '../socketBinding.js';
 import { ASSEMBLY } from './composed.js';
-import { makeDoorWorld, projectLeaving } from './doorFixture.js';
+import { makeDoorWorld } from './doorFixture.js';
 import { doorServing } from './doorServices.js';
+import { projectTenant } from './projectTenant.js';
 import type { LoginsParams } from './logins.js';
 import type { VendorWire } from '../../providers/accounts/signIns.js';
 import { scriptedModel } from './scriptedModel.js';
@@ -101,45 +95,14 @@ const built = Effect.fnUntraced(
     );
     yield* Layer.build(serving);
     const door = yield* HttpApiClient.make(Api, { baseUrl: origin }).pipe(Effect.provide(FetchHttpClient.layer));
-    const harness = Context.get(world.runtime.owners, ThreadHarness);
     const tenant = Effect.gen(function* () {
-      const checkout = yield* world.directory('e2e');
-      const projectId = yield* world.stealthProject(checkout);
-      yield* projectLeaving(world, projectId);
-      const perform = (id: string, payload: unknown) =>
-        door.operations.perform({ params: { id }, query: { project: String(projectId) }, headers: {}, payload });
-      const { project } = yield* Schema.decodeUnknownEffect(knownAnswer(REGISTRY_OPERATIONS.read_project.answer))(
-        yield* perform('read_project', { ref: String(projectId) }),
+      const held = yield* projectTenant(
+        world,
+        'e2e',
+        (projectId) => (id, payload) =>
+          door.operations.perform({ params: { id }, query: { project: String(projectId) }, headers: {}, payload }),
       );
-      if (project === null) return yield* Effect.die(new Error(`the e2e tenant lost project ${projectId} after its creation`));
-      const projectName = project.name;
-      const thread = Effect.fn('testing.E2eWorld.thread')(function* (input: typeof threadCreateSchema.Type = {}) {
-        const answer = yield* Schema.decodeUnknownEffect(knownAnswer(ROUTE_OPERATIONS.create_thread.answer))(
-          yield* perform('create_thread', { approvalMode: 'bypass', ...input }),
-        );
-        return answer.snapshot.thread;
-      });
-      const turn = Effect.fn('testing.E2eWorld.turn')(function* (threadId: string, input: typeof threadSendSchema.Type) {
-        const ended = yield* Queue.unbounded<string>();
-        yield* harness.runs.settlements().subscribe({
-          name: `e2e turn ${threadId}/${input.key}`,
-          at: 'after-stages',
-          handle: (event) => (event.threadId === threadId ? Queue.offer(ended, event.runId).pipe(Effect.asVoid) : Effect.void),
-        });
-        const { runId } = yield* Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer))(
-          yield* perform('start_turn', { threadId, ...input }),
-        );
-        const run = yield* harness.runs.ledger().runById(runId);
-        if (run === null) return yield* Effect.die(new Error(`the e2e turn lost run ${runId} after its start`));
-        if (run.status === 'running')
-          yield* Stream.runDrain(
-            Stream.take(
-              Stream.filter(Stream.fromQueue(ended), (id) => id === runId),
-              1,
-            ),
-          );
-        return { runId };
-      }, Effect.scoped);
+      const { projectId } = held;
       const upload = Effect.fn('testing.E2eWorld.upload')(function* (
         threadId: string,
         bytes: Uint8Array,
@@ -154,7 +117,7 @@ const built = Effect.fnUntraced(
         });
         return { id };
       });
-      return { projectId, projectName, checkout, perform, thread, turn, upload };
+      return { ...held, upload };
     });
     const context = yield* world.runtime.runtime.contextEffect;
     const store = Context.get(context, ActivityStore);
@@ -220,8 +183,6 @@ export const e2eFixture = (options: E2eOptions = {}) =>
     Effect.flatMap(E2eWorld, (served) => prepare(served, options)),
   ).pipe(
     Layer.provide(
-      options.logins === undefined
-        ? workerWorld(e2eWorld, null)
-        : workerWorld(e2eWorld, { logins: options.logins }, { own: LOGINS_WORLD }),
+      options.logins === undefined ? workerWorld(e2eWorld, null) : workerWorld(e2eWorld, { logins: options.logins }, { own: LOGINS_WORLD }),
     ),
   );
