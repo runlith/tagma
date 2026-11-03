@@ -3,6 +3,9 @@ id: 01a14564-656e-7e40-9f43-ef38e29c3592
 title: The server exits on its own a minute after the signal, and quit takes it down with SIGKILL after one and a half
 ord: 17
 tags: ["explanation"]
+edges:
+  - kind: supersedes
+    to: 01a1417f-9dbb-7825-ae17-a672d4dfb793
 sources:
   - kind: file
     ref: apps/tagma/server/src/composition/server.ts
