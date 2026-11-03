@@ -14,6 +14,8 @@ sources:
     ref: apps/tagma/server/src/threads/harness/registry.ts
   - kind: file
     ref: packages/agent/src/collaboration/modelCarry.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/harness/picks.ts
 ---
 A thread on any transport holds a `native_thread` core row with the `{adapter, profile, agent}` binding, a capabilities snapshot, the model pick (`provider`, `model`, `reasoning`), the account, and switches. `servingProvider` resolves the provider per transport: on `acp` — `AcpProfile.serves`, on terminal — `launch.model.provider`. The driver configures the vendor session from this same row, so there is no second source for the pick. A terminal thread writes to the same place, and its facet's `asked` applies only at birth.
 

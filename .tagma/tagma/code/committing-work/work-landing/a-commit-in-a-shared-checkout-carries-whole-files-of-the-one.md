@@ -74,7 +74,7 @@ Every round closed one case and opened the next. The Work landing and Line autho
 - **One shared tree.** The checkout's uncommitted state is one tree. Lines have authors, who are recorded and shown, but nobody owns them.
 - **A commit is whole files.** A commit is a part of that tree: a set of whole files as they stand on disk. Every file in a commit is one that existed and that the agents' own checks ran over. No commit carries a file cut by author.
 - **Ready is a property of the tree.** Work is ready when the tree the commit would carry passes the project's checks; it is not a state of a session. Any session may land any part of the tree. Landing needs nobody's consent, idleness, task custody or message.
-- **One ownership remains, the human's.** The operator's recorded lines land only on his word. This is the authority rule, not line property.
+- **The operator is a writer like any other.** His edits in Tagma's editor are recorded and shown as his, and ride with a commit like anyone's.
 
 ## submit_work
 
@@ -87,7 +87,6 @@ Every round closed one case and opened the next. The Work landing and Line autho
 - Derived outputs, through `derive` and the config's declarations, as today.
 
 **What stays out.**
-- **The operator's files.** A file holding the operator's recorded lines stays on disk under a bare call and is named in `left`. Naming it in `paths`, or an adapter needing it, raises `lines-of-another` (asked in review), and the prompt keeps it to his word.
 - Git-ignored files and the graph store, as today.
 
 **The judge.** Commit steps, hooks and every gated rule judge the tree that would land, as today. A new crossing anywhere in that tree refuses, whoever wrote the line. The refusal names the rule, the place and that line's author, as information. Its ways out:
@@ -103,12 +102,12 @@ No refusal names a holder to wait for or to take from.
 - `landed` with the commit;
 - `carried`: files holding other writers' lines, with those writers;
 - `unattributed`: files holding lines no tool recorded;
-- `left`: the team's files this commit did not carry, each with its reason — the operator's lines, left out by `paths`, or written again after the landing read them. Every part of this answer is a fact of the record and git, with no line judgement after the commit.
+- `left`: the team's files this commit did not carry, each with its reason — left out by `paths`, or written again after the landing read them. Every part of this answer is a fact of the record and git, with no line judgement after the commit.
 - When the team has nothing left to land because other commits already carried its lines, `nothing` names those commits.
 
 **What leaves the contract:**
 - `taking` and `whole`;
-- the `still-running` condition, and `lines-of-another` for anyone but the operator;
+- the `still-running` and `lines-of-another` conditions;
 - `lines-held` and `walk-cut` as landing refusals (a file that cannot be read refuses as a read failure);
 - `task-not-held`;
 - the court's `carriedViolations` exemption.
@@ -138,9 +137,8 @@ No refusal names a holder to wait for or to take from.
 1. **No new gated crossings.** A commit never adds a new crossing of a gated rule, judged on the tree that lands. HEAD feeds checkout builds, worktrees and pushes.
 2. **No file nobody had.** A commit never carries a file that nobody had on disk. The landed tree is as close to what the agents ran as a partial commit can be.
 3. **No missing declarations, where an adapter sees them.** A commit never leaves out an uncommitted declaration its code needs. This is the failure of [[03b72225]].
-4. **The operator's lines need his word.**
-5. **Authorship stays.** It is recorded and shown everywhere, and a thread's lines still roll back without touching others' lines.
-6. **The rest is unchanged:** publication by compare-and-set, rebuild on a moved HEAD, moves as pairs, derivations, and hooks in the commit tree.
+4. **Authorship stays.** It is recorded and shown everywhere, and a thread's lines still roll back without touching others' lines.
+5. **The rest is unchanged:** publication by compare-and-set, rebuild on a moved HEAD, moves as pairs, derivations, and hooks in the commit tree.
 
 ## What is removed, and what each protected
 
@@ -154,7 +152,7 @@ No refusal names a holder to wait for or to take from.
 
 - **Commits follow the tree, not the session.** Two writers in one file land together in whichever commit comes first. A commit's subject describes its caller's change, and the receipt and the per-line authors of a commit in the Git tab show who else rode along.
 - **Your lines can wait for another writer's.** When another writer's lines in a file you need do not yet pass the checks, your lines in that file wait and land with theirs. Under heavy concurrency a shared file lands later than a cut by author would have landed it, but no agent waits, asks or messages for it.
-- **Unrecorded lines ride along.** Lines no tool recorded, such as edits from an editor outside Tagma, ride with a file an agent lands and are named in the answer. Only the operator's recorded lines are held back.
+- **Everyone's lines ride along.** The operator's edits, and lines no tool recorded such as edits from an editor outside Tagma, ride with a file an agent lands and are named in the answer. Git-ignored files such as `.env` never land.
 
 ## Every user
 
@@ -167,7 +165,7 @@ No refusal names a holder to wait for or to take from.
 
 ## Owners and boundaries
 
-- **landing:** owns the `submit_work` contract, its receipt, the Commits section, the call into the court, and the operator question.
+- **landing:** owns the `submit_work` contract, its receipt, the Commits section, and the call into the court.
 - **change-record:** builds the prepared change from whole files, runs the carry walk through the code-facts port, and answers `left`, `carried` and `unattributed` from the record and git. Its slicing goes. It stays below landing.
 - **code-facts:** the language port answers which changed files a text needs, with JS/TS/Svelte as the adapter behind its contract (rule 6f758080).
 - **enforcement:** judges the built tree with no own-lines gating, for `submit_work` and `check_rules` over a change alike.
@@ -179,7 +177,7 @@ No refusal names a holder to wait for or to take from.
 - **Contract:** `taking`, `whole` and the removed refusals and conditions leave `submit_work` and `check_rules` in one change, together with their descriptions and the doctrine. This breaks operation inputs, so the commit carries `!`. Running threads read the new text at their next instruction refresh; until then, a call that still names `taking` or `whole` is refused as a malformed call that names the field.
 - **Records on acceptance:** task [[afa95730]] (refining line-cut landings) and idea [[e87e8682]] (an act that takes nobody's lines) lose their subject and close, and the third point of [[ec14ea5c]] is answered by the `single` selection.
 - **Records on build:** the blocks that describe landing are rewritten from the new code:
-  - the features [[54ec4a27]], [[29e7e083]], [[cfdb998e]] and [[cc335a96]];
+  - the features [[54ec4a27]], [[29e7e083]], [[cfdb998e]], [[cc335a96]] and [[a28ec4cb]] (the operator's edits now ride agents' commits);
   - the explanations [[0c6f0a9e]], [[ffe2dc34]], [[208a6ab1]], [[4c940a20]], [[478a6934]] and [[28ba4c77]];
   - the handover sentence of the `#task` tag.
 
@@ -190,7 +188,7 @@ Performer checks run through the real native door.
 1. Two running sessions whose JS/TS changes reference each other's new declarations in separate files. Either session's bare `submit_work` lands both files in one commit, with no refusal and no question in review mode, and `carried` names the other session.
 2. Two sessions edit separate places of one file. The first landing's blob equals the working bytes it read. The second session's bare `submit_work` answers `nothing` and names that commit.
 3. A gated crossing stands in another session's lines in a selected file. `rule-violated` names the rule, the place and the author, and its ways out name neither waiting nor taking. After that writer fixes it, the next landing carries both.
-4. A file holds the operator's recorded lines. A bare landing leaves it on disk and names it in `left`. Naming it in `paths` raises the operator's question in review.
+4. A file an agent lands also holds the operator's recorded lines. The commit carries them with no question in any mode, and `carried` names the operator.
 5. A parent's bare `submit_work` after its child rested lands the child's files and attributes the child's tasks named in `tasks`, with no claim. A teammate finishing that task raises no question.
 6. A two-file change in a language with no adapter lands its selected files whole and adds nothing.
 7. In a `single` checkout, a bare `submit_work` lands every changed file.
