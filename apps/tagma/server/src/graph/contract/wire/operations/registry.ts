@@ -57,16 +57,18 @@ export const REGISTRY_OPERATIONS = {
     ...act('Register this project?', 'Register', 'Registered a project'),
     meaning: 'Register a checkout as a project: its graph is born and the commit gate is installed in it.',
     grammar:
-      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; a removed project whose name another project took comes back under the name asked for. Otherwise the name, storage, policy, catalogs and contributed values asked for apply only to a project born here. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
+      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; a removed project whose name another project took comes back under the name asked for. Otherwise the name, storage, policy, catalogs and contributed values asked for apply only to a project born here. A folder whose `.tagma` already holds a graph is added over that graph: team storage, and the catalogs that graph holds become the project’s own choice, so naming stealth or catalogs for it refuses `graph-carried`. A graph a creation step brings from elsewhere keeps its catalogs the same way. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
     input: Schema.Struct({
       name: Schema.String.check(Schema.isMinLength(1)),
       rootPath: root,
       strictProvenance: Schema.optional(Schema.Boolean),
       private: Schema.optional(Schema.Boolean),
-      storage: Schema.optional(Schema.Literals(STORAGE_MODES)),
+      storage: Schema.optional(Schema.Literals(STORAGE_MODES)).annotate({
+        description: 'Where the graph files live. Omit to take team for a folder that carries its graph, stealth otherwise.',
+      }),
       catalogs: Schema.optional(Schema.Array(Schema.String)).annotate({
         description:
-          'The shipped catalogs this project is born with, saved as its own graph.catalogs choice. Omit to inherit the machine setting; an empty list installs the system library alone and no domain catalog.',
+          'The shipped catalogs a graph born empty is given, saved as the project’s own graph.catalogs choice. Omit to inherit the machine setting; an empty list installs the system library alone and no domain catalog.',
       }),
       contributed: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
         description:
@@ -74,7 +76,28 @@ export const REGISTRY_OPERATIONS = {
       }),
     }),
     answer: arms({ ok: { project: projectSchema, returned: Schema.Boolean } }),
-    refusals: [...ROOT_REFUSALS, 'reserved-project', 'project-name', 'duplicate-name', 'unknown-catalog', 'field-invalid', 'right-missing'],
+    refusals: [
+      ...ROOT_REFUSALS,
+      'reserved-project',
+      'project-name',
+      'duplicate-name',
+      'unknown-catalog',
+      'field-invalid',
+      'right-missing',
+      'graph-carried',
+    ],
+  }),
+
+  read_folder: operation('read_folder', {
+    ...SURFACE_READ,
+    place: 'machine',
+    ...read('Read what this folder holds?', 'Read a folder'),
+    meaning: 'Read, before adding a folder, whether it carries its own graph and whether it is a git repository.',
+    grammar:
+      'The answer is about the folder’s project root: the top of its repository, or the folder itself without git. `carries` is true when its `.tagma` holds a block; add_project then adds the folder over that graph.',
+    input: Schema.Struct({ rootPath: root }),
+    answer: arms({ ok: { rootPath: Schema.String, carries: Schema.Boolean, git: Schema.Boolean } }),
+    refusals: ['relative-root', 'missing-root', 'unwritable-root', 'graph-pool', 'git-refused', 'git-unreadable', 'git-incomplete'],
   }),
 
   set_project_root: operation('set_project_root', {

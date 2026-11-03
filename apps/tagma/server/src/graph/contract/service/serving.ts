@@ -156,7 +156,14 @@ export class ProjectLifecycle extends Context.Service<
       AdmittedProject,
       | StoreFailure
       | GateRefusal<
-          ProjectRootFailure | VocabularyRefusal | OpenRefusal | 'reserved-project' | 'project-name' | 'duplicate-name' | 'duplicate-root'
+          | ProjectRootFailure
+          | VocabularyRefusal
+          | OpenRefusal
+          | 'reserved-project'
+          | 'project-name'
+          | 'duplicate-name'
+          | 'duplicate-root'
+          | 'graph-carried'
         >
       | E,
       ProjectIdentification | R

@@ -3,7 +3,9 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { identityOf, runGit } from '../../platform/git/ownGit.js';
 import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
-import { blocksRetiredKey, rowsStepKey, type ServesFrom } from '../contract/wire/storage.js';
+import { blocksRetiredKey, CHECKOUT_DIRECTORY, rowsStepKey, type ServesFrom } from '../contract/wire/storage.js';
+import { carriesGraph } from '../tree/scan.js';
+import { refused } from './refusal.js';
 import { GraphSteps } from '../contract/service/steps.js';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { GraphStore, MachineStore, storeDirectory, type StoreDb } from '../../platform/contract/service/store.js';
@@ -58,6 +60,20 @@ const chosenCatalogs = Effect.fn('Projects.chosenCatalogs')(function* (shipped: 
   return [...new Set([...(shipped.byId(CORE_LIBRARY) === null ? [] : [CORE_LIBRARY]), ...asked])];
 });
 const GROUP_POLICY: GraphPolicy = { strictProvenance: false, private: false, storage: 'stealth' };
+
+const adopting = writes('Projects.adoptCatalogs', [session, setting]);
+
+export const adoptCatalogs = Effect.fn('Projects.adoptCatalogs')(function* (projectId: number, installed: readonly string[]) {
+  const shipped = yield* Catalogs;
+  if (shipped.key === null || installed.length === 0) return;
+  const key = shipped.key;
+  const value = installed.filter((id) => shipped.byId(id) !== null);
+  const managed = yield* ManagedWrite;
+  const written = yield* (yield* GraphStore).transaction(adopting, (unit) =>
+    managed.write(unit, { key, scope: 'project', projectId, value, declined: false, pinned: true, resolved: value }),
+  );
+  yield* written.announce;
+});
 
 const moving = writes('ProjectLifecycle.move', []);
 const updating = writes('ProjectLifecycle.update', []);
@@ -241,17 +257,28 @@ export const projectsLayer = (
         ) {
           yield* rootChecked(input.rootPath);
           const identity = yield* Effect.mapError((yield* ProjectIdentification).identify(input.rootPath), gitRefusal);
-          const chosen = yield* chosenCatalogs(road.shipped, input.catalogs);
+          const carried = yield* refused(carriesGraph(identity.rootPath));
+          const chosen = carried ? undefined : yield* chosenCatalogs(road.shipped, input.catalogs);
           const now = new Date(yield* Clock.currentTimeMillis);
           let announce: Effect.Effect<void> = Effect.void;
           const bear = Effect.fnUntraced(function* (row: ProjectRow) {
+            if (carried && (input.storage === 'stealth' || input.catalogs !== undefined)) {
+              return yield* new GateRefusal(
+                'graph-carried',
+                `${identity.rootPath} carries its graph in ${CHECKOUT_DIRECTORY}: it is added with team storage and the catalogs that graph holds`,
+                [
+                  'omit storage and catalogs to add the folder with the graph it carries',
+                  'change the catalogs after adding through the graph.catalogs setting',
+                ],
+              );
+            }
             const policy: GraphPolicy = {
               strictProvenance: input.strictProvenance ?? false,
               private: input.private ?? false,
-              storage: input.storage ?? 'stealth',
+              storage: input.storage ?? (carried ? 'team' : 'stealth'),
             };
             const born = yield* established(row, policy, input.name, now);
-            if (road.shipped.key === null) return born;
+            if (carried || road.shipped.key === null) return born;
             if (chosen === undefined) {
               yield* installCatalogs(road, born.id, yield* settings.value(road.shipped.key));
               return born;

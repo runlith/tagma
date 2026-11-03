@@ -16,7 +16,7 @@ import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
 export type ProjectDraft = {
   readonly name: string;
   readonly rootPath: string;
-  readonly storage: StorageMode;
+  readonly storage?: StorageMode;
   readonly catalogs?: readonly string[];
   readonly contributed?: Readonly<Record<string, unknown>>;
 };
@@ -91,7 +91,7 @@ export class ProjectCreation extends Service<ProjectCreation>()('ProjectCreation
     if (chosen === null) return;
     const name = folderName(chosen);
     try {
-      await this.create({ name, rootPath: chosen, storage: 'stealth' });
+      await this.create({ name, rootPath: chosen });
     } catch (error) {
       this.offered = { name, rootPath: chosen, refused: refusedOf(error) };
       this.open = true;

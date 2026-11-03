@@ -1,9 +1,13 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect } from 'effect';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import { join } from 'node:path';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { InstalledCatalogs, Tags } from '../../../graph/contract/service/vocabulary.js';
 import { CORE_LIBRARY } from '../../../graph/contract/wire/tags/identity.js';
-import { DoorFixture, doorFixture } from '../doorFixture.js';
+import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
+import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
+import { suiteGit } from '../suiteGit.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { graphCatalogs } from '../../../catalogs/contract/wire/settings.js';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -41,7 +45,7 @@ const bornWith = Effect.fnUntraced(function* (label: string, catalogs?: readonly
   return (created.body as Born).project.id;
 });
 
-layer(doorFixture(), { excludeTestServices: true })('project catalogs', (it) => {
+layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('project catalogs', (it) => {
   it.effect('a project is born with the catalogs its creator chose, and keeps them once the machine default would add more', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;
@@ -115,6 +119,41 @@ layer(doorFixture(), { excludeTestServices: true })('project catalogs', (it) => 
       const declarations = after.filter((row) => row.tags.includes(TAG_DECLARATION.id) || row.tags.includes(CATALOG_DECLARATION.id));
       expect(declarations.find((row) => row.tags.includes(CATALOG_DECLARATION.id) && row.fields.id === 'knowledge')).toBeDefined();
       expect(new Set(declarations.map((row) => row.parentId))).toEqual(new Set([container.id]));
+    }),
+  );
+
+  it.effect('a folder carrying its graph is added over it, with team storage and the catalogs that graph holds as its own', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const source = yield* files.realPath(yield* world.directory('carried-source'));
+      yield* suiteGit(source, 'init', '-q', '-b', 'main');
+      const first = yield* world.op('add_project', {
+        name: world.uniqueName(),
+        rootPath: source,
+        storage: 'team',
+        catalogs: ['knowledge'],
+      });
+      expect(first.status).toBe(200);
+      const clone = yield* files.realPath(yield* world.directory('carried-clone'));
+      yield* suiteGit(clone, 'init', '-q', '-b', 'main');
+      yield* files.copy(join(source, CHECKOUT_DIRECTORY), join(clone, CHECKOUT_DIRECTORY));
+      const name = world.uniqueName();
+      for (const asked of [{ storage: 'stealth' }, { catalogs: ['software-development'] }]) {
+        const refused = yield* world.op('add_project', { name, rootPath: clone, ...asked });
+        expect(refused.status).toBe(409);
+        expect(refused.body).toMatchObject({ code: 'graph-carried' });
+      }
+      const listed = yield* world.op('list_projects', {});
+      expect((listed.body as { projects: Born['project'][] }).projects.map((row) => row.name)).not.toContain(name);
+
+      const added = yield* world.op('add_project', { name, rootPath: clone });
+      expect(added.status).toBe(200);
+      const project = (added.body as { project: { id: number; storage: string } }).project;
+      yield* projectLeaving(world, (first.body as Born).project.id, project.id);
+      expect(project.storage).toBe('team');
+      expect(yield* installedOf(project.id)).toEqual({ ids: new Set([CORE_LIBRARY, 'knowledge']), bindsCode: false });
+      expect(new Set((yield* projectLayerOf(project.id)) as string[])).toEqual(new Set([CORE_LIBRARY, 'knowledge']));
     }),
   );
 

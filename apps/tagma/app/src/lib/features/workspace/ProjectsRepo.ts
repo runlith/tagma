@@ -32,6 +32,13 @@ export const ProjectsRepo = Repo.define(
       },
     }),
 
+    folder: keyed({
+      loader: async ({ key, signal }: KeyedLoaderContext<string>, door) => {
+        const { rootPath, carries, git } = await door.perform('read_folder', { rootPath: key }, {}, { signal });
+        return { rootPath, carries, git };
+      },
+    }),
+
     remove: mutation({
       mutator: async (projectId: number, { signal }, door) =>
         (await door.perform('remove_project', { ref: String(projectId) }, {}, { signal })).project,

@@ -58,13 +58,9 @@
         </span>
       </label>
     {/each}
-    <label class="flex cursor-pointer items-baseline gap-2 text-ui">
-      <input type="radio" name="no-template" checked={selected.length === 0} onchange={() => (touched = [])} />
-      <span>
-        <span class="font-medium">No template</span>
-        <span class="text-muted-foreground"> — only the system library ({CORE_LIBRARY}), which every project carries</span>
-      </span>
-    </label>
+    <span class="text-small text-muted-foreground"
+      >None checked — only the system library ({CORE_LIBRARY}), which every project carries.</span
+    >
   {:else if failed}
     <div class="flex items-center gap-2 text-ui text-destructive" role="alert">
       <span class="min-w-0 flex-1">The catalog list could not be read, so the project cannot be created yet.</span>

@@ -28,7 +28,7 @@ import { projecting } from '../store/actWrites.js';
 
 const rooting = writes('Projects.open', [block], projecting);
 const retiring = writes('Projects.open.retireRows', [meta]);
-import { ensureVocabulary } from './birth.js';
+import { adoptCatalogs, ensureVocabulary } from './birth.js';
 import { advanceTree } from './advance.js';
 import { syncTopology, type TopologySync } from '../tree/topology.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
@@ -42,7 +42,7 @@ import { Doctrine } from '../../platform/contract/service/sections.js';
 import { CatalogGraph, catalogWriter } from '../vocabulary/install.js';
 import { Catalogs } from '../contract/wire/catalogs.js';
 import { Behaviours } from '../contract/service/behaviours.js';
-import { Tags } from '../contract/service/vocabulary.js';
+import { InstalledCatalogs, Tags } from '../contract/service/vocabulary.js';
 import { projectToTree } from '../tree/projection.js';
 import { rebuildMirror } from '../tree/mirror.js';
 import { treeHeadStamp } from '../tree/stamp.js';
@@ -119,7 +119,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
     layout: StorageLayout,
     stealthRoot: string | null,
     shadow: ShadowGit | null,
-    standing: 'standing' | 'switched' | 'virgin',
+    standing: 'standing' | 'switched' | 'virgin' | 'adopted',
     initialScan?: TreeScan,
   ) {
     const store = Context.get(context, GraphStore);
@@ -514,6 +514,30 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
                 CurrentCost,
                 yield* CurrentCost,
               );
+              if (opened.standing === 'adopted') {
+                const installed = yield* Context.get(servedOpen, InstalledCatalogs)
+                  .read(row.id)
+                  .pipe(
+                    Effect.mapError(
+                      (failure) =>
+                        new GateRefusal(
+                          'graph-pool',
+                          `the catalogs installed in ${layout.treeRoot} could not be read: ${failure.message}`,
+                          ['repair the catalog declaration the reason names, then open the project again'],
+                        ),
+                    ),
+                  );
+                yield* refused(
+                  adoptCatalogs(
+                    row.id,
+                    installed.map((catalog) => catalog.id),
+                  ).pipe(
+                    Effect.provideService(GraphStore, Context.get(machine, GraphStore)),
+                    Effect.provideService(ManagedWrite, Context.get(machine, ManagedWrite)),
+                    Effect.provideService(Catalogs, Context.get(machine, Catalogs)),
+                  ),
+                );
+              }
               if (format.holds()) {
                 yield* Effect.logWarning(
                   'a graph whose format marker this server cannot write over opens for reads: no catalog is installed and every write refuses',

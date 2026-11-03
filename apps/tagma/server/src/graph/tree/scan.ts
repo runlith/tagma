@@ -1,5 +1,7 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Effect } from 'effect';
+import { CHECKOUT_DIRECTORY } from '../contract/wire/storage.js';
 import { BlockTreeUnreadable, type ScannedBlock, readBlockTree } from './layout.js';
 import { askOnce } from './oneShot.js';
 
@@ -82,3 +84,8 @@ export const treeHoldsAny = (root: string): Effect.Effect<boolean, BlockTreeUnre
     ),
     Effect.withSpan('Graph.treeHoldsAny', { attributes: { root } }),
   );
+
+export const carriesGraph = (rootPath: string): Effect.Effect<boolean, BlockTreeUnreadable> => {
+  const tree = join(rootPath, CHECKOUT_DIRECTORY);
+  return existsSync(tree) ? treeHoldsAny(tree) : Effect.succeed(false);
+};

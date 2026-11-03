@@ -3,7 +3,11 @@ import { Effect } from 'effect';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { admitted } from '../../platform/contract/service/routed.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { Projects } from '../../projects/contract/service/registry.js';
+import { ProjectIdentification, Projects } from '../../projects/contract/service/registry.js';
+import { rootChecked } from '../../projects/registration.js';
+import { gitRefusal } from '../../platform/git/readings.js';
+import { carriesGraph } from '../tree/scan.js';
+import { refused } from '../serving/refusal.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import type { ProjectRow } from '../../projects/contract/wire/project.js';
 import { Selection } from '../contract/service/reads.js';
@@ -95,6 +99,18 @@ export const REGISTRY_PAIRS = {
         );
         yield* (yield* RegisteredRoots).joined(row.rootPath);
         return { status: 'ok' as const, project: yield* wiredOne(row), returned: row.returned };
+      }),
+    }),
+  ),
+
+  read_folder: pair(
+    OPS.read_folder,
+    body(OPS.read_folder, {
+      execute: Effect.fnUntraced(function* (input: In<'read_folder'>) {
+        yield* rootChecked(input.rootPath);
+        const identity = yield* Effect.mapError((yield* ProjectIdentification).identify(input.rootPath), gitRefusal);
+        const carries = yield* refused(carriesGraph(identity.rootPath));
+        return { status: 'ok' as const, rootPath: identity.rootPath, carries, git: identity.gitDir !== null };
       }),
     }),
   ),

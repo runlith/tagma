@@ -40,6 +40,7 @@ export const REFUSAL_WORDS = {
   'field-required': 'Required field missing',
   'field-target': 'Field points at no block',
   'global-permanent': 'Global graph is permanent',
+  'graph-carried': 'Folder carries its own graph',
   'graph-commit': 'Graph commit failed',
   'graph-required': 'No project named',
   'group-graph': 'A group’s graph, not a project',

@@ -301,7 +301,10 @@ export const switchIfDue = Effect.fnUntraced(function* (
   rowsStep: string | null,
   openMirror: Effect.Effect<GraphStore['Service'], StoreOpenFailure>,
   treeHasBlocks?: boolean,
-): Effect.fn.Return<'standing' | 'switched' | 'virgin', GateRefusal<FloorRefusal> | { readonly _tag: string; readonly message: string }> {
+): Effect.fn.Return<
+  'standing' | 'switched' | 'virgin' | 'adopted',
+  GateRefusal<FloorRefusal> | { readonly _tag: string; readonly message: string }
+> {
   const machineStore = Context.get(machine, MachineStore);
   const retiredKey = blocksRetiredKey(row.id);
   const startedKey = switchStartedKey(row.id);
@@ -373,5 +376,5 @@ export const switchIfDue = Effect.fnUntraced(function* (
     if (shadow === null) yield* marking;
   }
   yield* retire;
-  return treeStands ? 'standing' : 'switched';
+  return treeStands ? 'adopted' : 'switched';
 });
