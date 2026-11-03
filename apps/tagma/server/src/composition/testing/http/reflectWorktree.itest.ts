@@ -342,7 +342,22 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         status: 409,
         body: { code: 'commit-unlanded' },
       });
+      const branchWork = yield* asThread('create_block', { parentId: parent, tags: ['task'], title: 'Work finished on the branch' });
+      const branchTask = (branchWork.body as { block: { name: string } }).block.name;
+      expect((yield* asThread('finish_block', { blockId: branchTask })).status).toBe(200);
+      const byBranch = yield* asThread('answer_reflection', { blockId: entry, by: branchTask });
+      expect(byBranch).toMatchObject({ status: 409, body: { code: 'not-found' } });
+      expect((byBranch.body as { unblock: readonly string[] }).unblock.some((way) => way.includes('merge_worktree'))).toBe(true);
       expect(yield* read(entry)).toMatchObject({ answered: false });
+      yield* files.writeFileString(join(destination, 'server', 'value.ts'), 'export const value = 4;\n');
+      expect(
+        yield* asThread('submit_work', {
+          checkout: destination,
+          subject: 'land beside main work',
+          paths: ['server/value.ts'],
+          tasks: [mainTask],
+        }),
+      ).toMatchObject({ status: 200, body: { submitted: { status: 'landed', tasks: [{ name: mainTask }] } } });
     }),
   );
 

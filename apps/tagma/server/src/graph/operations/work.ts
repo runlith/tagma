@@ -34,6 +34,7 @@ import {
   atTarget,
   currentTarget,
   documentScope,
+  localId,
   reflectionBlockPlace,
   scoped,
   targeted,
@@ -77,7 +78,7 @@ const answerOf = Effect.fn('answer_reflection.named')(function* <C extends strin
   id: number,
   named: { readonly by: string } | { readonly commit: string } | { readonly checked: C },
 ) {
-  if ('by' in named) return { id, byId: yield* (yield* BlockNames).idOfName(named.by) };
+  if ('by' in named) return { id, byId: yield* localId(named.by) };
   return 'commit' in named ? { id, commit: named.commit } : { id, checked: named.checked };
 });
 
