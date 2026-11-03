@@ -1,6 +1,6 @@
 import { basename, isAbsolute, resolve } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { Effect } from 'effect';
+import { Effect, type FileSystem } from 'effect';
 import type { ToolShown } from '@runlith/agent/tool';
 import { shellCommands, type ShellWord } from './shellCommands';
 import { gitOperation, withoutPrefixes } from './shellShapes';
@@ -354,6 +354,20 @@ const searched = (sight: SearchSight): ReadonlyMap<string, ToolShown['as']> => {
   }
   return said;
 };
+
+const nameTooLong = (cause: unknown): boolean => cause instanceof Error && 'code' in cause && cause.code === 'ENAMETOOLONG';
+
+export const fileProbe = (files: FileSystem.FileSystem) => (path: string) =>
+  files.stat(path).pipe(
+    Effect.map((standing) => standing.type === 'File'),
+    Effect.catchReasons('PlatformError', {
+      NotFound: () => Effect.succeed(false),
+      PermissionDenied: () => Effect.succeed(false),
+      BadResource: () => Effect.succeed(false),
+      BadArgument: () => Effect.succeed(false),
+      Unknown: (reason, error) => (nameTooLong(reason.cause) ? Effect.succeed(false) : Effect.fail(error)),
+    }),
+  );
 
 const probed = Effect.fnUntraced(function* <E>(
   named: ReadonlyMap<string, ToolShown['as']>,

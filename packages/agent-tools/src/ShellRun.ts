@@ -25,7 +25,7 @@ import type {
 import type { ResolvedToolOptions, ToolEnvCall } from './workspace';
 import type { ToolShown } from '@runlith/agent/tool';
 import { commandClass } from './commandClass';
-import { shellShown } from './shellShown';
+import { fileProbe, shellShown } from './shellShown';
 
 export class OutputTail {
   private readonly bytes = new Uint8Array(TOOL_OUTPUT_MAX_BYTES);
@@ -254,17 +254,6 @@ export type ShellSettlement = {
   readonly shown: readonly ToolShown[];
   readonly unseen: string | null;
 };
-
-const UNSEEN: ReadonlySet<string> = new Set(['NotFound', 'PermissionDenied', 'BadResource', 'BadArgument']);
-
-const isFile = (fs: FileSystem.FileSystem) => (path: string) =>
-  fs.stat(path).pipe(
-    Effect.map((info) => info.type === 'File'),
-    Effect.catchIf(
-      (error) => UNSEEN.has(error.reason._tag),
-      () => Effect.succeed(false),
-    ),
-  );
 
 const inWindow = (window: CommandWindow, at: number | null): at is number =>
   at !== null && Math.floor(at) >= window.from && Math.floor(at) <= window.to;
@@ -604,7 +593,7 @@ export class ShellRun {
           root: this.resolved.cwd,
           home: this.env.HOME ?? this.resolved.world.environment.home,
         },
-        isFile(fs),
+        fileProbe(fs),
       ),
     );
     return {

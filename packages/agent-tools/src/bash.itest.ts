@@ -181,6 +181,20 @@ it.live('an awk program and a shell body behind a launcher are code, never probe
   }),
 );
 
+it.live('an argument too long to name a file answers as data, with no failed sighting beside it', () =>
+  Effect.gen(function* () {
+    const root = yield* createTempDir();
+    const tools = createTools(options({ cwd: root }));
+    const body = `Dear team,\n${'the report follows. '.repeat(20)}\nRegards`;
+    const said = yield* call(
+      tools.bash,
+      { command: `echo sent --body '${body}'`, description: 'Send a message' },
+      { toolCallId: 'call-body', caller: unthreadedCaller },
+    );
+    expect(String(said)).toBe(`sent --body ${body}\n`);
+  }),
+);
+
 it.live('bash declares descriptions by policy and executes a call without one', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
