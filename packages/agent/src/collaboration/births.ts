@@ -356,6 +356,7 @@ function birthRequest(input: ThreadSpawnRequest, project: number | undefined, so
     root: input.root === true ? true : undefined,
     title: input.title?.trim(),
     project: project,
+    worktree: input.worktree === WORKTREE_INHERIT ? undefined : input.worktree,
     host: input.host ?? null,
     bindings: bindings.length === 0 ? undefined : Object.fromEntries(bindings),
     seed: input.fork ? { fork: input.fork, source: source.id } : { fresh: true },

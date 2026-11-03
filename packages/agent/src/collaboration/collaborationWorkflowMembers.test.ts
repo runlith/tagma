@@ -37,7 +37,16 @@ it.effect(
           ),
           Layer.succeed(
             Threads,
-            Threads.of({ find: unused, named: unused, lineage: unused, list: unused, watch: unused, readBirth: unused, create: unused }),
+            Threads.of({
+              find: unused,
+              named: unused,
+              lineage: unused,
+              list: unused,
+              watch: unused,
+              birthReceipt: unused,
+              readBirth: unused,
+              create: unused,
+            }),
           ),
         ),
       ),

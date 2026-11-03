@@ -27,6 +27,7 @@ const world = Effect.fnUntraced(function* (recorded: readonly ThreadTranscriptEn
     lineage: unused,
     list: unused,
     watch: unused,
+    birthReceipt: unused,
     readBirth: unused,
     create: unused,
   });

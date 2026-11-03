@@ -4,11 +4,9 @@ import type { ThreadBornOf } from '../protocol/birth';
 import type { KeyedRequest } from '../thread/keyed';
 import { threadTarget, type ThreadRecord } from '../thread/record';
 import { ThreadCallBroke, ThreadMissing } from '../thread/ThreadBorder';
-import { ThreadInbox } from '../thread/ThreadPorts';
 import { Approvers } from '../thread/Approvers';
 import { ApprovalAnswers } from '../thread/run/ApprovalAnswers';
 import type { ThreadPlaneAccess, ThreadPlaneFailure, ThreadSendAnswer, ThreadVerbs } from './ThreadPlaneAccess';
-import { spawnRequestId } from './births';
 import { type CollaborationConfig, DeclaredCollaboration } from './CollaborationConfig';
 import { planeRefused } from './planeRefusal';
 import { ContextCompaction } from './compaction';
@@ -44,7 +42,6 @@ export const threadPlanesLayer = Layer.effect(
     const compaction = yield* ContextCompaction;
     const declared = yield* DeclaredCollaboration;
     const directory = yield* ThreadDirectory;
-    const inbox = yield* ThreadInbox;
     const answering = yield* ApprovalAnswers;
     const approvers = yield* Approvers;
     const messaging = yield* ThreadEnvelopes;
@@ -168,8 +165,8 @@ export const threadPlanesLayer = Layer.effect(
             })),
           spawnSettlement: Effect.fnUntraced(function* (caller, requestId, subscribe) {
             const { thread: calling } = yield* callingThread(threads, caller);
-            const provisioned = yield* inbox.receipt(spawnRequestId(calling.id, requestId));
-            if (provisioned?.kind !== 'task') return { status: 'aborted' } as const;
+            const provisioned = yield* threads.birthReceipt(calling.id, requestId);
+            if (provisioned === null) return { status: 'aborted' } as const;
             const child = yield* threads.find(provisioned.threadId, calling.principal);
             const creator = child === null ? null : (child.parentThreadId ?? child.createdBy);
             if (child === null || creator !== calling.id) return { status: 'aborted' } as const;

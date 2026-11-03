@@ -1,6 +1,8 @@
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Data, Deferred, Effect, Layer } from 'effect';
+import { ToolAnswer, toolSettleEffect } from '../agent/tool';
+import { collaborationTools } from './CollaborationTools';
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import { DEFAULT_PROVIDER_DESCRIPTIONS } from '@runlith/builtin-catalog/descriptions';
 import type { ThreadBirth, ThreadHost } from '../thread/ThreadPorts';
@@ -204,6 +206,27 @@ describe('a spawn binds its host and decides its request once', () => {
       expect(retried.threadId).toBe(born.id);
       expect(world.children()).toHaveLength(1);
       expect(world.started()).toEqual([born.id]);
+    }),
+  );
+  it.effect(
+    'the native tool settles a recovered birth through its original task after readiness failed again',
+    Effect.fnUntraced(function* () {
+      let prepared = false;
+      const world = yield* spawnWorld({
+        onThreadBorn: () => Effect.void,
+        onThreadReady: () => (prepared ? Effect.void : new ThreadCallBroke({ cause: new Error('the container did not come up') })),
+      });
+      yield* world.refuse({ requestId: 'call-1', name: 'reader', host: WORKSPACE });
+      const born = world.children()[0]!;
+      yield* world.refuse({ requestId: 'call-2', name: 'reader', host: WORKSPACE });
+      prepared = true;
+      const settled = yield* world.settle('call-2');
+      expect(settled.status).toBe('completed');
+      if (settled.status !== 'completed' || !(settled.output instanceof ToolAnswer))
+        return yield* Effect.die('The tool did not recover its answer');
+      expect(settled.output.value).toMatchObject({ status: 'started', threadId: born.id });
+      expect(world.started()).toEqual([born.id]);
+      expect(world.provisions()).toEqual([spawnRequestId('parent', 'call-1')]);
     }),
   );
 });
@@ -573,6 +596,19 @@ const spawnWorld = Effect.fnUntraced(function* (
   return {
     spawn,
     spawnFrom,
+    settle: Effect.fnUntraced(function* (requestId: string) {
+      const parent = yield* parentRecord;
+      const access = yield* planes.access(parent);
+      if (access === null) return yield* Effect.die('The plane was not declared');
+      const tool = collaborationTools(access).spawn_agent!;
+      const settled = toolSettleEffect(tool, {
+        toolCallId: requestId,
+        toolInput: { agentId: 'tagma', task: TASK, name: 'reader', host: WORKSPACE },
+        caller: { agentId: parent.agentId, ownerId: parent.principal, thread: { threadId: parent.id, runId: 'run-parent', bindings: {} } },
+      });
+      if (settled === null) return yield* Effect.die('A spawn settles its recorded birth');
+      return yield* settled;
+    }),
     going: (runId: string) =>
       runStore.createRun({
         startFrom: parent,

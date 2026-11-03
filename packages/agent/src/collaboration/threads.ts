@@ -15,7 +15,7 @@ import type {
 import type { ThreadAuthority, ThreadBirthPlace, ThreadContextReading, ThreadHostBinding, ThreadRunStatus } from '../thread/rows';
 import type { ThreadMissing } from '../thread/ThreadBorder';
 import type { ThreadStorageFailed } from '../thread/persisted';
-import type { ReportDelivery, ThreadInboxItemValues } from '../thread/storage/inbox';
+import type { ReportDelivery, ThreadInboxItemValues, ThreadInboxRequest } from '../thread/storage/inbox';
 import type { ThreadFailureDiagnostics } from '../transcript/entries';
 import type { ThreadTypeOffer } from './types';
 import type { SpawnSubscription } from './ThreadPlaneAccess';
@@ -67,6 +67,7 @@ export type BirthRequest = {
   readonly root?: true;
   readonly title?: string;
   readonly project?: number;
+  readonly worktree?: string;
   readonly host: ThreadHostBinding | null;
   readonly bindings?: ThreadBindings;
   readonly seed: { readonly fresh: true } | { readonly fork: ThreadForkCut; readonly source: string };
@@ -77,9 +78,11 @@ export type BirthRequest = {
   readonly reportDelivery?: ReportDelivery;
 };
 
+export const birthCallKey = (parentThreadId: string, key: string) => callKey({ operation: 'spawn', actor: parentThreadId, key });
+
 export function birthKeyed(parentThreadId: string, request: BirthRequest): Keyed {
   const { key, ...asked } = request;
-  return { evidence: { envelope: callKey({ operation: 'spawn', actor: parentThreadId, key }) }, digest: actDigest(asked) };
+  return { evidence: { envelope: birthCallKey(parentThreadId, key) }, digest: actDigest(asked) };
 }
 
 export type BirthInput = {
@@ -161,6 +164,7 @@ export class Threads extends Context.Service<
       threadIds: readonly string[],
       kinds?: readonly ('record' | 'run' | 'inbox')[],
     ): Effect.Effect<Effect.Effect<readonly string[]>, never, Scope.Scope>;
+    birthReceipt(creatorThreadId: string, requestId: string): Effect.Effect<ThreadInboxRequest | null, ThreadReadFailure>;
     readBirth(
       creatorThreadId: string,
       principal: string,

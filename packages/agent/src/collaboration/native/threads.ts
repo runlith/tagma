@@ -1,10 +1,9 @@
-import { Clock, Effect, Layer } from 'effect';
+import { Clock, Effect, Layer, Schema } from 'effect';
 import { keyOrder, type PageKey, page, pastKey, readCursor } from '@runlith/paging';
 import { keptSwitches, type ModelSwitches } from '@runlith/llm/models/description';
 import { ThreadAgents } from '../../thread/agents/ThreadAgents';
 import { agentTypeId } from '../../thread/agents/AgentProfile';
 import { ThreadStorageFailed } from '../../thread/persisted';
-import { callKey } from '../../thread/keyed';
 import type { ThreadReadFailure, ThreadRecord } from '../../thread/record';
 import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../thread/rows';
 import { ThreadBranch } from '../../thread/run/ThreadBranch';
@@ -22,7 +21,7 @@ import {
   ThreadTransitions,
   type ThreadWriteTx,
 } from '../../thread/ThreadPorts';
-import { readBirthRecord, writeBirthRecord, type BirthSettled } from '../../thread/transition/kernel';
+import { birthReceiptSchema, readBirthRecord, writeBirthRecord, type BirthSettled } from '../../thread/transition/kernel';
 import { spawnRequestId } from '../births';
 import { envelopePrefix } from '../envelopeKeys';
 import { DeclaredCollaboration } from '../CollaborationConfig';
@@ -33,6 +32,7 @@ import {
   BirthRefused,
   BirthUnavailable,
   birthKeyed,
+  birthCallKey,
   IDLE_RANK,
   THREAD_LIST,
   THREAD_LIST_ORDER,
@@ -433,15 +433,32 @@ export const nativeThreadsLayer: Layer.Layer<
         (effect, threadId, principal) => effect.pipe(Effect.mapError(storageFailed('threads.lineage'))),
       ),
       watch: changes.watch,
+      birthReceipt: Effect.fn('Threads.birthReceipt')(
+        function* (creatorThreadId, requestId) {
+          const original = yield* inbox.receipt(spawnRequestId(creatorThreadId, requestId));
+          if (original?.kind === 'task') return original;
+          const reading = yield* transitions.readRecord(creatorThreadId, { call: birthCallKey(creatorThreadId, requestId) });
+          if (reading.kind !== 'present') return null;
+          const alias = yield* Schema.decodeUnknownEffect(birthReceiptSchema)(reading.result).pipe(
+            Effect.mapError((cause) => new ThreadStorageFailed({ call: 'threads.birthReceipt', cause })),
+          );
+          const item = yield* inbox.receipt(alias.itemId);
+          return item?.kind === 'task' ? item : null;
+        },
+        (effect) => effect.pipe(Effect.mapError(storageFailed('threads.birthReceipt'))),
+      ),
       readBirth: Effect.fnUntraced(
         function* (creatorThreadId, principal, request) {
           const key = birthKeyed(creatorThreadId, request);
           const alias = {
-            evidence: { call: callKey({ operation: 'spawn', actor: creatorThreadId, key: request.key }) },
+            evidence: { call: birthCallKey(creatorThreadId, request.key) },
             digest: key.digest,
           };
+          const original = yield* readBirthRecord(transitions, creatorThreadId, key);
           let settled =
-            (yield* readBirthRecord(transitions, creatorThreadId, alias)) ?? (yield* readBirthRecord(transitions, creatorThreadId, key));
+            original === null || ('spent' in original && original.spent === 'before-epoch')
+              ? ((yield* readBirthRecord(transitions, creatorThreadId, alias)) ?? original)
+              : original;
           if (settled === null || 'taken' in settled) {
             const name = request.name;
             if (name === null || request.root === true) return { status: 'unborn' as const };

@@ -419,7 +419,8 @@ export type BirthSettled =
   | {
       readonly taken: true;
     };
-const readsBirthReceipt = Schema.is(Schema.Struct({ threadId: Schema.String, itemId: Schema.String }));
+export const birthReceiptSchema = Schema.Struct({ threadId: Schema.String, itemId: Schema.String });
+const readsBirthReceipt = Schema.is(birthReceiptSchema);
 export function readBirthRecord<TTx, TWrite extends TTx>(
   transitions: ThreadTransitionStorage<TTx, TWrite>,
   childId: string,

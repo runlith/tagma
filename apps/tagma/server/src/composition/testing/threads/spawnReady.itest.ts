@@ -39,9 +39,9 @@ const parent = Effect.fnUntraced(function* () {
   yield* world.op('read_settings', {}, `project=${projectId}`, { [GRANT_HEADER]: grantFor(born.thread.id) });
   return born.thread.id;
 });
-const spawn = Effect.fnUntraced(function* (lead: string, name: string, text = task, key?: string) {
+const spawn = Effect.fnUntraced(function* (lead: string, name: string, text = task, key?: string, worktree?: string) {
   const { world, projectId } = yield* World;
-  return (yield* world.op('spawn_agent', { agentId: 'tagma', task: text, name }, `project=${projectId}`, {
+  return (yield* world.op('spawn_agent', { agentId: 'tagma', task: text, name, worktree }, `project=${projectId}`, {
     [GRANT_HEADER]: grantFor(lead),
     [APPROVAL_WAIT_HEADER]: '0',
     ...(key === undefined ? {} : { [CALL_HEADER]: key }),
@@ -87,6 +87,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
           expect((yield* harness.reads.snapshot(child!.threadId)).latestRun).toBeNull();
         }
         expect(yield* spawn(lead, names[0]!, 'Different work.')).toMatchObject({ code: 'name-taken' });
+        expect(yield* spawn(lead, names[0]!, task, undefined, 'new')).toMatchObject({ code: 'name-taken' });
         const recover = () => Effect.forEach(names, (name) => spawn(lead, name, task, `recover-${name}`), { concurrency: 'unbounded' });
         const recovered = yield* recover();
         expect(recovered).toMatchObject(stranded.map((child) => ({ status: 'started', threadId: child!.threadId })));

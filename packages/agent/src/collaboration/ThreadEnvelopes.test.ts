@@ -1673,6 +1673,7 @@ const envelopeHarness = Effect.fnUntraced(function* (
       }),
     watch: changes.watch,
     lineage: unused,
+    birthReceipt: unused,
     readBirth: unused,
     create: unused,
   });

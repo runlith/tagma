@@ -17,6 +17,7 @@ const accessOver = Effect.fnUntraced(function* (ancestors: ReadonlyMap<string, r
     named: unused,
     list: unused,
     watch: unused,
+    birthReceipt: unused,
     readBirth: unused,
     create: unused,
   });

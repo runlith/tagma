@@ -96,6 +96,7 @@ const world = Effect.fnUntraced(function* (input: WorldInput = {}) {
       }),
     list: unused,
     watch: unused,
+    birthReceipt: unused,
     readBirth: (_parent, _principal, request) =>
       Effect.sync(() =>
         (input.born ?? []).includes(request.key)
