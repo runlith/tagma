@@ -11,6 +11,7 @@ import { TokenStoreFailed, type TokenStoreFault } from '@runlith/llm/oauth/store
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import {
   type DefaultModel,
+  type ProviderCatalog,
   ProviderRegistry,
   defaultModelOf,
   notInstalled,
@@ -36,14 +37,7 @@ import { HarnessMoves, HarnessRegistry } from '../../threads/contract/service/ha
 import { ThreadList } from '../../threads/contract/service/list.js';
 import { ThreadHarness, ThreadLive } from '../../threads/contract/service/engine.js';
 
-const connectedModel = Effect.fnUntraced(function* (
-  registry: ProviderRegistry['Service'],
-  accounts: ProviderAccounts['Service'],
-  harnesses: HarnessRegistry['Service'],
-): Effect.fn.Return<Connection, HarnessFailure> {
-  const discovery = yield* Effect.serviceOption(DefaultLogins);
-  if (Option.isSome(discovery)) yield* discovery.value.ready;
-  const catalog = yield* registry.catalog;
+const hostingProviders = Effect.fnUntraced(function* (catalog: ProviderCatalog, harnesses: HarnessRegistry['Service']) {
   const hosting: string[] = [];
   for (const provider of catalog.models.providers) {
     if (catalog.failures.has(provider.id) || provider.textless === true) continue;
@@ -51,17 +45,48 @@ const connectedModel = Effect.fnUntraced(function* (
       Effect.as(true),
       Effect.catchTag('GateRefusal', (refusal) => (refusal.code === 'model-unavailable' ? Effect.succeed(false) : Effect.fail(refusal))),
     );
-    if (!hosts) continue;
-    hosting.push(provider.id);
-    if (!catalog.selectable(provider.id)) continue;
-    const held = yield* accounts.of(provider.id).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-    if (held.some((row) => row.problem === null)) return { model: defaultModelOf(provider), plans: [] };
+    if (hosts) hosting.push(provider.id);
   }
+  return hosting;
+});
+
+const usableModel = Effect.fnUntraced(function* (
+  catalog: ProviderCatalog,
+  accounts: ProviderAccounts['Service'],
+  hosting: readonly string[],
+): Effect.fn.Return<DefaultModel | null, HarnessFailure> {
+  for (const id of hosting) {
+    if (!catalog.selectable(id)) continue;
+    const held = yield* accounts.of(id).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+    if (held.some((row) => row.problem === null)) return defaultModelOf(catalog.models.named(id));
+  }
+  return null;
+});
+
+const connectedModel = Effect.fnUntraced(function* (
+  registry: ProviderRegistry['Service'],
+  accounts: ProviderAccounts['Service'],
+  harnesses: HarnessRegistry['Service'],
+  rows: ModelPreferenceRows,
+): Effect.fn.Return<Connection, HarnessFailure> {
+  const discovery = yield* Effect.serviceOption(DefaultLogins);
+  if (Option.isSome(discovery)) yield* discovery.value.ready;
+  const catalog = yield* registry.catalog;
+  const offered = () => {
+    const kept = rows.offered();
+    return kept !== null && textModelOf(catalog.models, kept.provider, kept.model) !== undefined ? kept : null;
+  };
+  const kept = offered();
+  if (kept !== null) return { model: kept, plans: [] };
+  const hosting = yield* hostingProviders(catalog, harnesses);
   if (hosting.length === 0)
     return yield* new GateRefusal('no-provider', 'No installed adapter serves a model a Tagma agent runs on.', [
       'install a provider adapter',
     ]);
-  return { model: null, plans: hosting.filter((id) => catalog.models.named(id).auth !== 'api-key') };
+  const model = yield* usableModel(catalog, accounts, hosting);
+  return model === null
+    ? { model: null, plans: hosting.filter((id) => catalog.models.named(id).auth !== 'api-key') }
+    : { model: offered() ?? rows.offer(model), plans: [] };
 });
 
 type Connection = { readonly model: DefaultModel | null; readonly plans: readonly string[] };
@@ -179,7 +204,7 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
       const memory = yield* rows.memory(OPERATOR_PRINCIPAL);
       const { models } = yield* registry.catalog;
       const saved = servedSelection(models, memory)?.selection ?? null;
-      const connected = saved === null ? (yield* connectedModel(registry, accounts, harnesses)).model : null;
+      const connected = saved === null ? (yield* connectedModel(registry, accounts, harnesses, rows)).model : null;
       const defaults = saved ?? (connected === null ? null : { ...connected, switches: {} });
       const provider = input.profile?.model?.provider ?? defaults?.provider;
       if (provider === undefined) return yield* unconnected();
@@ -274,6 +299,16 @@ export const makeModelPreferences = Effect.fnUntraced(function* ({ rows }: { rea
   });
 
   return ModelPreferences.of({
+    modelConnection: Effect.fnUntraced(function* () {
+      const discovery = yield* Effect.serviceOption(DefaultLogins);
+      const discovering = Option.isSome(discovery) && !(yield* discovery.value.settled);
+      const catalog = yield* registry.catalog;
+      const hosting = yield* hostingProviders(catalog, harnesses);
+      const plans = hosting.filter((id) => catalog.models.named(id).auth !== 'api-key');
+      if (discovering) return { state: 'discovering', plans };
+      const model = yield* usableModel(catalog, accounts, hosting);
+      return { state: model === null ? 'unconnected' : 'connected', plans };
+    }),
     modelDefaults: Effect.fnUntraced(function* (): Effect.fn.Return<ModelDefaults, HarnessFailure> {
       const { models } = yield* registry.catalog;
       const standing = yield* units.read((unit) =>
@@ -295,7 +330,7 @@ export const makeModelPreferences = Effect.fnUntraced(function* ({ rows }: { rea
           },
           remembered,
         };
-      const { model: fallback, plans } = yield* connectedModel(registry, accounts, harnesses);
+      const { model: fallback, plans } = yield* connectedModel(registry, accounts, harnesses, rows);
       if (fallback === null) return { status: 'unconnected', plans };
       const option = textModelOf(models, fallback.provider, fallback.model);
       return {
