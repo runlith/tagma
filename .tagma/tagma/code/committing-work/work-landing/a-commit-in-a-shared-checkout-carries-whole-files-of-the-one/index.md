@@ -26,17 +26,17 @@ edges:
     to: 01a1a183-c38c-72bb-8d73-20eaafa95730
 sources:
   - kind: file
-    ref: apps/tagma/server/src/landing/land/submit.ts
-  - kind: file
-    ref: apps/tagma/server/src/landing/operations/submit.ts
-  - kind: file
-    ref: apps/tagma/server/src/landing/doctrine/commits.ts
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/tree.ts
-  - kind: file
     ref: apps/tagma/server/src/change-record/prepared/dependencies.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/prepared/place.ts
+  - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/tree.ts
+  - kind: file
+    ref: apps/tagma/server/src/landing/doctrine/commits.ts
+  - kind: file
+    ref: apps/tagma/server/src/landing/land/submit.ts
+  - kind: file
+    ref: apps/tagma/server/src/landing/operations/submit.ts
   - kind: file
     ref: apps/tagma/server/src/threads/collaboration/heldTasks.ts
   - kind: symbol
@@ -78,7 +78,7 @@ Every round closed one case and opened the next. The Work landing and Line autho
 
 ## submit_work
 
-**Selection.** A bare call selects whole files: the files the change record says the caller wrote, plus those written by its descendants that are no longer running. Only files that still differ from HEAD are selected. Selection only needs to know which files the team wrote, not whose lines stand inside them, so landing no longer waits for a fresh line judgement. In a checkout declared `single`, a bare call selects every changed file. `paths` replaces the default: every changed file under the named files or directories, whoever wrote it. A caller the record does not see (another harness, a session outside Tagma) names `paths`, as today.
+**Selection.** A bare call selects whole files: the files the change record says the caller wrote, plus those written by its descendants that are no longer running. Only files that still differ from HEAD are selected. Selection only needs to know which files the team wrote, not whose lines stand inside them, so landing no longer waits for a fresh line judgement. When the record cannot tell which of several overlapping commands wrote a file, the file counts for every one of their teams. Carrying a file whole is harmless, so the ambiguity no longer costs a lost file or a refusal. In a checkout declared `single`, a bare call selects every changed file. `paths` replaces the default: every changed file under the named files or directories, whoever wrote it. A caller the record does not see (another harness, a session outside Tagma) names `paths`, as today.
 
 **What rides along without being asked for:**
 - Every line in a selected file, whoever wrote it: other sessions' lines, and lines no tool recorded.

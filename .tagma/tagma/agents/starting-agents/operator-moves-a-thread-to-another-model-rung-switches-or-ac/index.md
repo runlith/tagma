@@ -24,14 +24,14 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/harness/moves.ts
   - kind: file
+    ref: apps/tagma/server/src/threads/harness/picks.ts
+  - kind: file
     ref: apps/tagma/server/src/threads/harness/registry.ts
   - kind: file
     ref: packages/agent/src/collaboration/modelCarry.ts
   - kind: symbol
     ref: apps/tagma/server/src/native-harness/contract/wire/operations/models.ts
     symbol: MODEL_OPERATIONS
-  - kind: file
-    ref: apps/tagma/server/src/threads/harness/picks.ts
 ---
 **Value.** The operator changes the model mid-conversation — cheaper, stronger, at another provider — without losing history, even mid-turn and even between the native agent and Claude Code.
 

@@ -9,13 +9,13 @@ fields:
   }
 sources:
   - kind: file
+    ref: apps/tagma/server/src/composition/cut/commands.ts
+  - kind: file
     ref: apps/tagma/server/src/installation/cut/notarize.ts
   - kind: file
     ref: apps/tagma/server/src/installation/cut/pipeline.ts
   - kind: file
     ref: apps/tagma/server/src/installation/cut/publish.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/cut/commands.ts
 ---
 **Outcome.** Releasing is one command: `tagma:release publish` takes the checkout's HEAD to a published, notarized, verified release, and a repeat takes up where it stopped. `tagma:release` alone ends at a notarized cut — the build a tester can open — since an unnotarized cut opens on no other Mac. The wall time of a release is about half of today's: the two platforms try and notarize side by side.
 

@@ -20,6 +20,8 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/StandingChip.svelte
   - kind: file
+    ref: apps/tagma/desktop/src/quitting.ts
+  - kind: file
     ref: apps/tagma/server/src/installation/operations/next.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/cli.ts
@@ -27,8 +29,6 @@ sources:
     ref: apps/tagma/server/src/release-channel/runner.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/settings.ts
-  - kind: file
-    ref: apps/tagma/desktop/src/quitting.ts
 ---
 **Value.** The user gets a new release without rebuilding Tagma or hunting files by hand.
 

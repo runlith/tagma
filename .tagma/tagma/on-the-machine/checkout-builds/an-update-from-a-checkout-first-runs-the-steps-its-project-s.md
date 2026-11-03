@@ -9,9 +9,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/checkout-builds/runner.ts
-  - kind: file
     ref: apps/tagma/server/src/checkout-builds/offers.ts
+  - kind: file
+    ref: apps/tagma/server/src/checkout-builds/runner.ts
 ---
 ## Outcome
 

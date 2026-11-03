@@ -15,13 +15,13 @@ edges:
     to: 01a14bae-6720-7d62-897a-9280825673b8
 sources:
   - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/thread/ThreadSettings.svelte.ts
+  - kind: file
     ref: apps/tagma/server/src/native-harness/models/preference.ts
   - kind: file
     ref: apps/tagma/server/src/threads/harness/moves.ts
   - kind: file
     ref: packages/agent/src/collaboration/modelCarry.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/thread/ThreadSettings.svelte.ts
 ---
 **Defect.** The operator moves a running thread to a model on another road (native ↔ hosted harness, e.g. `openai-oauth` → `claude-code`), queues a word, leaves the thread and returns: the picker shows the old model, the turn goes on on the old model, and the queued word runs on it. Seen on thread `01a1a245-7a51-7739-a251-86d1ad1d1996` on 2026-11-03: a step compaction ran 17:58:35–18:01:04 inside run `01a1a28f`; the run carried no `stop` note `by: model` and continued on `gpt-6.1-sol` until the operator stopped it.
 
