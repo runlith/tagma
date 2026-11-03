@@ -6,9 +6,8 @@ import { GRAPH_STEPS } from '../../graph/steps/sequence.js';
 import { build } from '../../installation/cut/build.js';
 import { runCut } from '../../installation/cut/command.js';
 import type { Composition } from '../../installation/cut/descriptor.js';
-import { releaseCommand } from '../../installation/cut/pipeline.js';
 import type { InstanceHosts } from '../../installation/cut/port.js';
-import { notarizeCommand, publishCommand } from '../../installation/cut/publish.js';
+import { cutCommand, notarizeCommand, shipCommand } from '../../installation/cut/publish.js';
 import { transitionCommand } from '../../installation/cut/transition.js';
 import { tryout } from '../../installation/cut/try.js';
 import type { Channel } from '../../installation/contract/wire/channel.js';
@@ -36,16 +35,12 @@ const cutOf = async (of: Build): Promise<Composition> => {
 
 export const releaseCut = async (of: Build, given: readonly string[]): Promise<void> => {
   const composition = await cutOf(of);
-  const cut = given.filter((one) => one !== '--notarize');
-  const out = cut.flatMap((one, at) => (one === '--json' ? [one] : one === '--out' ? [one, cut[at + 1] ?? ''] : []));
   await runCut(
     given[0] === 'publish'
-      ? publishCommand(given.slice(1), composition)
+      ? shipCommand(given.slice(1), composition)
       : given[0] === 'notarize'
         ? notarizeCommand(given.slice(1), composition)
-        : cut.length === given.length
-          ? releaseCommand(given, composition)
-          : Effect.andThen(releaseCommand(cut, composition), notarizeCommand(out, composition)),
+        : cutCommand(given, composition),
   );
 };
 

@@ -33,6 +33,7 @@ export type Publisher = {
   readonly place: string;
   readonly latest: Effect.Effect<Feed | null, PublishTrouble, CutMachine>;
   readonly address: (release: string, file: string) => string;
+  readonly served: (release: string, file: string) => Effect.Effect<number | null, PublishTrouble, CutMachine>;
   readonly publish: (publication: Publication) => Effect.Effect<{ readonly page: string | null }, PublishTrouble, CutMachine>;
 };
 

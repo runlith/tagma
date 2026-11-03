@@ -1,5 +1,5 @@
 import { join, resolve } from 'node:path';
-import { Data, Effect, FileSystem, Layer, type PlatformError } from 'effect';
+import { Data, Effect, FileSystem, Layer, type PlatformError, Schedule } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -10,7 +10,7 @@ import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
 import { appleNotary, type Notary } from './notarize.js';
-import { flagsOf, KEPT_MAPS, publishedBy, RELEASE_DIRECTORY } from './pipeline.js';
+import { flagsOf, KEPT_MAPS, publishedBy, RELEASE_DIRECTORY, releaseCommand } from './pipeline.js';
 import { releaseNotes } from './notes.js';
 import { checkoutTags, highestOf, precedingOf } from './published.js';
 import {
@@ -26,7 +26,7 @@ import {
   type ReleaseRecord,
 } from './stage.js';
 
-const USAGE = 'bun run tagma:release publish [--out <dir>] [--json]';
+const USAGE = 'bun run tagma:release publish [--version <x.y.z>] [--out <dir>] [--json]';
 
 export class PublishRefused extends Data.TaggedError('PublishRefused')<{
   readonly step: string;
@@ -46,6 +46,8 @@ const refused = (step: string, detail: string, unblock: readonly string[] = []) 
   new PublishRefused({ step, detail, unblock: [...unblock] });
 
 const AGAIN = 'bun run tagma:release publish — publishing again takes up what stands';
+const FEED_ASKED_EVERY = '10 seconds';
+const FEED_ASKED = 12;
 const RECUT = 'bun run tagma:release, then bun run tagma:release publish — the cut takes the next number';
 
 const troubled = (step: string) => (trouble: PublishTrouble) =>
@@ -120,6 +122,35 @@ const notarizedCut = Effect.fnUntraced(function* (
 
 export const notarizeRelease = Effect.fnUntraced(function* (notary: Notary, cut: string) {
   return yield* notarizedCut(notary, cut, yield* cutStanding(cut));
+});
+
+const verified = Effect.fnUntraced(function* (publisher: Publisher, release: string, home: string, shipped: readonly string[]) {
+  const files = yield* FileSystem.FileSystem;
+  const newest = yield* publishedBy(publisher).pipe(
+    Effect.mapError(troubled('verify')),
+    Effect.map((feed) => (feed === null ? null : newestOf(feed).release)),
+    Effect.repeat({ until: (seen) => seen === release, schedule: Schedule.spaced(FEED_ASKED_EVERY), times: FEED_ASKED }),
+  );
+  if (newest !== release) {
+    return yield* refused('verify', `${publisher.place} offers ${newest ?? 'no release'} as its newest, and ${release} was placed`, [
+      AGAIN,
+    ]);
+  }
+  yield* Effect.forEach(
+    shipped,
+    Effect.fnUntraced(function* (name) {
+      const path = join(home, name);
+      const size = Number((yield* files.stat(path).pipe(Effect.mapError(unreadableIn('verify')(path)))).size);
+      const served = yield* publisher.served(release, name).pipe(Effect.mapError(troubled('verify')));
+      if (served === size) return;
+      return yield* refused(
+        'verify',
+        `${publisher.address(release, name)} serves ${served === null ? 'nothing' : `${served} bytes`}, and ${release} placed ${size}`,
+        [AGAIN],
+      );
+    }),
+    { concurrency: 'unbounded', discard: true },
+  );
 });
 
 export type Publishing = {
@@ -207,6 +238,7 @@ export const publishRelease = (
       };
       const shipped = [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)];
       const landed = yield* publisher.publish({ record, home, files: shipped, feed, notes }).pipe(Effect.mapError(troubled('publish')));
+      yield* verified(publisher, release, home, shipped);
 
       if (!tagged) {
         yield* git.run(['tag', tag, commit], { cwd: checkout }).pipe(
@@ -267,7 +299,7 @@ const cutIn = (composition: Composition, named: string | undefined, told: Told) 
   return { data, cut: named === undefined ? join(data, RELEASE_DIRECTORY) : resolve(named) };
 };
 
-export const notarizeCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+export const notarizeCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition, shown = true) {
   let json = given.includes('--json');
   const told = toldBy(NOTARIZE_USAGE, () => json);
   const flags = flagsOf(given, told);
@@ -279,6 +311,7 @@ export const notarizeCommand = Effect.fnUntraced(function* (given: readonly stri
   if (outcome._tag === 'Failure') {
     return told('notarize-refused', `${outcome.failure.step}: ${outcome.failure.detail}`, outcome.failure.unblock);
   }
+  if (!shown) return;
   const { record, home } = outcome.success;
   if (json) {
     console.log(JSON.stringify({ ...record, home }, null, 2));
@@ -297,7 +330,33 @@ export const notarizeCommand = Effect.fnUntraced(function* (given: readonly stri
     console.log(line);
 });
 
-export const publishCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+export const cutCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+  yield* releaseCommand(given, composition, !given.includes('--json'));
+  yield* notarizeCommand(given, composition);
+});
+
+const releasedHead = Effect.fnUntraced(function* (checkout: string) {
+  const tagged = yield* (yield* Git).run(['tag', '--points-at', 'HEAD', '--list', tagOf('*')], { cwd: checkout });
+  if (tagged.status !== 0) return yield* Effect.fail(`git tag --points-at HEAD exited ${tagged.status}: ${tagged.stderr.trim()}`);
+  return tagged.stdout.trim().split('\n')[0] || null;
+});
+
+export const shipCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+  const json = given.includes('--json');
+  const told = toldBy(USAGE, () => json);
+  const head = yield* Effect.result(releasedHead(composition.roots.checkout).pipe(Effect.provide(machine)));
+  if (head._tag === 'Failure') {
+    const detail = typeof head.failure === 'string' ? head.failure : head.failure.message;
+    return told('publish-refused', `tag: ${detail}`, [AGAIN]);
+  }
+  if (head.success === null) {
+    yield* releaseCommand(given, composition, !json);
+    yield* notarizeCommand(given, composition, !json);
+  }
+  yield* publishCommand(given, composition);
+});
+
+const publishCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
   const { checkout } = composition.roots;
   let json = given.includes('--json');
   const told = toldBy(USAGE, () => json);

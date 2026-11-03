@@ -255,8 +255,12 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
 
   const build = Effect.fnUntraced(function* (home: string): Effect.fn.Return<Built, ReleaseRefused, Machine> {
     logged = join(home, RELEASE_LOG);
-    const platforms: Record<string, BuiltPlatform> = {};
-    for (const { target, runtime } of runtimes) platforms[targetName(target)] = yield* built(home, target, runtime);
+    const made = yield* Effect.forEach(
+      runtimes,
+      ({ target, runtime }) => Effect.map(built(home, target, runtime), (one) => [targetName(target), one] as const),
+      { concurrency: 'unbounded' },
+    );
+    const platforms: Record<string, BuiltPlatform> = Object.fromEntries(made);
     return { platforms };
   });
 
@@ -293,12 +297,12 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
 
   const stages: Stages = {
     build: (home) => build(home).pipe(Effect.provideContext(context)),
-    trial: (trying) => Effect.forEach(TARGETS, (target) => tried(trying, target), { discard: true }),
+    trial: (trying) => Effect.forEach(TARGETS, (target) => tried(trying, target), { discard: true, concurrency: 'unbounded' }),
   };
   return yield* stagedCut(out, { release, commit: cut.head, stores, irreversible }, stages);
 }, Effect.scoped);
 
-const USAGE = 'bun run tagma:release [--version <x.y.z>] [--out <dir>] [--notarize] [--json]';
+const USAGE = 'bun run tagma:release [--version <x.y.z>] [--out <dir>] [--json]';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -320,7 +324,7 @@ export const flagsOf = (given: readonly string[], told: (code: string, reason: s
   return { json, value: (name) => values.get(name), rest: args.filter((one) => one !== '--json') };
 };
 
-export const releaseCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+export const releaseCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition, shown = true) {
   let json = given.includes('--json');
   const told = (code: string, reason: string, unblock: readonly string[] = [USAGE]): never => {
     if (json) console.log(JSON.stringify({ code, reason, unblock }));
@@ -345,6 +349,7 @@ export const releaseCommand = Effect.fnUntraced(function* (given: readonly strin
       ...(cut.failure.log === '' ? [] : [`${cut.failure.log} — the whole output of every step of this release`]),
     ]);
   }
+  if (!shown) return;
   const { record, images, feed, maps, inputs, log } = cut.success;
   const home = dirname(feed);
   const own = record.irreversible.filter((change) => change.release === record.release).map((change) => change.store);
@@ -364,9 +369,6 @@ export const releaseCommand = Effect.fnUntraced(function* (given: readonly strin
     `a feed of this release alone, to try an update on this machine: ${feed}`,
     `source maps ${maps}: publishing keeps them under ${join(data, KEPT_MAPS, record.release)}`,
     `log ${log}`,
-    composition.publisher === null
-      ? 'this distribution names no publisher, so the release is placed by hand'
-      : `bun run tagma:release publish — publishes ${record.release} in ${composition.publisher.place}`,
   ])
     console.log(line);
 });

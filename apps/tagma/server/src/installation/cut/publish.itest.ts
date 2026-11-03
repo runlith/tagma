@@ -55,16 +55,20 @@ const notary: Notary = {
     }),
 };
 
-const shelf = () => {
+const shelf = (serving = true) => {
   const placed: { publication: Parameters<Publisher['publish']>[0]; present: readonly boolean[] }[] = [];
+  const sizes = new Map<string, number>();
   let latest: Feed | null = null;
   const publisher: Publisher = {
     place: 'the test shelf',
     latest: Effect.sync(() => latest),
     address: (release, file) => `https://shelf.test/${release}/${file}`,
+    served: (release, file) => Effect.sync(() => (serving ? (sizes.get(`${release}/${file}`) ?? null) : null)),
     publish: (publication) =>
       Effect.sync(() => {
         placed.push({ publication, present: publication.files.map((file) => existsSync(join(publication.home, file))) });
+        for (const file of publication.files)
+          sizes.set(`${publication.record.release}/${file}`, readFileSync(join(publication.home, file)).length);
         latest = publication.feed;
         return { page: null };
       }),
@@ -125,5 +129,12 @@ it.live(
       expect(second._tag === 'Success' && second.success.maps).toBe(join(place.kept, '0.2.1'));
       expect(said(['-C', checkout, 'rev-parse', 'v0.2.0^{commit}'])).toBe(first);
       expect(behind._tag === 'Failure' && behind.failure.step).toBe('version');
+
+      const unserved = shelf(false);
+      const lost = commit('fix: lost');
+      cutInto(place.cut, lost, '0.3.0');
+      const missing = yield* Effect.result(publishRelease(unserved.publisher, notary, place).pipe(Effect.provide(machine)));
+      expect(missing._tag === 'Failure' && missing.failure.step).toBe('verify');
+      expect(git(['-C', checkout, 'rev-parse', '--verify', '--quiet', 'v0.3.0']).exitCode).not.toBe(0);
     }),
 );

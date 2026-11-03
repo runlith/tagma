@@ -62,6 +62,7 @@ const publisher: Publisher = {
   place: 'the test shelf',
   latest: Effect.succeed(published),
   address: (release, file) => `https://shelf.test/${release}/${file}`,
+  served: () => Effect.die('a refused cut publishes nothing'),
   publish: () => Effect.die('a refused cut publishes nothing'),
 };
 

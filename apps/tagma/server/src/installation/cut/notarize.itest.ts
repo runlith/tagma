@@ -24,7 +24,7 @@ const submissionId = (n: number): string => `00000000-0000-4000-8000-${String(n)
 const recordAt = (out: string): ReleaseRecord => JSON.parse(readFileSync(join(out, RELEASE_RECORD), 'utf8'));
 
 it.live(
-  'notarization submits and staples the application and the disk image of every platform; stopped while Apple checks the last image, it leaves the cut standing whole, and notarizing again sends nothing again',
+  'notarization submits, staples and judges the application and the disk image of every platform, the platforms side by side; stopped while Apple checks an image, it leaves the cut standing whole, and notarizing again sends nothing again',
   () =>
     Effect.gen(function* () {
       const out = join(scratch, 'release');
@@ -59,16 +59,24 @@ it.live(
       writeFileSync(join(out, RELEASE_RECORD), JSON.stringify(record));
 
       const submitted: string[] = [];
-      const waited: string[] = [];
       const stapled = new Set<string>();
+      const opened = new Set<string>();
       const checking = yield* Deferred.make<void>();
+      const x64Sent = yield* Deferred.make<void>();
       const stopping = { during: true };
+      const nameOf = (id: string) => submitted[Number(id.slice(-12)) - 1];
       const apple: Apple = {
-        submit: (path) => Effect.sync(() => submissionId(submitted.push(path.endsWith('.app') ? appOf(path) : basename(path)))),
+        submit: (path) =>
+          Effect.suspend(() => {
+            const name = path.endsWith('.app') ? appOf(path) : basename(path);
+            const id = submissionId(submitted.push(name));
+            return name === 'x64' ? Effect.as(Deferred.succeed(x64Sent, undefined), id) : Effect.succeed(id);
+          }),
         accepted: (id) =>
           Effect.suspend(() => {
-            waited.push(id);
-            return id === submissionId(4) && stopping.during
+            const name = nameOf(id);
+            if (name === 'arm64') return Deferred.await(x64Sent).pipe(Effect.timeout('5 seconds'), Effect.orDie);
+            return name === 'Tagma-0.1.0-x64.dmg' && stopping.during
               ? Effect.andThen(Deferred.succeed(checking, undefined), Effect.never)
               : Effect.void;
           }),
@@ -78,6 +86,7 @@ it.live(
             else stapled.add(basename(path));
           }),
         assess: () => Effect.void,
+        opens: (image) => Effect.sync(() => opened.add(basename(image))),
         image: (app, image) => Effect.sync(() => writeFileSync(image, `the dmg around ${appOf(app)}, stapled ${stapledIn(app)}`)),
       };
       const notary = yield* sealingNotary(apple).pipe(Effect.provide(machine));
@@ -93,9 +102,9 @@ it.live(
       const notarized = recordAt(out);
 
       expect([standingAfterStop.notarized, wholeAfterStop]).toEqual([false, true]);
-      expect(submitted).toEqual(['arm64', 'x64', 'Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg']);
-      expect(waited.slice(-2)).toEqual([submissionId(3), submissionId(4)]);
+      expect(submitted.toSorted()).toEqual(['Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg', 'arm64', 'x64']);
       expect([...stapled].sort()).toEqual(['Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg']);
+      expect([...opened].sort()).toEqual(['Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg']);
       expect(notarized.notarized).toBe(true);
       for (const [platform, one] of Object.entries(notarized.platforms)) {
         expect(sha(join(out, one.archive))).toBe(one.sha256);

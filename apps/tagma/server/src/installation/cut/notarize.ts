@@ -25,6 +25,7 @@ export type Apple = {
   readonly accepted: (id: string) => Effect.Effect<void, NotarizationRefused>;
   readonly staple: (path: string) => Effect.Effect<void, NotarizationRefused>;
   readonly assess: (app: string) => Effect.Effect<void, NotarizationRefused>;
+  readonly opens: (image: string) => Effect.Effect<void, NotarizationRefused>;
   readonly image: (app: string, image: string) => Effect.Effect<void, NotarizationRefused>;
 };
 
@@ -55,6 +56,16 @@ const ran = (command: string, args: readonly string[], cwd: string): Effect.Effe
   );
 
 const lastLine = (text: string): string => text.trim().split('\n').at(-1) ?? '';
+
+const gatekeeper = (path: string, kind: readonly string[]): Effect.Effect<void, NotarizationRefused, Spawner> =>
+  output('/usr/sbin/spctl', ['--assess', '-vv', ...kind, path], '/', {}).pipe(
+    Effect.mapError((failure) => refused(failure.detail, failure.unblock)),
+    Effect.flatMap((assessed) =>
+      assessed.status === 0 && SPCTL_ACCEPTED.test(assessed.text)
+        ? Effect.void
+        : Effect.fail(refused(`Gatekeeper refuses the notarized ${basename(path)}: ${assessed.text.trim()}`)),
+    ),
+  );
 
 const appleOf = (developer: Developer, context: Context.Context<Spawner>): Apple => {
   const profile = ['--keychain-profile', developer.profile, '--output-format', 'json'];
@@ -99,17 +110,8 @@ const appleOf = (developer: Developer, context: Context.Context<Spawner>): Apple
       provided(
         Effect.andThen(ran('/usr/bin/xcrun', ['stapler', 'staple', path], '/'), ran('/usr/bin/xcrun', ['stapler', 'validate', path], '/')),
       ),
-    assess: (app) =>
-      provided(
-        output('/usr/sbin/spctl', ['--assess', '-vv', '--type', 'execute', app], '/', {}).pipe(
-          Effect.mapError((failure) => refused(failure.detail, failure.unblock)),
-          Effect.flatMap((assessed) =>
-            assessed.status === 0 && SPCTL_ACCEPTED.test(assessed.text)
-              ? Effect.void
-              : Effect.fail(refused(`Gatekeeper refuses the notarized ${basename(app)}: ${assessed.text.trim()}`)),
-          ),
-        ),
-      ),
+    assess: (app) => provided(gatekeeper(app, ['--type', 'execute'])),
+    opens: (image) => provided(gatekeeper(image, ['--type', 'open', '--context', 'context:primary-signature'])),
     image: (app, image) =>
       provided(
         diskImage(app, image, developer.assets, basename(app).replace(/\.app$/u, ''), developer.signing).pipe(
@@ -144,16 +146,13 @@ const sealed = Effect.fn('Notarize.seal')(function* (
   });
 
   yield* at(work, files.makeDirectory(work, { recursive: true }));
-  const platforms: Record<string, FeedArchive> = {};
-  const images: Record<string, string> = {};
-  for (const [platform, one] of Object.entries(record.platforms)) {
+  const chain = Effect.fn('Notarize.platform')(function* (platform: string, one: FeedArchive) {
     const archiveName = basename(one.archive);
     const archive = join(into, archiveName);
     const named = record.images[platform];
     if (named === undefined) return yield* refused(`the cut of ${record.release} holds no disk image of ${platform}`, [RECUT]);
     const imageName = basename(named);
     const image = join(into, imageName);
-    images[platform] = imageName;
     const staging = join(work, platform);
     if (!(yield* at(archive, files.exists(archive))) || !(yield* at(image, files.exists(image)))) {
       const appId = join(staging, APP_SUBMISSION);
@@ -177,19 +176,21 @@ const sealed = Effect.fn('Notarize.seal')(function* (
       yield* at(app, files.remove(app, { recursive: true, force: true }));
       yield* at(`${app}.zip`, files.remove(`${app}.zip`, { force: true }));
     }
+    yield* at(staging, files.makeDirectory(staging, { recursive: true }));
+    yield* apple.accepted(yield* submission(join(staging, IMAGE_SUBMISSION), image));
+    yield* apple.staple(image);
+    yield* apple.opens(image);
     const [sha256, size] = yield* Effect.tryPromise({
       try: () => Promise.all([digestOf(archive), stat(archive).then((info) => info.size)]),
       catch: (error) => refused(`${archive} could not be read: ${String(error)}`),
     });
-    platforms[platform] = { archive: archiveName, sha256, size };
-  }
-  for (const [platform, imageName] of Object.entries(images)) {
-    const staging = join(work, platform);
-    const image = join(into, imageName);
-    yield* at(staging, files.makeDirectory(staging, { recursive: true }));
-    yield* apple.accepted(yield* submission(join(staging, IMAGE_SUBMISSION), image));
-    yield* apple.staple(image);
-  }
+    return { platform, archive: { archive: archiveName, sha256, size }, image: imageName };
+  });
+  const chains = yield* Effect.forEach(Object.entries(record.platforms), ([platform, one]) => chain(platform, one), {
+    concurrency: 'unbounded',
+  });
+  const platforms: Record<string, FeedArchive> = Object.fromEntries(chains.map((one) => [one.platform, one.archive]));
+  const images: Record<string, string> = Object.fromEntries(chains.map((one) => [one.platform, one.image]));
   return { ...record, platforms, images, notarized: true };
 });
 
