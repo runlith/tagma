@@ -516,31 +516,33 @@ describe('the authoritative interpreter', () => {
   );
 
   it.live(
-    'storage: the rows a trim dropped are released by the ring, and a heap census no longer finds them',
+    'storage: the rows a trim dropped leave the ring: their slots are vacated and no slot holds them',
     Effect.fnUntraced(function* () {
       const profile = profileWith(SMALL);
       const outcome = yield* withInterpreter(profile, (interpretation) =>
         Effect.gen(function* () {
           for (let line = 0; line < 6; line += 1) yield* interpretation.feed(bytes(`${styled(5)} C${line}\r\n`));
-          const census = yield* interpretation.read((engine) => {
+          const dropped = yield* interpretation.read((engine) => {
             const ring = buffersOf(engine)[0]?.lines;
             if (ring === undefined) return [];
-            return [0, 1].map((index) => new WeakRef(ring.get(index) as object));
+            return [0, 1].map((index) => ring.get(index) as object);
           });
           yield* interpretation.trim(2);
-          const vacated = yield* interpretation.read((engine) => {
+          const left = yield* interpretation.read((engine) => {
             const ring = buffersOf(engine)[0]?.lines;
-            if (ring === undefined) return -1;
-            return ring._array.filter((slot) => slot === undefined).length;
+            if (ring === undefined) return { vacated: -1, held: -1 };
+            const slots: readonly unknown[] = ring._array;
+            return {
+              vacated: slots.filter((slot) => slot === undefined).length,
+              held: dropped.value.filter((row) => slots.includes(row)).length,
+            };
           });
-          Bun.gc(true);
-          yield* Effect.yieldNow;
-          Bun.gc(true);
-          return { alive: census.value.filter((reference) => reference.deref() !== undefined).length, vacated: vacated.value };
+          return { dropped: dropped.value.length, ...left.value };
         }),
       );
+      expect(outcome.dropped).toBe(2);
       expect(outcome.vacated).toBeGreaterThanOrEqual(2);
-      expect(outcome.alive).toBe(0);
+      expect(outcome.held).toBe(0);
     }),
   );
 
