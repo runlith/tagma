@@ -29,7 +29,7 @@ A person who already uses Claude Code or Codex opens Tagma for the first time an
 
 **A sign-out never switches anything.** Logins can be lost without the person's intent, for example when another tool rewrites tokens, and moving work onto another account or subscription silently would bill one the person did not choose. So a lost login never changes a provider's default account, a saved model, an open draft or a born thread. The composer and the Providers row name the signed-out account with "Sign in again". The person may pick another account or model; Tagma does not.
 
-Until the first send, the composer's model is the fallback: the first provider in ladder order with a usable signed account. The first send keeps that model as the person's default, so from then on nothing moves it.
+Before a model is saved, the composer is offered the first provider in ladder order with a usable signed account. The preference owner retains that provisional choice for defaults and birth: signing out or another provider becoming usable changes no offered model. The first accepted send saves its actual model as the person's default.
 
 A new thread on a signed-out default account is stopped before the send, with the notice and its two acts in the composer. Today it reaches launch and is refused (`HarnessAccountBook.launch` answers `unknown-account`, or `account-required` when no default is set and several accounts are signed in).
 
