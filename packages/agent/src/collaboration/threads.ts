@@ -166,7 +166,7 @@ export class Threads extends Context.Service<
       principal: string,
       request: BirthRequest,
     ): Effect.Effect<
-      { readonly status: 'born'; readonly thread: ThreadRecord } | KeyedSpent | { readonly status: 'unborn' },
+      { readonly status: 'born'; readonly thread: ThreadRecord; readonly itemId?: string } | KeyedSpent | { readonly status: 'unborn' },
       ThreadReadFailure | BirthConflict
     >;
     create(

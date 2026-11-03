@@ -12,7 +12,10 @@ export const PLANE_REFUSALS = {
   'name-taken': ['start the child under another name, or with none and address it by thread id'],
   'spawn-spent': ['ask for the new work in a call of its own'],
   'spawn-conflict': ['ask for a changed child in a call of its own'],
-  'spawn-not-ready': ['ask again in the same call to take the child up'],
+  'spawn-not-ready': [
+    'repeat spawn_agent with the same name and inputs to take up an unstarted child',
+    'send_task to the child thread id to start it',
+  ],
   'spawn-slots-full': ['spawn again once one of the started agents has ended', 'do the work in your own thread'],
   'budget-spent': ['do the work in your own thread', 'the operator raises the budget of this agent tree'],
   'harness-contract': ['start an agent type whose harness takes what you asked for', 'ask without the parameter the reason names'],

@@ -139,7 +139,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
               'spawn-not-ready',
               `child ${child.id} stands and request ${provision.itemId} still provisions it, ` +
                 `but this host could not finish preparing it${unavailable.cause instanceof Error ? ` (${unavailable.cause.message})` : ''}. ` +
-                'Nothing of it is running; ask again under the same request to take it up.',
+                'Nothing of it is running; repeat this spawn with the same name and inputs, or send_task to its thread id.',
             ),
           ),
       ),
@@ -183,7 +183,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
       const itemId = spawnRequestId(parent.id, input.requestId);
       const standing = yield* threads.readBirth(parent.id, parent.principal, asked);
       if (standing.status === 'born')
-        return yield* answer(parent, standing.thread, { itemId, task: input.task, subscribe: input.subscribe });
+        return yield* answer(parent, standing.thread, { itemId: standing.itemId ?? itemId, task: input.task, subscribe: input.subscribe });
       if (standing.status === 'spent') return yield* spawnSpent(input.requestId);
       const there = project === undefined ? {} : { project };
       const offer = yield* types.resolve({ caller: 'agent', under: parent, typeId: input.agentId, ...there });

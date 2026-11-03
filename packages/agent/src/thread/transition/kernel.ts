@@ -1,4 +1,4 @@
-import { Clock, Effect, Option } from 'effect';
+import { Clock, Effect, Option, Schema } from 'effect';
 import { actDigest, callParts, evidenceKey, INPUT_OPERATION, type Evidence, type Keyed, type TransitionOutcome } from '../keyed';
 import type { ThreadMetadataRow, ThreadRow } from '../rows';
 import type { ThreadMetadataChange } from '../state';
@@ -408,6 +408,7 @@ function reused(row: ThreadMetadataRow, evidence: Evidence): Effect.Effect<never
 export type BirthSettled =
   | {
       readonly standing: string | null;
+      readonly itemId?: string;
     }
   | {
       readonly spent: Date | 'before-epoch';
@@ -418,6 +419,7 @@ export type BirthSettled =
   | {
       readonly taken: true;
     };
+const readsBirthReceipt = Schema.is(Schema.Struct({ threadId: Schema.String, itemId: Schema.String }));
 export function readBirthRecord<TTx, TWrite extends TTx>(
   transitions: ThreadTransitionStorage<TTx, TWrite>,
   childId: string,
@@ -436,7 +438,9 @@ export function readBirthRecord<TTx, TWrite extends TTx>(
         return reading.digest === key.digest ? { standing: null } : { reused: true };
       case 'present':
         if (reading.digest !== key.digest) return { reused: true };
-        return { standing: typeof reading.result === 'string' ? reading.result : null };
+        return readsBirthReceipt(reading.result)
+          ? { standing: reading.result.threadId, itemId: reading.result.itemId }
+          : { standing: typeof reading.result === 'string' ? reading.result : null };
       case 'spent':
         return reading.digest === key.digest ? { spent: reading.at } : { reused: true };
     }
@@ -448,8 +452,17 @@ export function writeBirthRecord<TTx, TWrite extends TTx>(
   key: Keyed,
   tx: TWrite,
   childId: string = holderId,
+  itemId?: string,
 ): Effect.Effect<void, ThreadPortFailure> {
-  return transitions.writeRecord(holderId, key.evidence, { digest: key.digest, result: childId }, tx);
+  return transitions.writeRecord(
+    holderId,
+    key.evidence,
+    {
+      digest: key.digest,
+      result: itemId === undefined ? childId : { threadId: childId, itemId },
+    },
+    tx,
+  );
 }
 export function sameVersion(left: ThreadVersion, right: ThreadVersion): boolean {
   return left.foldRev === right.foldRev && left.head === right.head && left.inheritRev === right.inheritRev;

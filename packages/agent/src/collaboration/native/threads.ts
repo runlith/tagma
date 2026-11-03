@@ -4,6 +4,7 @@ import { keptSwitches, type ModelSwitches } from '@runlith/llm/models/descriptio
 import { ThreadAgents } from '../../thread/agents/ThreadAgents';
 import { agentTypeId } from '../../thread/agents/AgentProfile';
 import { ThreadStorageFailed } from '../../thread/persisted';
+import { callKey } from '../../thread/keyed';
 import type { ThreadReadFailure, ThreadRecord } from '../../thread/record';
 import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../thread/rows';
 import { ThreadBranch } from '../../thread/run/ThreadBranch';
@@ -23,6 +24,7 @@ import {
 } from '../../thread/ThreadPorts';
 import { readBirthRecord, writeBirthRecord, type BirthSettled } from '../../thread/transition/kernel';
 import { spawnRequestId } from '../births';
+import { envelopePrefix } from '../envelopeKeys';
 import { DeclaredCollaboration } from '../CollaborationConfig';
 import {
   BirthConflict,
@@ -434,14 +436,56 @@ export const nativeThreadsLayer: Layer.Layer<
       readBirth: Effect.fnUntraced(
         function* (creatorThreadId, principal, request) {
           const key = birthKeyed(creatorThreadId, request);
-          const settled = yield* readBirthRecord(transitions, creatorThreadId, key);
+          const alias = {
+            evidence: { call: callKey({ operation: 'spawn', actor: creatorThreadId, key: request.key }) },
+            digest: key.digest,
+          };
+          let settled =
+            (yield* readBirthRecord(transitions, creatorThreadId, alias)) ?? (yield* readBirthRecord(transitions, creatorThreadId, key));
+          if (settled === null || 'taken' in settled) {
+            const name = request.name;
+            if (name === null || request.root === true) return { status: 'unborn' as const };
+            const parent = yield* store.metadata(creatorThreadId);
+            if (parent?.ownerId !== principal) return { status: 'unborn' as const };
+            if ((yield* store.findNamed(parent.spawnRootId, principal, name))?.parentThreadId !== creatorThreadId)
+              return { status: 'unborn' as const };
+            settled = yield* store.transaction(
+              Effect.fnUntraced(function* (tx) {
+                const replay = yield* readBirthRecord(transitions, creatorThreadId, alias, tx);
+                if (replay !== null) return replay;
+                const child = yield* store.findNamed(parent.spawnRootId, principal, name, tx);
+                if (child?.parentThreadId !== creatorThreadId || (yield* ledger.latestRun(child.id, undefined, tx)) !== null) return null;
+                const prefix = envelopePrefix('spawn', creatorThreadId);
+                const pending = (yield* inbox.openRequests(child.id, tx)).find(
+                  (item) =>
+                    item.id.startsWith(prefix) &&
+                    item.state === 'queued' &&
+                    item.deliveredToRunId === null &&
+                    item.sender.kind === 'thread' &&
+                    item.sender.threadId === creatorThreadId,
+                );
+                if (pending === undefined) return null;
+                const original = yield* readBirthRecord(
+                  transitions,
+                  creatorThreadId,
+                  birthKeyed(creatorThreadId, { ...request, key: pending.id.slice(prefix.length) }),
+                  tx,
+                );
+                if (original === null || !('standing' in original) || (original.standing !== null && original.standing !== child.id))
+                  return null;
+                yield* writeBirthRecord(transitions, child.id, alias, tx, child.id, pending.id);
+                return { standing: child.id, itemId: pending.id };
+              }),
+            );
+          }
           if (settled === null || 'taken' in settled) return { status: 'unborn' as const };
           if ('spent' in settled) return { status: 'spent' as const, at: settled.spent };
           if ('reused' in settled) return yield* new BirthConflict({ childId: null, key: request.key, reason: 'spawn-conflict' });
-          const child = yield* standingChild(settled.standing, spawnRequestId(creatorThreadId, request.key));
+          const itemId = settled.itemId ?? spawnRequestId(creatorThreadId, request.key);
+          const child = yield* standingChild(settled.standing, itemId);
           const creator = request.root === true ? child.createdBy : child.parentThreadId;
           if (child.ownerId !== principal || creator !== creatorThreadId) return { status: 'unborn' as const };
-          return { status: 'born' as const, thread: record(child) };
+          return { status: 'born' as const, thread: record(child), itemId };
         },
         (effect, creatorThreadId, principal, request) =>
           effect.pipe(

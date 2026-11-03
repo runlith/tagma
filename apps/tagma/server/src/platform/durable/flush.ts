@@ -1,8 +1,6 @@
 import type { FileHandle } from 'node:fs/promises';
 import { Effect, Layer } from 'effect';
 import { eventReason, workerGone } from '@runlith/utils/worker';
-import { capacity } from '@runlith/held/Capacity';
-import { Holding, liveHolds, liveTickets } from '@runlith/held/holding';
 
 export type Flushed = 'full' | 'degraded';
 
@@ -20,12 +18,6 @@ export const fullSyncOutcome = (reply: FlushAnswer): Flushed => {
   if (reply.outcome === 'errno' && [22, 25, 45, 102].includes(reply.code)) return 'degraded';
   throw new Error(reply.outcome === 'error' ? reply.reason : `F_FULLFSYNC failed with errno ${reply.code}`);
 };
-
-const slots = capacity([{ name: 'full-fsync', units: 1, limits: { call: 1, background: 1 } }], {
-  admission: Infinity,
-  queued: Infinity,
-});
-const slot = { name: 'full-fsync', class: 'call', needs: [{ pool: 'full-fsync', units: 1 }] } as const;
 
 type Waiting = { readonly resolve: (reply: FlushAnswer) => void; readonly reject: (cause: Error) => void };
 type Ready = { readonly thread: Worker; readonly closed: Promise<void> };
@@ -126,7 +118,7 @@ export const flushDescriptor = Effect.fnUntraced(function* (handle: FileHandle) 
     yield* Effect.tryPromise({ try: () => handle.sync(), catch: (cause) => new Error(String(cause)) });
     return 'full' as const;
   }
-  const flush = Effect.tryPromise({
+  return yield* Effect.tryPromise({
     try: async () => {
       const outcome = fullSyncOutcome(await fullSync(handle.fd));
       if (outcome === 'degraded') await handle.sync();
@@ -134,15 +126,4 @@ export const flushDescriptor = Effect.fnUntraced(function* (handle: FileHandle) 
     },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
   });
-  const holding = yield* Holding;
-  if (liveHolds(holding).length === 0 && liveTickets(holding).length === 0) {
-    return yield* slots.ticket(slot, flush);
-  }
-  const release = yield* slots.tryLease(slot);
-  if (release === null) return yield* Effect.fail(new Error('full-fsync worker is occupied under a held resource'));
-  return yield* Effect.acquireUseRelease(
-    Effect.succeed(release),
-    () => flush,
-    (done) => Effect.sync(done),
-  );
 });
