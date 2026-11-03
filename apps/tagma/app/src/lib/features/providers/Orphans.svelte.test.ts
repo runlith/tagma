@@ -35,6 +35,7 @@ test('accounts outside the catalog remain visible for removal, without installed
       restored: false,
       failedAt: null,
       problem: { kind: 'not-installed' },
+      lent: [],
     },
   ];
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });

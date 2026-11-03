@@ -48,6 +48,7 @@ function account(key: string, label: string, fields: Partial<AccountQuotaRow> = 
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
     ...fields,
   } as AccountQuotaRow;
 }

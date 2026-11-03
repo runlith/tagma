@@ -32,7 +32,14 @@ export class ModelDefaults extends Service<ModelDefaults>()('ModelDefaults', { t
   ) {
     super();
     const stop = $effect.root(() => {
-      const held = $derived(accounts.rows.map((row) => `${row.provider}\n${row.account}\n${row.problem === null}`).join('\n'));
+      const held = $derived(
+        accounts.rows
+          .map(
+            (row) =>
+              `${row.provider}\n${row.account}\n${row.problem === null}\n${row.lent.map((one) => `${one.provider}:${one.problem === null}`).join(',')}`,
+          )
+          .join('\n'),
+      );
       $effect(() => {
         void catalog.served;
         void held;

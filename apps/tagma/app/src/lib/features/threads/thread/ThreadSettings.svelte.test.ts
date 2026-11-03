@@ -63,6 +63,7 @@ const account = (key: string, label: string, provider: string, isDefault = false
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
   }) as unknown as AccountQuotaRow;
 
 function tableOf(rows: readonly AccountQuotaRow[]): UsageAccounts {

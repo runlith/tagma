@@ -25,6 +25,7 @@ function row(usedPercent: number, fields: Partial<AccountQuotaRow> = {}): Accoun
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
     ...fields,
   } as AccountQuotaRow;
 }

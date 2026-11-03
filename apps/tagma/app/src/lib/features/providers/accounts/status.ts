@@ -50,6 +50,30 @@ function needOf(row: AccountQuotaRow, served: ServedProvider | undefined): Usage
   return 'sign-in';
 }
 
+type AccountProblem = NonNullable<AccountQuotaRow['problem']>;
+
+export function problemWords(row: AccountQuotaRow, problem: AccountProblem): string | null {
+  switch (problem.kind) {
+    case 'signed-out':
+      return `${row.label} is signed out`;
+    case 'unsupported-method':
+      return `${problem.method} is not a subscription`;
+    case 'unreadable':
+      return problem.reason;
+    case 'not-installed':
+      return null;
+  }
+}
+
+export function signInTrouble(rows: readonly AccountQuotaRow[], provider: string): string | null {
+  for (const row of rows) {
+    const problem = row.problem ?? row.lent.find((one) => one.provider === provider)?.problem ?? null;
+    const words = problem === null ? null : problemWords(row, problem);
+    if (words !== null) return words;
+  }
+  return null;
+}
+
 export type UsageAbsence = 'reading' | 'unmeasured' | 'unread';
 
 export function usageAbsence(row: AccountQuotaRow, served: ServedProvider | undefined): UsageAbsence {

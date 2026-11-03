@@ -2,7 +2,7 @@ import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/acco
 import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
 import { expect, test } from 'vitest';
 import { servedProvider } from '../testing.js';
-import { usageNeed, usageStatus } from './status.js';
+import { signInTrouble, usageNeed, usageStatus } from './status.js';
 
 const NOW = Date.parse('2026-09-02T12:00:00Z');
 const MINUTE = 60_000;
@@ -20,6 +20,7 @@ function row(fields: Partial<AccountQuotaRow>): AccountQuotaRow {
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
     ...fields,
   } as AccountQuotaRow;
 }
@@ -31,6 +32,22 @@ const SUBSCRIPTION = servedProvider({ id: 'subscription', models: {}, defaultTex
 const FROM_REPLIES = servedProvider({ id: 'stepfun', auth: 'api-key', quotaFromReplies: true, models: {}, defaultTextModel: 'none' });
 
 const stepfun = (fields: Partial<AccountQuotaRow> = {}) => row({ provider: 'stepfun', ...fields });
+
+test('a signed CLI login names why the plan borrowing it cannot run, and only to that plan', () => {
+  const keyring = 'Codex keeps its login in the system keychain, which Tagma does not read';
+  const codex = row({
+    provider: 'codex',
+    origin: { kind: 'cli', place: 'default' },
+    lent: [
+      { provider: 'openai-oauth', problem: { kind: 'unreadable', reason: keyring } },
+      { provider: 'other', problem: null },
+    ],
+  });
+
+  expect(signInTrouble([codex], 'openai-oauth')).toBe(keyring);
+  expect(signInTrouble([codex], 'other')).toBeNull();
+  expect(signInTrouble([{ ...codex, problem: { kind: 'signed-out' } }], 'openai-oauth')).toBe('work@example.com is signed out');
+});
 
 test('a StepFun row stands as its mark alone, and a provider that really reports nothing keeps its word', () => {
   const unsupported = { _tag: 'unsupported' } as AccountQuotaRow['failure'];

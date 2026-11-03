@@ -29,6 +29,7 @@ it.effect('an answer that crossed as JSON decodes its dates and failures into th
           failure: { _tag: 'invalid-response', message: 'the answer did not match' },
           failedAt: 1790712257086,
           problem: null,
+          lent: [],
         },
       ],
     };

@@ -14,6 +14,7 @@
   import { SignInFlow, pendingWords } from '$lib/features/providers/SignInFlow.svelte.js';
   import SignInTerminal from '$lib/features/providers/SignInTerminal.svelte';
   import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
+  import { signInTrouble } from '$lib/features/providers/accounts/status.js';
   import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { settingsHref } from '$lib/features/workspace/address.js';
@@ -38,15 +39,7 @@
   const links = ExternalLinks.use();
   const usage = UsageAccounts.use();
 
-  function troubleOf(provider: string): string | null {
-    const row = usage.signing(provider).find((one) => one.problem !== null && one.problem.kind !== 'not-installed');
-    const problem = row?.problem ?? null;
-    if (row === undefined || problem === null) return null;
-    if (problem.kind === 'signed-out') return `${row.label} is signed out`;
-    if (problem.kind === 'unsupported-method') return `${problem.method} is not a subscription`;
-    if (problem.kind === 'unreadable') return problem.reason;
-    return null;
-  }
+  const troubleOf = (provider: string): string | null => signInTrouble(usage.signing(provider), provider);
 
   const cliOf = (provider: string) => agents.launches.find((row) => row.presentation.modelProvider === provider);
 

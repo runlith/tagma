@@ -25,6 +25,7 @@ function row(windows: readonly QuotaWindow[], fields: Partial<AccountQuotaRow> =
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
     ...fields,
   } as AccountQuotaRow;
 }

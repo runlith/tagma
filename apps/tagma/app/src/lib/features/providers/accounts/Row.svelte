@@ -18,7 +18,7 @@
   import PathText from '$lib/shared/PathText.svelte';
   import { CountdownClock } from './CountdownClock.svelte.js';
   import RemoveAccountDialog from '../auth/RemoveAccountDialog.svelte';
-  import { usageNeed, usageStatus, readingAt, updatedAgo, NEED_WORDS } from './status.js';
+  import { usageNeed, usageStatus, readingAt, updatedAgo, NEED_WORDS, problemWords } from './status.js';
   import { figureTone } from '../usage/thresholds.js';
   import { toneFill, toneText } from './tone.js';
   import Bar from '$lib/shared/ui/Bar.svelte';
@@ -50,6 +50,12 @@
   const directory = $derived(row.origin.kind === 'cli' && row.origin.place !== 'default' ? row.origin.place : null);
   const place = $derived(
     row.origin.kind === 'own' ? 'Tagma sign-in' : (mode?.defaultPlace ?? `${mode?.label ?? catalog.name(row.provider)} default`),
+  );
+  const lending = $derived(
+    row.lent.flatMap((one) => {
+      const words = one.problem === null ? null : problemWords(row, one.problem);
+      return words === null ? [] : [{ provider: one.provider, words }];
+    }),
   );
   const staleNote = $derived(status.stale && status.note !== null && bars.length > 0 ? status.note : null);
   const read = $derived(readingAt(row));
@@ -180,6 +186,12 @@
             {/if}
           </div>
         {/if}
+        {#each lending as one (one.provider)}
+          <div class="flex min-w-0 items-center gap-2 text-small" data-lent={one.provider}>
+            <span class="shrink-0 text-muted-foreground">{catalog.label(one.provider)}</span>
+            <FadeText class="min-w-0 text-severity-gap">{one.words}</FadeText>
+          </div>
+        {/each}
       {:else}
         {@render renameField('text-ui')}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-small text-muted-foreground">

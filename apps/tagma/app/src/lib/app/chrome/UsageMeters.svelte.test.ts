@@ -37,6 +37,7 @@ function account(provider: string, key: string, usedPercent: number, hours: numb
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [] as AccountQuotaRow['lent'],
   } as AccountQuotaRow;
 }
 
@@ -51,6 +52,7 @@ function unread(provider: string, failure: AccountQuotaRow['failure']): AccountQ
     failure,
     failedAt: NOW,
     problem: null,
+    lent: [] as AccountQuotaRow['lent'],
   } as AccountQuotaRow;
 }
 

@@ -155,6 +155,7 @@ function account(
     restored: false,
     failedAt: null,
     problem: null,
+    lent: [],
     ...fields,
   } as AccountQuotaRow;
 }
