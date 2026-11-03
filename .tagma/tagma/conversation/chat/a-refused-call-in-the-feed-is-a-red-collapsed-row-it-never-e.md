@@ -17,6 +17,6 @@ A refusal (`output-refused`) is addressed to the agent: it reads the code, reaso
 - the refusal step never expands itself. `display.opens` does not apply to it: in entries kept before this decision, every graph-operation refusal carries `opens: true`;
 - the row is red like a failure (`chat-refused` token), but the step-group header never counts refusals. Otherwise `bash` with a non-zero code (`grep` with no matches, a failed test) would raise "N failed" over normal work;
 - the status after the row is the refusal producer's phrase from the entry (`toolRefusal.words`); the app never assembles it from the code. An entry with no phrase (kept before it) shows the generic "Refused". When the producer's fact already names the code or phrase as label or value, there is no status;
-- an expanded refusal's reason is shown by the product renderer, when it takes on that step (the tool's `renders` did not refuse it), otherwise by the kit.
+- an expanded refusal's reason is shown by the product renderer, when it takes on that step (the tool's `renders` did not refuse it), otherwise by the kit — as linked text through the host's `userText`, keeping its line breaks, so the block references, paths and commits in it open: a rule refusal opens its rule and the refused place from the card.
 
 Default expansion stays with run failure (`toolError`).
