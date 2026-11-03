@@ -121,6 +121,7 @@ export const composed = Effect.fnUntraced(
       readonly cutAfterPublishing?: boolean;
       readonly gitOver?: (git: Git['Service']) => Git['Service'];
       readonly carried?: boolean;
+      readonly twinBehind?: (checkout: string) => Effect.Effect<boolean | null>;
       readonly project?: FixtureProject;
     } = {},
   ) {
@@ -378,6 +379,7 @@ export const composed = Effect.fnUntraced(
                 : Effect.succeed({ delivered: false, reason: lookup.undelivered } as const),
           },
           carried: () => Effect.succeed(options.carried === true),
+          twinBehind: options.twinBehind === undefined ? undefined : (_projectId, checkout) => options.twinBehind!(checkout),
           coAuthored: () => Effect.succeed(true),
         },
       ),

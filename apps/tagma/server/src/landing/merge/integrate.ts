@@ -21,7 +21,7 @@ import type { TreeReady, TreeSync } from '../../graph/contract/service/delivery.
 import { type FinishingGuards, HEADS } from '../../worktrees/contract/service/finishingGate.js';
 import type { WorktreeMerged } from '../contract/wire/merge.js';
 import type { MergeOptions } from '../contract/service/merges.js';
-import type { GraphCarried, GraphHeld, GraphSettled } from '../contract/service/graphSyncing.js';
+import type { GraphCarried, GraphHeld, GraphSettled, TwinBehind } from '../contract/service/graphSyncing.js';
 import type { MergeRequestRow } from '../store/mergeRequests.js';
 import { conflicting } from './failures.js';
 import type { CoAuthored, MergeCommits, MergeCut, Publishing } from './modes.js';
@@ -29,7 +29,7 @@ import type { MergeHookRefused } from '../contract/service/mergeGit.js';
 import { both, NO_EDITS, NOTHING_CARRIED, type RefusedEdits, unreadSaid } from '../land/reshaping.js';
 import { hookFields } from '../contract/wire/receipt.js';
 import type { MergePublications, Settled } from './publication.js';
-import type { MergeTail } from './tail.js';
+import type { GraphSyncRun, MergeTail } from './tail.js';
 import { takeBase, uncommittedOn } from './update.js';
 
 const ATTEMPTS = 3;
@@ -138,6 +138,8 @@ export const integrate = (
     readonly rules?: ActChecks;
     readonly carried?: GraphCarried;
     readonly settled?: GraphSettled;
+    readonly twinBehind?: TwinBehind;
+    readonly graph?: GraphSyncRun;
     readonly coAuthored: CoAuthored;
   },
 ) =>
@@ -278,29 +280,66 @@ export const integrate = (
             yield* progress.phase(rootId, 'judging');
             const judges = options.rules !== undefined && carries && [...touched].some(inGraphTree);
             const behind = judges ? yield* git.changed(base.root.path, tip, checked.tree) : [];
-            const source = behind.some(inGraphTree)
-              ? yield* takeBase(
-                  git,
-                  checkouts,
-                  holdings,
-                )({ record, branch, baseBranch, tip, baseTip, tree: checked.tree, paths: behind, coAuthored }).pipe(
-                  Effect.catchTags(laneRefusals(branch)),
-                )
-              : tip;
+            const twin =
+              options.rules !== undefined && !carries && options.twinBehind !== undefined
+                ? yield* Effect.mapError(
+                    options.twinBehind(projectId, record.path, branch, baseBranch),
+                    (failure) =>
+                      new WorktreeUnavailable({
+                        reason: 'storage',
+                        message: `whether the graph of ${baseBranch} is ahead of the worktree's could not be read: ${failure.reason}`,
+                      }),
+                  )
+                : null;
+            const takesGraph = behind.some(inGraphTree);
+            const takesTwin = twin === true && !(yield* git.ancestor(base.root.path, baseTip, tip));
+            const source =
+              takesGraph || takesTwin
+                ? yield* takeBase(
+                    git,
+                    checkouts,
+                    holdings,
+                  )({
+                    record,
+                    branch,
+                    baseBranch,
+                    tip,
+                    baseTip,
+                    tree: checked.tree,
+                    paths: takesGraph ? behind : yield* git.changed(base.root.path, tip, checked.tree),
+                    because: takesGraph ? 'both changed the graph' : `its graph holds changes ${branch}'s graph lacks`,
+                    coAuthored,
+                  }).pipe(Effect.catchTags(laneRefusals(branch)))
+                : tip;
             if (source !== tip) {
               took = source;
               tookYielded = checked.yielded;
-              const settled = options.settled;
-              if (settled !== undefined) {
-                yield* Effect.mapError(
-                  settled(projectId, record.path),
-                  (failure) =>
-                    new WorktreeUnavailable({
-                      reason: 'storage',
-                      message: `the worktree's graph could not take in what ${baseBranch} brought before the merge was judged: ${failure.reason}`,
-                    }),
+            }
+            if (twin === true && options.graph !== undefined) {
+              const brought = yield* options.graph(projectId, record.path);
+              if (brought.status === 'unread')
+                return yield* refused(
+                  'inspection-failed',
+                  `the graph of ${baseBranch} could not be brought into the graph of ${branch} before the merge was judged: ${brought.reason}`,
+                  [`read the graph of ${record.path} with sync_graph, then merge again`],
                 );
-              }
+              const conflicted = brought.status === 'synced' ? brought.merges.filter((one) => one.conflicts.length > 0) : [];
+              if (conflicted.length > 0)
+                return yield* refused(
+                  'merge-conflicts',
+                  `the graph of ${baseBranch} conflicts with the graph of ${branch} on ${conflicted.flatMap((one) => one.conflicts).join(', ')}, so the merge cannot be judged by the merged graph`,
+                  [`resolve the graph conflict in ${record.path} with resolve_graph_conflict, then merge again`],
+                );
+            }
+            if ((source !== tip || twin !== null) && options.settled !== undefined) {
+              yield* Effect.mapError(
+                options.settled(projectId, record.path),
+                (failure) =>
+                  new WorktreeUnavailable({
+                    reason: 'storage',
+                    message: `the worktree's graph could not take in what ${baseBranch} brought before the merge was judged: ${failure.reason}`,
+                  }),
+              );
             }
             const cut: MergeCut = {
               mode,
@@ -328,6 +367,7 @@ export const integrate = (
                 caller: request.caller,
                 workdir: record.path,
               };
+              if (twin !== null) return judged(rules, { ...subject, rulesAt: record.path, parted: false });
               if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>
                 behind.some(inGraphTree)

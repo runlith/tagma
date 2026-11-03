@@ -13,6 +13,7 @@ import { GraphSyncing } from './contract/service/graphSyncing.js';
 import { GraphChanging } from './contract/service/graphChanges.js';
 import { MergeReceipts } from './contract/service/receipts.js';
 import { makeMergeCoordinator } from './merge/coordinator.js';
+import { twinBehindOf } from './graphSync.js';
 import { MergeGit } from './contract/service/mergeGit.js';
 import { makeMergeGit } from './merge/git.js';
 import { makeMergeQueue } from './queue/pendingMerges.js';
@@ -44,6 +45,7 @@ export const assembleLanding = Effect.gen(function* () {
     graphChanges: yield* GraphChanging,
     carried: (projectId) => Effect.map(policy.read([projectId]), (rows) => rows.get(projectId)?.storage === 'team'),
     settled: (projectId, checkout) => Effect.flatMap(served.resolve({ projectId, cwd: checkout }), (graph) => graph.settled(true)),
+    twinBehind: twinBehindOf(served),
     rules: actChecks(yield* RuleChecks, 'merge_worktree'),
     coAuthored: (projectId) => settings.value(coAuthor, projectId),
   }).pipe(Effect.provideService(MergeGit, mergeGit), Effect.provideService(MergeReceipts, mergeReceipts(db, units)));
