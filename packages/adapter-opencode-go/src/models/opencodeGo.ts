@@ -147,7 +147,7 @@ const OPENCODE_GO_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-spark-1.3-contributor': {
-    label: 'Muse Spark 1.3 Contributor',
+    label: 'Spark 1.3 Contributor',
     short: 'Spark C',
     capacity: { context: 1_048_576, output: 131_072 },
     capabilities: ['text', 'vision'],
@@ -155,7 +155,7 @@ const OPENCODE_GO_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-spark-1.2-contributor': {
-    label: 'Muse Spark 1.2 Contributor',
+    label: 'Spark 1.2 Contributor',
     short: 'Spark C',
     capacity: { context: 1_048_576, output: 131_072 },
     capabilities: ['text', 'vision'],
