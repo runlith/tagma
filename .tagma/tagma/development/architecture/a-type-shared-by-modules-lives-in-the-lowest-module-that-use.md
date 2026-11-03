@@ -193,10 +193,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated object:7496feedf6c53318: apps/tagma/server/src/release-channel/child.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated alias:SettingLandRefusal apps/tagma/server/src/settings/contract/service/values.ts",
           "owner": "5a3bed29"
         },

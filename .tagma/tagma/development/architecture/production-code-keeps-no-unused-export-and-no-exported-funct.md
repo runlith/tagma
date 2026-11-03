@@ -8750,10 +8750,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/child.ts#Captured",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/release-channel/install.ts#ReleaseNotInstalled",
           "owner": "5a3bed29"
         },
