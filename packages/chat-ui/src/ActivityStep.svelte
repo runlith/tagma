@@ -17,6 +17,7 @@
     type ChatStepMoment,
     chatThoughtLabel,
     chatToolActivity,
+    displayDraws,
     firstLabelLine,
     foldedSubjects,
     foldedToolCounts,
@@ -127,7 +128,7 @@
     const display = entry.display;
     if (entry.toolError || entry.toolRefusal || entry.toolInputRaw) return true;
     if ((display?.images?.length ?? 0) > 0) return true;
-    if (display && display.form !== 'none' && display.form !== 'binary') return true;
+    if (displayDraws(display)) return true;
     if (rendering.kinds.toolRenders(entry)) return true;
     return readableOutput(entry, (name, output) => rendering.kinds.toolModelText(name, output)) !== null;
   }

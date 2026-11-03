@@ -1,5 +1,5 @@
 import type { AgentRuntimeGuidance } from '@runlith/agent/contracts';
-import { toolDisplayOpensByDefault } from '@runlith/agent/tool/display';
+import { type ToolDisplay, toolDisplayOpensByDefault } from '@runlith/agent/tool/display';
 import {
   toolFailed as producerToolFailed,
   toolReceipt,
@@ -242,6 +242,23 @@ export type ChatStepFact = { readonly label: string; readonly value?: string; re
 
 export function shownFacts(facts: readonly ChatStepFact[], verbose: boolean): readonly ChatStepFact[] {
   return verbose ? facts : facts.filter((fact) => fact.quiet !== true);
+}
+
+export function displayDraws(display: ToolDisplay | undefined): display is ToolDisplay {
+  if (display === undefined) return false;
+  switch (display.form) {
+    case 'none':
+    case 'binary':
+      return false;
+    case 'command':
+      return true;
+    case 'list':
+      return display.items.length > 0;
+    case 'diff':
+      return display.files.some((file) => file.patch !== '');
+    default:
+      return display.text !== '';
+  }
 }
 
 export function readableOutput(entry: ToolActivityEntry, text: (toolName: string, output: unknown) => string | null): string | null {

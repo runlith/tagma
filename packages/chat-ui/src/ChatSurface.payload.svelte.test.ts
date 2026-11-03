@@ -59,7 +59,7 @@ afterEach(async () => {
   host = undefined;
 });
 
-const call = (id: string, toolName: string, toolInput: Record<string, string>, toolDisplay: Record<string, string>) => ({
+const call = (id: string, toolName: string, toolInput: Record<string, string>, toolDisplay: Record<string, unknown>) => ({
   type: 'tool',
   id,
   runId: 'run-1',
@@ -81,6 +81,7 @@ describe('a call opened with raw payloads shown', () => {
           activeRunId: 'run-1',
           open: [
             call('bare', 'submit_work', { subject: 'the bare payload' }, { form: 'none', verb: 'Committed' }),
+            call('empty', 'grep', { pattern: 'the empty search' }, { form: 'list', items: [], total: 0 }),
             call('read', 'read', { path: 'the folded payload' }, { form: 'text', text: 'what the call printed' }),
           ],
         }),
@@ -118,7 +119,7 @@ describe('a call opened with raw payloads shown', () => {
         context: new Map([[CHAT_STRINGS, strings]]),
       }) as Record<string, unknown>;
       flushSync();
-      for (const id of ['bare', 'read']) {
+      for (const id of ['bare', 'empty', 'read']) {
         const row = host.querySelector<HTMLElement>(`[data-entry="${id}"]`)!;
         if (row.getAttribute('aria-expanded') !== 'true') row.click();
       }
@@ -126,6 +127,7 @@ describe('a call opened with raw payloads shown', () => {
 
       const toggles = [...host.querySelectorAll('button')].filter((button) => button.textContent?.trim() === 'details');
       expect(host.textContent).toContain('the bare payload');
+      expect(host.textContent).toContain('the empty search');
       expect(host.textContent).toContain('what the call printed');
       expect(host.textContent).not.toContain('the folded payload');
       expect(toggles).toHaveLength(1);
