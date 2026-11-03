@@ -21,6 +21,8 @@ export type SuiteOptions = {
   readonly combineVitest: boolean;
 };
 
+export const SCRIPTS = ['test', 'test:integration', 'test:native'] as const;
+
 const BUN_TEST = /\bbun(?:\s+--\S+)*\s+test\b/;
 const TEST_FILE = /\.[cm]?[jt]sx?'?$/;
 
@@ -47,7 +49,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
     });
   }
   for (const pkg of [...packages].sort((a, b) => a.dir.localeCompare(b.dir))) {
-    for (const script of ['test', 'test:integration']) {
+    for (const script of SCRIPTS) {
       const source = pkg.scripts[script];
       if (source === undefined || (script === 'test' && vitest.has(pkg.dir))) continue;
       const id = `${pkg.dir || '.'}:${script}`;

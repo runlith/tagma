@@ -15,8 +15,9 @@
   "scripts": {
     "build:native": "bun src/composition/nativeBuild.ts",
     "db:generate": "drizzle-kit generate",
-    "test": "bun run build:native && cargo test -j 1 --locked --manifest-path native/Cargo.toml -p execution-platform -p execution-holder --target-dir native/target -- --test-threads=2 && testbed bun test --no-isolate",
+    "test": "testbed bun test --no-isolate",
     "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:native": "bun run build:native && cargo test -j 1 --locked --manifest-path native/Cargo.toml -p execution-platform -p execution-holder --target-dir native/target -- --test-threads=2",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

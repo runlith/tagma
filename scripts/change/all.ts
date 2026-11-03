@@ -7,7 +7,7 @@ import type { FileVerdict, OutcomeRow, RunRow } from '@runlith/testbed/report';
 import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import { runJobs, type Ended } from '@runlith/testbed/schedule';
 import { packagesOf, workspacePaths } from './packages.ts';
-import { suitesOf, type Suite } from './suites.ts';
+import { SCRIPTS, suitesOf, type Suite } from './suites.ts';
 
 const started = performance.now();
 const own = process.cpuUsage();
@@ -22,7 +22,7 @@ for (let at = 0; at < args.length; at++) {
 const value = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 if (args.includes('--help')) {
   console.log(
-    'bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script test|test:integration] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan]',
+    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan]`,
   );
   process.exit(0);
 }
@@ -33,8 +33,8 @@ const seed = value('--seed') === undefined ? undefined : Number(value('--seed'))
 if (seed !== undefined && (!Number.isInteger(seed) || seed < 0 || seed > 2 ** 32 - 1)) throw new Error('--seed must be a uint32');
 const limit = Number(value('--max-suites') ?? Infinity);
 if (limit !== Infinity && (!Number.isInteger(limit) || limit < 1)) throw new Error('--max-suites must be a positive integer');
-if (value('--script') !== undefined && !['test', 'test:integration'].includes(value('--script')!))
-  throw new Error('--script must be test or test:integration');
+const script = value('--script');
+if (script !== undefined && !SCRIPTS.some((one) => one === script)) throw new Error(`--script must be one of ${SCRIPTS.join(', ')}`);
 const paths = workspacePaths(root);
 const packages = packagesOf(paths, (path) => readFileSync(join(root, path), 'utf8'));
 if (value('--package') !== undefined && !packages.some((pkg) => (pkg.dir || '.') === value('--package')))
@@ -52,7 +52,7 @@ let suites = suitesOf(packages, paths, {
   combineVitest: value('--package') === undefined,
 })
   .filter((suite) => value('--package') === undefined || (suite.directory || '.') === value('--package'))
-  .filter((suite) => value('--script') === undefined || suite.script === value('--script'));
+  .filter((suite) => script === undefined || suite.script === script);
 if (args.includes('--plan')) {
   console.log(JSON.stringify(suites, null, 2));
   process.exit(0);
