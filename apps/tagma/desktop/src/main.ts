@@ -334,7 +334,7 @@ class PillWindow implements Pill {
 
   private load(): void {
     if (this.window.isDestroyed()) return;
-    this.window.loadURL(new URL(PILL_PATH, this.url).toString()).catch(() => undefined);
+    this.window.loadURL(new URL(PILL_PATH, this.url).toString(), { extraHeaders: 'Cache-Control: no-cache\n' }).catch(() => undefined);
   }
 }
 

@@ -60,7 +60,7 @@ export class ViewWindows {
     window.on('closed', () => {
       if (this.opened.get(request.key) === window) this.opened.delete(request.key);
     });
-    window.loadURL(url.toString()).catch(() => undefined);
+    window.loadURL(url.toString(), { extraHeaders: 'Cache-Control: no-cache\n' }).catch(() => undefined);
   }
 
   private reveal(path: unknown): void {
