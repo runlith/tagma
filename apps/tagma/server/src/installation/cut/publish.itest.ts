@@ -14,7 +14,7 @@ import type { Composition, Publisher } from './descriptor.js';
 import { KEPT_MAPS } from './pipeline.js';
 import { MAPS, RELEASE_RECORD, type ReleaseRecord } from './stage.js';
 import type { Notary } from './notarize.js';
-import { publishRelease, shipCommand } from './publish.js';
+import { needsReleaseSource, publishRelease, shipCommand } from './publish.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-publish-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -197,6 +197,23 @@ it.live(
       expect(readFileSync(join(kept, '0.5.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.5.0"}');
       expect(readdirSync(kept)).toEqual(['0.5.0']);
     }),
+);
+
+it.live('only a HEAD with no standing cut and no release tag needs its release source', () =>
+  Effect.gen(function* () {
+    const { checkout, head } = repository('sourced');
+    const { publisher } = shelf();
+    const place = { cut: join(scratch, 'sourced-release'), checkout, kept: join(scratch, 'sourced-maps') };
+    const needs = () => needsReleaseSource(checkout, place.cut);
+
+    const uncut = yield* needs();
+    cutInto(place.cut, head, '0.10.0');
+    const cut = yield* needs();
+    yield* publishRelease(publisher, notary, place).pipe(Effect.provide(machine));
+    const released = yield* needs();
+
+    expect([uncut, cut, released]).toEqual([true, false, false]);
+  }),
 );
 
 const untouched = () => {

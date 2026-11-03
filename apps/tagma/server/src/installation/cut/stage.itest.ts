@@ -112,15 +112,14 @@ it.live(
         ['Tagma-0.1.3.dmg', 'the dmg of 0.1.3'],
       ] as const)
         writeFileSync(join(home, name), text);
-      writeFileSync(
-        join(home, RELEASE_RECORD),
-        JSON.stringify({
-          ...identity,
-          platforms: { 'darwin-arm64': { archive: 'tagma-0.1.3-darwin-arm64.tar.gz', sha256: '0'.repeat(64), size: 20 } },
-          images: { 'darwin-arm64': 'Tagma-0.1.3.dmg' },
-          notarized: false,
-        }),
-      );
+      const digest = (text: string) => ({ sha256: createHash('sha256').update(text).digest('hex'), size: text.length });
+      const record = {
+        ...identity,
+        platforms: { 'darwin-arm64': { archive: 'tagma-0.1.3-darwin-arm64.tar.gz', ...digest('the archive of 0.1.3') } },
+        images: { 'darwin-arm64': 'Tagma-0.1.3.dmg' },
+        notarized: false,
+      };
+      writeFileSync(join(home, RELEASE_RECORD), JSON.stringify(record));
       symlinkSync(basename(home), `${out}.next`);
       const stagesRun: string[] = [];
       const stages: Stages = {
@@ -133,5 +132,14 @@ it.live(
       expect(stagesRun).toEqual([]);
       expect(realpathSync(out)).toBe(home);
       expect(readFileSync(standing.images['darwin-arm64']!, 'utf8')).toBe('the dmg of 0.1.3');
+
+      writeFileSync(
+        join(home, RELEASE_RECORD),
+        JSON.stringify({ ...record, notarized: true, imageDigests: { 'darwin-arm64': digest('the dmg of 0.1.3') } }),
+      );
+      writeFileSync(join(home, 'Tagma-0.1.3.dmg'), 'the dmg of 0.1.X');
+      const tampered = yield* Effect.flip(stagedCut(out, identity, stages).pipe(Effect.provide(BunFileSystem.layer)));
+      expect(tampered.step).toBe('image');
+      expect(stagesRun).toEqual([]);
     }),
 );

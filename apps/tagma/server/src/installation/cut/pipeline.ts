@@ -25,7 +25,7 @@ import { archiveTrouble, developerInputs, type Label, sourceComments } from './p
 import { checkoutTags, highestOf } from './published.js';
 import { INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
-import { type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
+import { BRAND, type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
 import { machineTarget, type Target, TARGETS, targetName } from './target.js';
 import { trialStart } from './trial.js';
 
@@ -255,6 +255,9 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
 
   const build = Effect.fnUntraced(function* (home: string): Effect.fn.Return<Built, ReleaseRefused, Machine> {
     logged = join(home, RELEASE_LOG);
+    yield* files
+      .copy(composition.brand.assets, join(home, BRAND), { overwrite: true })
+      .pipe(Effect.mapError(unreadable(composition.brand.assets)));
     const platforms: Record<string, BuiltPlatform> = {};
     for (const { target, runtime } of runtimes) platforms[targetName(target)] = yield* built(home, target, runtime);
     return { platforms };

@@ -18,7 +18,7 @@ import {
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
 import { previousRelease } from '../installation/closure/versions.js';
-import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/source.js';
+import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/snapshot.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
 import { type InstallRefusal, installRefusalSchema, type NextFrame } from '../installation/contract/wire/next.js';
 import {

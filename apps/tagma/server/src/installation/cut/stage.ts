@@ -146,6 +146,33 @@ const recordIn = Effect.fn('installation.cutRecord')(function* (home: string) {
   return decoded.success;
 });
 
+export const provenCut = Effect.fn('installation.proveCut')(function* (home: string, record: ReleaseRecord) {
+  const recut = [`move the cut at ${home} aside, then cut the release again`];
+  const proofs = [
+    ...Object.values(record.platforms).map((one) => ({ step: 'archive', path: join(home, one.archive), expected: one })),
+    ...(record.notarized
+      ? Object.entries(record.imageDigests ?? {}).flatMap(([platform, expected]) =>
+          record.images[platform] === undefined ? [] : [{ step: 'image', path: join(home, record.images[platform]), expected }],
+        )
+      : []),
+  ];
+  for (const { step, path, expected } of proofs) {
+    const weight = yield* Effect.tryPromise({
+      try: () => weigh(path),
+      catch: (error) =>
+        new ReleaseRefused({ step: 'release', detail: `${path} could not be read: ${String(error)}`, log: '', unblock: recut }),
+    });
+    if (weight.size !== expected.size || weight.sha256 !== expected.sha256) {
+      return yield* new ReleaseRefused({
+        step,
+        detail: `${path} is ${weight.size} bytes with sha256 ${weight.sha256}, and ${RELEASE_RECORD} records ${expected.size} bytes with sha256 ${expected.sha256}`,
+        log: '',
+        unblock: recut,
+      });
+    }
+  }
+});
+
 type Kind = 'directory' | 'link' | 'other' | null;
 
 const kindOf = (path: string): Effect.Effect<Kind, ReleaseRefused> =>
@@ -243,6 +270,7 @@ export const stagedCut = Effect.fn('installation.stagedCut')(function* (out: str
   const at = yield* standingHome(out);
   const standing = at === null ? null : yield* recordIn(at);
   if (at !== null && standing !== null && standing.release === identity.release && standing.commit === identity.commit) {
+    yield* provenCut(at, standing);
     return releasedAt(at, standing);
   }
   const home = homeOf(out, { ...identity, notarized: false });

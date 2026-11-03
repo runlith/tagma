@@ -22,11 +22,11 @@ import {
   landNotarized,
   MAPS,
   openHome,
+  provenCut,
   recordedInPlace,
   standingHome,
   RELEASE_RECORD,
   type ReleaseRecord,
-  weigh,
 } from './stage.js';
 
 const USAGE = 'bun run tagma:release publish [--version <x.y.z>] [--out <dir>] [--json]';
@@ -90,27 +90,7 @@ const cutStanding = Effect.fnUntraced(function* (cut: string): Effect.fn.Return<
       if (!(yield* present(path))) return yield* refused('release', `${path}, which ${RELEASE_RECORD} names, is absent`, [RECUT]);
     }
   }
-  const proofs = [
-    ...Object.values(record.platforms).map((one) => ({ step: 'archive', path: join(home, one.archive), expected: one })),
-    ...(record.notarized
-      ? Object.entries(record.imageDigests ?? {}).flatMap(([platform, expected]) =>
-          record.images[platform] === undefined ? [] : [{ step: 'image', path: join(home, record.images[platform]), expected }],
-        )
-      : []),
-  ];
-  for (const { step, path, expected } of proofs) {
-    const weight = yield* Effect.tryPromise({
-      try: () => weigh(path),
-      catch: (error) => refused('release', `${path} could not be read: ${String(error)}`),
-    });
-    if (weight.size !== expected.size || weight.sha256 !== expected.sha256) {
-      return yield* refused(
-        step,
-        `${path} is ${weight.size} bytes with sha256 ${weight.sha256}, and ${RELEASE_RECORD} records ${expected.size} bytes with sha256 ${expected.sha256}`,
-        [RECUT],
-      );
-    }
-  }
+  yield* provenCut(home, record).pipe(Effect.mapError((failure) => refused(failure.step, failure.detail, [RECUT])));
   return { record, home };
 });
 
@@ -388,6 +368,12 @@ const headOf = Effect.fnUntraced(function* (checkout: string, cut: string): Effe
   }
   return standing === null ? { _tag: 'Uncut' } : { _tag: 'Cut' };
 });
+
+export const needsReleaseSource = (checkout: string, cut: string): Effect.Effect<boolean, PublishRefused> =>
+  headOf(checkout, cut).pipe(
+    Effect.map((head) => head._tag === 'Uncut'),
+    Effect.provide(machine),
+  );
 
 const completedMaps = Effect.fnUntraced(function* (
   kept: string,

@@ -561,7 +561,7 @@ export const cachedArtifact = Effect.fnUntraced(function* (input: BuildInput) {
 });
 
 const USAGE =
-  'expected the bundle directory, an optional build label, and optionally --conditions <a,b>, --inputs <file>, --maps <dir>, --sign <identity>, --arch <arm64|x64>, --runtime <bun> and --bare';
+  'expected the bundle directory, an optional build label, and optionally --conditions <a,b>, --inputs <file>, --maps <dir>, --sign <identity>, --arch <arm64|x64>, --runtime <bun>, --origin-from <dir> with --origin-to <dir>, and --bare';
 
 const argumentsOf = (given: readonly string[]) => {
   const rest = [...given];
@@ -578,6 +578,8 @@ const argumentsOf = (given: readonly string[]) => {
   const sign = valued('--sign');
   const arch = valued('--arch');
   const runtime = valued('--runtime');
+  const originFrom = valued('--origin-from');
+  const originTo = valued('--origin-to');
   const bareAt = rest.indexOf('--bare');
   if (bareAt >= 0) rest.splice(bareAt, 1);
   const [root, build, ...extra] = rest;
@@ -589,6 +591,9 @@ const argumentsOf = (given: readonly string[]) => {
     sign === undefined ||
     arch === undefined ||
     runtime === undefined ||
+    originFrom === undefined ||
+    originTo === undefined ||
+    (originFrom === null) !== (originTo === null) ||
     extra.length > 0 ||
     rest.some((one) => one.startsWith('--'))
   )
@@ -602,6 +607,7 @@ const argumentsOf = (given: readonly string[]) => {
     sign,
     arch,
     runtime,
+    origin: originFrom === null || originTo === null ? undefined : { from: originFrom, to: originTo },
     bare: bareAt >= 0,
   };
 };
@@ -631,6 +637,7 @@ export const main = Effect.gen(function* () {
       comments: asked.bare ? 'none' : 'kept',
       minify: asked.bare,
       sourcemap: asked.maps === null ? 'none' : 'external',
+      origin: asked.origin,
     },
     maps: asked.maps === null ? undefined : path.resolve(asked.maps),
     signing: asked.sign === null ? undefined : { identity: asked.sign, timestamp: true },

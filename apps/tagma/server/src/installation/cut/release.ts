@@ -3,12 +3,14 @@ import type { ChildProcessSpawner } from 'effect/process';
 import { realpathSync } from 'node:fs';
 import { basename, dirname, relative as relativePath, resolve } from 'node:path';
 import { sealRelease } from './sealing.js';
+import { capturedSource } from './source.js';
+import type { CapturedSource } from '../contract/wire/capture.js';
 import { bundle } from '@runlith/bundle/bundle';
 import { buildEngine } from '@runlith/sqlite-process/artifact';
 import { Git } from '@runlith/git/Git';
 import { verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { type GitAnswerInvalid, type GitRefused, type GitUnreadable, troubleOf } from '@runlith/git/repository';
-import { gitCut, gitTree } from '../../platform/git/readings.js';
+import { gitCut, gitText, gitTree } from '../../platform/git/readings.js';
 import type { Composition } from './descriptor.js';
 import {
   hostBinary,
@@ -24,6 +26,7 @@ import {
   RELEASE_NUMBER_ENV,
   BUILD_TARGET_ENV,
   revisionLabel,
+  sourceMapOriginIn,
 } from '../contract/wire/layout.js';
 import {
   CLOSURE_LAYOUT,
@@ -34,6 +37,7 @@ import {
   type InstallationManifest,
   type InstallationRole,
   type InstallationPlatform,
+  type InstallationProvenance,
   type IrreversibleChange,
   MIGRATIONS,
   PACKAGE_FILE,
@@ -146,6 +150,7 @@ const bundled = Effect.fnUntraced(function* (
   let rewrote = 0;
   const closure = yield* bundle(entry, basename(outfile), {
     sourcemap: 'external',
+    origin: sourceMapOriginIn(process.env),
     comments: release === null ? 'kept' : 'none',
     minify: release !== null,
     define: {
@@ -204,7 +209,16 @@ const labelled = Effect.fnUntraced(function* (
   git: Git['Service'],
   checkout: string,
   version: string,
+  captured: CapturedSource | null,
 ): Effect.fn.Return<{ readonly build: string; readonly tree: string | undefined }, GitUnreadable | GitRefused | GitAnswerInvalid, Spawner> {
+  if (captured !== null) {
+    const short =
+      captured.head === null ? null : ((yield* gitText(git, checkout, ['rev-parse', '--short', captured.head])) ?? captured.head).trim();
+    return {
+      build: `${revisionLabel(short === null ? null : { head: short, dirty: captured.dirty })} ${version}`,
+      tree: captured.tree ?? undefined,
+    };
+  }
   const [cut, tree] = yield* Effect.all([gitCut(git, checkout), gitTree(git, checkout)], { concurrency: 'unbounded' });
   return {
     build: `${revisionLabel(cut === null ? null : { head: cut.head, dirty: tree.changed > 0 })} ${version}`,
@@ -218,7 +232,7 @@ const releaseWith = <Launcher>(
   installRoot: string,
   composition: Composition,
   writing: (platform: InstallationPlatform) => Effect.Effect<Launcher, LauncherWriteFailed, FileSystem.FileSystem>,
-  origin: { readonly checkout: string } | null | undefined = undefined,
+  origin: InstallationProvenance | null | undefined = undefined,
   swapped: (version: string) => void = () => undefined,
   release: ReleaseCut | null = null,
 ): Effect.Effect<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
@@ -243,7 +257,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   installRoot: string,
   composition: Composition,
   writing: (platform: InstallationPlatform) => Effect.Effect<Launcher, LauncherWriteFailed, FileSystem.FileSystem>,
-  origin: { readonly checkout: string } | null | undefined,
+  origin: InstallationProvenance | null | undefined,
   release: ReleaseCut | null,
 ): Effect.fn.Return<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> {
   const { conditions, roots, client, entries } = composition;
@@ -300,6 +314,9 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   }
   const app = client.root;
   const { desktop, checkout, packages } = roots;
+  const captured = yield* capturedSource(checkout).pipe(
+    Effect.catchTag('SourceRefused', (failure) => refuseEarly('revision', failure.message, failure.unblock)),
+  );
   const host = `${packages}/execution-host`;
   if (release !== null) {
     const trouble = yield* targetTrouble(release.target, checkout);
@@ -548,16 +565,18 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     ]);
   }
 
-  const labels = yield* step('revision', labelled(git, checkout, release === null ? stamp : staged.version), troubleOf);
+  const labels = yield* step('revision', labelled(git, checkout, release === null ? stamp : staged.version, captured), troubleOf);
   const build = release === null ? labels.build : release.number;
   const { tree } = labels;
   yield* step(
     'executions',
     Effect.gen(function* () {
+      const mapOrigin = sourceMapOriginIn(process.env);
       const released =
         release === null
           ? []
           : [
+              ...(mapOrigin === undefined ? [] : ['--origin-from', mapOrigin.from, '--origin-to', mapOrigin.to]),
               '--inputs',
               `${release.inputs}/${EXECUTIONS_INPUTS}`,
               '--maps',
@@ -592,8 +611,9 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       const stores = composition.stores.length === 0 ? [] : [['migrations', STORE_MIGRATIONS] as const];
       const layout = [...programs, ...CLOSURE_LAYOUT, ...stores, ...engineLayout(engine)];
       const measured = yield* Effect.forEach(layout, ([role, place]) => partsAt(root, role, place));
-      const carried = origin === undefined ? { checkout } : origin === null ? undefined : origin;
-      return yield* writeInstallation(root, platform, build, measured.flat(), carried, tree, release?.irreversible);
+      const carried: InstallationProvenance | undefined = origin === undefined ? { checkout } : origin === null ? undefined : origin;
+      const source = carried === undefined ? undefined : { ...carried, inputs: captured?.inputs ?? carried.inputs };
+      return yield* writeInstallation(root, platform, build, measured.flat(), source, tree, release?.irreversible);
     }),
     (refusal) => `${refusal.path}: ${refusal.detail}`,
   );
@@ -670,7 +690,7 @@ export const releaseInstallation = (
   launcher: string,
   env: NodeJS.ProcessEnv,
   composition: Composition,
-  origin: { readonly checkout: string } | null | undefined = undefined,
+  origin: InstallationProvenance | null | undefined = undefined,
   swapped: (version: string) => void = () => undefined,
 ): Effect.Effect<ReleaseLanded, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
   releaseWith(installRoot, composition, (platform) => writeLauncher(installRoot, launcher, platform, env), origin, swapped);

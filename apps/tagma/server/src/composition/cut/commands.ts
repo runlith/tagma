@@ -4,6 +4,7 @@ import { ClaimHolders } from '../../executions/contract/service/host.js';
 import { hostsStaying } from '../../executions/host/staying.js';
 import { GRAPH_STEPS } from '../../graph/steps/sequence.js';
 import { build } from '../../installation/cut/build.js';
+import { releaseSource } from '../../installation/cut/entry.js';
 import { runCut } from '../../installation/cut/command.js';
 import type { Composition } from '../../installation/cut/descriptor.js';
 import type { InstanceHosts } from '../../installation/cut/port.js';
@@ -37,13 +38,20 @@ const cutOf = async (of: Build): Promise<Composition> => {
 };
 
 export const releaseCut = async (of: Build, given: readonly string[]): Promise<void> => {
-  const composition = await cutOf(of);
   await runCut(
-    given[0] === 'publish'
-      ? shipCommand(given.slice(1), composition)
-      : given[0] === 'notarize'
-        ? notarizeCommand(given.slice(1), composition)
-        : cutCommand(given, composition),
+    releaseSource(
+      given,
+      of.cut,
+      Effect.flatMap(
+        Effect.promise(() => cutOf(of)),
+        (composition) =>
+          given[0] === 'publish'
+            ? shipCommand(given.slice(1), composition)
+            : given[0] === 'notarize'
+              ? notarizeCommand(given.slice(1), composition)
+              : cutCommand(given, composition),
+      ),
+    ),
   );
 };
 
@@ -64,7 +72,7 @@ export const buildCut = async (of: Build, given: readonly string[]): Promise<voi
     build(
       { ask: door.ask, baseUrl: door.baseUrl, boundHere: door.boundHere, healthOrNone: door.healthOrNone, startup },
       given,
-      { channel: of.channel, checkout: of.cut.roots.checkout, composition: Effect.promise(() => cutOf(of)) },
+      { channel: of.channel, checkout: of.cut.roots.checkout, inputs: of.cut.inputs, composition: Effect.promise(() => cutOf(of)) },
       readBuildAttribution(door),
     ).pipe(Effect.provide(serverProcessesLayer(join(of.cut.roots.packages, 'execution-host'), undefined))),
   );

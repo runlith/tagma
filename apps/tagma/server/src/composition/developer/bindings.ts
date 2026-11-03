@@ -14,7 +14,9 @@ const runningRevision = ({ installation, source }: NextPlace): RunningRevision |
     return revision === null ? null : { ...revision, tree: null };
   }
   const revision = labelRevision(installation.manifest.identity.build);
-  return revision === null ? null : { ...revision, tree: installation.manifest.identity.tree ?? null };
+  return revision === null
+    ? null
+    : { ...revision, tree: installation.manifest.identity.tree ?? null, inputs: installation.manifest.origin?.inputs };
 };
 
 const checkoutOf = (place: SourcePlace): string | undefined =>

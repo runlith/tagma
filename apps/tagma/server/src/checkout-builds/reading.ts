@@ -4,13 +4,13 @@ import { Clock, Effect, Schema, Stream } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { troubleOf } from '@runlith/git/repository';
 import { statusAt } from '@runlith/git/status';
-import { changedIn, gitText, treeFingerprint, type TreeReading } from '../platform/git/readings.js';
+import { gitText, sourceTree, type TreeReading } from '../platform/git/readings.js';
 import { SourceChanges } from './contract/service/changes.js';
 import type { NextIssue } from '../installation/contract/wire/next.js';
 import type { Revision } from '../installation/contract/wire/layout.js';
 import type { CheckoutFrame, CheckoutRuns, CheckoutState } from './record.js';
 
-export type RunningRevision = Revision & { readonly tree: string | null };
+export type RunningRevision = Revision & { readonly tree: string | null; readonly inputs?: readonly string[] };
 
 const INSTANCE = crypto.randomUUID();
 
@@ -107,8 +107,7 @@ export const makeCheckoutReading = Effect.fnUntraced(function* (input: {
         apart = { same, ahead: Number.isInteger(ahead) ? ahead : null };
         distance = { epoch: stamp, head: full, value: apart };
       }
-      const changed = changedIn(status);
-      const fingerprint = changed > 0 && running?.dirty === true ? yield* treeFingerprint(git, at, status) : null;
+      const { changed, fingerprint } = yield* sourceTree(git, at, status, running?.inputs ?? [], running?.dirty === true);
       return {
         path: at,
         head: metadata.short,
@@ -185,7 +184,7 @@ export const makeCheckoutReading = Effect.fnUntraced(function* (input: {
           watching = false;
         }),
       );
-      return source.watch(path).pipe(
+      return source.watch(path, running?.inputs ?? []).pipe(
         Stream.mapEffect((shift) => {
           epoch += 1;
           watching = shift.watched;

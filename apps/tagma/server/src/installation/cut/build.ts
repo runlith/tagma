@@ -21,7 +21,7 @@ import type { BuildServer } from './port.js';
 import type { Composition } from './descriptor.js';
 import { releaseInstallation } from './release.js';
 import { steppedBack } from '../closure/moves.js';
-import { buildHead, type BuildAttribution } from './source.js';
+import { buildSource, type BuildAttribution } from './source.js';
 import type { Processes } from '@runlith/execution-host/ProcessReader';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
@@ -236,6 +236,7 @@ const reachLines = (launcher: LauncherWritten): string[] => {
 type BuildRecipe = {
   readonly channel: Channel;
   readonly checkout: string;
+  readonly inputs?: readonly string[];
   readonly composition: Effect.Effect<Composition>;
 };
 
@@ -280,12 +281,23 @@ export const build = (
   if (wantsVerify) return verify(recipe.channel, json);
   if (wantsBack) return back(api, recipe.channel, json, restart);
   return Effect.flatMap(CurrentInvocation, (at) => {
-    if (tree || at.env[BUILD_SOURCE_ENV] === recipe.checkout)
+    if (at.env[BUILD_SOURCE_ENV] === recipe.checkout)
       return Effect.flatMap(recipe.composition, (composition) => released(api, json, origin, restart, composition));
-    return buildHead(recipe.checkout, given, attribution).pipe(
+    return buildSource({
+      checkout: recipe.checkout,
+      command: 'tagma:build',
+      kind: tree ? 'tree' : 'head',
+      given,
+      attribution,
+      inputs: recipe.inputs,
+    }).pipe(
       Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer)),
       Effect.catchTag('SourceRefused', (failure) =>
-        Effect.sync(() => refuse(json, 'source-refused', failure.message, [...failure.unblock])),
+        Effect.sync(() =>
+          failure.exited === undefined
+            ? refuse(json, 'source-refused', failure.message, [...failure.unblock])
+            : process.exit(failure.exited),
+        ),
       ),
     );
   });

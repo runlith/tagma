@@ -1,11 +1,13 @@
-import { Console, Data, Effect, FileSystem, Result, type Scope } from 'effect';
+import { Console, Effect, FileSystem, Result, Schema } from 'effect';
 import { ChildProcess } from 'effect/process';
-import { dirname, join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { Git } from '@runlith/git/Git';
-import { commitOf, run, troubleOf } from '@runlith/git/repository';
+import { troubleOf } from '@runlith/git/repository';
 import { statusAt } from '@runlith/git/status';
 import { CurrentInvocation } from '../../platform/cli/verb.js';
-import { BUILD_SOURCE_ENV, BUILD_WORKTREE_ENV } from '../contract/wire/layout.js';
+import { BUILD_CAPTURE_ENV, BUILD_CHECKOUT_ENV, BUILD_SOURCE_ENV, BUILD_WORKTREE_ENV } from '../contract/wire/layout.js';
+import { capturedSourceSchema } from '../contract/wire/capture.js';
+import { captureSource, SourceRefused } from './snapshot.js';
 
 export type BuildHolding = {
   readonly path: string;
@@ -16,71 +18,42 @@ export type BuildHolding = {
 
 export type BuildAttribution = (checkout: string) => Effect.Effect<readonly BuildHolding[], string>;
 
-class SourceRefused extends Data.TaggedError('SourceRefused')<{
-  readonly message: string;
-  readonly unblock: readonly string[];
-}> {}
+type SourceBuild = {
+  readonly checkout: string;
+  readonly command: 'tagma:build' | 'tagma:release';
+  readonly kind: 'head' | 'tree';
+  readonly given: readonly string[];
+  readonly inputs?: readonly string[];
+  readonly clean?: boolean;
+  readonly attribution?: BuildAttribution;
+};
+
+export const capturedSource = Effect.fnUntraced(function* (root: string) {
+  const at = yield* CurrentInvocation;
+  const text = at.env[BUILD_CAPTURE_ENV];
+  if (at.env[BUILD_SOURCE_ENV] !== root || text === undefined) return null;
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(capturedSourceSchema))(text).pipe(
+    Effect.mapError(
+      (failure) =>
+        new SourceRefused({
+          message: `the captured source revision does not read: ${failure.message}`,
+          unblock: ['build again from the source checkout'],
+        }),
+    ),
+  );
+});
 
 const graphPath = (path: string): boolean => path === '.tagma' || path.startsWith('.tagma/');
 const unblock = ['commit the changes to include them in HEAD', 'bun run tagma:build --tree — deliberately build the working tree'];
 
-export const SUBMODULE_PATHS = ['config', '-z', '--file', '.gitmodules', '--get-regexp', '^submodule\\..*\\.path$'] as const;
-
-export const declaredSubmodules = (output: string): readonly string[] =>
-  output.split('\0').flatMap((entry) => {
-    const value = entry.slice(entry.indexOf('\n') + 1);
-    return entry.includes('\n') && value !== '' ? [value] : [];
-  });
-
-export const buildHead = Effect.fn('installation.buildHead')(function* (
-  checkout: string,
-  given: readonly string[],
-  attribution: BuildAttribution | undefined,
-) {
+export const buildSource = Effect.fn('installation.buildHead')(function* (input: SourceBuild) {
   const git = yield* Git;
   const files = yield* FileSystem.FileSystem;
   const at = yield* CurrentInvocation;
   const failed = (message: string) => new SourceRefused({ message, unblock });
-  const commandIn = (cwd: string, args: readonly string[]) =>
-    run(git, cwd, args, undefined).pipe(Effect.mapError((failure) => failed(troubleOf(failure))));
-  const detached: (source: string, place: string, commit: string) => Effect.Effect<void, SourceRefused, Scope.Scope> = Effect.fn(
-    'installation.headWorktree',
-  )(function* (source: string, place: string, commit: string) {
-    yield* Effect.acquireRelease(commandIn(source, ['worktree', 'add', '--detach', '--end-of-options', place, commit]), () =>
-      Effect.matchEffect(commandIn(source, ['worktree', 'remove', '--force', '--force', place]), {
-        onSuccess: () => Effect.void,
-        onFailure: (failure) => Console.error(`[tagma] HEAD source cleanup failed: ${failure.message}; remove the worktree ${place}`),
-      }),
-    );
-    for (const { path, pinned } of yield* submodulesOf(place)) {
-      const repository = join(source, path);
-      const unchecked = failed(`the submodule ${path} of ${source} is not checked out, so its pinned ${pinned} cannot be built`);
-      yield* Effect.all([commandIn(repository, ['rev-parse', '--show-toplevel']), files.realPath(repository)]).pipe(
-        Effect.mapError(() => unchecked),
-        Effect.filterOrFail(
-          ([top, real]) => top.trim() === real,
-          () => unchecked,
-        ),
-      );
-      yield* detached(repository, join(place, path), pinned);
-    }
-  });
-  const submodulesOf = Effect.fn('installation.headSubmodules')(function* (place: string) {
-    const declared = yield* files.exists(join(place, '.gitmodules')).pipe(Effect.mapError((failure) => failed(failure.message)));
-    if (!declared) return [];
-    const named = declaredSubmodules(yield* commandIn(place, SUBMODULE_PATHS));
-    if (named.length === 0) return [];
-    const staged = yield* commandIn(place, ['ls-files', '-z', '--stage', '--', ...named.map((path) => `:(literal)${path}`)]);
-    return staged.split('\0').flatMap((entry) => {
-      const linked = /^160000 ([0-9a-f]+) 0\t(.+)$/su.exec(entry);
-      return linked?.[1] === undefined || linked[2] === undefined ? [] : [{ pinned: linked[1], path: linked[2] }];
-    });
-  });
-  const [head, status] = yield* Effect.all([
-    commitOf(git, checkout, 'HEAD'),
-    statusAt(git, checkout, { untracked: 'all', monitor: false }),
-  ]).pipe(Effect.mapError((failure) => failed(troubleOf(failure))));
-  if (head === null) return yield* failed(`${checkout} has no committed HEAD to build`);
+  const status = yield* statusAt(git, input.checkout, { untracked: 'all', monitor: false }).pipe(
+    Effect.mapError((failure) => failed(troubleOf(failure))),
+  );
   const paths = [
     ...new Set(
       Object.values(status.entries).flatMap((rows) =>
@@ -88,42 +61,47 @@ export const buildHead = Effect.fn('installation.buildHead')(function* (
       ),
     ),
   ].filter((path) => !graphPath(path));
-  yield* Console.error(`[tagma] building committed HEAD ${head}; leaving out ${paths.length} uncommitted paths`);
-  if (paths.length > 0) {
-    const read = yield* Effect.result(attribution === undefined ? Effect.fail('no change record is connected') : attribution(checkout));
-    const holdings = Result.map(read, (rows) => new Map(rows.map((holding) => [holding.path, holding])));
-    for (const path of paths) {
-      const owners = Result.match(holdings, {
-        onFailure: (reason) => `holders unavailable: ${reason}`,
-        onSuccess: (rows) => {
-          const holding = rows.get(path);
-          return holding === undefined
-            ? 'holders unread'
-            : [
-                ...holding.holders,
-                ...(holding.nobody ? ['nobody'] : []),
-                ...(holding.unproven === null ? [] : [`unproven: ${holding.unproven}`]),
-              ].join(', ') || 'nobody recorded';
-        },
-      });
-      yield* Console.error(`[tagma] left out ${path} — ${owners}`);
-    }
-    yield* Console.error(`[tagma] ${unblock.join('; ')}`);
+  if (input.clean === true && paths.length > 0) {
+    return yield* failed(`${input.checkout} has ${paths.length} uncommitted or untracked paths; a release is cut from a commit`);
   }
-  const named = at.env[BUILD_WORKTREE_ENV];
-  const root =
-    named ??
-    join(
-      yield* files.makeTempDirectoryScoped({ prefix: 'tagma-head-' }).pipe(Effect.mapError((failure) => failed(failure.message))),
-      'source',
-    );
-  yield* files.makeDirectory(dirname(root), { recursive: true }).pipe(Effect.mapError((failure) => failed(failure.message)));
-  yield* detached(checkout, root, head);
-  const snapshot = yield* files.realPath(root).pipe(Effect.mapError((failure) => failed(failure.message)));
-  const runBuild = Effect.fn('installation.sourceCommand')(function* (args: readonly string[]) {
+  if (input.kind === 'head') {
+    yield* Console.error(`[tagma] building committed HEAD; leaving out ${paths.length} uncommitted paths`);
+    if (paths.length > 0) {
+      const read = yield* Effect.result(
+        input.attribution === undefined ? Effect.fail('no change record is connected') : input.attribution(input.checkout),
+      );
+      const holdings = Result.map(read, (rows) => new Map(rows.map((holding) => [holding.path, holding])));
+      for (const path of paths) {
+        const owners = Result.match(holdings, {
+          onFailure: (reason) => `holders unavailable: ${reason}`,
+          onSuccess: (rows) => {
+            const holding = rows.get(path);
+            return holding === undefined
+              ? 'holders unread'
+              : [
+                  ...holding.holders,
+                  ...(holding.nobody ? ['nobody'] : []),
+                  ...(holding.unproven === null ? [] : [`unproven: ${holding.unproven}`]),
+                ].join(', ') || 'nobody recorded';
+          },
+        });
+        yield* Console.error(`[tagma] left out ${path} — ${owners}`);
+      }
+      yield* Console.error(`[tagma] ${unblock.join('; ')}`);
+    }
+  }
+  const snapshot = yield* captureSource({
+    checkout: input.checkout,
+    kind: input.kind,
+    inputs: input.inputs ?? [],
+    at: at.env[BUILD_WORKTREE_ENV],
+  });
+  const root = snapshot.root;
+  const capture = Schema.encodeSync(Schema.fromJsonString(capturedSourceSchema))(snapshot);
+  const runBuild = Effect.fn('installation.sourceCommand')(function* (args: readonly string[], cwd = root, entry = false) {
     const child = yield* ChildProcess.make(process.execPath, args, {
-      cwd: root,
-      env: { ...at.env, [BUILD_SOURCE_ENV]: snapshot },
+      cwd,
+      env: { ...at.env, [BUILD_SOURCE_ENV]: root, [BUILD_CAPTURE_ENV]: capture, [BUILD_CHECKOUT_ENV]: input.checkout },
       extendEnv: false,
       detached: false,
       stdin: 'ignore',
@@ -131,11 +109,24 @@ export const buildHead = Effect.fn('installation.buildHead')(function* (
       stderr: 'inherit',
     }).pipe(Effect.mapError((failure) => failed(failure.message)));
     const status = yield* child.exitCode.pipe(Effect.mapError((failure) => failed(failure.message)));
-    if (status !== 0) return yield* failed(`${args.join(' ')} exited ${status} while building committed HEAD ${head}`);
+    if (status !== 0) {
+      return yield* new SourceRefused({
+        message: `${args.join(' ')} exited ${status} while building ${input.kind} of ${input.checkout}`,
+        unblock,
+        ...(entry ? { exited: status } : {}),
+      });
+    }
   });
   if (yield* files.exists(join(root, 'bun.lock')).pipe(Effect.mapError((failure) => failed(failure.message)))) {
     yield* runBuild(['install', '--frozen-lockfile']);
   }
-  const origin = given.includes('--portable') || given.includes('--origin') ? [] : ['--origin', checkout];
-  yield* runBuild(['run', 'tagma:build', ...given, ...origin]);
+  const origin =
+    input.command === 'tagma:build' && !input.given.includes('--portable') && !input.given.includes('--origin')
+      ? ['--origin', input.checkout]
+      : [];
+  if (input.command === 'tagma:release') {
+    const entry = relative(input.checkout, resolve(at.entry));
+    if (entry === '..' || entry.startsWith('../')) return yield* failed(`${at.entry} is no release entry in ${input.checkout}`);
+    yield* runBuild([...process.execArgv, join(root, entry), ...input.given], at.cwd, true);
+  } else yield* runBuild(['run', input.command, ...input.given, ...origin], root, true);
 }, Effect.scoped);

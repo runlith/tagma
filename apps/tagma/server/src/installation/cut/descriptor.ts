@@ -40,6 +40,7 @@ export type Publisher = {
 
 export type Distribution = {
   readonly conditions: readonly string[];
+  readonly inputs?: readonly string[];
   readonly applications: Applications;
   readonly roots: SourceRoots;
   readonly entries: { readonly cli: string; readonly server: string };

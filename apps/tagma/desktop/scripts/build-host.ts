@@ -24,6 +24,7 @@ import {
   RELEASE_INSIDE,
   RELEASE_NUMBER_ENV,
   SIGNING_IDENTITY_ENV,
+  sourceMapOriginIn,
 } from '@tagma/server/installation/contract/wire/layout';
 import { DESKTOP, EXECUTIONS } from '@tagma/server/installation/contract/wire/manifest';
 import { EXECUTIONS_RUNTIME } from '@tagma/server/installation/contract/wire/archive';
@@ -161,7 +162,9 @@ function bundleOptions(entry: string, outfile: string, format: 'esm' | 'cjs'): B
             for (const file of result.outputFiles ?? []) {
               const shelved = mapsTo !== null && file.path.endsWith('.map');
               const path = shelved ? join(mapsTo, relative(out, file.path)) : file.path;
-              const contents = shelved ? Buffer.from(absoluteSources(file.text, dirname(file.path))) : Buffer.from(file.contents);
+              const contents = shelved
+                ? Buffer.from(absoluteSources(file.text, dirname(file.path), sourceMapOriginIn(process.env)))
+                : Buffer.from(file.contents);
               if (existsSync(path) && readFileSync(path).equals(contents)) continue;
               mkdirSync(dirname(path), { recursive: true });
               writeFileSync(path, contents);

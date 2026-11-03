@@ -15,7 +15,7 @@ const original = readFileSync(join(shared, 'value.ts'), 'utf8');
 writeFileSync(join(shared, 'value.ts'), 'console.log("transient peer code");\\n');
 try {
   if (process.env.MOVE_HEAD === '1') {
-    writeFileSync(join(shared, 'peer-commit.txt'), 'a commit during the build\\n');
+    writeFileSync(join(shared, 'peer-commit.txt'), process.env.PEER_COMMIT ?? 'a commit during the build\\n');
     for (const args of [['add', 'peer-commit.txt'], ['commit', '-q', '--only', '-m', 'peer commit', '--', 'peer-commit.txt']]) {
       const child = Bun.spawn(['git', '-C', shared, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args]);
       if (await child.exited !== 0) throw new Error('the peer commit failed');
@@ -82,7 +82,7 @@ it.live(
       const deliberate = yield* runBuild('tree', ['--tree']);
       expect(deliberate.exitCode).toBe(0);
       const treeProgram = yield* spawnedEffect([process.execPath, join(tree, 'tree/current/value.js')]);
-      expect(new TextDecoder().decode(treeProgram.stdout).trim()).toBe('transient peer code');
+      expect(new TextDecoder().decode(treeProgram.stdout).trim()).toBe('uncommitted peer code');
       expect(readFileSync(join(tree, 'tree/current/skills.txt'), 'utf8')).toBe('ignored peer skill\n');
 
       writeFileSync(join(checkout, 'producer.ts'), 'throw new Error("unfinished working composition");\n');
@@ -101,6 +101,33 @@ it.live(
       expect(diagnostics).toContain('left out value.ts');
       expect(diagnostics).toContain('left out new.ts');
       expect(diagnostics).toContain('left out producer.ts');
+
+      writeFileSync(join(checkout, 'producer.ts'), producer);
+      writeFileSync(join(checkout, 'value.ts'), 'console.log("release source");\n');
+      writeFileSync(
+        join(checkout, 'release.ts'),
+        `import { runSourceRelease } from ${JSON.stringify(join(import.meta.dir, '../testing/sourceBuild.ts'))};\nawait runSourceRelease(import.meta.dir, process.argv.slice(2));\n`,
+      );
+      yield* git('add', '.');
+      yield* git('commit', '-q', '-m', 'release source');
+      const releasedHead = yield* git('rev-parse', 'HEAD');
+      const released = yield* spawnedEffect([process.execPath, join(checkout, 'release.ts')], {
+        cwd: checkout,
+        env: {
+          ...process.env,
+          TAGMA_INSTALL_ROOT: join(tree, 'release'),
+          SOURCE_CHECKOUT: checkout,
+          MOVE_HEAD: '1',
+          PEER_COMMIT: 'the next commit during release',
+        },
+      });
+      expect(released.exitCode).toBe(0);
+      const releaseProgram = yield* spawnedEffect([process.execPath, join(tree, 'release/current/value.js')]);
+      expect(new TextDecoder().decode(releaseProgram.stdout).trim()).toBe('release source');
+      const releasedSource = JSON.parse(readFileSync(join(tree, 'release/current/source.json'), 'utf8')) as { head: string; root: string };
+      expect(releasedSource.head).toBe(releasedHead);
+      expect(yield* git('rev-parse', 'HEAD')).not.toBe(releasedHead);
+      expect(existsSync(releasedSource.root)).toBe(false);
     }),
 );
 

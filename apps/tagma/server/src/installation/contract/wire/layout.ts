@@ -1,3 +1,4 @@
+import type { SourceMapOrigin } from '@runlith/bundle/maps';
 import { HOST_COMMAND } from '@runlith/tagma/adapter/harness';
 import type { Channel } from './channel.js';
 
@@ -40,6 +41,8 @@ export const BUILD_SWAPPED_ENV = 'TAGMA_BUILD_SWAPPED';
 export const BUILD_WORKTREE_ENV = 'TAGMA_BUILD_WORKTREE';
 export const BUILD_REFUSED_ENV = 'TAGMA_BUILD_REFUSED';
 export const BUILD_SOURCE_ENV = 'TAGMA_BUILD_SOURCE';
+export const BUILD_CAPTURE_ENV = 'TAGMA_BUILD_CAPTURE';
+export const BUILD_CHECKOUT_ENV = 'TAGMA_BUILD_CHECKOUT';
 export const BUILD_HOME_ENV = 'TAGMA_BUILD_HOME';
 export const SIGNING_IDENTITY_ENV = 'TAGMA_SIGNING_IDENTITY';
 export const BUILD_CONDITIONS_ENV = 'TAGMA_BUILD_CONDITIONS';
@@ -49,6 +52,12 @@ export const RELEASE_NUMBER_ENV = 'TAGMA_RELEASE_NUMBER';
 export const BUILD_TARGET_ENV = 'TAGMA_BUILD_TARGET';
 export const HOST_CHANNEL_ENV = 'TAGMA_HOST_CHANNEL';
 export const HOST_ASSETS_ENV = 'TAGMA_HOST_ASSETS';
+
+export const sourceMapOriginIn = (env: NodeJS.ProcessEnv): SourceMapOrigin | undefined => {
+  const from = env[BUILD_SOURCE_ENV];
+  const to = env[BUILD_CHECKOUT_ENV];
+  return from === undefined || from === '' || to === undefined || to === '' ? undefined : { from, to };
+};
 
 export const buildConditionsIn = (env: NodeJS.ProcessEnv): readonly string[] =>
   (env[BUILD_CONDITIONS_ENV] ?? '')

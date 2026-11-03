@@ -19,6 +19,9 @@ import { checkoutBuildsLayer } from '../../checkout-builds/runner.js';
 import { NextInstallation } from '../../installation/contract/service/next.js';
 import type { NextFrame } from '../../installation/contract/wire/next.js';
 import { sourceChanges } from '../developer/sourceChanges.js';
+import { makeFileWatcher } from '../fileWatcher.js';
+import { FileWatcher } from '../../platform/contract/service/watch.js';
+import { gitTree } from '../../platform/git/readings.js';
 
 const host = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
@@ -70,6 +73,57 @@ layer(layers, { excludeTestServices: true })('installation source', (it) => {
       );
       expect(committed._tag === 'Some' && committed.value.revision).toBeGreaterThan(initial._tag === 'Some' ? initial.value.revision : 0);
       expect(offered(yield* builds.reading, 'head')?.detail).toBe('second');
+    }),
+  );
+
+  it.effect('a running tree build stops reading as current when a declared ignored input is edited', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const git = yield* Git;
+      const home = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'installation-input-' }));
+      const checkout = join(home, 'checkout');
+      const input = 'skills/_probe-peer/SKILL.md';
+      yield* files.makeDirectory(join(checkout, 'skills/_probe-peer'), { recursive: true });
+      yield* files.writeFileString(join(checkout, 'package.json'), JSON.stringify({ scripts: { 'tagma:build': 'true' } }));
+      yield* files.writeFileString(join(checkout, '.gitignore'), 'skills/_probe-*\n');
+      const run = (...args: string[]) => Effect.orDie(git.run(args, { cwd: checkout }));
+      yield* run('init', '-q');
+      yield* run('add', '.');
+      yield* run('commit', '-qm', 'first');
+      yield* files.writeFileString(join(checkout, input), 'built skill\n');
+      const head = (yield* Effect.orDie(git.run(['rev-parse', 'HEAD'], { cwd: checkout }))).stdout.trim();
+      const built = yield* Effect.orDie(gitTree(git, checkout, [input]));
+      yield* files.makeDirectory(join(home, 'watch'));
+      const watcher = yield* makeFileWatcher({ dir: join(home, 'watch'), lifetime: 'with-client' });
+      yield* Effect.gen(function* () {
+        const records = yield* fileRootStore((yield* MachineStore).db, yield* MachineUnits);
+        const roots = yield* rootRegistry(records, files, yield* Path.Path, NamespaceId.make('input'), {
+          holding: () => Effect.succeed(new Map()),
+        });
+        const watch = yield* checkoutWatches(git, roots, yield* Scope.Scope);
+        const builds = Context.get(
+          yield* Layer.build(
+            checkoutBuildsLayer({
+              checkout,
+              log: join(home, 'build.log'),
+              worktrees: join(home, 'build'),
+              running: { head, dirty: true, tree: built.fingerprint, inputs: [input] },
+            }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(roots, watch)))),
+          ),
+          NextInstallation,
+        );
+        const offered = (frame: NextFrame, id: string) => frame.offers.find((offer) => offer.id === id);
+        yield* Effect.forkScoped(Stream.runDrain(builds.changes));
+        const current = yield* Stream.runHead(
+          Stream.filter(builds.changes, (frame) => frame.watched && offered(frame, 'tree')?.current === true),
+        );
+        expect(current._tag).toBe('Some');
+        yield* files.writeFileString(join(checkout, input), 'edited skill\n');
+        const moved = yield* Stream.runHead(Stream.filter(builds.changes, (frame) => offered(frame, 'tree')?.current === false)).pipe(
+          Effect.timeout('20 seconds'),
+        );
+        expect(moved._tag).toBe('Some');
+      }).pipe(Effect.provideService(FileWatcher, watcher));
     }),
   );
 });
