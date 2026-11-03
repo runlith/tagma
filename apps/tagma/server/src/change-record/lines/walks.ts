@@ -12,7 +12,6 @@ import type { BaseAlignment } from './projection.js';
 import type { ReleasedSpan } from './released.js';
 import type { DebtWindow } from './owed.js';
 import type { DependencyAnswer, DependencyInput, DependencyProbe, ImportProbe, PlacementInput } from '../prepared/dependencyWalk.js';
-import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Authoring, Placed } from '../threadFiles/authored.js';
 import type { LineTally, Tallied } from './tally.js';
 
@@ -71,12 +70,6 @@ export type WalkAnswer = { readonly id: number } & (
 type Answered<K extends WalkQuestion['kind']> = Extract<WalkAnswer, { readonly kind: K }>['answer'];
 
 export class WalkUnfinished extends Data.TaggedError('WalkUnfinished')<{ readonly reason: string }> {}
-
-export const walkCut = (path: string, unfinished: WalkUnfinished, ...ways: readonly string[]): GateRefusal<'walk-cut'> =>
-  new GateRefusal('walk-cut', `the line walk over ${path} was cut before it answered: ${unfinished.reason}`, [
-    'for a source or configuration error, correct its reported cause before retrying; retry a transient worker failure only after its cause clears',
-    ...ways,
-  ]);
 
 type Queued = {
   readonly ask: WalkAsk;

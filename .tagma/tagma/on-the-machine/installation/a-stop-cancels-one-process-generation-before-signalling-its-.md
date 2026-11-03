@@ -5,9 +5,9 @@ ord: 77
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/process/chain.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/process.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/chain.ts
   - kind: file
     ref: apps/tagma/server/src/installation/process/launch.ts
 ---

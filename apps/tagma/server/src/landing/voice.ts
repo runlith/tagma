@@ -1,5 +1,5 @@
 import type { SubmitReceipt, Unrecorded } from './contract/wire/receipt.js';
-import type { CarriedViolation, LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../enforcement/contract/wire/enforcement.js';
+import type { LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../enforcement/contract/wire/enforcement.js';
 import { findingLines } from '../enforcement/contract/wire/findings.js';
 
 const NAMED_MEASURED = 6;
@@ -10,10 +10,11 @@ const few = (paths: readonly string[]): string =>
 export function submitLines(report: SubmitReceipt): string[] {
   if (report.status === 'nothing') {
     return [
-      report.unmatched === undefined
-        ? 'nothing to commit — this session holds nothing the branch does not already carry'
-        : `nothing to commit — \`paths\` named no file this session holds: ${report.unmatched.join(', ')}`,
-      ...unattributedLines(report),
+      report.unmatched !== undefined
+        ? `nothing to commit — \`paths\` named no changed file: ${report.unmatched.join(', ')}`
+        : report.commits !== undefined
+          ? `nothing to commit — other commits already carried this session's lines: ${report.commits.map((commit) => commit.slice(0, 10)).join(', ')}`
+          : 'nothing to commit — this session changed no file that differs from HEAD',
       ...editedLines(report),
       ...unrecordedLines(report.unrecorded),
     ];
@@ -25,21 +26,22 @@ export function submitLines(report: SubmitReceipt): string[] {
     ...report.carried.map((one) => `  ${one.path} — carried lines of ${few(one.holders)}`),
     ...(report.tasks ?? []).map(
       (task) =>
-        `carries the work of ${task.name} “${task.title}” (held by ${task.by === 'session' ? 'this session' : `${task.holder}, ${task.by === 'taking' ? 'taken' : 'carried'}${task.standing === undefined ? '' : `, ${task.standing}`}`}) — finish_block ${task.name} with ${report.commit.slice(0, 10)} if this commit completes it`,
+        `carries the work of ${task.name} “${task.title}” — finish_block ${task.name} with ${report.commit.slice(0, 10)} if this commit completes it`,
     ),
     ...(report.unnamedTasks === undefined
       ? []
       : [`held tasks not attributed to this commit — tasks was omitted: ${report.unnamedTasks.join(', ')}`]),
-    ...(report.left ?? []).map((path) => `  ${path} — lines remain uncommitted`),
+    ...(report.left ?? []).map(
+      (one) =>
+        `  ${one.path} — still differs from HEAD: ${one.reason === 'paths' ? '`paths` left it out' : 'written again after this landing read it'}`,
+    ),
     ...unattributedLines(report),
     ...(report.unsynced === undefined
       ? []
       : [
           `the shared index still holds the old content of ${report.unsynced.length} path${report.unsynced.length === 1 ? '' : 's'}; \`git reset -q ${report.commit.slice(0, 10)} -- <path>\` brings each level with the commit: ${report.unsynced.join(', ')}`,
         ]),
-    ...(report.unmatched === undefined
-      ? []
-      : [`not in this commit — \`paths\` named no file this session holds: ${report.unmatched.join(', ')}`]),
+    ...(report.unmatched === undefined ? [] : [`not in this commit — \`paths\` named no changed file: ${report.unmatched.join(', ')}`]),
     ...judgedLines(report),
     ...(report.formatSkipped === true ? ["made without the repository's commit steps, on the operator's word"] : []),
     ...editedLines(report),
@@ -52,7 +54,7 @@ const unattributedLines = (report: { readonly unattributed?: readonly string[] }
   return paths.length === 0
     ? []
     : [
-        `not in this commit — ${paths.length} path${paths.length === 1 ? '' : 's'} changed while this session's commands ran beside another writer, so nobody's record claims them, and they still stand changed in this checkout: ${few(paths)}; read_changes names every session whose command met each change — name one in paths and whole only if it is this session's work`,
+        `${paths.length} committed file${paths.length === 1 ? '' : 's'} also carried lines no tool recorded, written outside Tagma or by a command of unproven writer: ${few(paths)}`,
       ];
 };
 
@@ -85,13 +87,11 @@ const unrecordedLines = (unrecorded: readonly Unrecorded[] | undefined): string[
 
 function judgedLines(judged: {
   readonly watched?: readonly Watched[];
-  readonly carriedViolations?: readonly CarriedViolation[];
   readonly rechecked?: readonly RuleCrossing[];
   readonly bodies?: RuleBodies;
   readonly unjudged?: readonly LandingUnjudged[];
 }): string[] {
   const watched = judged.watched ?? [];
-  const carried = judged.carriedViolations ?? [];
   const rechecked = judged.rechecked ?? [];
   const unjudged = judged.unjudged ?? [];
   const { bodies } = judged;
@@ -104,14 +104,6 @@ function judgedLines(judged: {
       bodies,
     ),
     ...watched.flatMap((one) => ('failed' in one ? [`  ${one.rule} could not run: ${one.failed}`] : [])),
-    ...(carried.length === 0 ? [] : [`carried violations (${carried.length}) — new crossings on what live peers hold uncommitted:`]),
-    ...findingLines(
-      carried,
-      '  ',
-      (one) =>
-        `held by ${few(one.holders)}${one.withheld === undefined ? '' : `, standing only on ${one.withheld}, which this commit lacks`}`,
-      bodies,
-    ),
     ...(rechecked.length === 0
       ? []
       : [

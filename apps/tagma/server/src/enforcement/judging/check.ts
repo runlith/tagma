@@ -358,11 +358,8 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
       collected.unjudged.push(...tagged(target.name, unjudged));
       const norm = normOf(target);
       for (const { violation, holders, withheld } of rows) {
-        if (holders.length === 0 && target.gatesLanding) refuses = true;
-        const crossing = {
-          ...crossingOf(norm, inspection, violation, withheld),
-          holders: holders.length === 0 ? undefined : holders,
-        };
+        if (target.gatesLanding) refuses = true;
+        const crossing = crossingOf(norm, inspection, violation, withheld, holders);
         const at = locations.get(locationOf(crossing));
         if (at === undefined) collected.violations.push(crossing);
         else collected.violations[at] = crossing;

@@ -30,7 +30,7 @@ const incoming = Effect.fnUntraced(function* (world: Effect.Success<ReturnType<t
 });
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
   it.effect(
-    'submit_work concludes a resolved merge with its incoming tree, resolution and own lines, leaving unstaged peer lines held',
+    'submit_work concludes a resolved merge with its incoming tree and the working file it carries, every writer’s lines in it',
     () =>
       withCheckout((checkout) =>
         Effect.fnUntraced(function* () {
@@ -39,7 +39,6 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           const resolved = ['const one = 42;', 'const two = 22;', ...FILE.slice(2)];
           writeFileSync(world.file, `${resolved.join('\n')}\n`);
           yield* world.run(['add', '--', 'src/a.ts']);
-          yield* world.run(['update-index', '--chmod=+x', '--', 'src/a.ts']);
           writeFileSync(world.file, `${['const one = 100;', ...FILE.slice(1)].join('\n')}\n`);
           yield* world.wrote(THEIRS, ['const one = 100;', ...FILE.slice(1, 4), 'const five = 55;']);
           yield* world.wrote(MINE, ['const one = 100;', 'const two = 23;', ...FILE.slice(2, 4), 'const five = 55;']);
@@ -73,8 +72,8 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           expect(answer.status).toBe('landed');
           if (answer.status !== 'landed') return;
           expect(yield* world.run(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${answer.commit} ${head} ${tip}`);
-          expect(yield* world.committed()).toEqual(['const one = 42;', 'const two = 23;', ...FILE.slice(2)]);
-          expect((yield* world.run(['ls-tree', 'HEAD', '--', 'src/a.ts'])).split(' ')[0]).toBe('100755');
+          expect(yield* world.committed()).toEqual(['const one = 100;', 'const two = 23;', ...FILE.slice(2, 4), 'const five = 55;']);
+          expect(answer.carried).toEqual([{ path: 'src/a.ts', holders: [THEIRS] }]);
           expect(yield* world.run(['show', 'HEAD:src/incoming.ts'])).toBe('const incoming = 1;');
           expect(yield* world.run(['show', 'HEAD:.tagma/incoming.json'])).toBe('{"incoming":true}');
           expect(existsSync(join(world.root, '.git/MERGE_HEAD'))).toBe(false);
@@ -82,8 +81,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           expect(yield* world.run(['ls-tree', '--name-only', 'HEAD', '--', 'src/after.ts'])).toBe('');
           expect(readFileSync(world.file, 'utf8')).toBe(working);
           const rows = yield* world.rows();
-          expect(rows.filter((row) => row.holder === MINE).map((row) => row.commit)).toEqual([answer.commit]);
-          expect(rows.filter((row) => row.holder === THEIRS).map((row) => row.commit)).toEqual([null]);
+          expect(rows.map((row) => row.commit)).toEqual([answer.commit, answer.commit]);
         })(),
       ),
   );
@@ -94,7 +92,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         const { head, tip } = yield* incoming(world, true);
         const index = yield* world.run(['ls-files', '--stage', '-z']);
         const working = readFileSync(world.file, 'utf8');
-        const outcome = yield* Effect.provide(Effect.result(world.submitAs(MINE)), world.context);
+        const outcome = yield* Effect.provide(Effect.result(world.submitAs(MINE, { paths: ['src'] })), world.context);
         expect(outcome._tag).toBe('Failure');
         if (outcome._tag !== 'Failure') return;
         expect(outcome.failure).toBeInstanceOf(GateRefusal);
@@ -110,7 +108,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
     ),
   );
   it.effect(
-    'incoming changes are gated without held paths, and an interrupted merge publication resumes its tail without another commit',
+    'incoming changes a named landing carries are gated, and an interrupted merge publication resumes its tail without another commit',
     () =>
       withCheckout((checkout) =>
         Effect.fnUntraced(function* () {
@@ -120,6 +118,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           const outcome = yield* Effect.provide(
             Effect.result(
               world.submitAs(MINE, {
+                paths: ['src'],
                 checks: {
                   before: (subject) =>
                     subject.kind !== 'tree'
@@ -159,14 +158,14 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
               return Effect.flatMap(world.git.run(args, options), () => Effect.interrupt);
             },
           };
-          const ended = yield* Effect.provide(Effect.exit(world.submitAs(MINE, { git: interrupted })), world.context);
+          const ended = yield* Effect.provide(Effect.exit(world.submitAs(MINE, { git: interrupted, paths: ['src'] })), world.context);
           expect(Exit.isFailure(ended)).toBe(true);
           const commit = yield* world.run(['rev-parse', 'HEAD']);
           expect(yield* world.run(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${commit} ${head} ${tip}`);
           expect(yield* world.run(['rev-parse', 'MERGE_HEAD'])).toBe(tip);
           yield* world.run(['branch', 'alternate', commit]);
           yield* world.run(['symbolic-ref', 'HEAD', 'refs/heads/alternate']);
-          const moved = yield* Effect.provide(Effect.result(world.submitAs(MINE)), world.context);
+          const moved = yield* Effect.provide(Effect.result(world.submitAs(MINE, { paths: ['src'] })), world.context);
           expect(moved._tag).toBe('Failure');
           if (moved._tag !== 'Failure') return;
           expect(moved.failure instanceof GateRefusal ? moved.failure.code : moved.failure).toBe('landing-busy');

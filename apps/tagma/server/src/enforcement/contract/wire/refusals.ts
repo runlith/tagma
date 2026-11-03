@@ -10,8 +10,11 @@ export type Rule = { readonly name: string; readonly title: string };
 
 export type Failed = Rule & { readonly why: string; readonly cause: InspectionFailure | 'undecodable'; readonly ways?: readonly string[] };
 
-const withheldNote = (one: RuleCrossing): string =>
-  one.withheld === undefined ? '' : `standing only on ${one.withheld}, which this session holds and this change leaves out`;
+export const authorNote = (one: RuleCrossing): string =>
+  [
+    ...(one.holders === undefined ? [] : [`written by ${one.holders.join(', ')}`]),
+    ...(one.withheld === undefined ? [] : [`standing only on ${one.withheld}, which the working tree holds and this change leaves out`]),
+  ].join('; ');
 
 const failedLine = (one: Failed): string => `${one.name} "${one.title}": ${one.why}`;
 
@@ -49,7 +52,7 @@ const firstWay = (op: string, kind: 'tree' | 'head'): string =>
       ? "fix each crossing as its fix says on the worktree's branch, commit it there, then merge again"
       : committing(op)
         ? 'fix each crossing as its fix says, or take its path out of the index with `git restore --staged <path>`, then commit again'
-        : 'fix each crossing as its fix says, or land the paths that carry none first: submit_work with `paths` naming them';
+        : "fix each crossing as its fix says — a line whose writer no longer changes it is anyone's to fix — or land without the file it stands in, naming the rest in `paths`";
 
 const absorbWay = (crossed: readonly RuleCrossing[], checkout: string): string => {
   const ruled = new Map<string, Set<string>>();
@@ -70,12 +73,19 @@ export const violatedRefusal = (
   bodies: RuleBodies,
 ): JudgeRefusalReport => {
   const unblock: [string, ...string[]] = [firstWay(op, kind), absorbWay(crossed, checkout)];
+  const landing = kind === 'tree' && op !== MERGE_OP && !committing(op);
+  if (landing && crossed.some((one) => one.holders !== undefined))
+    unblock.splice(
+      1,
+      0,
+      'where a crossing stands in lines another writer is still changing, leave your own lines in that file uncommitted: they land with the next commit that carries it, and say so in your report',
+    );
   for (const way of new Set(failed.flatMap((one) => one.ways ?? []))) unblock.push(way);
   const withheld = [...new Set(crossed.flatMap((one) => (one.withheld === undefined ? [] : [one.withheld])))];
   if (withheld.length > 0) {
     const one = withheld.length === 1;
     unblock.unshift(
-      `${op} with \`paths\` that also names ${withheld.join(', ')}: this session holds ${one ? 'it' : 'them'}, and each crossing standing on ${one ? 'it' : 'them'} ends once ${one ? 'it lands' : 'they land'} in the same commit`,
+      `${op} with \`paths\` that also names ${withheld.join(', ')} beside the files it carries: each crossing standing on ${one ? 'it' : 'them'} ends once ${one ? 'it lands' : 'they land'} in the same commit`,
     );
   }
   const own =
@@ -85,13 +95,13 @@ export const violatedRefusal = (
         ? "this merge's lines"
         : committing(op)
           ? 'what the index holds'
-          : "this session's own lines";
+          : 'the tree this landing would commit';
   const act = committing(op) ? 'the commit' : op;
   return {
     code: 'rule-violated',
     reason: [
       `${crossed.length} ${kind === 'head' ? '' : 'new '}crossing${crossed.length === 1 ? '' : 's'} of a gated rule in ${own}, so ${act} did not run:`,
-      ...findingLines(crossed, '  ', withheldNote, bodies),
+      ...findingLines(crossed, '  ', authorNote, bodies),
       ...(failed.length === 0 ? [] : [`and a gated inspection could not run: ${failed.map(failedLine).join('; ')}`]),
     ].join('\n'),
     unblock,

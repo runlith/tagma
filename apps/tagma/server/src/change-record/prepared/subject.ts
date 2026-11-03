@@ -14,22 +14,19 @@ import { type GitPlaces, type OpenOperation, operationIn, standingOf } from '../
 import { indexWrites } from '../../platform/git/index.js';
 import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type {
-  PreparedFns,
-  PreparedHolds,
-  PreparedLine,
-  PreparedLineHolders,
-  PreparedMerge,
-  PreparedPlace,
-  PreparedRemoval,
-  PreparedRemovers,
-  PreparedRow,
-  PreparedSubject,
+import {
+  LinesUnread,
+  type PreparedHolds,
+  type PreparedLine,
+  type PreparedLineHolders,
+  type PreparedMerge,
+  type PreparedRow,
+  type PreparedSubject,
 } from '../contract/service/prepared.js';
-import { type Landing, mirrorOf, named, stagedOf, type Whole } from './tree.js';
+import { type Landing, named, stagedOf } from './tree.js';
 import type { Finished } from './shaped.js';
 import { type StepHunk, sourceLines, stepHunks } from './stepLines.js';
-import { holdsOf, liveHolders } from './holds.js';
+import { holdsOf } from './holds.js';
 import type { HolderLines } from '../threadFiles/authored.js';
 import { carriesOf } from '../threadFiles/carries.js';
 import { holderKey } from '../../workspace/contract/wire/checkout.js';
@@ -194,7 +191,6 @@ export const releaseIndex = Effect.fn('prepared.releaseIndex')(
     const files = yield* FileSystem.FileSystem;
     yield* files.remove(index, { force: true });
     yield* files.remove(`${index}.lock`, { force: true });
-    yield* files.remove(mirrorOf(index), { recursive: true, force: true });
     yield* files.remove(stagedOf(index), { recursive: true, force: true });
   },
   Effect.orDie,
@@ -202,77 +198,40 @@ export const releaseIndex = Effect.fn('prepared.releaseIndex')(
   Effect.provide(BunFileSystem.layer),
 );
 
-type Carried = { readonly peers: readonly HolderLines[]; readonly own: readonly HolderLines[] };
-
 export const holdersOf = <Row extends PreparedRow>(
   landing: Landing<Row>,
   built: Finished<Row>,
-): { readonly holders: PreparedLineHolders; readonly removers: PreparedRemovers; readonly holds: PreparedHolds } => {
+): { readonly holders: PreparedLineHolders; readonly holds: PreparedHolds } => {
   const planned = new Map(built.plan.map((one) => [one.path, one] as const));
-  const carries = new Map<string, Carried>();
+  const team = new Set(landing.team.map((one) => one.threadId));
+  const carries = new Map<string, readonly HolderLines[]>();
   const stepped = new Map<string, readonly StepHunk[]>();
   const reshaped = new Set(built.reshaped.map((one) => one.path));
-  const carrying = (file: string): Whole<Row> | null => {
-    const one = planned.get(file);
-    return one === undefined || one.land === 'own' || one.accountable || one.holders.length === 0 ? null : one;
-  };
-  const readCarries = Effect.fnUntraced(function* (files: readonly Whole<Row>[]) {
-    if (files.length === 0) return;
-    const through = files.filter((one) => reshaped.has(one.path)).map((one) => one.path);
+  const loaded = Effect.fnUntraced(function* (lines: readonly PreparedLine[]) {
+    const due = [...new Set(lines.map((one) => one.file))].filter((file) => planned.has(file) && !carries.has(file));
+    if (due.length === 0) return;
+    const through = due.filter((path) => reshaped.has(path));
     for (const cut of landing.fns.pathChunks(through)) {
       const read = yield* Effect.mapError(
         stepHunks(landing.git, landing.root, built.from, built.tree, cut),
         (failure) =>
-          new GateRefusal(
-            'walk-cut',
-            `what the commit steps changed in ${cut.join(', ')} could not be read to attribute lines: ${saidByGit(failure)}`,
-            [`carry the files as they stand (whole: ${JSON.stringify(cut)}), or land without them (paths)`],
-          ),
+          new LinesUnread({ reason: `what the commit steps changed in ${cut.join(', ')} could not be read: ${saidByGit(failure)}` }),
       );
       for (const [path, hunks] of read) stepped.set(path, hunks);
     }
-    const judged = yield* landing.fns.judged(
-      landing,
-      files.map((one) => one.path),
-    );
-    for (const one of files) {
-      const lines = carriesOf(judged.get(one.path)?.verdict, new Map());
-      carries.set(one.path, {
-        peers: lines.filter((carry) => one.holders.includes(holderKey(carry.holder.holder))),
-        own: lines.filter((carry) => landing.carriers.has(holderKey(carry.holder.holder))),
-      });
-    }
-  });
-  const loaded = Effect.fnUntraced(function* (lines: readonly PreparedLine[]) {
-    const due = new Map<string, Whole<Row>>();
-    for (const { file } of lines) {
-      const one = carrying(file);
-      if (one !== null && !carries.has(file)) due.set(file, one);
-    }
-    yield* readCarries([...due.values()]);
+    const judged = yield* landing.fns.judged(landing, due);
+    for (const path of due) carries.set(path, carriesOf(judged.get(path)?.verdict, new Map()));
   });
   return {
     holders: (lines) =>
       Effect.map(loaded(lines), () =>
         lines.map(({ file, line }) => {
-          if (carrying(file) === null) return [];
           const hunks = stepped.get(file);
           const sources = hunks === undefined ? [line] : sourceLines(hunks, line);
-          return (carries.get(file)?.peers ?? [])
+          return (carries.get(file) ?? [])
+            .filter((carry) => !team.has(holderKey(carry.holder.holder)))
             .filter((carry) => sources.length > 0 && sources.every((source) => carry.added.has(source)))
             .map((carry) => holderKey(carry.holder.holder));
-        }),
-      ),
-    removers: (lines) =>
-      Effect.map(loaded(lines), () =>
-        lines.map(({ file, line }): PreparedRemoval => {
-          const held = carrying(file) === null ? undefined : carries.get(file);
-          const own = (held?.own ?? []).filter((carry) => carry.removed.has(line));
-          const peers = (held?.peers ?? []).filter((carry) => carry.removed.has(line));
-          const only = peers[0];
-          if (own.length === 1 && peers.length === 0) return { _tag: 'own' };
-          if (own.length === 0 && peers.length === 1 && only !== undefined) return { _tag: 'peer', holder: holderKey(only.holder.holder) };
-          return { _tag: 'unknown' };
         }),
       ),
     holds: holdsOf(landing, planned),
@@ -346,36 +305,18 @@ export const readMerge = Effect.fn('prepared.merge')(function* (
 const mergeStart = (git: Git['Service'], root: string, head: string): Effect.Effect<string, OwnGitFailed> =>
   Effect.map(quietGit(git, 'submit-merge-start', ['-C', root, 'rev-parse', '--verify', '-q', 'ORIG_HEAD^{commit}']), (sha) => sha || head);
 
-export const peerMerge = Effect.fn('prepared.peerMerge')(function* (
-  fns: PreparedFns,
-  place: PreparedPlace,
-  carriers: ReadonlySet<string>,
-  selected: readonly string[],
+export const besideMerge = Effect.fn('prepared.besideMerge')(function* (
+  git: Git['Service'],
+  root: string,
+  carried: readonly string[],
   open: OpenOperation | null,
-): Effect.fn.Return<boolean, OwnGitFailed | GateRefusal<'walk-cut' | 'lines-held'>> {
-  const { git, root } = place;
+): Effect.fn.Return<boolean, OwnGitFailed> {
   if (open !== 'merge') return false;
   const start = yield* mergeStart(git, root, yield* runGit(git, 'submit-merge-head', ['-C', root, 'rev-parse', 'HEAD']));
   const paths = new Set(
     named(yield* runGit(git, 'submit-merge-paths', ['-C', root, 'diff-index', '--cached', '--name-only', '--no-renames', '-z', start])),
   );
-  const peers = new Set<string>();
-  for (const cut of fns.pathChunks(yield* fns.eligiblePaths(git, root, [...paths]))) {
-    const judged = yield* fns.judged(place, cut);
-    for (const path of cut) for (const holder of liveHolders(judged.get(path))) if (!carriers.has(holder)) peers.add(holder);
-    if (peers.size > 0) break;
-  }
-  if (peers.size === 0) return false;
-  const crossing = selected.filter((path) => paths.has(path));
-  if (crossing.length === 0) return true;
-  const judged = yield* fns.judged(place, crossing);
-  if (crossing.some((path) => liveHolders(judged.get(path)).some((holder) => carriers.has(holder)))) return false;
-  const holders = [...peers].sort().join(', ');
-  return yield* new GateRefusal(
-    'lines-held',
-    `the merge ${holders} holds open in ${root} also changes ${crossing.join(', ')}, so nothing was committed`,
-    [`land without ${crossing.join(', ')} (paths)`, `once ${holders} concludes the merge with submit_work, submit again`],
-  );
+  return !carried.some((path) => paths.has(path));
 });
 
 export const mergeFor = (git: Git['Service'], root: string, places: GitPlaces, open: OpenOperation | null): ReturnType<typeof readMerge> =>

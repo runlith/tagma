@@ -10,13 +10,13 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/attempt.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/restart.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/feed.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/restart.ts
 ---
 `install.json`, `install/attempt.json` and `install/returned.json`, `restart.json` and the release feed cross releases: an issued release reads what today's code writes, and today's code reads what an issued release wrote. Their schemas decoded strictly and nothing said which shape is frozen, so a field made required, a literal widened or a struct closed on one side broke the other silently on a person's machine.
 

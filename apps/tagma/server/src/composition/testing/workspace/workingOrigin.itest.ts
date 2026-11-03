@@ -23,17 +23,15 @@ import { hostWorkspace } from '../hostWorkspace.js';
 import { worktreeRecordsLayer } from '../../../worktrees/layer.js';
 import { makeMachineWorld } from '../../../executions/testing/doubles.js';
 import type { SubmitReceipt } from '../../../landing/contract/wire/receipt.js';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmission } from '../../preparedChanges.js';
 import { makePreparedChanges } from '../../../change-record/prepared/change.js';
 import { UNSHAPED } from '../../../change-record/contract/service/shape.js';
-import { quietCommands } from '../../../change-record/testing/doubles.js';
+import { preparedReads, quietCommands } from '../../../change-record/testing/doubles.js';
 import { claimPreparedInstance, preparedBase } from '../../../change-record/prepared/subject.js';
 import { judgingFns } from '../../../change-record/testing/doubles.js';
 import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
 import { noRuleInPlay } from '../checkoutFixture.js';
 import { changeRecordOf, intakeOf, recordOfPath } from '../../../change-record/testing/doubles.js';
-import { evidenceInGroups, heldOfThread } from '../../../change-record/record/evidence.js';
+import { heldOfThread } from '../../../change-record/record/evidence.js';
 import { heldPathsOfProject, pathsOfThread } from '../../../change-record/record/reads.js';
 import { checkoutAt, placeIn } from '../../../workspace/roots/proof.js';
 import { WorkingOrigins } from '../../../workspace/contract/service/places.js';
@@ -96,13 +94,7 @@ const makeWorld = Effect.gen(function* () {
   yield* coverage.adopt(projectId, B);
   const landing = Effect.fnUntraced(function* (origin: WorkingOrigin) {
     const inst = yield* claimPreparedInstance(preparedBase(store));
-    const producer = makePreparedChanges(
-      { commands: quietCommands, pathsOfThread, evidenceInGroups },
-      landingAdmission(makeLandingHolds()),
-      judgingFns(CHECKOUT_DIRECTORY),
-      inst.dir,
-      UNSHAPED,
-    );
+    const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir, UNSHAPED);
     return yield* Effect.ensuring(
       submitOver(
         git,
@@ -110,7 +102,7 @@ const makeWorld = Effect.gen(function* () {
         store,
         units,
         origin,
-        { projectId: origin.work.projectId, tasks: [], taking: [], coAuthored: true },
+        { projectId: origin.work.projectId, tasks: [], coAuthored: true, everything: false },
         noRuleInPlay,
         producer,
       ).pipe(Effect.provideContext(services)),

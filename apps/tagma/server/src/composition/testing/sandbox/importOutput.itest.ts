@@ -23,7 +23,7 @@ import { submitOver } from '../../../landing/testing/doubles.js';
 import { landingServices } from '../landingServices.js';
 import { ChangeRecord } from '../../../change-record/contract/service/record.js';
 import { UNSHAPED } from '../../../change-record/contract/service/shape.js';
-import { sharedPrepared } from '../../preparedChanges.js';
+import { preparedChangesOver } from '../../../change-record/serving.js';
 import {
   quietCommands,
   claimPreparedInstance,
@@ -161,7 +161,7 @@ const makeImportWorld = Effect.gen(function* () {
   const rig = yield* holdingsOver(store, units, faces, checkout).pipe(Effect.provide(base));
   const instance = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(store)), (instance) => instance.release);
   const walks = yield* Effect.acquireRelease(Effect.sync(makeWalks), (owned) => owned.close);
-  const producer = sharedPrepared(instance.dir, holds, quietCommands, rig.holdings, walks, UNSHAPED).changes;
+  const producer = preparedChangesOver(quietCommands, instance.dir, CHECKOUT_DIRECTORY, rig.holdings, walks, UNSHAPED);
   const threads = yield* Effect.flatMap(makeThreadRecords, (records) => threadStore(records, ENTRY_KINDS)).pipe(Effect.provide(base));
   const origin = yield* Schema.decodeUnknownEffect(WorkingOrigin)({
     environment: {
@@ -226,7 +226,7 @@ dockerSuite('imported output', () => {
               world.store,
               world.units,
               world.origin,
-              { projectId: world.projectId, tasks: [], taking: [], coAuthored: true, subject: 'the produced files' },
+              { projectId: world.projectId, tasks: [], coAuthored: true, subject: 'the produced files', everything: false },
               noRuleInPlay,
               world.producer,
             );

@@ -3,7 +3,7 @@ import { type FloorRefusal, type Unblock, GateRefusal } from '../../../platform/
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../../platform/contract/service/store.js';
 import { SignedSession, WriterRegister } from '../../../platform/contract/service/writers.js';
-import { SessionIdentity, sessionName, type SessionRef } from '../../../platform/contract/wire/session.js';
+import { NATIVE_HARNESS, SessionIdentity, sessionName, type SessionRef } from '../../../platform/contract/wire/session.js';
 import { block, touch } from '../../store/tables.js';
 import { Act, BlockNames, BlockProjection } from '../../contract/service/acts.js';
 import { BlockRows } from '../../acts/rows.js';
@@ -32,7 +32,7 @@ import { abandoned } from '../../contract/wire/holders.js';
 import { WORK } from '../../contract/wire/tags/work.js';
 import { measuredCondition } from '../../acts/measurement.js';
 import { scopeCondition } from '../../search/selection.js';
-import { holdersOf } from './holders.js';
+import { type Holder, holdersOf } from './holders.js';
 
 const claiming = writes('Tasks.claim', [block], projecting);
 const releasing = writes('Tasks.release', [block, touch], projecting);
@@ -91,12 +91,19 @@ export const taskHolding = Effect.gen(function* () {
   const holderIn = (unit: Effect.Success<typeof transactionUnit>, as: SessionRef | undefined) =>
     as === undefined ? sessions.signedId(unit) : Effect.map(sessions.resolve(unit, as), (row) => row.id);
 
+  const teammate = Effect.fnUntraced(function* (holder: Holder | undefined) {
+    const caller = yield* SignedSession;
+    const team = holder?.state?.team ?? null;
+    if (caller === null || caller.harness !== NATIVE_HARNESS || team === null) return false;
+    return (yield* standings.of([caller.key])).get(caller.key)?.team === team;
+  });
+
   const heldElsewhere = Effect.fn('Tasks.heldElsewhere')(function* (row: BlockRow): Effect.fn.Return<HeldWork | null, StoreFailure> {
     const table = yield* tableOf(row);
     if (!table.standsAt(row, HOLDER, 'active') || (yield* holds(row))) return null;
     const held = table.holderOf(row);
     const holder = held === null ? undefined : (yield* holdersOf(sessions, standings, [held])).get(held);
-    if (abandoned(holder?.state)) return null;
+    if (abandoned(holder?.state) || (yield* teammate(holder))) return null;
     return {
       name: blockName(row.uuid),
       title: row.title,

@@ -1,0 +1,59 @@
+import { Effect, type FileSystem } from 'effect';
+import { unique } from '@runlith/utils/collection';
+import type { StoreFailure } from '../../platform/contract/service/store.js';
+import type { OwnGitFailed } from '../../platform/git/ownGit.js';
+import { placesIn } from '../../workspace/roots/proof.js';
+import type { PreparedRow, TeamMember } from '../contract/service/prepared.js';
+import { homesOfHolders } from '../record/sessions.js';
+import { movesAt } from '../record/moves.js';
+import { neededPaths } from './dependencies.js';
+import { changedAmong, recordedPaths, type Selection } from './team.js';
+import type { Landing } from './tree.js';
+
+export type Closure<Row extends PreparedRow> = {
+  readonly paths: readonly string[];
+  readonly rows: ReadonlyMap<string, readonly Row[]>;
+  readonly writers: ReadonlyMap<string, readonly string[]>;
+};
+
+export const closed = Effect.fn('prepared.closed')(function* <Row extends PreparedRow>(
+  landing: Landing<Row>,
+  base: string | null,
+  selection: Selection,
+  capture: number,
+): Effect.fn.Return<Closure<Row>, StoreFailure | OwnGitFailed, FileSystem.FileSystem> {
+  const { git, root, store, units, checkout, reads, fns } = landing;
+  const place = { git, root, store, units, checkout, head: base };
+  const team = new Set(landing.team.map((one) => one.threadId));
+  const carried = new Set(selection.paths);
+  const rows = new Map<string, readonly Row[]>();
+  const writers = new Map<string, readonly string[]>();
+  const expanded = new Set(team);
+  let frontier = [...selection.paths];
+  while (frontier.length > 0) {
+    const grouped = yield* reads.evidenceInGroups(units, store, placesIn(checkout, frontier), (evidence) => Effect.succeed([...evidence]));
+    for (const [path, held] of grouped) rows.set(path, held);
+    const fresh = new Set<string>();
+    for (const path of frontier) {
+      const found = unique((rows.get(path) ?? []).map((row) => row.threadId));
+      writers.set(
+        path,
+        found.filter((holder) => !team.has(holder)),
+      );
+      for (const holder of found) if (!expanded.has(holder)) fresh.add(holder);
+    }
+    for (const holder of fresh) expanded.add(holder);
+    const homes = fresh.size === 0 ? new Map<string, number>() : yield* units.read((unit) => unit.run(homesOfHolders(store, [...fresh])));
+    const members: TeamMember[] = [...fresh].map((threadId) => ({ threadId, projectId: homes.get(threadId) ?? null }));
+    const theirs = members.length === 0 ? [] : yield* changedAmong(place, fns, yield* recordedPaths(place, reads, members));
+    const needed = yield* neededPaths(landing, base, frontier, carried, capture);
+    const next = unique([...theirs, ...needed]).filter((path) => !carried.has(path));
+    for (const path of next) carried.add(path);
+    const moves = next.length === 0 ? null : yield* movesAt({ units, store, git }, { checkout, dir: root, head: base }, next, true);
+    const partners = unique(next.flatMap((path) => [...(moves?.partners(path) ?? [])])).filter((path) => !carried.has(path));
+    const paired = partners.length === 0 ? [] : yield* fns.eligiblePaths(git, root, partners);
+    for (const path of paired) carried.add(path);
+    frontier = [...next, ...paired];
+  }
+  return { paths: [...carried].sort(), rows, writers };
+});

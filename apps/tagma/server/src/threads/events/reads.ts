@@ -62,6 +62,7 @@ export const makeEventReads = Effect.gen(function* () {
                   .select({
                     id: threadRecord.id,
                     parentId: threadRecord.parentId,
+                    spawnRootId: threadRecord.spawnRootId,
                     archivedAt: threadRecord.archivedAt,
                     status: threadRecord.status,
                     busy: sql<number>`${busy(threadRecord.id, owing)}`,
@@ -72,10 +73,10 @@ export const makeEventReads = Effect.gen(function* () {
               for (const row of rows) {
                 const standing =
                   row.archivedAt !== null ? 'gone' : row.busy === 1 ? 'working' : row.status === 'failed' ? 'failed' : 'rested';
-                states.set(row.id, { standing, child: row.parentId !== null });
+                states.set(row.id, { standing, child: row.parentId !== null, team: row.spawnRootId });
               }
             }
-            for (const id of wanted) if (!states.has(id)) states.set(id, { standing: 'gone', child: false });
+            for (const id of wanted) if (!states.has(id)) states.set(id, { standing: 'gone', child: false, team: null });
             return states as ReadonlyMap<string, HolderState>;
           }),
         ),

@@ -24,6 +24,14 @@ const memoryReason = (failure: { readonly _tag: string }): string =>
     ? `a reserve of ${String(failure.reserve)} bytes does not fit: ${String(failure.reserved)} reserved and ${String(failure.retained)} retained under a grant of ${String(failure.grant)}`
     : failure._tag;
 
+const recordReadReason = (failure: { readonly _tag: string }): string => {
+  const stream = 'stream' in failure ? String(failure.stream) : 'a stream';
+  const detail = 'detail' in failure ? String(failure.detail) : 'unstated';
+  const act = 'act' in failure ? failure.act : undefined;
+  const said = act === 'missing' ? 'is missing' : act === 'open' ? 'could not be opened' : 'could not be read';
+  return `the ${stream} record ${said}: ${detail}`;
+};
+
 export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
   if (failure instanceof InputProfileConflict)
     return {
@@ -80,6 +88,8 @@ export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
         _tag: 'HostUnavailable',
         reason: `this host could not record what it did: ${'reason' in failure ? String(failure.reason) : 'unstated'}`,
       };
+    case 'RecordReadFailed':
+      return { _tag: 'HostUnavailable', reason: recordReadReason(failure) };
     default:
       return { _tag: 'HostConflict', reason: failure._tag };
   }

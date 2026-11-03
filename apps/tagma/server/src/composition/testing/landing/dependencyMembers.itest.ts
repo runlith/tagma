@@ -27,7 +27,7 @@ const COSTS = [
 ].join('\n');
 
 it.live(
-  'native landing ignores a peer member that a barrel-exported library namespace call cannot reach, and still refuses a peer member',
+  'native landing ignores a peer member that a barrel-exported library namespace call cannot reach, and carries the peer file whose member it reads',
   () =>
     Effect.gen(function* () {
       const { born, doors, write, read, files, root } = yield* nativeLanding(
@@ -61,10 +61,12 @@ it.live(
         'costs.ts',
         changed + 'export const found = (registry: import("./rig.js").Registry) => registry.get("k");\n',
       );
-      const refused = yield* doors.atNative('submit_work', { subject: 'read a peer registry member', paths: ['costs.ts'] }, caller);
-      expect(refused).toMatchObject({ class: 'refusal', code: 'lines-held' });
-      if (refused.class === 'refusal') expect(refused.reason).toContain(`get in rig.ts:3, held by ${peer.threadId}`);
-      expect(yield* read('costs.ts')).toBe(changed);
+      expect(yield* doors.atNative('submit_work', { subject: 'read a peer registry member', paths: ['costs.ts'] }, caller)).toMatchObject({
+        class: 'answer',
+        value: {
+          submitted: { status: 'landed', committed: ['costs.ts', 'rig.ts'], carried: [{ path: 'rig.ts', holders: [peer.threadId] }] },
+        },
+      });
     }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
@@ -138,7 +140,7 @@ const FEED = [
   '',
 ].join('\n');
 
-it.live('native landing settles a receiver behind a fixed call and still refuses one behind a generic call', () =>
+it.live('native landing settles a receiver behind a fixed call and carries the peer file one behind a generic call may need', () =>
   Effect.gen(function* () {
     const { born, doors, write, read } = yield* nativeLanding(
       { '.gitignore': 'node_modules/\n', 'walks.ts': WALKS, 'shape.ts': SHAPE, 'feed.ts': FEED },
@@ -161,10 +163,12 @@ it.live('native landing settles a receiver behind a fixed call and still refuses
       .replace('import { head }', 'import { head, headOf }')
       .concat('const second = headOf(pick(loose));\nexport const other = second === null ? null : second.value.kind;\n');
     yield* write(caller.threadId, 'feed.ts', generic);
-    const refused = yield* doors.atNative('submit_work', { subject: 'read through a generic', paths: ['feed.ts'] }, caller);
-    expect(refused).toMatchObject({ class: 'refusal', code: 'lines-held' });
-    if (refused.class === 'refusal') expect(refused.reason).toContain(`value in walks.ts:2, held by ${peer.threadId}`);
-    expect(yield* read('feed.ts')).toBe(grown);
+    expect(yield* doors.atNative('submit_work', { subject: 'read through a generic', paths: ['feed.ts'] }, caller)).toMatchObject({
+      class: 'answer',
+      value: {
+        submitted: { status: 'landed', committed: ['feed.ts', 'walks.ts'], carried: [{ path: 'walks.ts', holders: [peer.threadId] }] },
+      },
+    });
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 

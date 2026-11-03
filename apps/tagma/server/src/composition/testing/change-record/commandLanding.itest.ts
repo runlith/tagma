@@ -25,28 +25,25 @@ const windowsOf = Effect.fnUntraced(function* (s: World) {
 });
 
 layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
-  it.effect(
-    'a command that generates a picture and sweeps files by a glob proves none of them, and submit_work naming them lands them all',
-    () =>
-      Effect.gen(function* () {
-        const s = yield* commandWorld();
-        for (const name of ['b', 'c']) writeFileSync(join(s.w.root, 'src', `${name}.ts`), base);
-        yield* git(s, ['add', '--', 'src']);
-        yield* git(s, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'more files']);
+  it.effect('a command that generates a picture and sweeps files by a glob lands every file it changed with a bare submit', () =>
+    Effect.gen(function* () {
+      const s = yield* commandWorld();
+      for (const name of ['b', 'c']) writeFileSync(join(s.w.root, 'src', `${name}.ts`), base);
+      yield* git(s, ['add', '--', 'src']);
+      yield* git(s, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'more files']);
 
-        yield* call(s.mine.bash, {
-          command: `printf '\\122\\111\\106\\106\\000\\377' > picture.webp && perl -pi -e 's/const one = 1;/const one = 10;/' src/*.ts`,
-          description: 'Generate a picture and rewrite three files',
-        });
+      yield* call(s.mine.bash, {
+        command: `printf '\\122\\111\\106\\106\\000\\377' > picture.webp && perl -pi -e 's/const one = 1;/const one = 10;/' src/*.ts`,
+        description: 'Generate a picture and rewrite three files',
+      });
 
-        expect((yield* s.w.submit(MINE, { commands: s.commands })).status).toBe('nothing');
-        const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['picture.webp', 'src'] });
-        expect(landed.status).toBe('landed');
-        if (landed.status !== 'landed') return;
-        expect([...landed.committed].sort()).toEqual(['picture.webp', 'src/a.ts', 'src/b.ts', 'src/c.ts']);
-        expect(yield* git(s, ['status', '--porcelain'])).toBe('');
-        expect(yield* git(s, ['show', 'HEAD:src/c.ts'])).toBe(base.replace('const one = 1;', 'const one = 10;').trimEnd());
-      }),
+      const landed = yield* s.w.submit(MINE, { commands: s.commands });
+      expect(landed.status).toBe('landed');
+      if (landed.status !== 'landed') return;
+      expect([...landed.committed].sort()).toEqual(['picture.webp', 'src/a.ts', 'src/b.ts', 'src/c.ts']);
+      expect(yield* git(s, ['status', '--porcelain'])).toBe('');
+      expect(yield* git(s, ['show', 'HEAD:src/c.ts'])).toBe(base.replace('const one = 1;', 'const one = 10;').trimEnd());
+    }),
   );
 
   it.effect(
@@ -84,7 +81,7 @@ layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
           hands: [{ holder: { kind: 'thread', thread: MINE }, added: 1, removed: 0 }],
           nobody: [{ added: 1, removed: 0 }],
         });
-        const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['gen.txt'], whole: ['gen.txt'] });
+        const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['gen.txt'] });
         expect(landed.status).toBe('landed');
         if (landed.status !== 'landed') return;
         expect([...landed.committed]).toEqual(['gen.txt']);
@@ -160,7 +157,7 @@ layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
       expect(yield* s.held('src/generated.ts')).toEqual([]);
       expect(s.commands.unattributed({ projectId: s.w.projectId, threadId: MINE }).map((one) => one.path)).toEqual(names);
 
-      const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['src/'], whole: ['src/'] });
+      const landed = yield* s.w.submit(MINE, { commands: s.commands, paths: ['src/'] });
       expect(landed).toMatchObject({ status: 'landed', committed: ['src/generated.ts'] });
       expect(yield* git(s, ['show', 'HEAD:src/generated.ts'])).toBe(text.trimEnd());
       expect(yield* git(s, ['status', '--porcelain'])).toBe('?? src-other.ts');
@@ -221,7 +218,7 @@ layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
     }),
   );
 
-  it.effect('a submit that lands past overlap command paths names them unattributed, and naming them lands a deletion among them', () =>
+  it.effect('a bare submit lands the overlap command paths its session met, a deletion among them, and names them unattributed', () =>
     Effect.gen(function* () {
       const s = yield* commandWorld();
       const goneText = 'export const gone = 1;\n';
@@ -277,15 +274,8 @@ layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
       const landed = yield* s.w.submit(MINE, { commands: s.commands });
       expect(landed.status).toBe('landed');
       if (landed.status !== 'landed') return;
-      expect([...landed.committed]).toEqual(['src/own.ts']);
+      expect([...landed.committed].sort()).toEqual(['src/gone.ts', 'src/made.ts', 'src/own.ts']);
       expect(landed.unattributed).toEqual(['src/gone.ts', 'src/made.ts']);
-      expect(yield* git(s, ['status', '--porcelain'])).toBe(' D src/gone.ts\n?? src/made.ts');
-
-      const named = yield* s.w.submit(MINE, { commands: s.commands, paths: ['src/gone.ts', 'src/made.ts'] });
-      expect(named.status).toBe('landed');
-      if (named.status !== 'landed') return;
-      expect([...named.committed].sort()).toEqual(['src/gone.ts', 'src/made.ts']);
-      expect(named.unattributed).toBeUndefined();
       expect(yield* git(s, ['status', '--porcelain'])).toBe('');
       expect(yield* git(s, ['ls-tree', '--name-only', 'HEAD', '--', 'src/gone.ts'])).toBe('');
       expect(yield* git(s, ['show', 'HEAD:src/made.ts'])).toBe(madeText.trimEnd());

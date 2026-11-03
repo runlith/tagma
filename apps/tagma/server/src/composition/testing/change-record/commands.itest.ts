@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { contentDigest } from '@runlith/files/content';
 import { makeWalks } from '../../../change-record/lines/walks.js';
-import { observedPrograms } from '../../../change-record/record/programOrigins.js';
 import { collectReleased, sweepVersions } from '../../../change-record/record/versions.js';
 import { workspaceChange } from '../../../change-record/store/tables.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
@@ -55,7 +54,7 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
     }),
   );
 
-  it.effect('a file an opaque program writes stays nobody’s row yet is observed with the program’s line and the bytes it left', () =>
+  it.effect('a file an opaque program writes stays nobody’s row yet is observed for the session whose command ran', () =>
     Effect.gen(function* () {
       const s = yield* commandWorld();
       const command = `bun -e 'require("node:fs").writeFileSync("src/made.ts", "made\\n")'`;
@@ -64,11 +63,6 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
 
       expect(yield* s.held('src/made.ts')).toEqual([]);
       expect(reasons(s, MINE)).toEqual([['src/made.ts', 'unproven']]);
-      const observed = yield* observedPrograms(
-        { git: s.w.git, root: s.w.root, store: s.w.store, units: s.w.units, checkout: 'repo-root' },
-        ['src/made.ts', 'src/other.ts'],
-      );
-      expect([...observed]).toEqual([['src/made.ts', [{ digest: contentDigest('made\n'), commandLine: command }]]]);
     }),
   );
 
@@ -114,7 +108,7 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
       }),
   );
 
-  it.effect('a command over a file another session holds lines in lands its own lines and leaves theirs held', () =>
+  it.effect('a command over a file another session holds lines in lands the file whole and names that session', () =>
     Effect.gen(function* () {
       const s = yield* commandWorld();
       yield* call(s.theirs.edit, { path: 'src/a.ts', oldString: 'const one = 1;', newString: 'const one = 100;' });
@@ -123,11 +117,12 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
         description: 'Rewrite the last line',
       });
 
-      const landed = yield* s.w.submit(MINE, { commands: s.commands });
-      expect(landed.status).toBe('landed');
-      expect(yield* s.w.committed()).toEqual([...FILE.slice(0, 4), 'const five = 50;']);
-      expect(readFileSync(s.w.file, 'utf8')).toBe(`${['const one = 100;', ...FILE.slice(1, 4), 'const five = 50;'].join('\n')}\n`);
-      expect((yield* s.held('src/a.ts')).map(([threadId]) => threadId)).toEqual([THEIRS]);
+      expect(yield* s.w.submit(MINE, { commands: s.commands })).toMatchObject({
+        status: 'landed',
+        carried: [{ path: 'src/a.ts', holders: [THEIRS] }],
+      });
+      expect(yield* s.w.committed()).toEqual(['const one = 100;', ...FILE.slice(1, 4), 'const five = 50;']);
+      expect(yield* s.held('src/a.ts')).toEqual([]);
     }),
   );
 

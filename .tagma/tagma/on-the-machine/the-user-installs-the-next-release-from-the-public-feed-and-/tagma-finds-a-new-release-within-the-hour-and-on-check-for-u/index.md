@@ -9,9 +9,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/release-channel/runner.ts
-  - kind: file
     ref: apps/tagma/desktop/src/quitting.ts
+  - kind: file
+    ref: apps/tagma/server/src/release-channel/runner.ts
 ---
 **Outcome.** A running Tagma learns of a published release within an hour, and the person can ask for it at any moment: **Check for Updates…** in the Tagma menu, the ↻ of the status popover, `tagma release check`. Today the server reads the feed at start and then every 24 hours, and nothing asks it sooner: a person who keeps Tagma open learns of a release up to a day late, and only a server restart shows it earlier.
 

@@ -1,4 +1,5 @@
 import type { Finding, Side } from '@runlith/tagma/rules';
+import { NeedsPreparation } from '../preparation';
 import { changesBetween, FAR, GOOD_ENOUGH, prepare } from '../declarations/index';
 import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../maps';
 import { versionAt } from './cache';
@@ -84,7 +85,7 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
       if (changes.length < GOOD_ENOUGH) break;
     }
     if (best === undefined || best.changes.length > FAR)
-      throw new Error(
+      throw new NeedsPreparation(
         'vendor-ids has no revision index for this reader; run check_rules with inspection vendor-ids over "change", using the same paths, whole and taking selection, to prepare the candidate before judging it again',
       );
     return derived(commit, best.id, best.changes);

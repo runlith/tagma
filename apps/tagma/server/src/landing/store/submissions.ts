@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { Effect, Schema } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { MachineStore, type StoreDb } from '../../platform/contract/service/store.js';
@@ -15,6 +15,21 @@ const recording = writes('submit_work.receipt', [submitReceipt]);
 
 const whereCall = (work: WorkOrigin, callId: string) =>
   and(eq(submitReceipt.threadId, work.threadId), eq(submitReceipt.projectId, work.projectId), eq(submitReceipt.callId, callId));
+
+export const landedBy = (db: StoreDb<'machine'>, units: Units<'machine'>, threadIds: readonly string[], checkout: string) =>
+  threadIds.length === 0
+    ? Effect.succeed(new Set<string>())
+    : units.read((unit) =>
+        Effect.map(
+          unit.run(
+            db
+              .selectDistinct({ commit: submitReceipt.commit })
+              .from(submitReceipt)
+              .where(and(inArray(submitReceipt.threadId, [...threadIds]), eq(submitReceipt.checkout, checkout))),
+          ),
+          (rows) => new Set(rows.map((row) => row.commit)),
+        ),
+      );
 
 export const witnessSubmission = (db: StoreDb<'machine'>, units: Units<'machine'>, witness: typeof submitReceipt.$inferInsert) =>
   units.write(recording, (unit) =>

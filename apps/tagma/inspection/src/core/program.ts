@@ -172,6 +172,15 @@ export const ProgramAnswer = Schema.Struct({
     capabilities: Schema.Struct({ unit: Schema.optional(Schema.Literal('count')) }),
   }),
   readings: Schema.Array(ProgramResult),
+  unanswered: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        key: Schema.NonEmptyString,
+        why: Schema.Literals(['unprepared', 'threw']),
+        reason: Schema.NonEmptyString,
+      }),
+    ),
+  ),
   failure: Schema.optional(Schema.NonEmptyString),
 });
 export type ProgramAnswer = typeof ProgramAnswer.Type;
@@ -184,7 +193,10 @@ export const readProgramAnswer = (input: ProgramInvocation, output: unknown): Re
   for (const field of ['request', 'tree', 'base', 'checker'] as const) {
     if (answer[field] !== input[field]) return Result.fail(`the answer echoes a different ${field}`);
   }
-  const keys = new Set(input.keys.map((one) => one.key));
+  const asked = new Set(input.keys.map((one) => one.key));
+  const unanswered = new Set((answer.unanswered ?? []).map((one) => one.key));
+  for (const key of unanswered) if (!asked.has(key)) return Result.fail(`an unknown key was left unanswered: ${key}`);
+  const keys = new Set([...asked].filter((key) => !unanswered.has(key)));
   const sides = new Set(input.sides.map((one) => one.side));
   const seen = new Set<string>();
   for (const reading of answer.readings) {

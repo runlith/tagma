@@ -187,6 +187,25 @@ const execute = Effect.fn('enforcement.program.group')(function* (
         });
   const answer = readProgramAnswer(input, json);
   if (Result.isFailure(answer)) return yield* rejected(answer.failure);
+  const unanswered = answer.success.unanswered ?? [];
+  if (unanswered.length > 0) {
+    const named = (key: string): string =>
+      [...new Set(routes.filter((route) => route.key.key === key).map((route) => route.binding.check.key))].join(', ');
+    const unprepared = unanswered.filter((one) => one.why === 'unprepared');
+    return yield* new InspectionFailed({
+      cause: 'program',
+      reason: `${unanswered.length} of ${keys.size} program keys of ${checker.id} gave no reading: ${unanswered
+        .map((one) => `${named(one.key)} ${one.why === 'unprepared' ? 'is unprepared' : 'threw'}: ${one.reason}`)
+        .join('; ')}`,
+      ways:
+        unprepared.length === 0
+          ? undefined
+          : [
+              `prepare every unprepared inspection (${[...new Set(unprepared.flatMap((one) => named(one.key).split(', ')))].join(', ')}) over this change with check_rules, then judge again: the refused act needs them all, and each one prepared alone leaves the others refusing`,
+            ],
+      unprepared: unanswered.every((one) => one.why === 'unprepared'),
+    });
+  }
   const readings = new Map(answer.success.readings.map((one) => [`${one.key}/${one.side}`, one]));
   const sides = new Map(subject.sides.map((one) => [one.side, one]));
   const measured = new Map<
@@ -280,7 +299,7 @@ export const judgePrograms = Effect.fn('enforcement.programs.judge')(function* (
     const checker = group[0].checker;
     const answer = yield* execute(subject, group, checker).pipe(
       Effect.mapError((failure) => {
-        if (failure.cause !== 'program' && failure.cause !== 'host') return failure;
+        if ((failure.cause !== 'program' && failure.cause !== 'host') || failure.unprepared === true) return failure;
         return new InspectionFailed({
           cause: failure.cause,
           split: failure.split,

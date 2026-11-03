@@ -6,7 +6,7 @@ import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js'
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { nativeLanding } from './native.js';
 
-it.live('submit_work attributes only declared tasks when paths lands one of two held tasks, and an omitted declaration names none', () =>
+it.live('submit_work attributes exactly the declared tasks, held or not, and an omitted declaration names none', () =>
   Effect.gen(function* () {
     const { world, projectId, root, born, doors, write, read } = yield* nativeLanding({
       'first.ts': 'export const first = 1;\n',
@@ -50,8 +50,8 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
           status: 'landed',
           subject: 'Complete the first task',
           committed: ['first.ts'],
-          left: ['second.ts'],
-          tasks: [{ name: tasks[0], holder: caller.threadId, by: 'session' }],
+          left: [{ path: 'second.ts', reason: 'paths' }],
+          tasks: [{ name: tasks[0] }],
         },
       },
     });
@@ -66,11 +66,19 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
     expect(new TextDecoder().decode(trailers.stdout).trim()).toBe(`Task: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`);
     expect(yield* read('second.ts')).toBe('export const second = 1;\n');
 
+    const spec = yield* world.op('create_block', { tags: ['spec'], title: 'Not work', parentId }, `project=${projectId}`);
+    const specName = (spec.body as { block: { name: string } }).block.name;
+    expect(yield* doors.atNative('submit_work', { subject: 'Name a spec', tasks: [specName] }, caller)).toMatchObject({
+      class: 'refusal',
+      code: 'not-work',
+    });
     const unheld = yield* world.op('create_block', { tags: ['task'], title: 'Unheld task', parentId }, `project=${projectId}`);
     const unheldName = (unheld.body as { block: { name: string } }).block.name;
-    const refused = yield* doors.atNative('submit_work', { subject: 'Reject an unheld task', tasks: [unheldName] }, caller);
-    expect(refused).toMatchObject({ class: 'refusal', code: 'task-not-held' });
-    if (refused.class === 'refusal') expect(refused.unblock.length).toBeGreaterThan(0);
+    expect(yield* doors.atNative('submit_work', { subject: 'Attribute an unheld task', tasks: [unheldName] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['second.ts'], tasks: [{ name: unheldName }] } },
+    });
+    yield* write(caller.threadId, 'first.ts', 'export const first = 4;\n');
     const noTasks = yield* doors.atNative('submit_work', { subject: 'Leave tasks unnamed', tasks: [] }, caller);
     expect(noTasks).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed', subject: 'Leave tasks unnamed' } } });
     if (noTasks.class === 'answer') {
@@ -99,7 +107,7 @@ it.live('submit_work names the declared work of a single held task without sourc
     expect(yield* doors.atNative('submit_work', { tasks: [task] }, caller)).toMatchObject({
       class: 'answer',
       value: {
-        submitted: { status: 'landed', subject: 'Single task', tasks: [{ name: task, holder: caller.threadId, by: 'session' }] },
+        submitted: { status: 'landed', subject: 'Single task', tasks: [{ name: task }] },
       },
     });
     const head = yield* spawnedEffect(['git', 'log', '-1', '--format=%B'], { cwd: root });

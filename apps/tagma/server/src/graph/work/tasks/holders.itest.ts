@@ -7,18 +7,22 @@ import { NATIVE_HARNESS } from '../../../platform/contract/wire/session.js';
 import { HolderStandings } from '../../contract/service/holders.js';
 import type { HolderState } from '../../contract/wire/holders.js';
 
+const READER = 'reader';
+
 const STATES: ReadonlyMap<string, HolderState> = new Map([
-  ['child-gone', { standing: 'gone', child: true }],
-  ['child-rested', { standing: 'rested', child: true }],
-  ['child-working', { standing: 'working', child: true }],
-  ['root-rested', { standing: 'rested', child: false }],
+  ['child-gone', { standing: 'gone', child: true, team: 'gone-tree' }],
+  ['child-rested', { standing: 'rested', child: true, team: 'rested-tree' }],
+  ['child-working', { standing: 'working', child: true, team: 'working-tree' }],
+  ['root-rested', { standing: 'rested', child: false, team: 'root-tree' }],
+  ['teammate-working', { standing: 'working', child: true, team: 'reader-tree' }],
+  [READER, { standing: 'working', child: false, team: 'reader-tree' }],
 ]);
 
 layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
   it.effect(
-    'work of a child that stopped or a thread that is gone is held by nobody, stands idle, and leaves the orientation; a working child and a rested root keep theirs',
+    'work of a child that stopped or a thread that is gone is held by nobody, stands idle, and leaves the orientation; a working child and a rested root keep theirs, and a teammate’s is no other holder’s',
     () =>
-      withDemo(({ graph, context, projectId, as, nameOf, root }) =>
+      withDemo(({ graph, context, projectId, nameOf, root }) =>
         Effect.gen(function* () {
           yield* Effect.acquireRelease(
             Effect.sync(() =>
@@ -29,19 +33,20 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
             (stop) => Effect.sync(stop),
           );
           const names = new Map<string, string>();
-          for (const key of STATES.keys()) {
+          for (const key of [...STATES.keys()].filter((one) => one !== READER)) {
             const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: `held by ${key}` });
             yield* signedBy({ harness: NATIVE_HARNESS, key })(graph.tasks.claim({ id }));
             names.set(key, yield* nameOf(id));
           }
           const asked = Effect.fnUntraced(function* (key: string) {
             const row = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(names.get(key)!));
-            return yield* as('reader', graph.tasks.heldElsewhere(row));
+            return yield* signedBy({ harness: NATIVE_HARNESS, key: READER })(graph.tasks.heldElsewhere(row));
           });
           expect(yield* asked('child-gone')).toBeNull();
           expect(yield* asked('child-rested')).toBeNull();
           expect(yield* asked('child-working')).toMatchObject({ name: names.get('child-working') });
           expect(yield* asked('root-rested')).toMatchObject({ name: names.get('root-rested') });
+          expect(yield* asked('teammate-working')).toBeNull();
 
           const idle = yield* graph.tasks.idle({ projectId });
           expect(

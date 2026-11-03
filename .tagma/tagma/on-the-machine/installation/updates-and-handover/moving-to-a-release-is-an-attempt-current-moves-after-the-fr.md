@@ -20,11 +20,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/closure/leases.ts
   - kind: file
+    ref: apps/tagma/server/src/installation/closure/moves.ts
+  - kind: file
     ref: apps/tagma/server/src/installation/process/trial.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/install.ts
-  - kind: file
-    ref: apps/tagma/server/src/installation/closure/moves.ts
 ---
 `install-from` points `current` at the new release only after writing the attempt `install/attempt.json` `{from, to, starts, copied, ended}`. The `to` release's server clears it by opening the local door. The predecessor cannot take the place back after leaving: the successor's migrations make the database unfit for the previous build, and 0.1.0 with its handover protocol is issued for good. So only the `to` code rolls back, before its own door.
 

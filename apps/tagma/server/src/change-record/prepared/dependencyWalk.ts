@@ -2,28 +2,26 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { totalmem } from 'node:os';
 import { contentDigest } from '@runlith/files/content';
+import { textChanges } from '@runlith/utils/patch';
 import { blobTree, type ParseMemo } from '@runlith/code-facts/blobs';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
-import type { SymbolImport, SymbolMeaning, SymbolReader, Symbols } from '@runlith/code-facts/adapter';
+import type { Resolution, SymbolImport, SymbolMeaning, SymbolReader, Symbols } from '@runlith/code-facts/adapter';
 import type { Tree } from '@runlith/code-facts/tree';
-import type { SelectedSpan } from '../lines/selection.js';
+import { UnsupportedSource } from '@runlith/code-facts/imports';
 
-export type PeerLine = { readonly line: number; readonly holder: string | null };
-export type Dependency = PeerLine & { readonly path: string; readonly name: string };
+export type Dependency = { readonly path: string; readonly name: string; readonly line: number };
 export type ImportedUse = { readonly path: string; readonly name: string; readonly meaning: SymbolMeaning };
-export type BoundTexts = { readonly working: Symbols; readonly selected: Symbols; readonly candidates: readonly Dependency[] };
+export type BoundTexts = { readonly working: Symbols; readonly landed: Symbols; readonly candidates: readonly Dependency[] };
 export type DependencyInput = {
   readonly root: string;
   readonly path: string;
   readonly working: string;
-  readonly selected: string | null;
-  readonly peers: readonly PeerLine[];
-  readonly positions?: readonly SelectedSpan[];
-  readonly lines?: readonly number[];
+  readonly head: string | null;
+  readonly lands: boolean;
   readonly uses?: readonly ImportedUse[];
   readonly facts?: BoundTexts;
 };
-export type DependencyProbe = { readonly root: string; readonly path: string; readonly text?: string; readonly capture: number };
+export type DependencyProbe = { readonly root: string; readonly path: string; readonly capture: number };
 export type ImportProbe = {
   readonly text: string | undefined;
   readonly paths: readonly string[];
@@ -38,13 +36,13 @@ export type PlacementInput = {
   readonly names: readonly string[];
   readonly files: readonly string[];
   readonly texts: readonly (readonly [string, string | null])[];
-  readonly closed: readonly string[];
   readonly capture: number;
 };
 export type DependencyAnswer = {
   readonly dependencies: readonly Dependency[];
   readonly imports: readonly ImportedUse[];
   readonly facts: BoundTexts | undefined;
+  readonly lines: readonly number[] | undefined;
   readonly parses: number;
 };
 
@@ -68,13 +66,22 @@ const treeAt = (root: string): Tree => ({
   realpath: (path) => relative(root, realpathSync(join(root, path))).replaceAll('\\', '/'),
 });
 
+const changedLines = (head: string | null, working: string): readonly number[] | undefined => {
+  if (head === null) return undefined;
+  const changed = textChanges(head, working);
+  if (changed.timedOut) return undefined;
+  const lines: number[] = [];
+  for (const { after } of changed.changes) for (let at = after.start; at < after.end; at += 1) lines.push(at + 1);
+  return lines;
+};
+
 export const dependencyImportsOf = async (input: DependencyProbe): Promise<ImportProbe> => {
   const adapter = ADAPTERS.find((one) => one.parses(input.path));
   if (adapter === undefined) return { text: undefined, paths: [], reads: 0, importMs: 0 };
   const path = join(input.root, input.path);
-  if (input.text === undefined && !treeAt(input.root).has(input.path)) return { text: undefined, paths: [], reads: 0, importMs: 0 };
-  if (input.text === undefined && statSync(path).size > input.capture) throw new Error(`${input.path} exceeds its dependency text capture`);
-  const text = input.text ?? readFileSync(path, 'utf8');
+  if (!treeAt(input.root).has(input.path)) return { text: undefined, paths: [], reads: 0, importMs: 0 };
+  if (statSync(path).size > input.capture) throw new Error(`${input.path} exceeds its dependency text capture`);
+  const text = readFileSync(path, 'utf8');
   const key = `${input.root}\0${input.path}`;
   const digest = contentDigest(text);
   const previous = importsByPath.get(key);
@@ -111,18 +118,24 @@ export const dependencyImportsOf = async (input: DependencyProbe): Promise<Impor
   const paths = new Set<string>();
   let reader: SymbolReader | undefined;
   for (const site of sites) {
-    const direct = adapter.resolve(site.specifier, input.path, tree);
-    const resolved =
-      direct !== null && 'to' in direct
-        ? direct
-        : adapter.symbols === undefined
-          ? null
-          : (reader ??= await adapter.symbols()).resolve(site.specifier, input.path, tree);
-    if (resolved === null || !('to' in resolved)) continue;
-    const target = tree.realpath!(resolved.to);
-    if (target !== '..' && !target.startsWith('../')) paths.add(target);
+    const target = await resolvedOrNull(async () => {
+      const direct = adapter.resolve(site.specifier, input.path, tree);
+      if (direct !== null && 'to' in direct) return direct;
+      return adapter.symbols === undefined ? null : (reader ??= await adapter.symbols()).resolve(site.specifier, input.path, tree);
+    }, tree);
+    if (target !== null && target !== '..' && !target.startsWith('../')) paths.add(target);
   }
   return { text, paths: [...paths], reads: hit ? 0 : 1, importMs };
+};
+
+const resolvedOrNull = async (resolve: () => Promise<Resolution | null>, tree: Tree): Promise<string | null> => {
+  try {
+    const resolved = await resolve();
+    return resolved === null || !('to' in resolved) ? null : tree.realpath!(resolved.to);
+  } catch (error) {
+    if (error instanceof UnsupportedSource) return null;
+    throw error;
+  }
 };
 
 export const placementsOf = async (input: PlacementInput): Promise<readonly string[]> => {
@@ -131,12 +144,10 @@ export const placementsOf = async (input: PlacementInput): Promise<readonly stri
   const reader = await adapter.symbols();
   const disk = treeAt(input.root);
   const texts = new Map(input.texts);
-  const closed = new Set(input.closed);
   const tree: Tree = {
-    has: (path) => (texts.has(path) ? texts.get(path) !== null : !closed.has(path) && disk.has(path)),
+    has: (path) => (texts.has(path) ? texts.get(path) !== null : disk.has(path)),
     read: (path) => texts.get(path) ?? disk.read(path),
-    size: (path) =>
-      texts.has(path) ? texts.get(path)?.length : closed.has(path) || !disk.has(path) ? undefined : statSync(join(input.root, path)).size,
+    size: (path) => (texts.has(path) ? texts.get(path)?.length : !disk.has(path) ? undefined : statSync(join(input.root, path)).size),
     realpath: disk.realpath,
   };
   let left = input.capture - input.text.length;
@@ -153,31 +164,26 @@ export const placementsOf = async (input: PlacementInput): Promise<readonly stri
 
 export const dependenciesOf = async (input: DependencyInput): Promise<DependencyAnswer> => {
   const adapter = ADAPTERS.find((one) => one.parses(input.path));
-  if (adapter?.symbols === undefined) return { dependencies: [], imports: [], facts: undefined, parses: 0 };
+  if (adapter?.symbols === undefined) return { dependencies: [], imports: [], facts: undefined, lines: undefined, parses: 0 };
   const reader = await adapter.symbols();
   let parses = 0;
   const read = (text: string, lines?: readonly number[]): Symbols => {
     parses += 1;
     return reader.read(text, input.path, lines);
   };
+  const lines = changedLines(input.head, input.working);
   const working = input.facts?.working ?? read(input.working);
-  const selected =
-    input.facts?.selected ??
-    (input.selected === null
-      ? EMPTY
-      : input.selected === input.working && input.lines === undefined
-        ? working
-        : read(input.selected, input.lines));
-  const peers = new Map(input.peers.map((one) => [one.line, one.holder]));
-  const keptNames = new Set(selected.names.map((one) => `${one.owner}\0${one.name}`));
+  const landed =
+    input.facts?.landed ??
+    (input.lands ? (lines === undefined ? working : read(input.working, lines)) : input.head === null ? EMPTY : read(input.head));
+  const changed = new Set(input.lands ? [] : (lines ?? working.names.map((one) => one.line)));
+  if (!input.lands && input.head === null) changed.add(0);
+  const keptNames = new Set(landed.names.map((one) => `${one.owner}\0${one.name}`));
   const candidates =
     input.facts?.candidates ??
-    working.names.flatMap((one): Dependency[] => {
-      const holder = peers.get(one.line);
-      return holder === undefined || keptNames.has(`${one.owner}\0${one.name}`)
-        ? []
-        : [{ path: input.path, name: one.name, line: one.line, holder }];
-    });
+    working.names.flatMap((one): Dependency[] =>
+      !changed.has(one.line) || keptNames.has(`${one.owner}\0${one.name}`) ? [] : [{ path: input.path, name: one.name, line: one.line }],
+    );
   const dependencies: Dependency[] = [];
   const imports = new Map<string, ImportedUse>();
   const tree = treeAt(input.root);
@@ -185,8 +191,13 @@ export const dependenciesOf = async (input: DependencyInput): Promise<Dependency
   const follow = (imported: SymbolImport): void => {
     let path = resolutions.get(imported.from);
     if (path === undefined) {
-      const resolved = reader.resolve(imported.from, input.path, tree);
-      path = resolved !== null && 'to' in resolved ? tree.realpath!(resolved.to) : null;
+      try {
+        const resolved = reader.resolve(imported.from, input.path, tree);
+        path = resolved !== null && 'to' in resolved ? tree.realpath!(resolved.to) : null;
+      } catch (error) {
+        if (!(error instanceof UnsupportedSource)) throw error;
+        path = null;
+      }
       resolutions.set(imported.from, path);
     }
     if (path === null || path.startsWith('../') || path === '..') return;
@@ -194,13 +205,12 @@ export const dependenciesOf = async (input: DependencyInput): Promise<Dependency
     imports.set(`${path}\0${one.name}\0${one.meaning}`, one);
   };
   const note = (name: string, line: number): void => {
-    const holder = peers.get(line);
-    if (holder !== undefined) dependencies.push({ path: input.path, name, line, holder });
+    if (changed.has(line)) dependencies.push({ path: input.path, name, line });
   };
   if (input.uses !== undefined) {
-    const selectedExports = new Map(selected.exports.map((one) => [one.name, one]));
+    const landedExports = new Map(landed.exports.map((one) => [one.name, one]));
     const workingExports = new Map(working.exports.map((one) => [one.name, one]));
-    const lookup = (exports: typeof selectedExports, name: string) => {
+    const lookup = (exports: typeof landedExports, name: string) => {
       const direct = exports.get(name);
       if (direct !== undefined) return { exported: direct, suffix: '' };
       const parts = name.split('.');
@@ -216,12 +226,12 @@ export const dependenciesOf = async (input: DependencyInput): Promise<Dependency
       follow({ ...imported, name, meaning });
     };
     for (const use of input.uses) {
-      if (input.selected === null && peers.has(0)) {
+      if (input.head === null && !input.lands) {
         note(use.name, 0);
         continue;
       }
       if (use.name === '*') continue;
-      const kept = lookup(selectedExports, use.name);
+      const kept = lookup(landedExports, use.name);
       const present =
         kept?.suffix === '' && kept.exported.definitions.some((one) => use.meaning === 'all' || one.spaces.includes(use.meaning));
       if (present) continue;
@@ -236,43 +246,17 @@ export const dependenciesOf = async (input: DependencyInput): Promise<Dependency
       for (const definition of found?.suffix === '' ? (exported?.definitions ?? []) : [])
         if (use.meaning === 'all' || definition.spaces.includes(use.meaning)) note(use.name, definition.line);
       if (exported === undefined) {
-        const selectedForwards = new Set(selected.forwards.map((one) => one.from));
+        const landedForwards = new Set(landed.forwards.map((one) => one.from));
         for (const forward of working.forwards) {
-          if (!selectedForwards.has(forward.from)) note(use.name, forward.line);
+          if (!landedForwards.has(forward.from)) note(use.name, forward.line);
           follow({ from: forward.from, name: use.name, meaning: use.meaning });
         }
-        for (const forward of selected.forwards) follow({ from: forward.from, name: use.name, meaning: use.meaning });
+        for (const forward of landed.forwards) follow({ from: forward.from, name: use.name, meaning: use.meaning });
       }
     }
   } else {
-    for (const from of selected.imports) follow({ from, name: '*', meaning: 'all' });
-    const at = new Map(working.references.map((one) => [`${one.line}:${one.column}:${one.name}`, one]));
-    for (const reference of selected.references) {
-      if (reference.imported !== undefined) {
-        follow(reference.imported);
-        continue;
-      }
-      if (reference.definitions.length > 0) continue;
-      const positions = input.positions ?? [];
-      let low = 0;
-      let high = positions.length;
-      while (low < high) {
-        const middle = (low + high) >>> 1;
-        if (positions[middle]!.selected + positions[middle]!.count <= reference.line) low = middle + 1;
-        else high = middle;
-      }
-      const span = positions[low];
-      const line =
-        span === undefined || span.selected > reference.line
-          ? input.selected === input.working
-            ? reference.line
-            : undefined
-          : span.working + reference.line - span.selected;
-      if (line === undefined) continue;
-      const original = at.get(`${line}:${reference.column}:${reference.name}`);
-      if (original?.imported !== undefined) follow(original.imported);
-      for (const definition of original?.definitions ?? []) note(reference.name, definition.line);
-    }
+    for (const from of landed.imports) follow({ from, name: '*', meaning: 'all' });
+    for (const reference of landed.references) if (reference.imported !== undefined) follow(reference.imported);
   }
-  return { dependencies, imports: [...imports.values()], facts: { working, selected, candidates }, parses };
+  return { dependencies, imports: [...imports.values()], facts: { working, landed, candidates }, lines, parses };
 };

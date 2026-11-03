@@ -222,6 +222,29 @@ describe('the program road over a live execution host', () => {
       }),
     );
 
+    it.effect('a program that prints and exits at once answers every byte it printed, never an empty console', () =>
+      Effect.gen(function* () {
+        const { checkout, projectId, thread, road } = yield* Fixture;
+        const endings = yield* Effect.forEach(
+          Array.from({ length: 48 }, (_, at) => at),
+          (at) =>
+            road.run({
+              projectId,
+              actor: { _tag: 'Thread', threadId: thread, projectId },
+              argv: ['/bin/sh', '-c', `printf '{"answer":${at}}'`],
+              cwd: checkout,
+              stdin: '',
+              operation: `config/stest/${crypto.randomUUID()}`,
+              subject: 'the instant program under test',
+            }),
+          { concurrency: 8 },
+        );
+        expect(endings.map((ending) => (ending._tag === 'Exited' ? ending.stdout : ending._tag))).toEqual(
+          Array.from({ length: 48 }, (_, at) => `{"answer":${at}}`),
+        );
+      }),
+    );
+
     it.effect('operands far past the call envelope reach one program whole and in order, and its own exit code is the answer', () =>
       Effect.gen(function* () {
         const { checkout, projectId, thread, road } = yield* Fixture;

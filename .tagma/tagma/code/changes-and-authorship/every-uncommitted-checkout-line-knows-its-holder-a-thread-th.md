@@ -31,7 +31,7 @@ sources:
     ref: apps/tagma/server/src/change-record/contract/wire/writes.ts
     symbol: CHANGE_WRITES
 ---
-**Value.** Several agents and the operator write into one checkout, and Tagma knows whose lines are whose instead of guessing by git: so line choice for commit and rollback rests on authorship.
+**Value.** Several agents and the operator write into one checkout, and Tagma knows whose lines are whose instead of guessing by git: so the Git tab, review, rollback and the names in a landing receipt rest on authorship.
 
 **How.** Automatic, on every write: the agent's file tools, the operator's edits in the Tagma editor, foreign CLIs' writes reported by their hooks (`record_write`), and shell commands. The accounting is read by `read_changes`, `read_authorship`, `read_checkout`, the Git tab, and the thread Changes panel.
 
@@ -41,5 +41,6 @@ sources:
 - A foreign CLI hook message lands after the file write, so a parallel command may take the shift first.
 - A line's holder is whoever wrote it last. Binary, too-large files, and symlinks are held whole by all writers of the version chain from HEAD.
 - Lines leave accounting by commit, rollback, or checkout deletion; a vanished folder alone is no deletion but a possible move.
+- Authorship decides what a commit says and a rollback touches, never what a commit may carry: `submit_work` lands whole files with every writer's lines in them, names the other writers in `carried`, and a thread's lines still roll back alone.
 
-**Limits.** Edits from the operator's own terminal are nobody's. Git metadata and the graph store aren't in accounting. Nobody's lines the agent lands only by whole path: a path with nothing but them — via `paths`, a path with its own lines — via `whole`; beside its own lines its landing doesn't carry them, and if its lines rest on a nobody's declaration, it refuses and names it. There is no "take nobody's as one's own" act.
+**Limits.** Edits from the operator's own terminal and from editors outside Tagma are nobody's; they ride a landing with the file they stand in and are named in `unattributed`. Git metadata and the graph store aren't in accounting. There is no act to take nobody's lines as one's own, and none is needed.

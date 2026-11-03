@@ -8,19 +8,16 @@ import { RootId } from '../workspace/contract/wire/ids.js';
 import { FileRoots } from '../workspace/contract/service/roots.js';
 import { WorkingOrigins } from '../workspace/contract/service/places.js';
 import { CheckoutPaths } from '../workspace/contract/service/checkoutPaths.js';
-import { namesOfHolders } from './record/sessions.js';
-import { holdersOf } from './holdings/totals.js';
+import { namesOfHolders, teamOf } from './record/sessions.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { makeChangeRecord } from './layer.js';
-import { CarrierAdmission } from './contract/service/carriers.js';
 import { Retirement } from './contract/service/retirement.js';
 import { makeRetirer } from './retire/driver.js';
 import { HeldFeed } from './contract/service/held.js';
 import { makeWalks, type Walks } from './lines/walks.js';
-import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CommandChanges } from './contract/service/commands.js';
 import { ChangeRecord } from './contract/service/record.js';
-import { PreparedChanges, type PreparedFns } from './contract/service/prepared.js';
+import { LinesUnread, PreparedChanges, type PreparedFns } from './contract/service/prepared.js';
 import { CommitShape } from './contract/service/shape.js';
 import { Authorship } from './contract/service/authorship.js';
 import { ThreadChanges } from './contract/service/threadChanges.js';
@@ -42,7 +39,7 @@ import { makeCommandJournal } from './record/journal.js';
 import { makeLessons } from './record/lessons.js';
 import { recoverCommands } from './record/recovery.js';
 import { settleIntents } from './record/intents.js';
-import { pathsOfThread } from './record/reads.js';
+import { checkoutsOfHolders, heldPathsOf } from './record/reads.js';
 import { collecting, collectionSweep } from './record/collection.js';
 import { scheduleSweeps } from '../platform/contract/service/maintenance.js';
 import { drive } from '../platform/contract/service/drives.js';
@@ -55,7 +52,6 @@ import { makeGitMetadata, pruneMetadata } from './record/metadata.js';
 import { formChangeHomes } from './store/homes.js';
 
 export const preparedChangesOver = (
-  admission: CarrierAdmission['Service'],
   commands: CommandChanges['Service'],
   instanceDir: string,
   graphDirectory: string,
@@ -64,51 +60,17 @@ export const preparedChangesOver = (
   shape: CommitShape['Service'],
 ): PreparedChanges['Service'] =>
   makePreparedChanges(
-    { commands, pathsOfThread, evidenceInGroups },
-    admission,
+    { commands, team: teamOf, heldPaths: heldPathsOf, heldCheckouts: checkoutsOfHolders, evidenceInGroups },
     preparedFnsOver(holdings, walks, graphDirectory),
     instanceDir,
     shape,
   );
 
 export const preparedFnsOver = (holdings: Holdings['Service'], walks: Walks, graphDirectory: string): PreparedFns => ({
-  foreignPaths: (place, carriers, unborne) =>
-    Effect.flatMap(
-      Effect.mapError(
-        holdings.read(RootId.make(place.checkout), 'settled'),
-        (failure) =>
-          new GateRefusal('walk-cut', `the checkout holders could not be read: ${failure.message}`, [
-            'submit again once the checkout holders answer',
-          ]),
-      ),
-      (view) =>
-        view.state.kind !== 'current'
-          ? Effect.fail(
-              new GateRefusal('walk-cut', `the checkout holders are ${view.state.kind}, so foreign dependency work is not known`, [
-                'submit again once the checkout holders are current',
-              ]),
-            )
-          : Effect.succeed(
-              new Set(
-                view.paths
-                  .filter(
-                    (one) =>
-                      one.git !== 'ignored' &&
-                      (holdersOf(one).some((holder) => !carriers.has(holder)) ||
-                        (one.verdict.verdict === 'proven' && one.verdict.nobody.some((part) => part.added > 0) && unborne(one.path))),
-                  )
-                  .map((one) => one.path),
-              ),
-            ),
-    ),
   judged: (place, paths) =>
     Effect.mapError(
       holdings.judged(RootId.make(place.checkout), paths),
-      (failure) =>
-        new GateRefusal('walk-cut', `whose lines stand in ${paths.join(', ')} could not be judged: ${failure.message}`, [
-          'ask again once the record and the checkout answer',
-          `carry the files as they stand (whole: ${JSON.stringify(paths)}), or land without them (paths)`,
-        ]),
+      (failure) => new LinesUnread({ reason: `whose lines stand in ${paths.join(', ')} could not be judged: ${failure.message}` }),
     ),
   eligiblePaths: eligiblePaths(graphDirectory),
   pathChunks,
@@ -154,11 +116,7 @@ export const servingChangeRecord = Effect.gen(function* () {
     memory: new FoldMemory(foldMemoryBudget()),
     metadata,
   });
-  const admission = yield* CarrierAdmission;
-  const prepared = {
-    admission,
-    changes: preparedChangesOver(admission, commands, instance.dir, graphDirectory, judges, walks, yield* CommitShape),
-  };
+  const prepared = preparedChangesOver(commands, instance.dir, graphDirectory, judges, walks, yield* CommitShape);
   const changes = yield* makeChangeRecord({ intake, commands, walks });
   const settled = yield* Effect.result(settleIntents(units, store, roots, walks));
   if (settled._tag === 'Failure') {
@@ -282,7 +240,7 @@ export const changeRecordServingLayer = Layer.effectContext(
       Context.add(CommandChanges, served.commands),
       Context.add(ChangeRecord, served.changes),
       Context.add(Intake, { turn: served.intake.turn, land: served.intake.land }),
-      Context.add(PreparedChanges, served.prepared.changes),
+      Context.add(PreparedChanges, served.prepared),
       Context.add(Authorship, authorship.service),
       Context.add(ThreadChanges, changes),
       Context.add(Retirement, retirer),

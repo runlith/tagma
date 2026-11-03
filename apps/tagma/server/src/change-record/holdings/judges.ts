@@ -247,7 +247,6 @@ export const makeJudges = Effect.fnUntraced(function* ({
       settled: (checkout) => using(checkout, (judge) => judge.quiet),
       introduced: (checkout, steps, decide) =>
         Effect.flatMap(roots.read(checkout), (root) => introduced(readers, folder, { rootId: checkout, dir: root.path }, steps, decide)),
-      lease: (checkout, paths, work) => using(checkout, (judge) => judge.lease(paths, work)),
       moved: (checkout, paths) => {
         const known = judges.get(checkout);
         if (known !== undefined) return known.shift(paths);
@@ -271,10 +270,6 @@ export const makeJudges = Effect.fnUntraced(function* ({
           }),
         );
         return new Map(threadIds.map((thread) => [thread, totals.holder(thread)] as const));
-      }),
-      heldCheckouts: Effect.fnUntraced(function* (holders) {
-        for (const checkout of yield* checkoutsOf(holders)) yield* using(RootId.make(checkout), (judge) => judge.quiet);
-        return totals.checkoutsOf(holders);
       }),
     }),
     stated,

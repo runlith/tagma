@@ -9,7 +9,7 @@ import { nativeLanding } from './native.js';
 const OUTSIDE = { [MCP_SESSION_HEADER]: 'claude-code:outside' };
 
 it.live(
-  'a Claude Code session outside Tagma lands only the paths it names, keeps a peer’s separate lines uncommitted, carries a peer block it edited inside with its author, and is refused no-record without paths',
+  'a Claude Code session outside Tagma lands the paths it names whole, naming the peer whose lines ride, and is refused no-record without paths',
   () =>
     Effect.gen(function* () {
       const notes = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n';
@@ -40,11 +40,12 @@ it.live(
           status: 'landed',
           subject: 'land the outside edit',
           committed: ['added.txt', 'notes.txt'],
-          carried: [],
-          tasks: [{ name: task, holder: 'claude-code:outside', by: 'session' }],
+          carried: [{ path: 'notes.txt', holders: [peer.threadId] }],
+          tasks: [{ name: task }],
+          unattributed: ['added.txt', 'notes.txt'],
         },
       });
-      expect(yield* read('notes.txt')).toBe(notes.replace('seven\n', 'SEVEN\n'));
+      expect(yield* read('notes.txt')).toBe(outside);
       expect(yield* read('added.txt')).toBe('added outside\n');
       expect(yield* files.readFileString(join(root, 'notes.txt'))).toBe(outside);
 

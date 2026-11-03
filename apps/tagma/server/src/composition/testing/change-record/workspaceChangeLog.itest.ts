@@ -35,7 +35,6 @@ import { tagsOfCatalogs } from '../../../catalogs/contract/wire/registry.js';
 import { TagIndex } from '../../../graph/vocabulary/tagIndex.js';
 import { turnsOf } from '../../../change-record/changes/turns.js';
 import { evidenceInGroups, evidenceOfPath, heldOfThread } from '../../../change-record/record/evidence.js';
-import { resolveHandover } from '../../../change-record/record/sessions.js';
 import { addressOf } from '../../../thread-record/identity.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { BEHAVIOUR_REGISTRY } from '../composed.js';
@@ -360,8 +359,6 @@ it.live('a store failure resolving an address fails instead of answering no-agen
     yield* store.db.insert(project).values({ id: 1, name: 'runlith', repoKey: ROOT, rootPath: ROOT, createdAt: new Date(0) });
     const failure = yield* Effect.flip(addressOf(downStore(store).db, 'builder', { threadId: 'thread-one', projectId: 1 }));
     expect(failure._tag).toBe('EffectDrizzleQueryError');
-    const handover = yield* Effect.flip(resolveHandover(downStore(store), 1, 'thread-one', ['builder']));
-    expect(handover._tag).toBe('EffectDrizzleQueryError');
   }).pipe(Effect.provide(machineLayers)),
 );
 

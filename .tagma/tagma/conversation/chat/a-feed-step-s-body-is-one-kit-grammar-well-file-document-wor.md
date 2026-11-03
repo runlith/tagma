@@ -12,9 +12,9 @@ sources:
   - kind: file
     ref: packages/chat-ui/src/entries/ToolRow.svelte
   - kind: file
-    ref: packages/chat-ui/src/entries/Well.svelte
-  - kind: file
     ref: packages/chat-ui/src/entries/ToolXRay.svelte
+  - kind: file
+    ref: packages/chat-ui/src/entries/Well.svelte
 ---
 A step's body — what opens under a call, signal and notice — the kit assembles from one set of parts, and the producer says only what the content is (`form` display). The view is chosen by the text's addressee, not its format: model-bound text in markdown used to render in the human-answer font, and 40 lines of a command's tail filled the screen as the agent's answer.
 

@@ -1,23 +1,18 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { Deferred, Effect, Exit } from 'effect';
+import { unique } from '@runlith/utils/collection';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { holderKey } from '../../workspace/contract/wire/checkout.js';
+import { placesIn } from '../../workspace/roots/proof.js';
 import { type PreparedHold, type PreparedHolds, type PreparedRow, WorkingPathUnread } from '../contract/service/prepared.js';
-import type { Judged } from '../contract/service/holdings.js';
 import { type Listing, listingUnder, standing } from '@runlith/files/working';
 import type { Landing, Planned } from './tree.js';
 
 const MISSING: PreparedHold = { _tag: 'missing' };
 
-const UNHELD: PreparedHold = { _tag: 'unheld' };
-
-const OWN: PreparedHold = { _tag: 'own' };
-
 const GONE: ReadonlySet<string> = new Set(['ENOENT', 'ENOTDIR']);
 
-type Failure = StoreFailure | WorkingPathUnread | GateRefusal<'walk-cut'>;
+type Failure = StoreFailure | WorkingPathUnread;
 
 const standsAt = Effect.fnUntraced(function* (path: string, listing: Listing): Effect.fn.Return<boolean, WorkingPathUnread> {
   const stood = yield* standing(path, listing);
@@ -31,16 +26,9 @@ const standsAt = Effect.fnUntraced(function* (path: string, listing: Listing): E
   }
 });
 
-export const liveHolders = (judged: Judged | undefined): readonly string[] => {
-  const verdict = judged?.holding.verdict;
-  if (verdict === undefined) return [];
-  return verdict.verdict === 'proven'
-    ? verdict.hands.filter((hand) => !hand.retired).map((hand) => holderKey(hand.holder))
-    : verdict.writers.map(holderKey);
-};
-
 export const holdsOf = <Row extends PreparedRow>(landing: Landing<Row>, planned: ReadonlyMap<string, Planned<Row>>): PreparedHolds => {
   const listing = listingUnder(landing.root);
+  const team = new Set(landing.team.map((one) => one.threadId));
   const asked = new Map<string, Deferred.Deferred<PreparedHold, Failure>>();
   const read = Effect.fnUntraced(function* (paths: readonly string[]): Effect.fn.Return<ReadonlyMap<string, PreparedHold>, Failure> {
     const present: string[] = [];
@@ -50,13 +38,15 @@ export const holdsOf = <Row extends PreparedRow>(landing: Landing<Row>, planned:
     }
     const landable = present.length === 0 ? [] : yield* landing.fns.eligiblePaths(landing.git, landing.root, present);
     if (landable.length === 0) return new Map();
-    const judged = yield* landing.fns.judged(landing, landable);
+    const rows = yield* landing.reads.evidenceInGroups(landing.units, landing.store, placesIn(landing.checkout, landable), (evidence) =>
+      Effect.succeed([...evidence]),
+    );
+    const held = new Map(rows);
     return new Map(
-      landable.map((path): [string, PreparedHold] => {
-        const live = liveHolders(judged.get(path));
-        if (live.some((one) => landing.carriers.has(one))) return [path, OWN];
-        return [path, live.length === 0 ? UNHELD : { _tag: 'peers', holders: live }];
-      }),
+      landable.map((path): [string, PreparedHold] => [
+        path,
+        { _tag: 'stands', writers: unique((held.get(path) ?? []).map((row) => row.threadId)).filter((holder) => !team.has(holder)) },
+      ]),
     );
   });
   return (paths) =>

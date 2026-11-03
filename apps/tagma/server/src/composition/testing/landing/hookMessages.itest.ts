@@ -4,8 +4,6 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Layer } from 'effect';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
-import { landingAdmission } from '../../preparedChanges.js';
 import { demoGraphLayer, withDemo } from '../graphFixture.js';
 import { commitEffect, composed, shEffect } from '../finishingFixture.js';
 import { PLACE } from '../checkoutFixture.js';
@@ -18,13 +16,10 @@ import type { WorkingOrigin } from '../../../workspace/contract/wire/place.js';
 import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
 import {
   claimPreparedInstance,
-  eligiblePaths,
-  evidenceInGroups,
   judgingFns,
   makePreparedChanges,
+  preparedReads,
   quietCommands,
-  pathChunks,
-  pathsOfThread,
   preparedBase,
   recordWrite,
 } from '../../../change-record/testing/doubles.js';
@@ -56,12 +51,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           { mode: 0o755 },
         );
         const inst = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(demo.graph.store)), (instance) => instance.release);
-        const producer = makePreparedChanges(
-          { commands: quietCommands, pathsOfThread, evidenceInGroups },
-          landingAdmission(makeLandingHolds()),
-          judgingFns(CHECKOUT_DIRECTORY),
-          inst.dir,
-        );
+        const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir);
         const services = yield* landingServices;
         const landing = submitOver(
           demo.graph.git,
@@ -69,7 +59,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           demo.graph.store,
           demo.graph.units,
           origin,
-          { projectId, subject: 'the writer lands mine', tasks: [], taking: [], coAuthored: true },
+          { projectId, subject: 'the writer lands mine', tasks: [], coAuthored: true, everything: false },
           { before: () => Effect.succeed(UNCHECKED), after: () => Effect.void },
           producer,
         ).pipe(Effect.provide(services));

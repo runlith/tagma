@@ -16,7 +16,7 @@ import {
   type GitRefused,
 } from './repository.js';
 
-export type FileAt = Result.Result<Uint8Array | null, GitUnreadable | GitAnswerInvalid>;
+type FileAt = Result.Result<Uint8Array | null, GitUnreadable | GitAnswerInvalid>;
 export type BlobAt = { readonly blob: string; readonly path: string };
 
 type Asked = { readonly at: number; readonly path: string; readonly blob: string; readonly mode: string };

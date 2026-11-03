@@ -23,7 +23,6 @@ import { chunk } from '@runlith/utils/collection';
 import { rowsPerStatement } from '../../platform/store/binds.js';
 import type { DebtWindow } from '../lines/owed.js';
 import type { DebtSource } from '../contract/wire/reshape.js';
-import type { LandedPath } from '../contract/service/retirement.js';
 import type { ReleasedSpan } from '../lines/released.js';
 import type { StoreShape } from '../record/places.js';
 import { releaseVersions } from '../record/versions.js';
@@ -226,19 +225,10 @@ export const makeRetireStore = Effect.gen(function* () {
         ),
       ),
 
-    landing: (checkout: string, commit: string, tree: string, landed: readonly LandedPath[]): Effect.Effect<void, StoreFailure> =>
+    landing: (checkout: string, commit: string, tree: string): Effect.Effect<void, StoreFailure> =>
       units.write(landingWrites, (unit) =>
         Effect.gen(function* () {
           yield* unit.run(store.db.insert(changeLanding).values({ checkout, commit, tree }).onConflictDoNothing());
-          for (const { path, landed: one } of landed) {
-            const values = { head: one.head, working: one.working, pieces: one.pieces };
-            yield* unit.run(
-              store.db
-                .insert(changeLanded)
-                .values({ checkout, path, digest: one.digest, ...values })
-                .onConflictDoUpdate({ target: [changeLanded.checkout, changeLanded.path, changeLanded.digest], set: values }),
-            );
-          }
           yield* unit.run(
             store.db.delete(changeLanded).where(
               and(

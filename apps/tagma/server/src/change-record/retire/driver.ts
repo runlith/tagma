@@ -462,7 +462,7 @@ export const makeRetirer = Effect.fnUntraced(function* ({
 
   return {
     ...Retirement.of({
-      landing: (fact) => store.landing(fact.checkout, fact.commit, fact.tree, fact.landed ?? []),
+      landing: (fact) => store.landing(fact.checkout, fact.commit, fact.tree),
       pass: passes.pass,
       lease: passes.lease,
       formed: (checkout, ids) =>

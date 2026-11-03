@@ -3,15 +3,11 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { OwnGitFailed } from '../../../platform/git/ownGit.js';
 import type { RootId } from '../../../workspace/contract/wire/ids.js';
 import type { HoldingsFailure } from './holdings.js';
-import type { Landed } from '../../lines/landed.js';
-
-export type LandedPath = { readonly path: string; readonly landed: Landed };
 
 export type LandingTree = {
   readonly checkout: RootId;
   readonly commit: string;
   readonly tree: string;
-  readonly landed?: readonly LandedPath[];
 };
 
 export type Retired = { readonly committed: readonly string[]; readonly withdrawn: readonly string[] };

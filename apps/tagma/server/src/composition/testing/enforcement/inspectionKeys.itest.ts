@@ -6,7 +6,6 @@ import ts from 'typescript';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Git } from '@runlith/git/Git';
 import { Context, Effect, FileSystem, Layer } from 'effect';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { config } from '../../../config/config.js';
 import { Configs } from '../../../config/contract/service/configs.js';
 import { ProgramRoad } from '../../../executions/contract/service/programs.js';
@@ -16,10 +15,9 @@ import { changeChecked, checksOver, targetsOf, withLanes } from '../../../enforc
 import { actChecks } from '../../../enforcement/contract/service/ruleChecks.js';
 import {
   claimPreparedInstance,
-  evidenceInGroups,
   judgingFns,
   makePreparedChanges,
-  pathsOfThread,
+  preparedReads,
   preparedBase,
   prepareChange,
   quietCommands,
@@ -35,7 +33,6 @@ import { TRIGGERS } from '../../../graph/testing/triggers.js';
 import type { WorkingOrigin } from '../../../workspace/contract/wire/place.js';
 import { TEST_CHECKOUT, testPlace } from '../../../workspace/testing/doubles.js';
 import { submitOver } from '../../../landing/testing/doubles.js';
-import { landingAdmission } from '../../preparedChanges.js';
 import { landingServices } from '../landingServices.js';
 import { MINE, PLACE } from '../checkoutFixture.js';
 import { gitEffect, refusalOf } from '../graphFixture.js';
@@ -107,14 +104,9 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
           demo.graph.store,
           demo.graph.units,
           origin,
-          { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true },
+          { projectId: demo.projectId, tasks: [], coAuthored: true, everything: false },
           actChecks(checksOver({ graphOf: () => Effect.succeed(context) }), 'submit_work'),
-          makePreparedChanges(
-            { commands: quietCommands, pathsOfThread, evidenceInGroups },
-            landingAdmission(makeLandingHolds()),
-            judgingFns(CHECKOUT_DIRECTORY),
-            inst.dir,
-          ),
+          makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir),
         ).pipe(Effect.provide(services)),
       (inst) => inst.release,
     );
@@ -127,24 +119,19 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
         claimPreparedInstance(preparedBase(demo.graph.store)),
         (inst) =>
           Effect.gen(function* () {
-            const { prepared } = yield* prepareChange(
-              { commands: quietCommands, pathsOfThread, evidenceInGroups },
-              judgingFns(CHECKOUT_DIRECTORY),
-              inst.dir,
-              {
-                projectId: demo.projectId,
-                git: demo.graph.git,
-                root: demo.demoRoot,
-                store: demo.graph.store,
-                units: demo.graph.units,
-                origin,
-                checkout: TEST_CHECKOUT,
-                input: { taking: [] },
-                job: `check:${randomUUID()}`,
-                caller: mine(),
-                act: { kind: 'thread', ...origin.work },
-              },
-            );
+            const { prepared } = yield* prepareChange(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir, {
+              projectId: demo.projectId,
+              git: demo.graph.git,
+              root: demo.demoRoot,
+              store: demo.graph.store,
+              units: demo.graph.units,
+              origin,
+              checkout: TEST_CHECKOUT,
+              input: {},
+              job: `check:${randomUUID()}`,
+              caller: mine(),
+              act: { kind: 'thread', ...origin.work },
+            });
             if (prepared === null) return yield* Effect.die('the session holds no change to check');
             const { subject } = prepared;
             const version = { projectId: demo.projectId, actor: mine(), root: subject.root, tree: subject.built };

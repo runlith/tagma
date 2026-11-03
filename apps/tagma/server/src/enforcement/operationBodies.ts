@@ -29,9 +29,10 @@ import { Orientation } from '../graph/contract/service/orientation.js';
 import { documentRunsUnasked, FINDING_UNHEARD } from '../graph/contract/wire/tags/law.js';
 import type { LawEnforcement } from '../graph/contract/wire/enforcement.js';
 import { settleJournalCall } from '../graph/journal/callRange.js';
-import { handoverOf, landingPlace } from '../change-record/prepared/place.js';
+import { landingPlace } from '../change-record/prepared/place.js';
 import { selectCheckout } from '../change-record/prepared/selection.js';
-import type { SubmitHandover } from '../change-record/contract/wire/handover.js';
+import { Settings } from '../settings/contract/service/values.js';
+import { checkoutMode } from '../graph/settings.js';
 import { ServingGit } from '../executions/contract/service/git.js';
 import { type CheckAnswer, type CheckedViolation, type InspectionsReading, shownBodies } from './contract/wire/enforcement.js';
 import { VIOLATIONS } from './contract/wire/pages.js';
@@ -95,7 +96,7 @@ const violationKey = (row: CheckedViolation): PageKey => [
 ];
 const ASCENDING = ['asc', 'asc', 'asc', 'asc', 'asc'] as const;
 
-type Checking = { readonly row: BlockRow | undefined; readonly handover: SubmitHandover };
+type Checking = { readonly row: BlockRow | undefined };
 
 const checkAsk = (
   input: InputOf<typeof ENFORCEMENT_OPERATIONS.check_rules>,
@@ -125,7 +126,6 @@ type CheckOwners =
   | Effect.Services<ReturnType<typeof checkHead>>
   | Effect.Services<ReturnType<typeof checkChange>>
   | Effect.Services<ReturnType<typeof landingPlace>>
-  | Effect.Services<ReturnType<typeof handoverOf>>
   | Effect.Services<ReturnType<typeof selectCheckout>>
   | Effect.Services<ReturnType<typeof scoped>>
   | Effect.Services<ReturnType<typeof headOf>>
@@ -145,6 +145,7 @@ type ChangeServices =
   | MachineStore
   | MachineUnits
   | PreparedChanges
+  | Settings
   | ServingGit;
 
 const checking = <A>(
@@ -168,42 +169,36 @@ const overChange = Effect.fnUntraced(function* <A, E, R>(
   const store = yield* MachineStore;
   const units = yield* MachineUnits;
   const service = yield* PreparedChanges;
-  return yield* Effect.acquireUseRelease(
-    service.lease(change),
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* Effect.result(
-          service.prepare({
-            projectId,
-            git: place.git,
-            root: place.root,
-            store,
-            units,
-            origin: place.origin,
-            checkout: place.checkout,
-            input: change,
-            job: `check:${randomUUID()}`,
-            caller: actorOf(caller, projectId) ?? undefined,
-            act: actorRefOf(caller, projectId),
-          }),
-        );
-        if (outcome._tag === 'Failure') {
-          if (outcome.failure instanceof OwnGitFailed) {
-            if (outcome.failure.admission !== undefined) return yield* notAdmitted(outcome.failure.admission);
-            return yield* new GateRefusal('git-unavailable', `the change could not be built to check it: ${saidByGit(outcome.failure)}`, [
-              'read what git said and clear it, then check again',
-            ]);
-          }
-          return yield* outcome.failure;
-        }
-        const made = outcome.success.prepared;
-        const reshaped = made === null ? (outcome.success.emptied?.reshaped ?? []) : made.built.reshaped;
-        const formed = reshaped.map((one) => one.path).sort();
-        if (made === null) return { ran: null, formed };
-        return { ran: yield* use(made.subject).pipe(Effect.ensuring(service.release(made))), formed };
-      }),
-    (release) => Effect.sync(release),
+  const everything = (yield* (yield* Settings).value(checkoutMode, projectId)) === 'single';
+  const outcome = yield* Effect.result(
+    service.prepare({
+      projectId,
+      git: place.git,
+      root: place.root,
+      store,
+      units,
+      origin: place.origin,
+      checkout: place.checkout,
+      input: { ...change, everything },
+      job: `check:${randomUUID()}`,
+      caller: actorOf(caller, projectId) ?? undefined,
+      act: actorRefOf(caller, projectId),
+    }),
   );
+  if (outcome._tag === 'Failure') {
+    if (outcome.failure instanceof OwnGitFailed) {
+      if (outcome.failure.admission !== undefined) return yield* notAdmitted(outcome.failure.admission);
+      return yield* new GateRefusal('git-unavailable', `the change could not be built to check it: ${saidByGit(outcome.failure)}`, [
+        'read what git said and clear it, then check again',
+      ]);
+    }
+    return yield* outcome.failure;
+  }
+  const made = outcome.success.prepared;
+  const reshaped = made === null ? (outcome.success.emptied?.reshaped ?? []) : made.built.reshaped;
+  const formed = reshaped.map((one) => one.path).sort();
+  if (made === null) return { ran: null, formed };
+  return { ran: yield* use(made.subject).pipe(Effect.ensuring(service.release(made))), formed };
 });
 
 const changeCrossings = Effect.fnUntraced(function* (row: BlockRow, caller: Caller) {
@@ -224,7 +219,7 @@ const changeCrossings = Effect.fnUntraced(function* (row: BlockRow, caller: Call
   const crossings: ChangeCrossings = Effect.fnUntraced(
     function* (target: Targets['targets'][number]) {
       const place = yield* landingPlace(projectId, caller, (yield* ServingGit).run);
-      const { ran } = yield* overChange(projectId, caller, place, { taking: [] }, (subject) =>
+      const { ran } = yield* overChange(projectId, caller, place, {}, (subject) =>
         Effect.gen(function* () {
           const refreshed =
             target.key === undefined
@@ -424,15 +419,9 @@ export const ENFORCEMENT_PAIRS = {
       prepare: (input: InputOf<typeof ENFORCEMENT_OPERATIONS.check_rules>, caller: Caller) =>
         checking(
           Effect.gen(function* () {
-            const call = yield* yield* CurrentProject;
-            if (input.over === 'staged')
-              return { row: undefined, handover: { taking: [], refusal: null, consents: [] } } satisfies Checking;
+            if (input.over === 'staged') return { row: undefined } satisfies Checking;
             const row = input.inspection === undefined || input.blockId === undefined ? undefined : yield* scoped(input.blockId);
-            const handover: SubmitHandover =
-              (input.over ?? 'change') === 'change'
-                ? yield* handoverOf(call.project.id, input.taking ?? [], caller)
-                : { taking: [], refusal: null, consents: [] };
-            return { row, handover } satisfies Checking;
+            return { row } satisfies Checking;
           }).pipe(Effect.withSpan('check_rules.prepare')),
         ),
       execute: (input: InputOf<typeof ENFORCEMENT_OPERATIONS.check_rules>, prepared: Checking, caller: Caller) =>
@@ -459,17 +448,8 @@ export const ENFORCEMENT_PAIRS = {
                 })
               : Effect.gen(function* () {
                   const place = yield* landingPlace(projectId, caller, (yield* ServingGit).run);
-                  if (prepared.handover.refusal !== null) return yield* prepared.handover.refusal;
                   yield* (yield* Remeasure).ready(projectId, place.root);
-                  const change = {
-                    taking: prepared.handover.taking.map((session) => ({
-                      projectId: session.projectId,
-                      threadId: session.threadId,
-                      tasks: [],
-                    })),
-                    paths: input.paths,
-                    whole: input.whole,
-                  };
+                  const change = { paths: input.paths };
                   const { ran, formed } = yield* overChange(projectId, caller, place, change, (subject) =>
                     Effect.gen(function* () {
                       const targets = yield* checkTargets(

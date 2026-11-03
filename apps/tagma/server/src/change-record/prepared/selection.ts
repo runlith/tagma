@@ -3,8 +3,11 @@ import { Effect } from 'effect';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { CallPlace, CallerAim, SubjectProject } from '../../platform/contract/service/place.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { Git } from '@runlith/git/Git';
 import { Projects } from '../../projects/contract/service/registry.js';
-import { Holdings } from '../contract/service/holdings.js';
+import { MachineStore } from '../../platform/contract/service/store.js';
+import { MachineUnits } from '../../platform/contract/service/units.js';
+import { PreparedChanges } from '../contract/service/prepared.js';
 import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
 import { FileRoots } from '../../workspace/contract/service/roots.js';
 import { CallerWorkspace } from '../../workspace/contract/service/places.js';
@@ -47,8 +50,12 @@ export const selectCheckout = Effect.fn('prepared.selectCheckout')(function* (
     return yield* main(place.projectId);
   }
   if (caller.actor.kind !== 'thread') return subject === null ? null : yield* main(subject);
-  const checkouts = yield* (yield* Holdings)
-    .heldCheckouts([caller.actor.threadId])
+  const store = yield* MachineStore;
+  const units = yield* MachineUnits;
+  const git = yield* Git;
+  const changes = yield* PreparedChanges;
+  const { team, checkouts } = yield* changes
+    .teamCheckouts(units, store, { projectId: caller.actor.projectId, threadId: caller.actor.threadId })
     .pipe(
       Effect.mapError(
         (failure) =>
@@ -59,7 +66,7 @@ export const selectCheckout = Effect.fn('prepared.selectCheckout')(function* (
       ),
     );
   const registry = yield* FileRoots;
-  const roots = yield* Effect.forEach(checkouts, (checkout) => registry.read(RootId.make(checkout))).pipe(
+  const read = yield* Effect.forEach(checkouts, (checkout) => registry.read(RootId.make(checkout))).pipe(
     Effect.mapError(
       (failure) =>
         new GateRefusal('root-unproven', failure.message, [
@@ -68,10 +75,26 @@ export const selectCheckout = Effect.fn('prepared.selectCheckout')(function* (
         ]),
     ),
   );
+  const standing = yield* Effect.forEach(read, (root, at) =>
+    changes.remaining({ git, root: root.path, store, units, checkout: checkouts[at]! }, team).pipe(
+      Effect.map((paths) => paths.length > 0),
+      Effect.mapError(
+        (failure) =>
+          new GateRefusal(
+            'root-unproven',
+            `which files of this session still differ from HEAD in ${root.path} could not be read: ${failure.message}`,
+            ['name checkout explicitly to select a readable checkout', 'read the unavailable checkout again'],
+          ),
+      ),
+    ),
+  );
+  const roots = read.filter((_, at) => standing[at] === true);
   const several = (paths: readonly string[]) =>
-    new GateRefusal('multiple-checkouts', `This session holds lines in several checkouts: ${paths.join(', ')}.`, [
-      'split the work into one checkout per call, naming checkout in each call',
-    ]);
+    new GateRefusal(
+      'multiple-checkouts',
+      `This session and its finished children changed files in several checkouts: ${paths.join(', ')}.`,
+      ['split the work into one checkout per call, naming checkout in each call'],
+    );
   if (subject === null) {
     if (roots.length === 0) return null;
     if (roots.length > 1) return yield* several(roots.map((root) => root.path));

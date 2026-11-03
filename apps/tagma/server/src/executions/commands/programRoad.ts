@@ -40,6 +40,7 @@ const endingOf = (ending: AdmittedEnding, argv0: string): ProgramEnding => {
   }
   if (ending._tag === 'Unread')
     return { _tag: 'Stopped', late: ending.cancelled === 'timeout', said: ending.said, stderr: ending.stderr.text };
+  if (ending._tag === 'Unwatched') return { _tag: 'Stopped', late: false, said: ending.said, stderr: '' };
   return { _tag: 'Unrun', said: ending.said };
 };
 

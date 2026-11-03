@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import type { PreparedHolds, PreparedRemoval } from '../../../change-record/contract/service/prepared.js';
+import type { LinesUnread, PreparedHolds } from '../../../change-record/contract/service/prepared.js';
 import type { CarriedViolation, JudgeRefusalReport, LandingUnjudged, RuleBodies, RuleCrossing, RuleRun, Watched } from './enforcement.js';
 import { type Trigger, type TriggerPhase, triggersSaid } from '../../../graph/contract/wire/enforcement.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -33,9 +33,7 @@ export const checkedTriggers = Effect.fnUntraced(function* (
 
 export type JudgedLine = { readonly file: string; readonly line: number };
 
-export type LineHolders = (lines: readonly JudgedLine[]) => Effect.Effect<readonly (readonly string[])[], GateRefusal<'walk-cut'>>;
-
-export type LineRemovers = (lines: readonly JudgedLine[]) => Effect.Effect<readonly PreparedRemoval[], GateRefusal<'walk-cut'>>;
+export type LineHolders = (lines: readonly JudgedLine[]) => Effect.Effect<readonly (readonly string[])[], LinesUnread>;
 
 export type TreeSubject = {
   readonly kind: 'tree';
@@ -50,7 +48,6 @@ export type TreeSubject = {
   readonly debtBase?: string;
   readonly paths: readonly string[];
   readonly holders?: LineHolders;
-  readonly removers?: LineRemovers;
   readonly holds?: PreparedHolds;
   readonly caller?: TerminalActor;
   readonly job?: string;
@@ -131,7 +128,6 @@ export type JudgedTree = {
 export type Checked = {
   readonly refused: JudgeRefusalReport | null;
   readonly watched: readonly Watched[];
-  readonly carriedViolations: readonly CarriedViolation[];
   readonly rechecked?: readonly RuleCrossing[];
   readonly unjudged: readonly LandingUnjudged[];
   readonly crossed?: readonly RuleCrossing[];
@@ -140,7 +136,7 @@ export type Checked = {
   readonly tree?: JudgedTree;
 };
 
-export const UNCHECKED: Checked = { refused: null, watched: [], carriedViolations: [], unjudged: [] };
+export const UNCHECKED: Checked = { refused: null, watched: [], unjudged: [] };
 
 export const OPERATOR_HOLDER = 'operator';
 

@@ -2,7 +2,6 @@ import { expect } from 'bun:test';
 import { dirname, join } from 'node:path';
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Queue, Stream } from 'effect';
 import { ToolAnswer, type ToolFailed, toolExecute, toolPrepare } from '@runlith/agent/tool';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { PreparedChanges } from '../../../change-record/contract/service/prepared.js';
 import { Holdings } from '../../../change-record/contract/service/holdings.js';
 import { Retirement } from '../../../change-record/contract/service/retirement.js';
@@ -17,15 +16,13 @@ import {
   preparedBase,
   makePreparedChanges,
   quietCommands,
-  pathsOfThread,
-  evidenceInGroups,
+  preparedReads,
   judgingFns,
   recordWrite,
 } from '../../../change-record/testing/doubles.js';
 import { holdingsAt, underCheckoutLanes } from '../../../landing/testing/doubles.js';
 import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
 import { LineWrites } from '../../../change-record/contract/service/lineWrites.js';
-import { landingAdmission } from '../../preparedChanges.js';
 import { landingServices, provedOrigins } from '../landingServices.js';
 import { MINE } from '../checkoutFixture.js';
 import { fixtureNativeCatalog, fixtureServedGraphs } from '../nativeCatalog.js';
@@ -222,12 +219,7 @@ const withOperations = Effect.fnUntraced(function* <A, E, R>(
   const services = yield* landingServices.pipe(Effect.provide(demo.context));
   const rig = yield* holdingsAt(demo.graph.git, root, demo.graph.store, demo.graph.units, Context.get(services, LineWrites));
   const instance = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(demo.graph.store)), (held) => held.release);
-  const producer = makePreparedChanges(
-    { commands: quietCommands, pathsOfThread, evidenceInGroups },
-    landingAdmission(makeLandingHolds()),
-    judgingFns(CHECKOUT_DIRECTORY),
-    instance.dir,
-  );
+  const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), instance.dir);
   const context = withLanes(demo.context, workers).pipe(Context.add(MeasuredCheckout, { projectId: demo.projectId, path: root }));
   const graphs = fixtureServedGraphs(context);
   const served = yield* graphs.resolve({ projectId: demo.projectId, cwd: root });

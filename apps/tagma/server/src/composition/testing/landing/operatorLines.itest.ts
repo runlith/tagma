@@ -8,7 +8,7 @@ import { TEST_CHECKOUT } from '../../../workspace/testing/doubles.js';
 import { FILE, MINE, checkoutFixture, withCheckout } from '../checkoutFixture.js';
 import { lineWrites } from '../../lineWrites.js';
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
-  it.effect('the operator’s independent adjacent lines stay held, and explicit taking carries them afterward', () =>
+  it.effect('a file an agent lands carries the operator’s recorded lines in it and names the operator', () =>
     withCheckout((checkoutWorld) =>
       Effect.fnUntraced(function* () {
         const world = checkoutWorld;
@@ -16,10 +16,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         yield* world.wrote('operator', operator);
         const both = [...operator.slice(0, 4), 'const five = 5; // mine'];
         yield* world.wrote(MINE, both);
-        expect(yield* world.submit(MINE)).toMatchObject({ status: 'landed', carried: [] });
-        expect(yield* world.committed()).toEqual([...FILE.slice(0, 4), 'const five = 5; // mine']);
-        const taken = yield* world.submit(MINE, { taking: [{ threadId: 'operator', label: 'operator' }] });
-        expect(taken.status).toBe('landed');
+        expect(yield* world.submit(MINE)).toMatchObject({ status: 'landed', carried: [{ path: 'src/a.ts', holders: ['operator'] }] });
         expect(yield* world.committed()).toEqual(both);
       })(),
     ),

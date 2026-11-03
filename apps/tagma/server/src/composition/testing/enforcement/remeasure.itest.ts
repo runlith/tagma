@@ -4,43 +4,23 @@ import { dirname, join } from 'node:path';
 import { Clock, Context, Deferred, Effect, Exit, FileSystem, Queue, Scope } from 'effect';
 import { contentDigest } from '@runlith/files/content';
 import { workspaceChangeHunk } from '@runlith/files/hunk';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { Enforcements, enforceFixture, withEnforcement, bodies, operator, type EnforcementFixture } from './enforceFixture.js';
 import { LAYERED_KEY } from '../../../enforcement/testing/layered.js';
-import { PLACE } from '../checkoutFixture.js';
-import { landingServices } from '../landingServices.js';
-import { submitOver } from '../../../landing/testing/doubles.js';
-import { landingAdmission } from '../../preparedChanges.js';
-import {
-  recordWrite,
-  intakeOf,
-  makePreparedChanges,
-  quietCommands,
-  pathsOfThread,
-  evidenceInGroups,
-  claimPreparedInstance,
-  preparedBase,
-  judgingFns,
-} from '../../../change-record/testing/doubles.js';
+import { recordWrite, intakeOf } from '../../../change-record/testing/doubles.js';
 import { fixedCoverage, gitCheckoutPaths, TEST_CHECKOUT, testPlace } from '../../../workspace/testing/doubles.js';
 import { lineWrites } from '../../lineWrites.js';
-import { CHECKOUT_DIRECTORY } from '../../../graph/contract/wire/storage.js';
 import { perform } from '../../../invocation/testing/performing.js';
 import type { LawEnforcement, Strictness, Trigger } from '../../../graph/contract/wire/enforcement.js';
 import { GraphFeed, GraphJournal, type GraphFrame } from '../../../graph/contract/service/journal.js';
 import { TRIGGERS } from '../../../graph/testing/triggers.js';
-import { actChecks } from '../../../enforcement/contract/service/ruleChecks.js';
 import { QUIET_DRIVER } from '../../../enforcement/testing/doubles.js';
-import type { SubmitReceipt } from '../../../landing/contract/wire/receipt.js';
-import type { WorkingOrigin } from '../../../workspace/contract/wire/place.js';
-import { checksOver, driverOver, journalOver, type Lanes, withLanes } from '../../../enforcement/testing/wiring.js';
+import { driverOver, journalOver, type Lanes, withLanes } from '../../../enforcement/testing/wiring.js';
 import type { LandingJournal } from '../../../enforcement/contract/service/remeasure.js';
 import type { EscapeNotice, LandedTree } from '../../../enforcement/contract/wire/checks.js';
 import { Remeasure } from '../../../enforcement/contract/service/remeasure.js';
 import { gitEffect } from '../graphFixture.js';
 import { fileReady } from '../change-record/commandWorld.js';
 
-const MINE = 'mirror-git';
 const THEIRS = 'amber-fox';
 const UPWARD = "import { main } from '../app/main';\nexport const boot = main;\n";
 type EnforcementOptions = { readonly on?: readonly Trigger[]; readonly driver?: Remeasure['Service'] };
@@ -55,8 +35,6 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
     yield* files.makeDirectory(dirname(at(path)), { recursive: true });
     yield* files.writeFileString(at(path), text);
   });
-  const context = withLanes(demo.context, workers);
-  const originFor = (threadId: string) => ({ ...PLACE, generation: 0, work: { projectId: demo.projectId, threadId } }) as WorkingOrigin;
   const wrote = Effect.fnUntraced(function* (threadId: string, path: string, text: string | null) {
     const before = (yield* files.exists(at(path))) ? yield* files.readFileString(at(path)) : '';
     if (text === null) yield* files.remove(at(path));
@@ -85,34 +63,6 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
       ).pipe(Effect.provideService(Remeasure, asked.driver ?? QUIET_DRIVER)),
     );
     return { rule, id: yield* demo.graph.blockNames.idOfName(rule) };
-  });
-  const submit = Effect.fnUntraced(function* (threadId: string, whole = false) {
-    const services = yield* landingServices;
-    return yield* Effect.acquireUseRelease(
-      claimPreparedInstance(preparedBase(demo.graph.store)),
-      (inst) =>
-        Effect.gen(function* () {
-          const producer = makePreparedChanges(
-            { commands: quietCommands, pathsOfThread, evidenceInGroups },
-            landingAdmission(makeLandingHolds()),
-            judgingFns(CHECKOUT_DIRECTORY),
-            inst.dir,
-          );
-          const receipt = yield* submitOver(
-            demo.graph.git,
-            demo.demoRoot,
-            demo.graph.store,
-            demo.graph.units,
-            originFor(threadId),
-            { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true, whole: whole ? ['.'] : undefined },
-            actChecks(checksOver({ graphOf: () => Effect.succeed(context) }), 'submit_work'),
-            producer,
-          ).pipe(Effect.provide(services));
-          if (receipt.status !== 'landed') return yield* Effect.die(new Error(`expected a landing, got ${JSON.stringify(receipt)}`));
-          return receipt;
-        }),
-      (inst) => inst.release,
-    );
   });
   const commitTree = Effect.fnUntraced(function* (paths: readonly string[], message: string) {
     yield* fixture.committed(message);
@@ -179,21 +129,9 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
       ),
       scope,
     );
-    const landed = (receipt: SubmitReceipt, op = 'submit_work') =>
-      receipt.status !== 'landed'
-        ? Effect.die('the fixture expected a landed receipt')
-        : driver.landed(op, {
-            kind: 'tree',
-            projectId: demo.projectId,
-            root: demo.demoRoot,
-            commit: receipt.commit,
-            paths: receipt.committed,
-            carried: receipt.carriedViolations ?? [],
-          });
     return {
       driver,
       journal,
-      landed,
       told,
       notice: Queue.take(notices),
       settled: Queue.take(completed),
@@ -208,7 +146,6 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
     put,
     wrote,
     enforced,
-    submit,
     documentOf,
     measured,
     entries,
@@ -229,7 +166,7 @@ layer(enforceFixture(), { excludeTestServices: true })('remeasurement', (it) => 
         const { demo } = scene;
         yield* scene.put('src/core/shared.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
         yield* scene.committed('shared source');
-        const { id } = yield* scene.enforced('gate');
+        const { id, rule } = yield* scene.enforced('gate');
         const foreignRoot = yield* demo.fixture.directory('holder-home');
         const holderHome = yield* demo.graph.projectLifecycle.create({ name: 'holder-home', rootPath: foreignRoot });
         const before = yield* scene.files.readFileString(scene.at('src/core/shared.ts'));
@@ -253,18 +190,30 @@ layer(enforceFixture(), { excludeTestServices: true })('remeasurement', (it) => 
             lineWrites.replace({ root: demo.demoRoot, path: 'src/core/shared.ts', before, after }, Effect.succeed(true)),
           ),
         ).toEqual({ _tag: 'written', kept: true });
-        yield* scene.wrote(MINE, 'src/core/shared.ts', after.replace('b = main;', 'b = main + 1;'));
-        const receipt = yield* scene.submit(MINE, true);
-        expect(receipt.carriedViolations?.map(({ fingerprint, holders }) => ({ fingerprint, holders }))).toEqual([
-          { fingerprint: 'app order core/shared.ts -> app/', holders: [THEIRS] },
-        ]);
+        const receipt: LandedTree = {
+          ...(yield* scene.commitTree(['src/core/shared.ts'], 'a carried crossing lands')),
+          carried: [
+            {
+              rule,
+              title: 'Import only downward',
+              strictness: 'gate',
+              fingerprint: 'app order core/shared.ts -> app/',
+              file: 'src/core/shared.ts',
+              line: 2,
+              specifier: '../app/main',
+              message: 'imports `../app/main`',
+              generalFix: 'Move the import downward.',
+              holders: [THEIRS],
+            },
+          ],
+        };
         const release = yield* Deferred.make<void>();
         const paused: Lanes = {
           ...scene.workers,
           reach: (ask) => Deferred.await(release).pipe(Effect.andThen(scene.workers.reach(ask))),
         };
         const drive = yield* scene.driven({ lanes: paused });
-        yield* drive.landed(receipt);
+        yield* drive.driver.landed('submit_work', receipt);
         expect(yield* drive.journal.page(null, 10)).toHaveLength(1);
         yield* Deferred.succeed(release, undefined);
         const notice = yield* drive.notice;

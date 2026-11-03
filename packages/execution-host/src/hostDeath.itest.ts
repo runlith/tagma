@@ -169,7 +169,7 @@ layer(platform, { excludeTestServices: true, testTimeout: '30 seconds' })('a hos
       );
       expect(yield* Effect.flip(replacement.client.read({ ref: echo, stream: 'stdout', offset: byteOffset(0n) }, 64))).toMatchObject({
         _tag: 'HostRefused',
-        refusal: { _tag: 'HostConflict', reason: 'RecordReadFailed' },
+        refusal: { _tag: 'HostUnavailable' },
       });
       expect(yield* files.exists(`${host.directory}/records`)).toBe(true);
     }),

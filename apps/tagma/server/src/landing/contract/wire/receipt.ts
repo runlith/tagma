@@ -1,18 +1,13 @@
 import { Schema } from 'effect';
-import { CarriedViolation, LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../../../enforcement/contract/wire/enforcement.js';
-import { type HolderStanding, holderStandingSchema } from '../../../graph/contract/wire/holders.js';
+import { LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../../../enforcement/contract/wire/enforcement.js';
 
 export type SubmitCarry = { readonly path: string; readonly holders: readonly string[] };
 
-export const LANDED_BY = ['session', 'taking', 'carried'] as const;
+type LandedTask = { readonly name: string; readonly title: string };
 
-export type LandedTask = {
-  readonly name: string;
-  readonly title: string;
-  readonly holder: string;
-  readonly by: (typeof LANDED_BY)[number];
-  readonly standing?: HolderStanding;
-};
+const LEFT_REASONS = ['paths', 'written'] as const;
+
+type LeftPath = { readonly path: string; readonly reason: (typeof LEFT_REASONS)[number] };
 
 export const UNRECORDED_STEPS = ['receipt', 'stamp', 'discharge', 'reshape', 'tasks'] as const;
 
@@ -73,12 +68,11 @@ export type SubmitReceipt =
       readonly carried: readonly SubmitCarry[];
       readonly tasks?: readonly LandedTask[];
       readonly unnamedTasks?: readonly string[];
-      readonly left?: readonly string[];
+      readonly left?: readonly LeftPath[];
       readonly unattributed?: readonly string[];
       readonly unsynced?: readonly string[];
       readonly unmatched?: readonly string[];
       readonly watched?: readonly Watched[];
-      readonly carriedViolations?: readonly CarriedViolation[];
       readonly rechecked?: readonly RuleCrossing[];
       readonly bodies?: RuleBodies;
       readonly unjudged?: readonly LandingUnjudged[];
@@ -90,7 +84,7 @@ export type SubmitReceipt =
     }
   | {
       readonly status: 'nothing';
-      readonly unattributed?: readonly string[];
+      readonly commits?: readonly string[];
       readonly unmatched?: readonly string[];
       readonly unrecorded?: readonly Unrecorded[];
       readonly edited?: readonly string[];
@@ -110,7 +104,7 @@ const Unrecorded = Schema.Struct({ step: Schema.Literals(UNRECORDED_STEPS), reas
 const UNATTRIBUTED = Schema.optional(
   Schema.Array(Schema.String).annotate({
     description:
-      'Paths with unowned changes left outside this commit: selected paths whose nobody’s lines remain on disk, and unselected paths that changed while a command of this session, or of a session it took, ran without proven authorship. read_changes explains whose lines or command observations remain; a command’s observation proves no author. Name a path in `paths` and `whole` only when it is this session’s work.',
+      'Files this commit carried whose working text holds lines no tool recorded — edits made outside Tagma or by a command whose writer is unproven; they landed with the file.',
   }),
 );
 
@@ -120,20 +114,14 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
     checkout: Schema.NonEmptyString.annotate({ description: 'The registered id of the checkout this commit landed in.' }),
     commit: Schema.NonEmptyString,
     subject: Schema.optional(Schema.String.annotate({ description: 'The subject line of the commit.' })),
-    committed: Schema.Array(Schema.String).annotate({ description: 'Paths whose lines this commit carried.' }),
-    carried: Schema.Array(Schema.Struct({ path: Schema.String, holders: Schema.Array(Schema.NonEmptyString) })),
+    committed: Schema.Array(Schema.String).annotate({ description: 'Paths this commit changed.' }),
+    carried: Schema.Array(Schema.Struct({ path: Schema.String, holders: Schema.Array(Schema.NonEmptyString) })).annotate({
+      description: "Committed files holding other writers' lines, with those writers.",
+    }),
     tasks: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          name: Schema.String,
-          title: Schema.String,
-          holder: Schema.NonEmptyString,
-          by: Schema.Literals(LANDED_BY),
-          standing: Schema.optional(holderStandingSchema),
-        }),
-      ).annotate({
+      Schema.Array(Schema.Struct({ name: Schema.String, title: Schema.String })).annotate({
         description:
-          'The tasks the caller declared this commit carries, held by this session or holders in taking. Each names its holder, how that holder’s lines came in and, where known, its standing. These tasks ride in its Task trailers; the landing ends none: finish_block names this commit for each one it completes.',
+          'The tasks the caller declared this commit carries, whoever holds them; they ride in its Task trailers. The landing ends none: finish_block names this commit for each one it completes.',
       }),
     ),
     unnamedTasks: Schema.optional(Schema.Array(Schema.String)).annotate({
@@ -141,15 +129,15 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
         'This session’s held tasks, not attributed to this commit because the caller omitted tasks. Explicit tasks: [] suppresses this reminder.',
     }),
     left: Schema.optional(
-      Schema.Array(Schema.String).annotate({
-        description: 'Paths where lines of this session, or of a session it took, still stand uncommitted after this commit.',
+      Schema.Array(Schema.Struct({ path: Schema.String, reason: Schema.Literals(LEFT_REASONS) })).annotate({
+        description:
+          'Files this session and its finished children changed that still differ from HEAD after this commit: `paths` left them out, or they were written again after the landing read them.',
       }),
     ),
     unattributed: UNATTRIBUTED,
     unsynced: Schema.optional(Schema.Array(Schema.String)),
     unmatched: Schema.optional(Schema.Array(Schema.String)),
     watched: Schema.optional(Schema.Array(Watched)),
-    carriedViolations: Schema.optional(Schema.Array(CarriedViolation)),
     rechecked: Schema.optional(Schema.Array(RuleCrossing)).annotate({
       description:
         'Violations outside debt across the whole reach of an enforced inspection whose description this commit changes; the description change does not itself block the commit.',
@@ -162,7 +150,11 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
   }),
   Schema.Struct({
     status: Schema.Literal('nothing'),
-    unattributed: UNATTRIBUTED,
+    commits: Schema.optional(
+      Schema.Array(Schema.String).annotate({
+        description: 'The commits that already carried the lines of this session and its finished children, newest first.',
+      }),
+    ),
     unmatched: Schema.optional(Schema.Array(Schema.String)),
     unrecorded: Schema.optional(Schema.Array(Unrecorded)),
     ...HOOK_FIELDS,

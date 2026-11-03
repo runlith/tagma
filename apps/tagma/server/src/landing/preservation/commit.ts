@@ -46,7 +46,7 @@ const keyRef = (key: string): string => `${KEY_REFS}${createHash('sha256').updat
 
 const messageOf = (prepared: PreparedChange<PreservedWorktree>): string => {
   const worktree = prepared.subject.caller;
-  const holders = worktree?.holders ?? [...new Set(prepared.built.plan.flatMap((one) => (one.land === 'whole' ? one.holders : [])))];
+  const holders = worktree?.holders ?? [...new Set(prepared.built.plan.flatMap((one) => one.writers))];
   const named = worktree === undefined ? '' : `${worktree.name}: `;
   return `${named}the work left uncommitted when the worktree was deleted\n\n${holders.length === 0 ? 'No thread holds these lines.' : `Lines held by ${holders.join(', ')}.`}\n`;
 };

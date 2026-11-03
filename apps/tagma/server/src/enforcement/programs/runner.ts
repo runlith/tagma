@@ -105,13 +105,26 @@ const sideOf = (side: ProgramSide, key: ProgramKey): Side => {
 };
 
 const readings: ProgramResult[] = [];
+const unanswered: NonNullable<ProgramAnswer['unanswered']>[number][] = [];
 for (const key of input.keys) {
   const program: unknown = (programs as Readonly<Record<string, unknown>>)[key.id];
   if (typeof program !== 'function') failed(`${module} declares no program ${key.id}`);
   const sides = new Map(input.sides.map((side) => [side.side, side]));
   const tree = sideOf(sides.get('tree')!, key);
   const base = sides.has('base') ? sideOf(sides.get('base')!, key) : null;
-  const answer: unknown = await (program as Program<object>)({ params: key.params, tree, base, mode: input.mode });
+  let answer: unknown;
+  try {
+    answer = await (program as Program<object>)({ params: key.params, tree, base, mode: input.mode });
+  } catch (error) {
+    const unprepared = error instanceof Error && error.name === 'NeedsPreparation';
+    const reason = error instanceof Error ? (unprepared ? error.message : (error.stack ?? error.message)) : String(error);
+    unanswered.push({
+      key: key.key,
+      why: unprepared ? 'unprepared' : 'threw',
+      reason: reason === '' ? 'it threw with no message' : reason,
+    });
+    continue;
+  }
   if (!answered(answer)) failed(`${key.id} of ${module} answered no { tree: { findings }, base? } reading`);
   for (const side of input.sides) {
     const reading = side.side === 'tree' ? answer.tree : answer.base;
@@ -131,4 +144,4 @@ for (const key of input.keys) {
     });
   }
 }
-said({ readings });
+said({ readings, unanswered: unanswered.length === 0 ? undefined : unanswered });

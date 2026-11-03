@@ -149,7 +149,10 @@ const beyondSides = Effect.fnUntraced(function* (own: Comparison, sides: readonl
         if (left === 0) break;
         if (
           standing.has(one) ||
-          !siteRows([one]).some((site) => site.line !== undefined && touched.get(site.file)?.added(site.line) === false)
+          !siteRows([one]).some((site) => {
+            const touch = touched.get(site.file);
+            return site.line !== undefined && touch !== undefined && touch.added(site.line) === undefined;
+          })
         )
           continue;
         standing.add(one);

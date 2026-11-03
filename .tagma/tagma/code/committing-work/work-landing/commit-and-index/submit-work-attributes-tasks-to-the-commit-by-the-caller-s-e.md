@@ -1,6 +1,6 @@
 ---
 id: 01a17db1-1284-7858-8bf5-be5e478a6934
-title: submit_work attributes tasks to the commit by the caller's explicit declaration
+title: submit_work attributes tasks to the commit by the caller's explicit declaration, whoever holds them
 ord: 4
 tags: ["explanation"]
 edges:
@@ -17,5 +17,9 @@ sources:
   - kind: symbol
     ref: apps/tagma/server/src/landing/contract/wire/operations.ts
     symbol: LANDING_OPERATIONS
+  - kind: file
+    ref: apps/tagma/server/src/graph/work/tasks/holding.ts
 ---
-The `tasks` field is the caller's testimony of this landing's link to the tasks' work; holding only checks that a task belongs to it or to a holder from `taking`. One filtered set feeds the commit's Task trailers and the receipt. The declaration selects no project or checkout. A task's holder is determined by the session's full signature regardless of whether bookkeeping sees its file edits: an external harness may hold a task while its lines count as nobody's. Holding itself, including handover from a stopped child, proves no part in the commit. Intersection with sources rejected: task sources are optional, and a wide catalog does not separate parallel works. Holding time also admits others' edits; so without a task declaration there is no attribution, and a separate reminder of held tasks does not propose completing them.
+The `tasks` field is the caller's testimony of this landing's link to the tasks' work; holding proves no part in the commit and gates nothing at landing. Any named task, whoever holds it, lands in the commit's `Task:` trailer and the receipt; none is ended, and finish_block names the commit for each one it completes. A stealth task gets no trailer, so a public commit never names a stealth block. The declaration selects no project or checkout. Intersection with sources was rejected: task sources are optional, and a wide catalog does not separate parallel works. Without a declaration there is no attribution, and the separate reminder of the session's held tasks does not propose completing them.
+
+A task's holder is determined by the session's full signature regardless of whether bookkeeping sees its file edits: an external harness may hold a task while its lines count as nobody's. A stopped child's tasks still pass to its parent as the record of who now answers for them. Inside one thread tree (the same spawn root) a native session finishing, closing or attributing a teammate's task meets no `held-elsewhere` question; a task held outside the tree keeps it.

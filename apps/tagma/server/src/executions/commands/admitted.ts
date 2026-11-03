@@ -41,7 +41,7 @@ export type AdmittedCommand = {
   readonly requested?: number;
 };
 
-export type CommandSaid = { readonly text: string; readonly gap: boolean };
+export type CommandSaid = { readonly text: string; readonly gap: boolean; readonly unread?: string };
 
 export type AdmittedEnding =
   | {
@@ -146,24 +146,19 @@ export const admittedWatch = Effect.fnUntraced(function* (
       ? Effect.succeed<readonly [CommandSaid, CommandSaid]>([SILENT, SILENT])
       : Effect.flatMap(observing(input, execution), (authority): Effect.Effect<readonly [CommandSaid, CommandSaid], TerminalFailure> =>
           authority === undefined
-            ? Effect.succeed([
-                { text: '', gap: true },
-                { text: '', gap: true },
-              ])
+            ? Effect.succeed([UNREAD, UNREAD])
             : Effect.all(
                 [consoleOf(input, execution, 'stdout', authority, stdoutEnd), consoleOf(input, execution, 'stderr', authority, stderrEnd)],
                 { concurrency: 2 },
               ),
         ),
   );
-  if (said._tag === 'Failure') {
-    return {
-      _tag: 'Unwatched',
-      execution,
-      said: `${input.subject} ended and its console could not be read: ${refusedAs(said.failure)} (execution ${execution.execution}, incarnation ${execution.incarnation})`,
-    };
-  }
-  const [stdout, stderr] = said.success;
+  const unread: CommandSaid = {
+    text: '',
+    gap: true,
+    unread: said._tag === 'Failure' ? `${input.subject}'s console could not be read: ${refusedAs(said.failure)}` : undefined,
+  };
+  const [stdout, stderr] = said._tag === 'Failure' ? [unread, unread] : said.success;
   const ending = endingOf(input, decided.success);
   return 'unread' in ending
     ? {
@@ -312,6 +307,8 @@ const observing = Effect.fn('admittedCommand.observe')(function* (input: Admitte
 type Observing = NonNullable<Effect.Success<ReturnType<typeof observing>>>;
 
 const SILENT: CommandSaid = { text: '', gap: false };
+
+const UNREAD: CommandSaid = { text: '', gap: true };
 
 //! a settled summary is taken after each stream's record closed, so its eof position is the stream's whole length
 const endOf = (summary: ExecutionSummary, stream: 'stdout' | 'stderr'): bigint | undefined => {

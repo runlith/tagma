@@ -93,7 +93,7 @@ layer(platform, { excludeTestServices: true })('a released command over the wire
       });
       expect(reread.at(-1)).toEqual({ _tag: 'Ended', ending: 'completed' });
       expect(report).toEqual({ retired: 1 });
-      expect(after).toMatchObject({ _tag: 'HostRefused', refusal: { _tag: 'HostConflict', reason: 'RecordReadFailed' } });
+      expect(after).toMatchObject({ _tag: 'HostRefused', refusal: { _tag: 'HostUnavailable' } });
     }),
   );
 });

@@ -98,7 +98,6 @@ import { mcpPlaces } from './mcpPlaces.js';
 import { MachineWorld } from '../executions/contract/service/worlds.js';
 import { Holdings } from '../change-record/contract/service/holdings.js';
 import { holderAt } from '../workspace/contract/wire/checkout.js';
-import { CarrierAdmission } from '../change-record/contract/service/carriers.js';
 import { PreparedChanges } from '../change-record/contract/service/prepared.js';
 import { WORKTREE_HOME, WorktreeHome } from '../worktrees/contract/service/home.js';
 import { installationAnchor } from '../installation/paths.js';
@@ -119,7 +118,6 @@ import { InspectionCode } from '../enforcement/contract/service/inspectionCode.j
 import type { InspectionsInstalled, JudgingServices } from '../enforcement/serving.js';
 import { CommitGateCli, type HookCli } from '../enforcement/commits/hooks.js';
 import { CommitQueue } from '../enforcement/commits/queue.js';
-import type { SharedPrepared } from '../change-record/contract/service/prepared.js';
 import { changeRecord } from '../change-record/change-record.js';
 import { doctrineText } from './doctrine.js';
 import { Doctrine } from '../platform/contract/service/sections.js';
@@ -278,7 +276,7 @@ export type ServerRuntime = {
   resolution: SessionResolution['Service'];
   grants: GrantSigner['Service'];
   sourceCache: WorkspaceInputs['Service'];
-  prepared: SharedPrepared;
+  prepared: PreparedChanges['Service'];
   machineWorld: World;
   workspace: Context.Context<WorkspaceServices | WorktreeRecords | WorktreeIntents>;
   executions: Context.Context<ExecutionServices>;
@@ -830,7 +828,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const judging = owners;
   const pool = Context.get(owners, ServingPool);
   yield* Scope.addFinalizer(poolScope, pool.dispose());
-  const preparedShared = { admission: Context.get(owners, CarrierAdmission), changes: Context.get(owners, PreparedChanges) };
+  const preparedShared = Context.get(owners, PreparedChanges);
   yield* admitAssembled(Context.mergeAll(built, owners));
   yield* driving.start;
   const markHeld = Context.get(owners, ThreadList).markHeld;

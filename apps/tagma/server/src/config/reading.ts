@@ -77,7 +77,7 @@ const endedBy = (ending: ProgramEnding): GateRefusal<'config-invalid'> | string 
   }
   if (ending.exitCode !== 0 || ending.cut) {
     return unran(
-      `its evaluation exited ${ending.exitCode}${ending.cut ? ' with an answer too long to read' : ''}: ${tailOf(ending.stderr)}`,
+      `its evaluation exited ${ending.exitCode}${ending.cut ? ' and its answer came back cut short or unreadable in part' : ''}: ${tailOf(ending.stderr)}`,
       'run the act again',
     );
   }

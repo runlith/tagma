@@ -3,19 +3,16 @@ import { layer } from '@runlith/effect-test';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem } from 'effect';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { based, type Unbased } from '../../../enforcement/testing/based.js';
 import { refusalOf } from '../graphFixture.js';
 import { Enforcements, enforceFixture, withEnforcement, type EnforcementFixture } from './enforceFixture.js';
 import { MINE, PLACE } from '../checkoutFixture.js';
 import { landingServices } from '../landingServices.js';
 import { submitOver } from '../../../landing/testing/doubles.js';
-import { landingAdmission } from '../../preparedChanges.js';
 import {
   makePreparedChanges,
   quietCommands,
-  evidenceInGroups,
-  pathsOfThread,
+  preparedReads,
   recordWrite,
   claimPreparedInstance,
   preparedBase,
@@ -93,19 +90,14 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
       claimPreparedInstance(preparedBase(demo.graph.store)),
       (inst) =>
         Effect.gen(function* () {
-          const producer = makePreparedChanges(
-            { commands: quietCommands, pathsOfThread, evidenceInGroups },
-            landingAdmission(makeLandingHolds()),
-            judgingFns(CHECKOUT_DIRECTORY),
-            inst.dir,
-          );
+          const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir);
           const receipt = yield* submitOver(
             demo.graph.git,
             demo.demoRoot,
             demo.graph.store,
             demo.graph.units,
             originFor(MINE),
-            { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true },
+            { projectId: demo.projectId, tasks: [], coAuthored: true, everything: false },
             checks,
             producer,
           ).pipe(Effect.provide(services));
@@ -122,24 +114,19 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
         claimPreparedInstance(preparedBase(demo.graph.store)),
         (inst) =>
           Effect.gen(function* () {
-            const { prepared } = yield* prepareChange(
-              { commands: quietCommands, pathsOfThread, evidenceInGroups },
-              judgingFns(CHECKOUT_DIRECTORY),
-              inst.dir,
-              {
-                projectId: demo.projectId,
-                git: demo.graph.git,
-                root: demo.demoRoot,
-                store: demo.graph.store,
-                units: demo.graph.units,
-                origin: originFor(MINE),
-                checkout: TEST_CHECKOUT,
-                input: { taking: [] },
-                job: `check:${randomUUID()}`,
-                caller: mine(),
-                act: { kind: 'thread', ...originFor(MINE).work },
-              },
-            );
+            const { prepared } = yield* prepareChange(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir, {
+              projectId: demo.projectId,
+              git: demo.graph.git,
+              root: demo.demoRoot,
+              store: demo.graph.store,
+              units: demo.graph.units,
+              origin: originFor(MINE),
+              checkout: TEST_CHECKOUT,
+              input: {},
+              job: `check:${randomUUID()}`,
+              caller: mine(),
+              act: { kind: 'thread', ...originFor(MINE).work },
+            });
             if (prepared === null) return null;
             const { subject } = prepared;
             const version = { projectId: demo.projectId, actor: mine(), root: subject.root, tree: subject.built };

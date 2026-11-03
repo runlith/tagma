@@ -7,14 +7,12 @@ import { preparedBase } from '../../../change-record/testing/doubles.js';
 import { expect } from 'bun:test';
 import { FILE, MINE, THEIRS, makeCheckout, CheckoutFixture, checkoutFixture, withCheckout } from '../checkoutFixture.js';
 layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
-  it.effect('own lines are stored under the attributes the working tree gives their path', () =>
+  it.effect('a landed file is stored under the attributes the working tree gives its path', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
         writeFileSync(join(world.root, 'src', '.gitattributes'), '*.ts text\n');
-        const theirs = [FILE[0] as string, 'const two = 2; // theirs', ...FILE.slice(2)];
-        yield* world.wrote(THEIRS, theirs);
-        yield* world.wrote(MINE, [...theirs.slice(0, 4), 'const five = 5; // mine\r']);
+        yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine\r']);
         const answer = yield* world.submit(MINE);
         expect(answer.status).toBe('landed');
         if (answer.status !== 'landed') return;
@@ -23,7 +21,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
       })(),
     ),
   );
-  it.effect('where git normalizes line endings, a peer that rewrote an LF file in CRLF keeps its line and mine lands alone', () =>
+  it.effect('where git normalizes line endings, a file a peer rewrote in CRLF lands normalized with both writers’ lines', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
         const world = checkout;
@@ -38,8 +36,8 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         const answer = yield* world.submit(MINE);
         expect(answer.status).toBe('landed');
         if (answer.status !== 'landed') return;
-        expect(answer.carried).toEqual([]);
-        expect(yield* world.committed()).toEqual([...FILE.slice(0, 4), 'const five = 5; // mine']);
+        expect(answer.carried).toEqual([{ path: 'src/a.ts', holders: [THEIRS] }]);
+        expect(yield* world.committed()).toEqual(both);
       })(),
     ),
   );
@@ -54,46 +52,39 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         const parked = yield* Deferred.make<void>();
         const git: Git['Service'] = {
           run: (args, options) =>
-            args.includes('--stdin-paths')
+            args.includes('write-tree') && options?.env?.GIT_INDEX_FILE !== undefined
               ? Effect.andThen(
-                  Deferred.succeed(written, args[args.indexOf('-C') + 1]!),
+                  Deferred.succeed(written, options.env.GIT_INDEX_FILE),
                   Effect.andThen(Deferred.await(parked), world.git.run(args, options)),
                 )
               : world.git.run(args, options),
         };
         const preparing = yield* Effect.forkScoped(world.builtAs(MINE, { git }));
-        const mirror = yield* Deferred.await(written);
-        expect(existsSync(mirror)).toBe(true);
+        const index = yield* Deferred.await(written);
+        expect(existsSync(index)).toBe(true);
         yield* Fiber.interrupt(preparing);
-        expect(existsSync(mirror)).toBe(false);
+        expect(existsSync(index)).toBe(false);
         expect(readdirSync(preparedBase(world.store))).toEqual([]);
         expect(yield* world.run(['rev-parse', 'HEAD'])).toBe(head);
       }),
     ),
   );
-  it.effect('whole-selected files land with their peer authors when dependency parsing cannot read a sample config', () =>
+  it.effect('a file carries the peer file whose new declaration it imports even when another of its imports cannot resolve', () =>
     withCheckout((world) =>
       Effect.gen(function* () {
         yield* world.based({
           'sample/tsconfig.json': '{"extends":"uninstalled-config"}\n',
           'sample/peer.ts': 'export const peer = 1;\n',
         });
-        const peer = 'export const peer = 2;\n';
+        const peer = 'export const peer = 1;\nexport const required = 3;\n';
         const importer =
-          'import { peer } from "./peer.js";\nimport { external } from "missing-package";\nexport const value = peer + external;\n';
+          'import { required } from "./peer.js";\nimport { external } from "missing-package";\nexport const value = required + external;\n';
         yield* world.written(THEIRS, 'sample/peer.ts', peer);
         yield* world.written(MINE, 'sample/importer.ts', importer);
-        expect(yield* world.submit(MINE, { paths: ['sample'], whole: ['sample'] })).toMatchObject({
+        expect(yield* world.submit(MINE, { paths: ['sample/importer.ts'] })).toMatchObject({
           status: 'landed',
           committed: ['sample/importer.ts', 'sample/peer.ts'],
           carried: [{ path: 'sample/peer.ts', holders: [THEIRS] }],
-        });
-        expect(yield* world.head('sample/importer.ts')).toBe(importer);
-        expect(yield* world.head('sample/peer.ts')).toBe(peer);
-        yield* world.written(THEIRS, 'sample/peer.ts', `${peer}export const required = 3;\n`);
-        yield* world.written(MINE, 'sample/importer.ts', 'import { required } from "./peer.js";\nexport const value = required;\n');
-        expect(yield* Effect.flip(world.submit(MINE, { paths: ['sample/importer.ts'], whole: ['sample/importer.ts'] }))).toMatchObject({
-          code: 'lines-held',
         });
         expect(yield* world.head('sample/importer.ts')).toBe(importer);
         expect(yield* world.head('sample/peer.ts')).toBe(peer);
@@ -106,7 +97,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         const world = checkout;
         const bytes = Buffer.concat([Buffer.from('export const word = "caf'), Buffer.from([0xe9]), Buffer.from('";\n')]);
         writeFileSync(join(world.root, 'src', 'latin.ts'), bytes);
-        const answer = yield* world.submit(MINE, { paths: ['src/latin.ts'], whole: ['src/latin.ts'] });
+        const answer = yield* world.submit(MINE, { paths: ['src/latin.ts'] });
         expect(answer.status).toBe('landed');
         if (answer.status !== 'landed') return;
         expect(answer.carried).toEqual([]);

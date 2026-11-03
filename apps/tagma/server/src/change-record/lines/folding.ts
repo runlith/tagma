@@ -131,8 +131,6 @@ export function contentOf(text: string | null, blob?: string, known?: string): T
   const digest = known ?? contentDigest(text);
   return { kind: 'text', digest, blob: blob ?? digest, ...bufferOf(tokensOf(text), text) };
 }
-export const contentText = (side: Content): string | null | undefined =>
-  side.kind === 'text' ? side.text : side.kind === 'absent' ? null : undefined;
 export const contentLines = (side: TextContent): readonly string[] => (side.kind === 'text' ? side.lines : []);
 export const digestKey = (digest: string | null): string => (digest === null ? 'absent' : `bytes:${digest}`);
 export const digestOf = (side: Content): string | null | undefined => (side.kind === 'unread' ? undefined : side.digest);

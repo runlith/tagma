@@ -6,7 +6,6 @@ import { LAYERED, LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 import { bodies, enforceFixture, operator, withEnforcement, type EnforcementFixture } from './enforceFixture.js';
 import type { InputOf } from '../../../platform/contract/service/body.js';
 import type { ENFORCEMENT_OPERATIONS } from '../../../enforcement/contract/wire/operationCatalog.js';
-import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { refusalOf } from '../graphFixture.js';
 import { Enforcements } from './enforceFixture.js';
 import { checksOver, withLanes } from '../../../enforcement/testing/wiring.js';
@@ -15,13 +14,11 @@ import { TRIGGERS } from '../../../graph/testing/triggers.js';
 import { MINE, PLACE } from '../checkoutFixture.js';
 import { landingServices } from '../landingServices.js';
 import { submitOver } from '../../../landing/testing/doubles.js';
-import { landingAdmission } from '../../preparedChanges.js';
 import {
   claimPreparedInstance,
-  evidenceInGroups,
   judgingFns,
   makePreparedChanges,
-  pathsOfThread,
+  preparedReads,
   preparedBase,
   quietCommands,
   recordWrite,
@@ -39,12 +36,7 @@ const submitted = Effect.fnUntraced(function* (fx: EnforcementFixture) {
   const checks = actChecks(checksOver({ graphOf: () => Effect.succeed(served) }), 'submit_work');
   const services = yield* Effect.provide(landingServices, fx.demo.context);
   const inst = yield* claimPreparedInstance(preparedBase(fx.demo.graph.store));
-  const producer = makePreparedChanges(
-    { commands: quietCommands, pathsOfThread, evidenceInGroups },
-    landingAdmission(makeLandingHolds()),
-    judgingFns(CHECKOUT_DIRECTORY),
-    inst.dir,
-  );
+  const producer = makePreparedChanges(preparedReads(quietCommands), judgingFns(CHECKOUT_DIRECTORY), inst.dir);
   const origin = { ...PLACE, generation: 0, work: { projectId: fx.demo.projectId, threadId: MINE } } as WorkingOrigin;
   return yield* Effect.ensuring(
     submitOver(
@@ -53,7 +45,7 @@ const submitted = Effect.fnUntraced(function* (fx: EnforcementFixture) {
       fx.demo.graph.store,
       fx.demo.graph.units,
       origin,
-      { projectId: fx.demo.projectId, tasks: [], taking: [], coAuthored: true },
+      { projectId: fx.demo.projectId, tasks: [], coAuthored: true, everything: false },
       checks,
       producer,
     ).pipe(Effect.provideContext(services)),
@@ -100,7 +92,6 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
           const set = yield* fx.working(
             perform(bodies.set_module, { ...flipped, absorb: [OPENED], owners: { [OPENED]: owner } }, operator),
           );
-          expect(Object.keys(set).sort()).toEqual(['graph', 'modules', 'rules', 'status']);
           expect(set.rules).toHaveLength(2);
           expect(set.rules.find((one) => one.rule === rule)).toMatchObject({
             debt: { before: 1, after: 1 },

@@ -6,6 +6,7 @@ import type { BlobAt } from '@runlith/git/working';
 import { directoriesAt, listedAt, prepareDirectories } from '../directories';
 import { blobTexts, type Entry, git } from '../git';
 import { derivedMap, rootAt, seededMap, valueAt } from '../maps';
+import { NeedsPreparation } from '../preparation';
 import { databaseAt } from '../store';
 import { type Packed, pack, unpack } from './compact';
 import { ancestorsOf, isManifest, isSource, keysReaching, type Package, type Packages, packageOf, shapeOf, targetKeys } from './corpus';
@@ -222,7 +223,7 @@ export const GOOD_ENOUGH = 50;
 
 export const FAR = 5000;
 
-export class WholeRequired extends Error {}
+export class WholeRequired extends NeedsPreparation {}
 
 const ensure = (root: string, tree: string, hint: string | null, populate: boolean): void => {
   if (indexedAt(root, tree)) return;

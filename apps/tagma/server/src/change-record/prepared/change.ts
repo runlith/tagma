@@ -1,32 +1,35 @@
 import { closeSync, openSync, readdirSync, rmSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Effect, Exit } from 'effect';
 import type { MachineStore, StoreFailure } from '../../platform/contract/service/store.js';
 import { lockExclusive } from '@runlith/file-lock/flock';
 import type {
-  ChangeInput,
   PrepareInput,
   PreparedChange,
   PreparedChanges,
   PreparedFns,
   PreparedOutcome,
+  PreparedPlace,
   PreparedReads,
   PreparedRefusal,
   PreparedRow,
+  TeamMember,
 } from '../contract/service/prepared.js';
-import type { CarrierAdmission } from '../contract/service/carriers.js';
 import type { CommitShape } from '../contract/service/shape.js';
-import { carriersOf, heldPaths } from './carriers.js';
-import { build, type Landing } from './tree.js';
+import { changedAmong, recordedPaths, selectedPaths } from './team.js';
+import { closed } from './closure.js';
+import { build, type Landing, WEIGHED_BYTES } from './tree.js';
 import { rebasePrepared } from './rebase.js';
 import { shapeBuilt } from './shaped.js';
 import { operationIn } from '../../platform/git/places.js';
+import { commitsOfHolders } from '../record/reads.js';
 import {
+  besideMerge,
   kindOfPreparedEntry,
   locateIndex,
   mergeFor,
   onBranch,
-  peerMerge,
   preparedBase,
   releaseIndex,
   subjectOf,
@@ -49,22 +52,22 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
   args: PrepareInput<Caller>,
 ): Effect.fn.Return<PreparedOutcome<Caller>, OwnGitFailed | GateRefusal<PreparedRefusal> | StoreFailure> {
   const { projectId, git, root, store, units, origin, checkout, input, job, caller, act } = args;
-  if (origin.work === null && (input.paths ?? []).length === 0 && input.taking.length === 0)
+  if (origin.work === null && (input.paths ?? []).length === 0 && input.everything !== true)
     return yield* new GateRefusal(
       'no-record',
-      'this caller writes through tools the change record does not see, so it holds no lines to land',
-      ['name the paths: their lines nobody holds are this change, and independent lines of other sessions stay out'],
+      'this caller writes through tools the change record does not see, so the record names no files of its own to land',
+      ['name the paths: every changed file under them lands as it stands'],
     );
   const { places, ref, commit: head } = yield* onBranch(git, root);
-  const sessions = carriersOf(origin, input);
-  const carriers = new Set(sessions.map((session) => session.threadId));
+  const team = origin.work === null ? [] : yield* reads.team(units, store, origin.work);
   const decided = Effect.map(
-    Effect.forEach(sessions, ({ projectId, threadId }) =>
+    Effect.forEach(team, ({ projectId, threadId }) =>
       projectId === null ? Effect.succeed(0) : reads.commands.decided({ projectId, threadId }),
     ),
     (revisions) => revisions.join(','),
   );
-  const select = () => heldPaths(git, root, store, units, reads, fns, checkout, head, input, sessions, origin.work?.threadId ?? null);
+  const place = { git, root, store, units, checkout, head };
+  const select = () => selectedPaths(place, reads, fns, input, team);
   let seen = yield* decided;
   let selection = yield* select();
   for (let snapshot = 1; ; snapshot += 1) {
@@ -74,12 +77,9 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
     seen = now;
     selection = yield* select();
   }
-  const { paths, unmatched, unattributed, pairs } = selection;
+  const nothing = { prepared: null, emptied: null, team, unmatched: [...selection.unmatched], paths: [], unattributed: [] };
+  if (selection.paths.length === 0) return nothing;
   const open = yield* operationIn(places);
-  const beside = yield* peerMerge(fns, { git, root, store, units, checkout }, carriers, paths, open);
-  const merge = beside ? undefined : yield* mergeFor(git, root, places, open);
-  if (paths.length === 0 && merge === undefined)
-    return { prepared: null, emptied: null, unmatched: [...unmatched], paths: [], unattributed: [...unattributed] };
   const prepared = yield* Effect.acquireUseRelease(
     locateIndex(instanceDir),
     (index) =>
@@ -96,30 +96,33 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
           act,
           checkout,
           input,
-          carriers,
-          paths,
-          explicit: selection.explicit,
-          team: selection.team,
-          pairs,
-          message: '',
+          team,
+          selection,
           index,
           gitDir: places.gitDir,
           commonDir: places.commonDir,
           job,
         };
-        const built = yield* build(landing, head, merge);
+        const carried = yield* closed(landing, head, selection, WEIGHED_BYTES).pipe(Effect.provide(BunFileSystem.layer));
+        const beside = yield* besideMerge(git, root, carried.paths, open);
+        const merge = beside ? undefined : yield* mergeFor(git, root, places, open);
+        const built = yield* build(landing, carried, head, merge);
+        const paths = built.plan.map((one) => one.path);
+        const { unattributed } = built;
         if (built.changed.length === 0 && merge === undefined) {
           yield* releaseIndex(index);
-          return { _tag: 'idle' } as const;
+          return { _tag: 'idle', paths, unattributed } as const;
         }
         const shaping = yield* shapeBuilt(landing, built, shape, merge !== undefined);
         if (shaping._tag === 'emptied') {
           yield* releaseIndex(index);
-          return shaping;
+          return { ...shaping, paths, unattributed };
         }
         const finished = shaping.finished;
         return {
           _tag: 'shaped',
+          paths,
+          unattributed,
           prepared: {
             subject: yield* subjectOf(landing, finished, caller, merge),
             built: {
@@ -128,11 +131,7 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
               from: finished.from,
               changed: finished.changed,
               entries: finished.entries,
-              plan: finished.plan.map((one) =>
-                one.land === 'own'
-                  ? { path: one.path, land: 'own' as const, landed: one.landed, holders: one.holders, ids: one.ids }
-                  : { path: one.path, land: 'whole' as const, holders: one.holders, ids: one.ids },
-              ),
+              plan: finished.plan.map((one) => ({ path: one.path, writers: one.writers, ids: one.ids })),
               hashes: finished.hashes,
               reshaped: finished.reshaped,
               formatSkipped: finished.formatSkipped,
@@ -150,11 +149,11 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
     (index, exit) => (Exit.isSuccess(exit) ? Effect.void : releaseIndex(index)),
   );
   return {
+    ...nothing,
     prepared: prepared._tag === 'shaped' ? prepared.prepared : null,
     emptied: prepared._tag === 'emptied' ? prepared.emptied : null,
-    unmatched: [...unmatched],
-    paths: [...paths],
-    unattributed: [...unattributed],
+    paths: prepared.paths,
+    unattributed: prepared.unattributed,
   };
 });
 
@@ -221,15 +220,42 @@ export const sweepPreparedIndexes = (store: StoreShape): Effect.Effect<void> =>
     }
   });
 
+const CARRIED_BY = 20;
+
+const remaining = <Row extends PreparedRow>(reads: PreparedReads<Row>, fns: PreparedFns) =>
+  Effect.fn('prepared.remaining')(function* (place: PreparedPlace, team: readonly TeamMember[]) {
+    if (team.length === 0) return [];
+    return yield* changedAmong(place, fns, yield* recordedPaths({ ...place, head: null }, reads, team));
+  });
+
 export const makePreparedChanges = <Row extends PreparedRow>(
   reads: PreparedReads<Row>,
-  admission: CarrierAdmission['Service'],
   fns: PreparedFns,
   instanceDir: string,
   shape: CommitShape['Service'],
 ): Context.Service.Shape<typeof PreparedChanges> => ({
   prepare: <Caller>(args: PrepareInput<Caller>) => prepareChange(reads, fns, instanceDir, shape, args),
   rebase: (git, root, prepared, head) => rebasePrepared(git, root, prepared, head),
-  lease: (input: ChangeInput) => admission.admit(input.taking.map((session) => session.threadId)),
   release: (prepared) => releasePrepared(prepared),
+  remaining: remaining(reads, fns),
+  teamCheckouts: Effect.fn('prepared.teamCheckouts')(function* (units, store, work) {
+    const team = yield* reads.team(units, store, work);
+    const held = yield* reads.heldCheckouts(
+      units,
+      store,
+      team.map((one) => one.threadId),
+    );
+    const observed = team.flatMap(({ projectId, threadId }) =>
+      projectId === null ? [] : reads.commands.unattributed({ projectId, threadId }).map((one) => one.checkout),
+    );
+    return { team, checkouts: [...new Set([...held, ...observed])] };
+  }),
+  carriedBy: (place, team) =>
+    commitsOfHolders(
+      place.units,
+      place.store,
+      place.checkout,
+      team.map((one) => one.threadId),
+      CARRIED_BY,
+    ),
 });

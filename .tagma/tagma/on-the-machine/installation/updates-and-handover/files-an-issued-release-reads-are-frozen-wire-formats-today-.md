@@ -8,13 +8,13 @@ edges:
     to: 01a1a2c3-df29-790a-ac75-a876cfb6a896
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/attempt.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/restart.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/feed.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/restart.ts
   - kind: file
     ref: apps/tagma/server/src/installation/testing/frozen.ts
 ---

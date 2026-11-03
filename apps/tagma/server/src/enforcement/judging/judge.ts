@@ -4,7 +4,6 @@ import { RuleJudgement } from '../contract/service/judge.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import {
   bodiesOf,
-  type CarriedViolation,
   crossingOf,
   inspectionBase,
   inspectionRelevant,
@@ -147,7 +146,6 @@ const unread = (op: string, failure: Unread, started: number): Judgement => {
       unblock: failure instanceof GateRefusal ? [...failure.unblock, again] : [again],
     },
     watched: [],
-    carriedViolations: [],
     unjudged: [],
     rules: [],
     inspections: 0,
@@ -158,7 +156,6 @@ const unread = (op: string, failure: Unread, started: number): Judgement => {
 const ungated = (root: string, why: string, started: number): Judgement => ({
   refused: null,
   watched: [],
-  carriedViolations: [],
   unjudged: [
     { gate: 'unread', cause: `the graph of ${root} could not be read, and this project was never read enforcing a rule at gate: ${why}` },
   ],
@@ -168,14 +165,7 @@ const ungated = (root: string, why: string, started: number): Judgement => ({
 });
 
 const verdictOf = (judged: Judgement): string =>
-  judged.refused?.code ??
-  (judged.unjudged.some((one) => 'gate' in one)
-    ? 'unjudged'
-    : judged.watched.length > 0
-      ? 'watched'
-      : judged.carriedViolations.length > 0
-        ? 'carried'
-        : 'clean');
+  judged.refused?.code ?? (judged.unjudged.some((one) => 'gate' in one) ? 'unjudged' : judged.watched.length > 0 ? 'watched' : 'clean');
 
 const annotated = (op: string, files: number, judged: Judgement): Effect.Effect<Judgement> =>
   Effect.as(
@@ -211,7 +201,6 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
   const crossed: RuleCrossing[] = [];
   const failed: Failed[] = [];
   const watched: Watched[] = [];
-  const carried: CarriedViolation[] = [];
   const unjudged: LandingUnjudged[] = [];
   const runs: RuleRun[] = [];
   const rechecked: RuleCrossing[] = [];
@@ -370,15 +359,14 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
       unjudged.push(...loose.map((one) => ({ rule: rule.name, ...one })));
       const norm = { rule: rule.name, title: rule.title, strictness: document.strictness };
       for (const { violation, holders, withheld } of found) {
-        const crossing = crossingOf(norm, inspection, violation, withheld);
-        if (holders.length > 0) carried.push({ ...crossing, holders });
-        else if (gate) crossed.push(crossing);
+        const crossing = crossingOf(norm, inspection, violation, withheld, holders);
+        if (gate) crossed.push(crossing);
         else watched.push(crossing);
       }
     }
   });
   yield* judging;
-  const bodies = bodiesOf(rules, findingRules(crossed, watched, carried, rechecked));
+  const bodies = bodiesOf(rules, findingRules(crossed, watched, rechecked));
   const refusal =
     crossed.length > 0
       ? violatedRefusal(op, 'tree', crossed, failed, subject.checkout ?? subject.root, bodies)
@@ -396,7 +384,6 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
             reason: [refusal.reason, 'inspection times:', ...times.map((run) => `  ${run.rule} ran in ${run.ms} ms`)].join('\n'),
           },
     watched,
-    carriedViolations: carried,
     rechecked,
     unjudged,
     crossed,
@@ -501,7 +488,6 @@ export const headJudgement = Effect.fn('enforcement.headJudgement')(function* (o
           ? failedRefusal(op, 'head', failed)
           : null,
     watched,
-    carriedViolations: [],
     unjudged,
     bodies,
     rules: names,
@@ -527,7 +513,6 @@ const unbuilt = (op: string, why: string, memory: GateMemory['Service'] | undefi
         }
       : null,
     watched: [],
-    carriedViolations: [],
     unjudged: gated ? [] : [{ gate: 'unread', cause: `the tree ${op} would land could not be read from git: ${why}` }],
     rules: [],
     inspections: 0,
@@ -549,7 +534,6 @@ export const unresolved = (
 export const unowned = (root: string, cause = `no project this server serves holds ${root}, so no rule of its judges it`): Judgement => ({
   refused: null,
   watched: [],
-  carriedViolations: [],
   unjudged: [{ gate: 'unread', cause }],
   rules: [],
   inspections: 0,

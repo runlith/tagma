@@ -10,10 +10,6 @@ import { landingFixture, withLanding } from '../composition/testing/landingFixtu
 
 const USER = "import { fresh } from './fresh.js';\nexport const user = fresh;\n";
 
-const rows = (
-  violations: readonly { readonly fingerprint: string; readonly holders?: readonly string[]; readonly withheld?: string }[] | undefined,
-) => violations?.map(({ fingerprint, holders, withheld }) => ({ fingerprint, holders, withheld }));
-
 layer(landingFixture(), { excludeTestServices: true })('landing gates', (it) => {
   it.effect(
     'a new upward crossing in the session’s own file refuses rule-violated, names the file, line and crossing, and commits nothing',
@@ -36,79 +32,53 @@ layer(landingFixture(), { excludeTestServices: true })('landing gates', (it) => 
       ),
   );
 
-  it.effect('an automatically carried dependency is judged as this delivery, while explicit whole retains the peer attribution', () =>
-    withLanding((gate) =>
-      Effect.gen(function* () {
-        yield* gate.wrote(
-          THEIRS,
-          'src/core/shared.ts',
-          "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\nexport const c = 3;\n",
-        );
-        yield* gate.wrote(
-          MINE,
-          'src/core/shared.ts',
-          "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main + 1;\nexport const c = 3;\n",
-        );
-        const refused = yield* gate.refused(MINE);
-        expect(refused.code).toBe('rule-violated');
-        expect(refused.reason).toContain('src/core/shared.ts:2');
-        const receipt = gate.landed(yield* gate.submit(MINE, { whole: ['src/core/shared.ts'] }));
-        expect(receipt.carried).toEqual([{ path: 'src/core/shared.ts', holders: [THEIRS] }]);
-        expect(receipt.carriedViolations).toEqual([
-          {
-            rule: gate.rule,
-            title: expect.any(String),
-            strictness: 'gate',
-            fingerprint: 'app order core/shared.ts -> app/',
-            file: 'src/core/shared.ts',
-            line: 2,
-            specifier: '../app/main',
-            message: expect.any(String),
-            fix: expect.any(String),
-            generalFix: expect.any(String),
-            holders: [THEIRS],
-          },
-        ]);
-      }),
-    ),
-  );
-
-  it.effect('in a file carried whole with a live peer, the session’s own crossing refuses while the peer’s line stays carried', () =>
-    withLanding((gate) =>
-      Effect.gen(function* () {
-        const peer = "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\nexport const c = 3;\n";
-        yield* gate.wrote(THEIRS, 'src/core/shared.ts', peer);
-        yield* gate.wrote(
-          MINE,
-          'src/core/shared.ts',
-          "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main + 1;\nexport const c = 3;\nimport { main as again } from '../app/main';\n",
-        );
-        const verdict = yield* gate.checked(MINE, { whole: ['src/core/shared.ts'] });
-        expect(verdict?.violations.map(({ file, line, holders }) => ({ file, line, holders }))).toEqual([
-          { file: 'src/core/shared.ts', line: 2, holders: [THEIRS] },
-          { file: 'src/core/shared.ts', line: 5, holders: undefined },
-        ]);
-        expect((yield* gate.refused(MINE, { whole: ['src/core/shared.ts'] })).code).toBe('rule-violated');
-      }),
-    ),
-  );
-
   it.effect(
-    'a crossing that stands on a file the session holds but `paths` leaves out refuses naming that file, and lands once `paths` names it',
+    'a crossing in another writer’s lines of a selected file refuses naming its author, and lands with both once that writer fixes it',
     () =>
       withLanding((gate) =>
         Effect.gen(function* () {
-          yield* gate.wrote(MINE, 'src/core/fresh.ts', 'export const fresh = 1;\n');
-          yield* gate.wrote(MINE, 'src/core/user.ts', USER);
-          const checked = yield* gate.checked(MINE, { paths: ['src/core/user.ts'] });
+          yield* gate.wrote(
+            THEIRS,
+            'src/core/shared.ts',
+            "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\nexport const c = 3;\n",
+          );
+          yield* gate.wrote(
+            MINE,
+            'src/core/shared.ts',
+            "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main + 1;\nexport const c = 3;\n",
+          );
+          const checked = yield* gate.checked(MINE);
           expect(checked?.refuses).toBe(true);
-          expect(rows(checked?.violations)).toEqual([
-            { fingerprint: 'app -> ./fresh.js unresolved @ core/user.ts', holders: undefined, withheld: 'src/core/fresh.ts' },
+          expect(checked?.violations.map(({ file, line, holders }) => ({ file, line, holders }))).toEqual([
+            { file: 'src/core/shared.ts', line: 2, holders: [THEIRS] },
           ]);
-          const receipt = gate.landed(yield* gate.submit(MINE, { paths: ['src/core/user.ts', 'src/core/fresh.ts'] }));
-          expect(receipt.committed).toEqual(['src/core/fresh.ts', 'src/core/user.ts']);
+          const refused = yield* gate.refused(MINE);
+          expect(refused.code).toBe('rule-violated');
+          expect(refused.reason).toContain('src/core/shared.ts:2');
+          expect(refused.reason).toContain(THEIRS);
+          expect(refused.unblock.join('\n')).not.toMatch(/taking|wait for/u);
+          yield* gate.wrote(
+            THEIRS,
+            'src/core/shared.ts',
+            'export const a = 1;\nconst main = 0;\nexport const b = main + 1;\nexport const c = 3;\n',
+          );
+          const receipt = gate.landed(yield* gate.submit(MINE));
+          expect(receipt.carried).toEqual([{ path: 'src/core/shared.ts', holders: [THEIRS] }]);
+          expect(yield* gate.sh(['show', 'HEAD:src/core/shared.ts'])).toContain('const main = 0;');
         }),
       ),
+  );
+
+  it.effect('a file `paths` leaves out rides along when a selected file imports it, and the rules judge the tree with it', () =>
+    withLanding((gate) =>
+      Effect.gen(function* () {
+        yield* gate.wrote(MINE, 'src/core/fresh.ts', 'export const fresh = 1;\n');
+        yield* gate.wrote(MINE, 'src/core/user.ts', USER);
+        expect((yield* gate.checked(MINE, { paths: ['src/core/user.ts'] }))?.refuses).toBe(false);
+        const receipt = gate.landed(yield* gate.submit(MINE, { paths: ['src/core/user.ts'] }));
+        expect(receipt.committed).toEqual(['src/core/fresh.ts', 'src/core/user.ts']);
+      }),
+    ),
   );
 
   it.effect('a path a pre-commit hook adds to what it commits is named by the receipt and handed to the rules judging after', () =>

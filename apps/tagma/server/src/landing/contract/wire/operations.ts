@@ -1,5 +1,4 @@
 import { Schema } from 'effect';
-import type { SubmitHandover } from '../../../change-record/contract/wire/handover.js';
 import { COVERAGE_REFUSALS, REPOSITORY_REFUSALS } from '../../../workspace/contract/wire/refusals.js';
 import { GIT_REFUSALS } from '../../../platform/contract/wire/refusal.js';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
@@ -8,13 +7,13 @@ import { SHAPE_REFUSALS } from '../../../change-record/contract/wire/shape.js';
 import { SubmitReceipt } from './receipt.js';
 import { MergeAfter, MergeMode, type FinishingPlace } from '../../../worktrees/contract/wire/mergeTypes.js';
 import { PLACE, deleteConsequence, rootId, raised, subjects } from '../../../worktrees/contract/wire/operations/retirement.js';
-import { AGENT_RUNNING, LINES_OF_ANOTHER, ROOT_IN_USE, STILL_RUNNING, UNCOMMITTED } from '../../../platform/contract/wire/conditions.js';
+import { AGENT_RUNNING, ROOT_IN_USE, UNCOMMITTED } from '../../../platform/contract/wire/conditions.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { placeRole } from '../../../platform/contract/wire/place.js';
 import { blockMention } from '../../../graph/contract/wire/fields.js';
 import { DeriveCommand } from '../../../change-record/contract/wire/derivation.js';
 
-export type SubmitScope = SubmitHandover & { readonly project: string; readonly checkout: string | null };
+export type SubmitScope = { readonly project: string; readonly checkout: string | null };
 
 const LANDING_DOORS = { http: true } as const;
 const LANDING_TOOL = { capability: 'worktrees', needs: ['shared'] } as const;
@@ -45,13 +44,14 @@ const WRITE = {
 
 export const LANDING_OPERATIONS = {
   submit_work: operation('submit_work', {
-    approval: { ...ASKS_IN_REVIEW, when: [LINES_OF_ANOTHER, STILL_RUNNING] },
+    approval: ASKS_IN_REVIEW,
     ...WRITE,
     tool: SUBMIT_TOOL,
     subject: 'tree',
-    meaning: 'Commit this session’s held lines in the named checkout, or its only held checkout, on that checkout’s current branch.',
+    meaning:
+      'Commit whole files of one checkout on its current branch: the files this session and its finished children changed, or every changed file under `paths`, each as it stands with every writer’s lines in it.',
     grammar:
-      '`checkout` selects a registered checkout root; `project` alone selects its main checkout. With neither, the session’s held lines select the only checkout, and several refuse `multiple-checkouts`: call once per checkout. `taking` and `paths` narrow work in that selected tree, not the place. Without `paths`, the commit takes what the change record holds for this session in this tree. Explicit `paths` also selects changed files and deletions nobody holds. A caller whose writes the record does not see — another harness, a session outside Tagma — holds no lines and names `paths`: it lands their lines nobody holds as its own, in the checkout its call stands in. The graph’s own storage stays out, and a moved file lands as a move: its source’s deletion goes with its destination, whether the record or the index (`git mv`) pairs them; `taking` adds a named session’s held paths. Independent peer lines stay out even when adjacent; dependencies recorded between edits land automatically with their authors named in `carried`. JS/TS binding checks and conservative declaration/member-name checks over peer-held imports can refuse `lines-held`, naming the missing definition, path and holder. Matching imported member names can refuse without a proven receiver type; wait for the holder, or include the required paths with `taking` or `whole`. The operator’s own lines need the operator’s word; `taking: ["operator"]` selects them. A path whose lines cannot be told apart refuses `walk-cut`; `whole` names files or directories to carry intact within the selected paths, including peer lines, and `carried` names their holders. Relative and absolute paths are accepted; `whole: ["."]` covers every selected path. Whole command rewrites without file-tool history and `linguist-generated` files land whole and name other holders in `carried`; `linguist-generated=false` permits line splitting without clearing program origin. When a landing carries program-origin bytes beside excluded working changes, matching `derive` entries from the caller or tagma.config.ts regenerate declared outputs in the commit tree. Declarations also work without origin recognition. Commands run from the repository root without appended operands; only their declared output paths enter the commit, outputs equal to HEAD drop out, and working output bytes and recorded holders stay unchanged. Without a matching command, `derive-required` names the outputs, recorded command hints and excluded paths with holders; supply derive or leave the outputs out. Recorded commands are never replayed automatically. Missing, failed and cut runs refuse with `derive-missing`, `derive-failed` or `derive-cut`. An open merge with a resolved index lands as a merge commit: it carries the index’s incoming changes and conflict resolutions together with the selected session lines, preserves the merge parents and clears MERGE_HEAD. Its full merged tree is judged against HEAD; formatting leaves merge commits in their merged form, while required derivations still run. A merge whose changes live peers hold is theirs unless this landing carries one of the paths it changes: it stays open and this session’s lines land beside it as an ordinary commit on HEAD; a carried path the merge changes that only peers hold refuses `lines-held` naming them. A merge HEAD moved under since it opened concludes over the current HEAD, and a path both changed refuses `tree-mid-merge`. Unresolved conflicts refuse with their paths. A cherry-pick, revert, rebase or am must conclude before this session’s lines land. Before the commit, every enforced rule triggered before submit_work whose reach the landing touches judges the built tree against HEAD: a new crossing of a rule at gate on this session’s own lines refuses `rule-violated` in every approval mode and for every caller, and a gated inspection that cannot run refuses `inspection-failed`; no mode or caller waives either, and the rule itself changes only through enforce_rule. A changed enforced inspection description also measures its rule’s whole reach in the built tree; `rechecked` names what it finds outside debt without blocking for standing findings introduced by the description alone, and remeasurement records their origins as escapes after landing. What lands anyway is named in `watched` (rules at watch), `carriedViolations` (new crossings on a live peer’s lines, or standing on a path a live peer holds uncommitted that the commit lacks) and `unjudged`. Where the `tagma.config.ts` of the commit’s own version declares `format` commands, they run first, over that version in the checkout’s commit tree, and the rules judge the tree they produced; a file a command rewrote lands in that form, and its working file takes the same change as uncommitted-by-nobody work where it merges cleanly (named in `edited`, or in `kept` where it did not). A refusal after the commands ran carries their change into the working files as this session’s uncommitted work and names those files, so the places and counts it reports read in them. A command whose tool is missing refuses `format-missing`, one that exits outside its `ok` codes `format-failed`, one that runs past its ceiling `format-cut`, and a config that does not evaluate `config-invalid`: nothing is published and no working file changes. The repository’s commit hooks run in the checkout’s commit tree, a private work tree that holds the commit’s own files; what they edit reaches the working files, on a refusal too: `edited` names the files whose working text now carries their edits — what the commit lacks of them stays this session’s to land next — and `kept` the files left as they stood. The commit carries the user’s git identity and is signed where commit.gpgsign asks; a signature git cannot make refuses `commit-unsigned` with the signer’s words. Rules triggered after submit_work run over the commit once it landed. check_rules with `over: "change"` runs the same rules over the same tree without committing, and its `refuses` says whether this act would refuse. The answer is `landed` with the commit, `committed`, the paths whose lines it carried, and `left`, the paths where lines of this session or of one it took still stand, and `unattributed`, selected paths with nobody’s lines left outside the commit, and unselected paths that changed while its commands ran without proven authorship and still stand changed in this checkout — read_changes explains the remaining authorship and command observations; name one in `paths` only when it is this session’s work — `nothing` where this session holds nothing the branch lacks, or `refused` with what git said; `tasks` declares which held tasks this commit carries; only those are attributed in the message and answer, without ending them. A declared task must be held by this session or a holder in `taking`, otherwise `task-not-held` refuses. Omitted or empty `tasks` attributes none; omission also names this session’s held tasks separately as unattributed. The subject and `body` stand as written; each declared task lands as a `Task: <name> <title>` trailer, and `Co-authored-by: Tagma <agent@tagma.dev>` joins them unless `commits.coAuthor` is off — one trailer block after a blank line, joining one the body already ends with. Author, committer and signature stay the user’s.',
+      '`checkout` selects a registered checkout root; `project` alone selects its main checkout. With neither, the checkout holding this session’s lines is taken, and lines in several refuse `multiple-checkouts`: call once per checkout. Without `paths`, the commit takes every file the change record says this session, or a child of it no longer running, wrote that still differs from HEAD; where `agent.checkout` is `single`, every changed file. A file a command changed while several sessions’ commands ran counts for each of their teams. `paths` replaces that selection with every changed file under the named files or directories, whoever wrote it; relative and absolute paths are accepted, and a caller the change record does not see — another harness, a session outside Tagma — names them. Each file lands as it stands on disk, every writer’s lines in it included, and the commit also carries the other path of a move, every uncommitted file of a writer whose lines it carries, and a changed file holding a declaration a carried file uses that HEAD lacks, as far as a language adapter can tell — until nothing more joins. Git-ignored files and the graph’s own storage stay out. Where the `tagma.config.ts` of the commit’s own version declares `format` commands, they run over the commit tree and the rules judge their form: a rewritten file lands in that form and its working file takes the same change where it merges cleanly (`edited`, or `kept` where it did not); a missing tool refuses `format-missing`, an exit outside its `ok` codes `format-failed`, a run past its ceiling `format-cut`, a config that does not evaluate `config-invalid`. When the commit leaves working changes out, the `derive` entries of the caller and of tagma.config.ts regenerate their declared outputs in the commit tree; only declared outputs enter it, and missing, failed and cut runs refuse `derive-missing`, `derive-failed` or `derive-cut`. Every enforced rule triggered before submit_work whose reach the tree touches judges it against HEAD: a new crossing of a rule at gate anywhere in it refuses `rule-violated`, naming each crossing’s place and the other writers of its line; a gated inspection that cannot run refuses `inspection-failed`; `watched`, `rechecked` and `unjudged` name what lands anyway. An open merge whose index is resolved concludes with the first landing that carries a path it changed, as a merge commit carrying its incoming changes and resolutions; a landing carrying none of them lands beside it as an ordinary commit; unresolved conflicts refuse `tree-mid-merge`, and a cherry-pick, revert, rebase or am must conclude first. The repository’s commit hooks run in a private commit tree; what they edit reaches the working files (`edited`, `kept`). The commit carries the user’s git identity and is signed where commit.gpgsign asks; a signature git cannot make refuses `commit-unsigned`. HEAD moves only by compare-and-set from the judged base, a moved HEAD rebuilds or rebases the tree, and repeated races refuse `landing-busy`. check_rules with `over: "change"` builds the same tree and its `refuses` says whether this act would refuse it. `tasks` names the tasks whose work the commit carries, whoever holds them; each lands as a `Task: <name> <title>` trailer and none is ended; omitted, the answer names this session’s held tasks as unattributed. The subject and `body` stand as written, and `Co-authored-by: Tagma <agent@tagma.dev>` joins the trailers unless `commits.coAuthor` is off. The answer is `landed` with the commit, `committed`, `carried` (files holding other writers’ lines, with those writers), `unattributed` (files holding lines no tool recorded) and `left` (files of this session and its finished children the commit did not carry, with why); `nothing` with the commits that already carried those lines; or `refused` with what git said.',
     input: Schema.Struct({
       project: Schema.optional(Schema.Union([Schema.String, Schema.Int])).annotate({
         ...placeRole('selector'),
@@ -69,19 +69,11 @@ export const LANDING_OPERATIONS = {
       }),
       tasks: Schema.optional(Schema.Array(blockMention)).annotate({
         description:
-          'Held tasks whose work this commit carries, declared by the caller. Each must be held by this session or a holder in taking. Omitted or []: attribute no tasks; when omitted, the answer separately names this session’s held tasks as unattributed.',
+          'Tasks whose work this commit carries, whoever holds them. Omitted or []: attribute no tasks; when omitted, the answer separately names this session’s held tasks as unattributed.',
       }),
       paths: Schema.optional(Schema.Array(Schema.String.annotate(placeRole('value')))).annotate({
         description:
-          'Files or directories selecting changed paths in this checkout, including changes nobody holds; either path of a move selects both. Without paths, select this session’s held work. Peer lines follow the same slicing and carrying rules.',
-      }),
-      whole: Schema.optional(Schema.Array(Schema.String.annotate(placeRole('value')))).annotate({
-        description:
-          'Files or directories to carry intact within the selected paths, other holders’ lines included. Does not add paths; ["."] covers the selected tree.',
-      }),
-      taking: Schema.optional(Schema.Array(Schema.String)).annotate({
-        description:
-          'Holders whose held paths this commit carries beside its own, by team name or thread id. Idle sessions need no extra consent; taking a running session’s held work raises `still-running`. `operator` carries the operator’s own lines on their word.',
+          'Files or directories whose changed files this commit takes, whoever wrote them; either path of a move selects both. Without paths, the files this session and its finished children wrote.',
       }),
       derive: Schema.optional(Schema.Array(DeriveCommand)).annotate({
         description:
@@ -95,7 +87,7 @@ export const LANDING_OPERATIONS = {
     answer: arms({ ok: { submitted: SubmitReceipt } }),
     refusals: [
       'no-record',
-      'task-not-held',
+      'not-work',
       'bad-name',
       'not-found',
       'ambiguous-name',
@@ -106,8 +98,7 @@ export const LANDING_OPERATIONS = {
       'multiple-checkouts',
       'place-mismatch',
       'tree-mid-merge',
-      'walk-cut',
-      'lines-held',
+      'path-unread',
       'rule-violated',
       'inspection-failed',
       'module-map-invalid',
@@ -119,25 +110,16 @@ export const LANDING_OPERATIONS = {
       ...SHAPE_REFUSALS,
     ],
     confirmation: (input, prepared: SubmitScope) => {
-      const taking = input.taking ?? [];
       const where = `project “${prepared.project}”${prepared.checkout === null ? '' : ` at ${prepared.checkout}`}`;
       const skipped = input.withoutFormat === true ? ' The repository’s commit steps are skipped.' : '';
-      return taking.length === 0
-        ? {
-            summary: `Commit this session's own lines in ${where}?`,
-            consequence: `What this session still holds in this tree goes onto the current branch as one commit.${skipped}`,
-          }
-        : {
-            summary: `Commit this session's own lines, and the held paths of ${taking.join(', ')} in ${where}?`,
-            consequence: `What this session still holds in this tree goes onto the current branch as one commit, and so does what ${taking.join(', ')} holds, which stays recorded as theirs.${skipped}`,
-          };
+      return {
+        summary: `Commit ${input.paths === undefined ? "this session's changed files" : 'the changed files under the named paths'} in ${where}?`,
+        consequence: `The files go onto the current branch as one commit, as they stand, with every writer’s lines in them.${skipped}`,
+      };
     },
     confirmLabel: 'Submit',
     presentation: { running: 'Committing', done: 'Committed', many: (count) => `Made ${count} commits` },
-    subjects: (_input, prepared: SubmitHandover) => [
-      ...prepared.taking.map((session) => ({ kind: 'write' as const, value: `taking:${session.threadId}` })),
-    ],
-    raises: (_input, prepared: SubmitHandover) => prepared.consents,
+    subjects: () => [],
     negative: (answer: { readonly submitted: { readonly status: string } }) => answer.submitted.status === 'refused',
   }),
 

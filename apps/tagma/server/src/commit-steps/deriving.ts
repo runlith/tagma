@@ -9,20 +9,16 @@ import { outsideGraph, selectedPaths, selectionOf } from './selection.js';
 
 type DerivationPlan = { readonly key: string; readonly command: DeriveCommand; readonly paths: readonly string[] };
 
-const contextOf = (need: DerivationNeed): string =>
-  `; left-out changes: ${need.excluded.map((one) => `${one.path}, held by ${one.holders.join(', ')}`).join('; ')}; recorded command hints: ${need.commands.length === 0 ? 'command text unavailable' : need.commands.join('; ')}`;
-
 export const derivationsFor = (
   need: DerivationNeed | undefined,
   declared: readonly DeriveEntry[],
   given: readonly DeriveCommand[],
   available: readonly string[],
   graphDirectory: string,
-): Effect.Effect<readonly DerivationPlan[], GateRefusal<'derive-required'>> => {
-  if (need === undefined) return Effect.succeed([]);
+): readonly DerivationPlan[] => {
+  if (need === undefined) return [];
   const entries = [...given.map((command, at) => ({ key: `caller-${at + 1}`, command })), ...declared];
   const plans: DerivationPlan[] = [];
-  const pending = new Set(need.recognized);
   const covered = new Set<string>();
   for (const entry of entries) {
     const names = new Set([...available, ...entry.command.paths.filter((path) => !/[?*\[\]{}!]/.test(path))]);
@@ -30,24 +26,10 @@ export const derivationsFor = (
       (path) => outsideGraph(path, graphDirectory) && !covered.has(path),
     );
     if (paths.length === 0 && !entry.command.paths.some((path) => /[?*\[\]{}]/.test(path))) continue;
-    for (const path of paths) {
-      pending.delete(path);
-      covered.add(path);
-    }
+    for (const path of paths) covered.add(path);
     plans.push({ ...entry, paths });
   }
-  return pending.size === 0
-    ? Effect.succeed(plans)
-    : Effect.fail(
-        new GateRefusal(
-          'derive-required',
-          `derived content ${[...pending].join(', ')} was produced over changes this commit leaves out and has no derivation${contextOf(need)}`,
-          [
-            `name derive entries with paths matching ${JSON.stringify([...pending])} and run argv that regenerates them, or declare matching derive entries in tagma.config.ts`,
-            'leave the named derived paths out of this landing (paths)',
-          ],
-        ),
-      );
+  return plans;
 };
 
 const outputOf = (stdout: string, stderr: string): string => {
