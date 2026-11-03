@@ -14,5 +14,7 @@ sources:
     ref: apps/tagma/desktop/src/server.ts
   - kind: file
     ref: apps/tagma/server/src/installation/setup/active.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/probe.ts
 ---
 The window asks its carried CLI for directory-lock ownership and restart liveness, so Electron reads no native process ABI. The process reader binds current records to kernel birth witnesses and qualifies issued records against their recorded start; a raw PID is never sufficient to keep a restart alive. A failed probe remains unavailable rather than telling the window that the directory is free.

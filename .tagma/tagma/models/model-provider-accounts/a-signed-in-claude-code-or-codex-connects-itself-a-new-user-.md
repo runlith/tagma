@@ -12,8 +12,6 @@ edges:
     to: 01a14c08-22b6-75de-88f8-5bef6fa09803
   - kind: relates
     to: 01a14c08-22b6-75de-88f8-5bf142804f17
-  - kind: relates
-    to: 01a164d4-4b95-7103-9928-d27241797cec
 ---
 ## Outcome
 
@@ -33,7 +31,7 @@ The fallback default stays unsaved until the person picks a model. It follows wh
 
 ## Why it fails now
 
-- For a fresh, untouched default login, nothing passive ever asks the CLI. `DefaultLoginBook.listed` returns nothing without a `requested` row (`providers/accounts/defaultLogins.ts`). So startup, `read_model_defaults` (`connectedModel`, `native-harness/models/preference.ts`) and the Providers list never run `claude auth status` or `codex login status`, the composer answers `unconnected`, and a restart changes nothing. That is rule [[41797cec]] as it stood before this spec.
+- For a fresh, untouched default login, nothing passive ever asks the CLI. `DefaultLoginBook.listed` returns nothing without a `requested` row (`providers/accounts/defaultLogins.ts`). So startup, `read_model_defaults` (`connectedModel`, `native-harness/models/preference.ts`) and the Providers list never run `claude auth status` or `codex login status`, the composer answers `unconnected`, and a restart changes nothing.
 - Sign in calls `begin` with no account, which makes a new Tagma directory (`<data>/claude/<uuid>`) and runs `claude auth login` under its own `CLAUDE_CONFIG_DIR` (`providers/accounts/harnessAccounts.ts`). That is a second login in a second Keychain item, never the one the person's terminal holds. The card's hint "Uses the logins of Claude Code on this machine" promises what the button does not do.
 - With no saved model, sending is refused `no-model-connected` (`preference.ts` birth selection). The addressed paths already find the default login: a Claude Code launch (`HarnessAccountBook.launch` → `DefaultLoginBook.current`) and the first native ChatGPT request, whose model-time token store discovers the default `~/.codex` login (`credentials/borrowed.ts`, `borrowedRows` with `renew`). The defect is the passive side only: the composer never gets a model to send with.
 
@@ -45,7 +43,7 @@ Today the provider order already puts Claude first. Contributor order is Anthrop
 - the environment variable naming the CLI's account place: `CLAUDE_CONFIG_DIR`, `CODEX_HOME`;
 - the login files the CLI writes when it signs in or out, relative to that place: Claude Code's `.claude.json`, Codex's `auth.json`.
 
-Exact paths are verified against the shipped CLIs at implementation. No other adapter declares it, so Cursor, OpenCode, Gemini, Grok, Devin and Muse keep the selection rule unchanged.
+Exact paths are verified against the shipped CLIs at implementation. No other adapter declares it yet, so Cursor, OpenCode, Gemini, Grok, Devin and Muse keep today's behaviour: nothing of theirs runs before the provider is selected. How they join is the ladder below.
 
 **Typed status.** `loggedIn` answers one of four outcomes instead of identity, null or a message:
 - signed in with the subscription, with its label;
@@ -63,7 +61,7 @@ The status is read under the same environment the run gets, with keys cleared (`
 
 A changed answer publishes through the path a sign-in uses (`AccountQuota.refresh` → `accounts.subscribe`). The app already rereads `read_model_defaults` on that frame (`ModelDefaults`), and the scheduled 15-minute refresh is not relied on. Rows persist in `harness-accounts.json`, so a later start shows the last answer at once and confirms it in the background.
 
-**Readiness is one fact.** From owner construction, discovery holds a readiness fact: installed declaring CLIs located and each first status answered, whatever the outcome. A missing CLI is ready at once, and a timed-out one is ready as unreadable. `read_model_defaults` and the birth selector both call `connectedModel` and both await it, so no early call answers `unconnected` or refuses `no-model-connected` while a login may still be found. A persisted signed row is ready at once; an unsigned or unreadable one waits for its fresh answer. Until readiness, the composer keeps its shape with a pending model slot ("Looking for Claude Code…") in `BirthSettings` / `ModelPicker`, and the connect card stays hidden as it already is while defaults are unknown.
+**Readiness is one fact.** From owner construction, discovery holds a readiness fact. It settles when the highest-ranked installed declaring CLI answers signed in, or when every installed declaring CLI has answered, whatever the outcome. A missing CLI is ready at once, and a timed-out one is ready as unreadable. `read_model_defaults` and the birth selector both call `connectedModel` and both await it, so no early call answers `unconnected` or refuses `no-model-connected` while a login may still be found. A persisted signed row is ready at once; an unsigned or unreadable one waits for its fresh answer. Until readiness, the composer keeps its shape with a pending model slot ("Looking for Claude Code…") in `BirthSettings` / `ModelPicker`, and the connect card stays hidden as it already is while defaults are unknown.
 
 **The fallback needs a usable account.** `connectedModel` accepts a provider only through an account whose `problem` is null, for wire providers too; `held.length > 0` today lets an unreadable borrowed row hide the card and fail the first send. Existing mode choices stay authoritative (`modes.ts`): a saved mode or owned Tagma logins win over the CLI mode. "Default model" means the provider's declared default, not the model the person configured in the CLI.
 
@@ -86,10 +84,18 @@ A changed answer publishes through the path a sign-in uses (`AccountQuota.refres
 
 **Words.** The Claude card says what happens: "Uses your Claude Code sign-in on this Mac". A connected row shows the label and, dimmed beside it, the place: "Claude Code default" for the unset address, the exact directory for an explicit one. Final copy is settled under the design skill.
 
+## Scope now, and how more CLIs join
+
+This change ships discovery for Claude Code and Codex only. It is built so that a later CLI joins by its own adapter change alone, with nothing of the core rewritten. Behaviour is decided by a ladder, not by a list of names:
+
+1. **Entry condition.** A CLI declares discovery only after its status command is proven cheap and free of side effects on the shipped version: no writes, no network sign-in, no prompt, no update check. The declaration itself is the place variable, the login files and the typed status. This is what was wrong with the CLIs Tagma used to start unasked.
+2. **One order is the ladder.** The priority is the order of providers the catalog already keeps: contributor order in `composition/adapters.ts`, with subscriptions before keys. The composer default is the first provider in that order with a usable signed account. Adding an adapter means placing it in that order; nothing else ranks providers.
+3. **The card is built from what is found, in ladder order.** A found, signed-out CLI comes first with Sign in, then the top plans. A CLI whose login Tagma's own agent cannot run on (today Grok, Gemini, Devin: no accounts or hosted runner in the core) is offered as a CLI thread, never as the composer default. Claude Code and Codex use only the first two of these places now; the rule is written so the rest fill in.
+4. **Cost stays bounded as the list grows.** At start, discovery observes installed declaring CLIs in ladder order with a small fixed concurrency. Readiness settles as soon as the highest-ranked installed CLI answers signed in, because nothing below it can change the default; otherwise it settles when all have answered. Uninstalled CLIs cost a stat. Each watch is one directory with no process. With fifteen adapters, start cost is processes for the installed ones only, a few at a time, and the composer waits only for the first that answers signed in.
+
 ## Limits
 
 - A login revoked at the vendor with no local change is found when the CLI refuses the first turn, through the existing "Sign in again" path.
-- Other CLIs gain discovery only by declaring it, in their own change.
 
 ## Owners touched
 
@@ -106,7 +112,7 @@ A changed answer publishes through the path a sign-in uses (`AccountQuota.refres
   - `ModelDefaults`, `birth/BirthSettings`, `native/ModelPicker`: the pending slot;
   - `providers/SignInFlow`, `AccountsRepo`, `Group`, `birth/ConnectCard`: the cases and words;
   - the focus signal.
-- Rule [[41797cec]] carries the Claude Code and Codex exemption with these triggers. The change corrects every explanation and feature that describes the passive rule or the address: [[3b360b13]], [[1cfa3cd9]] (including its stale "its own rows win" claim), [[46e7ebcd]], [[38ce4f43]], [[c8041df5]], [[6fa09803]], [[42804f17]] and [[948797f4]].
+- The change corrects every explanation and feature that describes the passive restriction or the address: [[3b360b13]], [[1cfa3cd9]] (including its stale "its own rows win" claim), [[46e7ebcd]], [[38ce4f43]], [[c8041df5]], [[6fa09803]], [[42804f17]] and [[948797f4]].
 
 ## Acceptance
 
