@@ -52,7 +52,7 @@ os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then arch=arm64; fi
 if [ "$arch" = x86_64 ]; then arch=x64; fi
-if [ "$os" != ${quoted(platform.os)} ] || [ "$arch" != ${quoted(platform.arch)} ]; then
+if [ "$os" != ${quoted(platform.os)} ] || { [ "$arch" != ${quoted(platform.arch)} ] && ! { [ "$os" = darwin ] && [ "$arch" = arm64 ] && [ ${quoted(platform.arch)} = x64 ]; }; }; then
   echo "tagma: this installation was built for ${platform.os}/${platform.arch} and this machine is $os/$arch; install the one built for this machine" >&2
   exit 1
 fi
@@ -184,12 +184,27 @@ export const writeLauncherBeside = Effect.fnUntraced(function* (
   yield* files
     .makeDirectory(directory, { recursive: true })
     .pipe(Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) => refuse(`${directory}: ${error.reason._tag}`)));
-  yield* files.writeFileString(path, launcherText(root, platform, env), { mode: 0o700 }).pipe(Effect.catchTag('PlatformError', failed));
-  yield* files.chmod(path, 0o700).pipe(Effect.catchTag('PlatformError', failed));
-  yield* files.makeDirectory(world, { recursive: true }).pipe(
-    Effect.andThen(files.remove(alias, { force: true })),
-    Effect.andThen(files.symlink(relative(world, path), alias)),
-    Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) => refuse(`${alias}: ${error.reason._tag}`)),
+  yield* files
+    .makeDirectory(world, { recursive: true })
+    .pipe(Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) => refuse(`${alias}: ${error.reason._tag}`)));
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const stagedDirectory = yield* files
+        .makeTempDirectoryScoped({ directory, prefix: '.launcher-' })
+        .pipe(Effect.catchTag('PlatformError', failed));
+      const stagedWorld = yield* files
+        .makeTempDirectoryScoped({ directory: world, prefix: '.launcher-' })
+        .pipe(Effect.catchTag('PlatformError', failed));
+      const stagedLauncher = `${stagedDirectory}/${basename(path)}`;
+      const stagedAlias = `${stagedWorld}/${WORLD_COMMAND}`;
+      yield* files
+        .writeFileString(stagedLauncher, launcherText(root, platform, env), { mode: 0o700 })
+        .pipe(Effect.catchTag('PlatformError', failed));
+      yield* files.chmod(stagedLauncher, 0o700).pipe(Effect.catchTag('PlatformError', failed));
+      yield* files.symlink(relative(world, path), stagedAlias).pipe(Effect.catchTag('PlatformError', failed));
+      yield* files.rename(stagedLauncher, path).pipe(Effect.catchTag('PlatformError', failed));
+      yield* files.rename(stagedAlias, alias).pipe(Effect.catchTag('PlatformError', failed));
+    }),
   );
   return path;
 });

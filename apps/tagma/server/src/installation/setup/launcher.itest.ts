@@ -2,7 +2,7 @@ import { join, relative, resolve } from 'node:path';
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Effect, FileSystem } from 'effect';
+import { Effect, FileSystem, Layer, PlatformError } from 'effect';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { ensuredPath, runningWorld, writeLauncher } from './launcher.js';
 import { besideEnv } from '../cut/beside.js';
@@ -105,6 +105,64 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('the launcher', (it) =
         env: { PATH: ensuredPath('/usr/bin:/bin', world) ?? '' },
       });
       expect(yield* files.realPath(said.stdout.toString().trim())).toBe(yield* files.realPath(path));
+    }),
+  );
+
+  it.effect('a failed replacement keeps the standing launcher and world command usable', () =>
+    Effect.gen(function* () {
+      const home = yield* homeOf;
+      const files = yield* FileSystem.FileSystem;
+      const root = join(home, 'install');
+      const path = join(home, 'bin', 'tagma');
+      const alias = join(home, 'world', 'tagma');
+      const env = shell(home, join(home, 'bin'));
+      yield* writeLauncher(root, path, platform, env);
+      const original = yield* files.readFileString(path);
+      const failure = PlatformError.systemError({ _tag: 'PermissionDenied', module: 'FileSystem', method: 'write' });
+      const brokenLink: FileSystem.FileSystem = { ...files, symlink: () => Effect.fail(failure) };
+      expect(
+        (yield* Effect.result(
+          writeLauncher(root, path, platform, env).pipe(Effect.provide(Layer.succeed(FileSystem.FileSystem, brokenLink))),
+        ))._tag,
+      ).toBe('Failure');
+      expect(yield* files.readFileString(path)).toBe(original);
+      expect(yield* files.realPath(alias)).toBe(yield* files.realPath(path));
+      const partial: FileSystem.FileSystem = {
+        ...files,
+        writeFileString: (target, _text, options) => files.writeFileString(target, '', options).pipe(Effect.andThen(Effect.fail(failure))),
+      };
+      expect(
+        (yield* Effect.result(writeLauncher(root, path, platform, env).pipe(Effect.provide(Layer.succeed(FileSystem.FileSystem, partial)))))
+          ._tag,
+      ).toBe('Failure');
+      expect(yield* files.readFileString(path)).toBe(original);
+      expect(yield* files.realPath(alias)).toBe(yield* files.realPath(path));
+    }),
+  );
+
+  it.effect('an x64 launcher runs under Rosetta on Apple silicon', () =>
+    Effect.gen(function* () {
+      const home = yield* homeOf;
+      const files = yield* FileSystem.FileSystem;
+      const root = join(home, 'install');
+      const path = join(home, 'bin', 'tagma');
+      const tools = join(home, 'tools');
+      yield* files.makeDirectory(join(root, 'current'), { recursive: true });
+      yield* files.makeDirectory(tools, { recursive: true });
+      yield* files.writeFileString(join(root, 'current', 'bun'), '#!/bin/sh\necho runtime-reached\n', { mode: 0o700 });
+      yield* files.writeFileString(join(tools, 'uname'), '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else echo x86_64; fi\n', {
+        mode: 0o700,
+      });
+      yield* files.writeFileString(join(tools, 'sysctl'), '#!/bin/sh\necho 1\n', { mode: 0o700 });
+      yield* writeLauncher(root, path, { os: 'darwin', arch: 'x64' }, shell(home, join(home, 'bin')));
+      const answer = yield* spawnedEffect([path], { env: { PATH: `${tools}:/usr/bin:/bin` } });
+      expect(answer.exitCode).toBe(0);
+      expect(answer.stdout.toString().trim()).toBe('runtime-reached');
+      yield* files.writeFileString(join(tools, 'sysctl'), '#!/bin/sh\necho 0\n', { mode: 0o700 });
+      yield* writeLauncher(root, path, { os: 'darwin', arch: 'arm64' }, shell(home, join(home, 'bin')));
+      const incompatible = yield* spawnedEffect([path], { env: { PATH: `${tools}:/usr/bin:/bin` } });
+      expect(incompatible.exitCode).toBe(1);
+      expect(incompatible.stdout.toString()).toBe('');
     }),
   );
 
