@@ -7,7 +7,7 @@ import { Doctrine } from '../../platform/contract/service/sections.js';
 import { WriterRegister } from '../../platform/contract/service/writers.js';
 import { SessionIdentity, sessionName } from '../../platform/contract/wire/session.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { GLOBAL_PROJECT, type ProjectGroup, type ProjectRow } from '../../projects/contract/wire/project.js';
+import { GLOBAL_PROJECT, type ProjectGroup, type ProjectRow, reaching } from '../../projects/contract/wire/project.js';
 import { mapHeading, mapLines, mapNodes, mapRegions, regionAbove, regionsHeading, type MapCut, type MapNode, type MapRow } from './map.js';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { block, edge, source } from '../store/tables.js';
@@ -102,12 +102,12 @@ const orientationReads = Effect.fnUntraced(function* (law: LawReads) {
 
   const section = (title: string, body: string) => (body ? `${title}\n${body.trim()}` : title);
 
-  const groupRoot = Effect.fn('Orientation.groupRoot')(function* (group: ProjectGroup) {
+  const groupRoot = Effect.fn('Orientation.groupRoot')(function* (group: ProjectGroup, named: readonly ProjectRow[]) {
     const root = yield* Effect.provide(
       Effect.flatMap(BlockRows, (reader) => reader.rootBlockOf(group.graph.id)),
       yield* graphOf(group.graph.id),
     );
-    const members = group.members.map((member) => member.name).join(', ');
+    const members = named.map((member) => member.name).join(', ');
     return section(
       `## ${group.graph.name} (id ${group.graph.id}) — group root ${blockName(root.uuid)} of ${members}: what spans them is kept here, linked to the member blocks that own the code`,
       root.body,
@@ -145,7 +145,7 @@ const orientationReads = Effect.fnUntraced(function* (law: LawReads) {
     const found = yield* groups.of(proj.id);
     const group = found !== undefined && found.graph.id !== proj.id ? found : undefined;
     const budget = yield* settings.value(mapBudget, proj.id);
-    const others = group === undefined ? [] : group.members.filter((member) => member.id !== proj.id);
+    const others = group === undefined ? [] : reaching(group, proj.id, 'map');
     const share = Math.floor(budget / (others.length + 1));
     const drawn: string[] = [];
     let left = budget;
@@ -154,7 +154,14 @@ const orientationReads = Effect.fnUntraced(function* (law: LawReads) {
       drawn.push(text);
       left -= spent;
     }
-    if (group !== undefined) sections.push(yield* groupRoot(group));
+    if (group !== undefined) {
+      sections.push(
+        yield* groupRoot(
+          group,
+          group.members.filter((member) => member.id === proj.id || others.includes(member)),
+        ),
+      );
+    }
 
     const shown = scope ?? root;
     const here = group === undefined ? '' : ' — you stand here';

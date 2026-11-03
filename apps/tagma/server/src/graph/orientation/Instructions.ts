@@ -9,6 +9,7 @@ import { readsOf } from '../acts/reads.js';
 import { deriveLaw } from './derived.js';
 import { measuredRoot } from '../contract/service/serving.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
+import { reaching } from '../../projects/contract/wire/project.js';
 import { type LawEntry, type LawReads, ruleLine } from './law.js';
 import { reachLabel } from '../contract/wire/tags/law.js';
 import { tagRevision } from './tagPrompts.js';
@@ -125,7 +126,9 @@ export const instructionsReads = Effect.fnUntraced(function* (law: LawReads) {
       if (group !== undefined && group.graph.id !== input.projectId) {
         const scope = `prompt · ${group.graph.name}`;
         for (const entry of yield* promptOf(group.graph.id)) law.push(scopedInstruction(entry, scope));
+        const giving = new Set(reaching(group, input.projectId, 'law').map((member) => member.id));
         for (const member of group.members) {
+          if (member.id !== input.projectId && !giving.has(member.id)) continue;
           const entries = member.id === input.projectId ? yield* prompted(member.id) : yield* promptOf(member.id);
           for (const entry of entries) law.push(localInstruction(entry, member.name));
         }

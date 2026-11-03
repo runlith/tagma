@@ -3,7 +3,7 @@ import { SOURCE_KINDS } from './sources.js';
 import { edgeNameSchema } from './edges.js';
 import { fieldsField, tagsField } from './fields.js';
 import { SERVES_FROM } from './storage.js';
-import { PROJECT_KINDS, STORAGE_MODES } from '../../../projects/contract/wire/project.js';
+import { GROUP_SHARES, PROJECT_KINDS, STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 import { subtreeShapeSchema } from './standing.js';
 import { blockListRowSchema, viewResultsSchema } from './reads.js';
 import { graphReportFields, type GraphReport } from './answers.js';
@@ -28,9 +28,23 @@ export const projectSchema = Schema.Struct({
 });
 export type Project = typeof projectSchema.Type;
 
+export const groupShareSchema = Schema.Literals(GROUP_SHARES).annotate({
+  description: 'map: its root and top regions in a thread’s start; law: its prompt rules; skills: its project skills.',
+});
+
+const memberSharingSchema = Schema.Struct({
+  project: Schema.Number,
+  gives: Schema.Array(groupShareSchema),
+  takes: Schema.Array(groupShareSchema),
+});
+
 export const groupSchema = Schema.Struct({
   graph: projectSchema.annotate({ description: 'The group’s own registration: its name, id and the graph it keeps.' }),
   members: Schema.Array(projectSchema).annotate({ description: 'The projects of the group in its order; the first is its first member.' }),
+  sharing: Schema.Array(memberSharingSchema).annotate({
+    description:
+      'What each member gives the group and takes from it, in the group’s order: one member’s map, law or skills reach another’s threads exactly when the first gives it and the second takes it.',
+  }),
 });
 export type Group = typeof groupSchema.Type;
 

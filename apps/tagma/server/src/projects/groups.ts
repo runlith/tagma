@@ -8,7 +8,18 @@ import { MachineUnits, type Unit, type WriteUnit } from '../platform/contract/se
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { GroupChange } from './contract/service/changes.js';
 import { ProjectGroups } from './contract/service/registry.js';
-import type { DepartedGroup, NameRefusal, ProjectGroup, ProjectRow } from './contract/wire/project.js';
+import {
+  type DepartedGroup,
+  FULL_SHARING,
+  GROUP_SHARES,
+  type GroupShare,
+  type MemberSharing,
+  type NameRefusal,
+  type ProjectGroup,
+  type ProjectRow,
+  type SharedGroup,
+  sharingOf,
+} from './contract/wire/project.js';
 import { physical } from './identity.js';
 import { registration } from './resolution.js';
 import { groupMember, project } from './store/table.js';
@@ -26,24 +37,37 @@ const memberRow = {
   kind: member.kind,
 };
 
+const kept = (left: readonly GroupShare[]) => GROUP_SHARES.filter((share) => !left.includes(share));
+
+const dropped = (taken: readonly GroupShare[]) => GROUP_SHARES.filter((share) => !taken.includes(share));
+
 const groupsIn = Effect.fn('ProjectGroups.read')(function* (store: MachineStore['Service'], unit: Unit<'machine'>) {
   const rows = yield* unit.run(
     store.db
-      .select({ graph: registration, member: memberRow })
+      .select({ graph: registration, member: memberRow, withholds: groupMember.withholds, declines: groupMember.declines })
       .from(project)
       .leftJoin(groupMember, eq(groupMember.groupId, project.id))
       .leftJoin(member, eq(member.id, groupMember.projectId))
       .where(and(eq(project.kind, 'group'), isNull(project.removedAt)))
       .orderBy(asc(project.name), asc(project.id), asc(groupMember.ord)),
   );
-  const groups: { readonly graph: ProjectRow; readonly members: ProjectRow[] }[] = [];
+  type Gathered = { readonly graph: ProjectRow; readonly members: ProjectRow[]; readonly sharing: Map<number, MemberSharing> };
+  const groups: Gathered[] = [];
   for (const row of rows) {
     const last = groups[groups.length - 1];
-    const group = last?.graph.id === row.graph.id ? last : { graph: row.graph, members: [] };
+    const group: Gathered = last?.graph.id === row.graph.id ? last : { graph: row.graph, members: [], sharing: new Map() };
     if (group !== last) groups.push(group);
-    if (row.member !== null) group.members.push(row.member);
+    if (row.member === null) continue;
+    group.members.push(row.member);
+    group.sharing.set(row.member.id, { gives: kept(row.withholds ?? []), takes: kept(row.declines ?? []) });
   }
   return groups as readonly ProjectGroup[];
+});
+
+const withMembers = (group: ProjectGroup, members: readonly ProjectRow[]): ProjectGroup => ({
+  graph: group.graph,
+  members,
+  sharing: new Map(members.map((one) => [one.id, sharingOf(group, one.id)])),
 });
 
 type Standing = {
@@ -158,7 +182,7 @@ export const makeGroups = Effect.fnUntraced(function* (input: {
     if (rest.length >= 2) {
       yield* unit.run(db.delete(groupMember).where(eq(groupMember.projectId, row.id)));
       yield* announced(unit, { groupId: group.graph.id, before: ids(group.members), after: ids(rest) });
-      return { from: group, rest: { graph: group.graph, members: rest } } satisfies DepartedGroup;
+      return { from: group, rest: withMembers(group, rest) } satisfies DepartedGroup;
     }
     yield* unit.run(db.delete(groupMember).where(eq(groupMember.groupId, group.graph.id)));
     yield* unit.run(
@@ -210,7 +234,10 @@ export const makeGroups = Effect.fnUntraced(function* (input: {
       if (dissolved !== undefined && !inMemory) yield* rootMade(graph.rootPath);
       yield* unit.run(db.insert(groupMember).values(members.map((member, ord) => ({ projectId: member.id, groupId: graph.id, ord }))));
       yield* announced(unit, { groupId: graph.id, before: [], after: ids(members) });
-      return { group: { graph, members }, returned: dissolved !== undefined };
+      return {
+        group: { graph, members, sharing: new Map(members.map((one) => [one.id, FULL_SHARING])) },
+        returned: dissolved !== undefined,
+      };
     }),
     join: Effect.fn('ProjectGroups.join')(function* (unit, group, asked) {
       const row = yield* enrolled(store, unit, asked);
@@ -231,7 +258,21 @@ export const makeGroups = Effect.fnUntraced(function* (input: {
       yield* unit.run(db.insert(groupMember).values({ projectId: row.id, groupId: current.graph.id, ord: (top?.ord ?? -1) + 1 }));
       const members = [...current.members, row];
       yield* announced(unit, { groupId: current.graph.id, before: ids(current.members), after: ids(members) });
-      return { graph: current.graph, members };
+      return withMembers(current, members);
+    }),
+    share: Effect.fn('ProjectGroups.share')(function* (unit, row, asked) {
+      const group = holding(yield* groupsIn(store, unit), row.id);
+      if (group === undefined) {
+        return yield* new GateRefusal('ungrouped', `"${row.name}" belongs to no group`, ['list_groups names the groups and their members']);
+      }
+      const from = sharingOf(group, row.id);
+      const withholds = dropped(asked.gives ?? from.gives);
+      const declines = dropped(asked.takes ?? from.takes);
+      yield* unit.run(db.update(groupMember).set({ withholds, declines }).where(eq(groupMember.projectId, row.id)));
+      yield* announced(unit, { groupId: group.graph.id, before: ids(group.members), after: ids(group.members) });
+      const sharing = new Map(group.sharing);
+      sharing.set(row.id, { gives: kept(withholds), takes: kept(declines) });
+      return { from, group: { graph: group.graph, members: group.members, sharing } } satisfies SharedGroup;
     }),
     leave: Effect.fn('ProjectGroups.leave')(function* (unit, row) {
       const left = yield* depart(unit, row);

@@ -7,7 +7,7 @@ import { suiteGit } from '../suiteGit.js';
 
 type Answer = { readonly status: number; readonly body: unknown };
 type Row = { readonly id: number; readonly name: string; readonly kind: string };
-type Group = { readonly graph: Row; readonly members: readonly Row[] };
+type Group = { readonly graph: Row; readonly members: readonly Row[]; readonly sharing: readonly unknown[] };
 
 const groupOf = (answer: Answer) => (answer.body as { group: Group }).group;
 const ids = (group: Group) => group.members.map((member) => member.id);
@@ -93,7 +93,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
   );
 
   it.effect(
-    'a member starts with the group root, its own map, every other member’s regions, and the law of the group and of each member labelled with its project; a project in no group starts as before',
+    'a member starts with the group root, its own map, every other member’s regions, and the law of the group and of each member labelled with its project, as far as each member gives and takes them; a project in no group starts as before',
     () =>
       Effect.gen(function* () {
         const world = yield* DoorFixture;
@@ -148,6 +148,32 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect(order).toEqual([...order].sort((a, b) => a - b));
         for (const [ruleName, project] of labelled) expect(lines[at(ruleName)]).toContain(project);
         expect(yield* start(gamma)).toBe(before);
+
+        const share = (project: number, sharing: { readonly gives?: string[]; readonly takes?: string[] }) =>
+          Effect.map(world.op('set_group_sharing', { project: String(project), ...sharing }), groupOf);
+        expect((yield* share(beta, { gives: [] })).sharing).toContainEqual({ project: beta, gives: [], takes: ['map', 'law', 'skills'] });
+        const alone = (yield* start(alpha)).split('\n');
+        const shown = (text: readonly string[], fragment: string) => text.some((line) => line.includes(fragment));
+        expect(alone.find((line) => line.includes(groupRoot))).toContain(`of ${group.members[1]!.name}: `);
+        expect(['Beta core region', betaRule].map((fragment) => shown(alone, fragment))).toEqual([false, false]);
+        expect([groupRule, alphaRule].map((fragment) => shown(alone, fragment))).toEqual([true, true]);
+        const giving = (yield* start(beta)).split('\n');
+        expect(['Alpha core region', groupRule, betaRule, alphaRule].map((fragment) => shown(giving, fragment))).toEqual([
+          true,
+          true,
+          true,
+          true,
+        ]);
+
+        yield* share(beta, { takes: ['map'] });
+        const mapped = (yield* start(beta)).split('\n');
+        expect(['Alpha core region', groupRule, betaRule, alphaRule].map((fragment) => shown(mapped, fragment))).toEqual([
+          true,
+          true,
+          true,
+          false,
+        ]);
+        expect(codeOf(yield* world.op('set_group_sharing', { project: String(gamma), gives: [] }))).toBe('ungrouped');
       }),
   );
 

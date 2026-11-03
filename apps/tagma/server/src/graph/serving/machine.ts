@@ -104,6 +104,7 @@ export const machineGraphOf = <R>(
         rename: (group, name) => within(groups.rename(group, name)),
         join: (group, project) => within(groups.join(group, project)),
         leave: (project) => within(groups.leave(project)),
+        share: (project, sharing) => within(groups.share(project, sharing)),
       }),
     ),
   );

@@ -21,6 +21,7 @@ import type {
   NameRefusal,
   ProjectGroup,
   ProjectRow,
+  SharingChange,
   StorageMode,
 } from '../../../projects/contract/wire/project.js';
 import type { ProjectSetting, ProjectSettings } from '../wire/storage.js';
@@ -205,6 +206,7 @@ export class GroupLifecycle extends Context.Service<
     ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<'global-permanent' | NameRefusal | FloorRefusal>>;
     join(group: ProjectGroup, project: ProjectRow): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<JoinRefusal | FloorRefusal>>;
     leave(project: ProjectRow): Effect.Effect<GroupLeft, StoreFailure | GateRefusal<'ungrouped' | FloorRefusal>>;
+    share(project: ProjectRow, sharing: SharingChange): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<'ungrouped' | FloorRefusal>>;
   }
 >()('tagma/graph/GroupLifecycle') {}
 
