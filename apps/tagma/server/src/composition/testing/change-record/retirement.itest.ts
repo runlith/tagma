@@ -15,12 +15,36 @@ import { releasedAt } from '../../../change-record/record/released.js';
 import { RootId } from '../../../workspace/contract/wire/ids.js';
 import { TEST_CHECKOUT, testPlace } from '../../../workspace/testing/doubles.js';
 import { call, FILE, MINE, THEIRS } from '../checkoutFixture.js';
-import { lines, retirementFixture, withRetirement } from '../retirementFixture.js';
+import { lines, retirementFixture, withRetirement, type RetirementCheckout } from '../retirementFixture.js';
 import { contentDigest } from '@runlith/files/content';
 import { insertRow } from '../../../change-record/record/inserts.js';
 import { changeLogWrites } from '../../../change-record/store/tables.js';
 
 const CHECKOUT = RootId.make(TEST_CHECKOUT);
+const KIT = 'harness/kit.json';
+const ENTRY = '  "css-target": {\n    "target": "css"\n  },\n';
+
+const toolsOf = (s: RetirementCheckout, threadId: string) =>
+  Effect.map(recordOver(s.w.store, s.w.units), (record) =>
+    createTools({
+      cwd: s.w.root,
+      world: makeMachineWorld(() => null),
+      commandTimes: unruledTimes,
+      searchMs: LONGEST_ACT_MS,
+      allowOutsideCwd: true,
+      changes: record.changes({ work: { projectId: s.w.projectId, threadId } }),
+    }),
+  );
+
+const stagedCommit = Effect.fnUntraced(function* (s: RetirementCheckout, path: string, staged: (working: string) => string) {
+  const file = join(s.w.root, path);
+  const working = readFileSync(file, 'utf8');
+  writeFileSync(file, staged(working));
+  yield* s.w.run(['add', '--', path]);
+  writeFileSync(file, working);
+  yield* s.w.run(['-c', 'user.name=h', '-c', 'user.email=h@h', 'commit', '-q', '-m', 'a peer commits what it staged']);
+  yield* s.pass();
+});
 
 layer(retirementFixture, { excludeTestServices: true })('retirement', (it) => {
   it.effect('of five commits a pass reads, the one that carries the lines commits them', () =>
@@ -111,14 +135,7 @@ layer(retirementFixture, { excludeTestServices: true })('retirement', (it) => {
       Effect.gen(function* () {
         const files = yield* FileSystem.FileSystem;
         const scratch = yield* files.makeTempDirectoryScoped({ prefix: 'swap-' });
-        const mine = createTools({
-          cwd: s.w.root,
-          world: makeMachineWorld(() => null),
-          commandTimes: unruledTimes,
-          searchMs: LONGEST_ACT_MS,
-          allowOutsideCwd: true,
-          changes: (yield* recordOver(s.w.store, s.w.units)).changes({ work: { projectId: s.w.projectId, threadId: MINE } }),
-        });
+        const mine = yield* toolsOf(s, MINE);
         yield* call(mine.edit, { path: s.w.file, oldString: 'const one = 1;', newString: 'const one = 10;' });
         yield* s.aside('unrelated.txt');
         yield* s.pass();
@@ -140,6 +157,46 @@ layer(retirementFixture, { excludeTestServices: true })('retirement', (it) => {
             ? { hands: verdict.hands.map((hand) => [holderKey(hand.holder), hand.added, hand.removed]), nobody: verdict.nobody }
             : verdict,
         ).toEqual({ hands: [[MINE, 2, 2]], nobody: [] });
+      }),
+    ),
+  );
+
+  it.effect('a typed deletion of lines a peer’s commit carried into HEAD stays its writer’s through the next peer commit and lands', () =>
+    withRetirement((s) =>
+      Effect.gen(function* () {
+        yield* s.w.based({ [KIT]: '{\n  "button": {\n    "target": "button"\n  },\n  "card": {\n    "target": "card"\n  }\n}\n' });
+        const file = join(s.w.root, KIT);
+        const [mine, theirs, third] = yield* Effect.all([toolsOf(s, MINE), toolsOf(s, THEIRS), toolsOf(s, 'third')]);
+        yield* call(third.edit, { path: file, oldString: '"target": "card"', newString: '"target": "the-card"' });
+        yield* call(mine.edit, { path: file, oldString: '  "card": {', newString: `${ENTRY}  "card": {` });
+        yield* call(theirs.edit, { path: file, oldString: '"target": "button"', newString: '"target": "the-button"' });
+        yield* s.pass();
+        const withoutThird = (working: string) => working.replace('"target": "the-card"', '"target": "card"');
+        yield* stagedCommit(s, KIT, withoutThird);
+        const handsOf = Effect.map(s.rig.holdings.judged(CHECKOUT, [KIT]), (judged) => {
+          const verdict = judged.get(KIT)?.holding.verdict;
+          return verdict?.verdict === 'proven'
+            ? { hands: verdict.hands.map((hand) => [holderKey(hand.holder), hand.added, hand.removed]), nobody: verdict.nobody }
+            : verdict;
+        });
+        const kept = {
+          hands: [
+            [MINE, 0, 3],
+            ['third', 1, 1],
+          ],
+          nobody: [],
+        };
+
+        yield* call(mine.edit, { path: file, oldString: ENTRY, newString: '' });
+        expect(yield* handsOf).toEqual(kept);
+
+        yield* call(theirs.edit, { path: file, oldString: '"target": "the-button"', newString: '"target": "a-button"' });
+        yield* stagedCommit(s, KIT, (working) => withoutThird(working).replace('  "card": {', `${ENTRY}  "card": {`));
+        expect(yield* handsOf).toEqual(kept);
+
+        expect(yield* s.w.submit(MINE)).toMatchObject({ status: 'landed', committed: [KIT] });
+        yield* s.pass();
+        expect((yield* s.rowsOf(MINE)).map((row) => row.state)).toEqual(['committed', 'committed']);
       }),
     ),
   );

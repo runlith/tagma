@@ -1,6 +1,6 @@
 import { totalmem } from 'node:os';
-import type { FoldState, TextContent } from './folding.js';
-import type { BaseAlignment } from './projection.js';
+import type { FoldState } from './folding.js';
+import type { BaseAlignment, TextIdentity } from './projection.js';
 
 type Retained = { readonly bytes: number };
 export const foldMemoryBudget = (): number => Math.min(256 * 1024 * 1024, Math.floor(totalmem() / 64));
@@ -42,7 +42,7 @@ export class FoldMemory<State extends Retained = FoldState> {
     if (overhead > this.limit) this.tinyNoted = true;
     return notice;
   }
-  alignment(before: TextContent, after: TextContent, normalized: boolean): BaseAlignment | undefined {
+  alignment(before: TextIdentity, after: TextIdentity, normalized: boolean): BaseAlignment | undefined {
     const entry = this.touch(this.pair(before.blob, after.blob, normalized));
     return entry?.kind === 'alignment' && entry.value.beforeDigest === before.digest && entry.value.afterDigest === after.digest
       ? entry.value

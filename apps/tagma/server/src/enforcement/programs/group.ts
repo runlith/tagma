@@ -10,7 +10,7 @@ import {
 } from '@tagma/inspection/program';
 import { newViolations } from '@tagma/inspection/verdict';
 import { canonicalJson } from '@runlith/utils/object';
-import { Clock, Effect, Option, Result, Schema } from 'effect';
+import { Clock, Data, Effect, Option, Result, Schema } from 'effect';
 import { ProgramRoad } from '../../executions/contract/service/programs.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import type { Checker } from './checker.js';
@@ -64,6 +64,19 @@ export type ProgramRun<A> = {
 };
 
 const rejected = (reason: string) => new InspectionFailed({ cause: 'program', reason });
+
+class Unprepared extends Data.TaggedError('Unprepared')<{
+  readonly reason: string;
+  readonly bindings: readonly [ProgramBinding, ...ProgramBinding[]];
+}> {}
+
+const preparing = (subject: GroupSubject): GroupSubject => ({
+  ...subject,
+  mode: 'measure',
+  base: null,
+  sides: [{ side: 'tree', paths: null, files: null }],
+  paths: null,
+});
 
 export const reachOf = (binding: Pick<ProgramBinding, 'places' | 'check'>): BindingReach => ({
   places: [...new Set(binding.places)].sort(),
@@ -191,20 +204,20 @@ const execute = Effect.fn('enforcement.program.group')(function* (
   if (unanswered.length > 0) {
     const named = (key: string): string =>
       [...new Set(routes.filter((route) => route.key.key === key).map((route) => route.binding.check.key))].join(', ');
-    const unprepared = unanswered.filter((one) => one.why === 'unprepared');
-    return yield* new InspectionFailed({
-      cause: 'program',
-      reason: `${unanswered.length} of ${keys.size} program keys of ${checker.id} gave no reading: ${unanswered
-        .map((one) => `${named(one.key)} ${one.why === 'unprepared' ? 'is unprepared' : 'threw'}: ${one.reason}`)
-        .join('; ')}`,
-      ways:
-        unprepared.length === 0
-          ? undefined
-          : [
-              `prepare every unprepared inspection (${[...new Set(unprepared.flatMap((one) => named(one.key).split(', ')))].join(', ')}) over this change with check_rules, then judge again: the refused act needs them all, and each one prepared alone leaves the others refusing`,
-            ],
-      unprepared: unanswered.every((one) => one.why === 'unprepared'),
-    });
+    const reason = `${unanswered.length} of ${keys.size} program keys of ${checker.id} gave no reading: ${unanswered
+      .map((one) => `${named(one.key)} ${one.why === 'unprepared' ? 'is unprepared' : 'threw'}: ${one.reason}`)
+      .join('; ')}`;
+    if (unanswered.every((one) => one.why === 'unprepared')) {
+      const needing = new Set(unanswered.map((one) => one.key));
+      return yield* new Unprepared({
+        reason,
+        bindings: [...new Set(routes.filter((route) => needing.has(route.key.key)).map((route) => route.binding))] as [
+          ProgramBinding,
+          ...ProgramBinding[],
+        ],
+      });
+    }
+    return yield* new InspectionFailed({ cause: 'program', reason });
   }
   const readings = new Map(answer.success.readings.map((one) => [`${one.key}/${one.side}`, one]));
   const sides = new Map(subject.sides.map((one) => [one.side, one]));
@@ -283,6 +296,21 @@ const execute = Effect.fn('enforcement.program.group')(function* (
   });
 });
 
+const stillUnprepared = (needing: Unprepared): InspectionFailed =>
+  new InspectionFailed({ cause: 'program', reason: needing.reason, unprepared: true });
+
+const read = (subject: GroupSubject, group: readonly [ProgramBinding, ...ProgramBinding[]], checker: Checker) =>
+  execute(subject, group, checker).pipe(
+    Effect.catchTag('Unprepared', (needing) =>
+      subject.mode === 'measure'
+        ? Effect.fail(stillUnprepared(needing))
+        : execute(preparing(subject), needing.bindings, checker).pipe(
+            Effect.andThen(execute(subject, group, checker)),
+            Effect.catchTag('Unprepared', (still) => Effect.fail(stillUnprepared(still))),
+          ),
+    ),
+  );
+
 export const judgePrograms = Effect.fn('enforcement.programs.judge')(function* (
   subject: GroupSubject,
   bindings: readonly ProgramBinding[],
@@ -297,7 +325,7 @@ export const judgePrograms = Effect.fn('enforcement.programs.judge')(function* (
   for (const [identity, group] of groups) {
     const started = yield* Clock.monotonicTimeNanos;
     const checker = group[0].checker;
-    const answer = yield* execute(subject, group, checker).pipe(
+    const answer = yield* read(subject, group, checker).pipe(
       Effect.mapError((failure) => {
         if ((failure.cause !== 'program' && failure.cause !== 'host') || failure.unprepared === true) return failure;
         return new InspectionFailed({

@@ -7,12 +7,8 @@ import { body, pair } from '../../platform/contract/service/body.js';
 import { actChecks, RuleChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import { PreparedChanges } from '../../change-record/contract/service/prepared.js';
 import { type HeldTaskLabel, HeldTaskLabels } from '../../change-record/contract/service/taskLabels.js';
-import { BlockNames } from '../../graph/contract/service/acts.js';
-import { Blocks } from '../../graph/contract/service/blocks.js';
-import { Tags } from '../../graph/contract/service/vocabulary.js';
-import { WORK } from '../../graph/contract/wire/tags/work.js';
+import { blockLabel } from '../../graph/blockLabels.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { blockName } from '../../graph/contract/wire/references.js';
 import { landingPlace } from '../../change-record/prepared/place.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { LANDING_OPERATIONS, type SubmitScope } from '../contract/wire/operations.js';
@@ -38,9 +34,7 @@ type SubmitOwners =
   | CurrentProject
   | LandingGit
   | HeldTaskLabels
-  | BlockNames
-  | Blocks
-  | Tags
+  | Effect.Services<ReturnType<typeof blockLabel>>
   | PreparedChanges
   | MachineStore
   | MachineUnits
@@ -51,13 +45,12 @@ type SubmitOwners =
 const declared = Effect.fn('submit_work.tasks')(function* (names: readonly string[]) {
   const found = new Map<string, HeldTaskLabel>();
   for (const name of names) {
-    const row = yield* (yield* Blocks).blockById(yield* (yield* BlockNames).idOfName(name));
-    if (!(yield* (yield* Tags).of(row.projectId)).supports(row, WORK))
+    const label = yield* blockLabel(name);
+    if (!label.work)
       return yield* new GateRefusal('not-work', `${name} is no work a commit can carry: tasks names blocks whose tags make them work`, [
         'remove it from tasks, or name the task whose work this commit carries',
       ]);
-    const task = { name: blockName(row.uuid), title: row.title, stealth: row.stealth };
-    found.set(task.name, task);
+    found.set(label.name, { name: label.name, title: label.title, stealth: label.stealth });
   }
   return [...found.values()];
 });

@@ -36,6 +36,7 @@ export type Taking = {
   readonly baseTip: string;
   readonly tree: string;
   readonly paths: readonly string[];
+  readonly because: string;
   readonly coAuthored: boolean;
 };
 
@@ -49,7 +50,7 @@ export const takeBase = (git: MergeGit['Service'], checkouts: CheckoutRows['Serv
       const named = [...new Set(standing.held.map(({ holder }) => holderName(holder)))];
       return yield* refused(
         'source-held',
-        `the merge takes ${baseBranch} into ${branch} first, because both changed the graph, and lines on ${[...new Set(standing.held.map(({ entry }) => entry.path))].join(', ')} in the worktree are held by ${named.join(', ')} on paths that writes`,
+        `the merge takes ${baseBranch} into ${branch} first, because ${at.because}, and lines on ${[...new Set(standing.held.map(({ entry }) => entry.path))].join(', ')} in the worktree are held by ${named.join(', ')} on paths that writes`,
         [`wait until ${named.join(', ')} commits those lines, then merge`],
       );
     }
@@ -57,7 +58,7 @@ export const takeBase = (git: MergeGit['Service'], checkouts: CheckoutRows['Serv
       const graphOnly = standing.dirty.every((entry) => underGraph(entry.path));
       return yield* refused(
         'source-dirty',
-        `the merge takes ${baseBranch} into ${branch} first, because both changed the graph, and the worktree holds uncommitted changes nobody's record claims on paths that writes: ${standing.dirty.map((entry) => entry.path).join(', ')}`,
+        `the merge takes ${baseBranch} into ${branch} first, because ${at.because}, and the worktree holds uncommitted changes nobody's record claims on paths that writes: ${standing.dirty.map((entry) => entry.path).join(', ')}`,
         [
           graphOnly
             ? 'deliver the graph of the worktree with sync_graph, then merge'

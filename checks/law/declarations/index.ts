@@ -223,7 +223,11 @@ export const GOOD_ENOUGH = 50;
 
 export const FAR = 5000;
 
-export class WholeRequired extends NeedsPreparation {}
+export class WholeRequired extends Error {}
+
+export class IndexRequired extends WholeRequired {
+  override readonly name: string = 'NeedsPreparation';
+}
 
 const ensure = (root: string, tree: string, hint: string | null, populate: boolean): void => {
   if (indexedAt(root, tree)) return;
@@ -241,8 +245,8 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
   }
   if (best === undefined || best.changes.length > FAR) {
     if (!populate)
-      throw new WholeRequired(
-        `the declaration index holds no revision within ${FAR} changed files of ${tree}; run check_rules with inspection "dead-code" over "change", using the same paths, whole and taking selection as the refused landing, to prepare the candidate before judging it again`,
+      throw new IndexRequired(
+        `the declaration index holds no revision within ${FAR} changed files of ${tree}; only a whole reading of it builds the index`,
       );
     populated(root, tree);
     mark(root, tree);

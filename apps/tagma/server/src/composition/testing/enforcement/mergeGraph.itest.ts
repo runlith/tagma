@@ -21,6 +21,7 @@ import { actChecks } from '../../../enforcement/contract/service/ruleChecks.js';
 import type { ModuleSet } from '../../../enforcement/contract/wire/modules.js';
 import { LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 import { MeasuredCheckout } from '../../../graph/contract/service/serving.js';
+import type { GraphSync } from '../../../landing/contract/wire/merge.js';
 
 const put = Effect.fn('testing.mergeGraph.put')(function* (dir: string, path: string, text: string) {
   const files = yield* FileSystem.FileSystem;
@@ -62,6 +63,119 @@ const enforced = Effect.fnUntraced(
 );
 
 const CORE: ModuleSet = { id: 'core', title: 'Core', root: 'src/core', entries: { put: [{ at: 'model.ts' }] } };
+
+const EXTRA: ModuleSet = { id: 'extra', title: 'Extra', root: 'src/extra', entries: { put: [{ at: 'extra.ts' }] } };
+
+const twinned = (
+  title: string,
+  options: {
+    readonly behind: boolean;
+    readonly graph?: GraphSync;
+  },
+  check: (seen: {
+    readonly finishing: Effect.Success<ReturnType<typeof composed>>['finishing'];
+    readonly projectId: number;
+    readonly project: string;
+    readonly side: {
+      readonly path: string;
+      readonly rootId: Parameters<Effect.Success<ReturnType<typeof composed>>['finishing']['merge']>[1];
+    };
+    readonly base: string;
+  }) => Effect.Effect<void, unknown, FileSystem.FileSystem>,
+) =>
+  it.live(title, () =>
+    Effect.gen(function* () {
+      const baseWorld = graphFixture();
+      const branchWorld = graphFixture();
+      const base = (yield* Effect.acquireRelease(baseWorld.openEffect(), () => Effect.orDie(baseWorld.releaseEffect))).effects;
+      const branch = (yield* Effect.acquireRelease(branchWorld.openEffect(), () => Effect.orDie(branchWorld.releaseEffect))).effects;
+      const workers = yield* Effect.acquireRelease(Effect.sync(workerLanes), (lanes) => Effect.sync(() => lanes.close()));
+      return yield* Effect.gen(function* () {
+        let worktree = '';
+        const checks = actChecks(
+          checksOver({
+            graphOf: (_projectId, root) => Effect.succeed(withLanes(root === worktree ? branch.context : base.context, workers)),
+          }),
+          'merge_worktree',
+        );
+        const { finishing, make, project, projectId } = yield* composed(
+          base,
+          makeMachineWorld(() => null),
+          {
+            before: checks.before,
+            twinBehind: () => Effect.succeed(options.behind),
+            graph: options.graph === undefined ? undefined : () => Effect.succeed(options.graph!),
+          },
+        );
+        yield* put(project, 'src/core/model.ts', 'export const model = 1;\n');
+        yield* put(project, 'src/app/main.ts', "import { model } from '../core/model.js';\nexport const main = model;\n");
+        yield* committed(project, 'two modules');
+        yield* enforced(
+          base,
+          projectId,
+          project,
+          [CORE, { id: 'app', title: 'App', root: 'src/app', imports: { put: ['core'] } }],
+          workers,
+        );
+        const side = yield* make('twinned');
+        worktree = side.path;
+        yield* put(side.path, 'src/extra/extra.ts', 'export const extra = 1;\n');
+        yield* put(
+          side.path,
+          'src/app/main.ts',
+          "import { model } from '../core/model.js';\nimport { extra } from '../extra/extra.js';\nexport const main = model + extra;\n",
+        );
+        yield* committed(side.path, 'an extra module');
+        yield* Effect.provide(branch.graph.projectLifecycle.create({ name: basename(project), rootPath: side.path }), branch.context);
+        yield* enforced(
+          branch,
+          projectId,
+          side.path,
+          [CORE, EXTRA, { id: 'app', title: 'App', root: 'src/app', imports: { put: ['core', 'extra'] } }],
+          workers,
+        );
+        yield* put(project, 'src/base.ts', 'export const base = 1;\n');
+        yield* committed(project, 'the base moves on');
+        yield* check({ finishing, projectId, project, side, base: yield* shEffect(project, ['rev-parse', 'HEAD']) });
+      }).pipe(Effect.provide(base.context));
+    }).pipe(Effect.provide(BunFileSystem.layer)),
+  );
+
+twinned(
+  'a stealth branch whose graph twin holds its own module card merges under that twin, the base graph written to nowhere',
+  { behind: false },
+  ({ finishing, projectId, project, side }) =>
+    Effect.gen(function* () {
+      const merged = yield* finishing.merge(projectId, side.rootId, {});
+      expect(merged.base.head).toBe(yield* shEffect(project, ['rev-parse', 'HEAD']));
+      expect(yield* shEffect(project, ['show', 'HEAD:src/extra/extra.ts'])).toBe('export const extra = 1;');
+    }),
+);
+
+twinned(
+  'a base twin the topology sync leaves ahead is not taken as absorbed: the base graph judges',
+  { behind: true, graph: { status: 'synced', merges: [] } },
+  ({ finishing, projectId, side }) =>
+    Effect.gen(function* () {
+      const refused = yield* Effect.flip(finishing.merge(projectId, side.rootId, {}));
+      expect(refused._tag === 'WorktreeFinishRefused' && refused.reason).toBe('rule-violated');
+    }),
+);
+
+twinned(
+  'a stealth merge whose base twin cannot be brought into the branch twin refuses naming the conflict, with the base taken into the branch',
+  { behind: true, graph: { status: 'synced', merges: [{ branch: 'main', merged: null, conflicts: ['modules/core.md'] }] } },
+  ({ finishing, projectId, project, side, base }) =>
+    Effect.gen(function* () {
+      const refused = yield* Effect.flip(finishing.merge(projectId, side.rootId, {}));
+      expect(refused._tag === 'WorktreeFinishRefused' && [refused.reason, refused.message.includes('modules/core.md')]).toEqual([
+        'merge-conflicts',
+        true,
+      ]);
+      expect(yield* shEffect(project, ['rev-parse', 'HEAD'])).toBe(base);
+      expect(yield* shEffect(side.path, ['merge-base', '--is-ancestor', base, 'HEAD']).pipe(Effect.as(true))).toBe(true);
+    }),
+);
 
 it.live(
   'a branch that carries its own module card in the tree merges under its own graph, and a crossing of that graph still refuses',

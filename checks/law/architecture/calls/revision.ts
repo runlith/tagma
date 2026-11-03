@@ -165,7 +165,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     }
     if (best === undefined || best.changes.length > FAR)
       throw new NeedsPreparation(
-        `no ask-calls state within ${FAR} changed files of ${commit}; run check_rules with inspection ask-calls over "change", using the same paths, whole and taking selection, to prepare the candidate before judging it again`,
+        `no ask-calls state within ${FAR} changed files of ${commit}; only a whole reading of it builds the state`,
       );
     return advance(commit, best, best.changes).id;
   };

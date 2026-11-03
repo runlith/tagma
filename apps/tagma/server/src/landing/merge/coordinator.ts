@@ -14,7 +14,7 @@ import type { Raised } from '@runlith/agent/permissions';
 import { pathsOf, runningWords } from '../../worktrees/retirement/finishing.js';
 import { Merges } from '../contract/service/merges.js';
 import type { BranchGraphChanges } from '../contract/service/graphChanges.js';
-import type { GraphCarried, GraphHeld, GraphSettled } from '../contract/service/graphSyncing.js';
+import type { GraphCarried, GraphHeld, GraphSettled, TwinBehind } from '../contract/service/graphSyncing.js';
 import type { TreeReady, TreeSync } from '../../graph/contract/service/delivery.js';
 import { inGraphTree } from '../../graph/contract/wire/storage.js';
 import { checkMerge } from './check.js';
@@ -53,6 +53,7 @@ export const makeMergeCoordinator = Effect.fnUntraced(function* (options: {
   readonly rules?: ActChecks;
   readonly carried?: GraphCarried;
   readonly settled?: GraphSettled;
+  readonly twinBehind?: TwinBehind;
   readonly coAuthored: CoAuthored;
 }) {
   const git = yield* MergeGit;
@@ -144,6 +145,8 @@ export const makeMergeCoordinator = Effect.fnUntraced(function* (options: {
       rules: options.rules,
       carried: options.carried,
       settled: options.settled,
+      twinBehind: options.twinBehind,
+      graph,
       coAuthored: options.coAuthored,
     }),
     openPullRequest: openPullRequest(git, guards, gate, checkouts, gh, progress),

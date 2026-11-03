@@ -3,7 +3,17 @@ import { alignWindow, matchedRuns, type Aligned, type Match } from './alignment.
 import { completeFold, askFold, type FoldWork } from './jobs.js';
 import { sliceLines, shareText, type TextSlice } from './text.js';
 import type { NetWindow } from './net.js';
-import { contentLines, digestKey, type Content, type FoldState, type Snapshot, type TextContent, type Unknown } from './folding.js';
+import {
+  contentLines,
+  contentOf,
+  digestKey,
+  digestOf,
+  type Content,
+  type FoldState,
+  type Snapshot,
+  type TextContent,
+  type Unknown,
+} from './folding.js';
 import { anchorsOf, frameOf, gapsOf, indexOf, pointIn, walkFrame, type Frame, type RemovalIndex } from './intervals.js';
 import { landedRoot, removalAt, rowRemovals, type Landed, type Removal, type Removals } from './landed.js';
 import {
@@ -15,6 +25,7 @@ import {
   runsOf,
   sliced,
   sizeOf,
+  textOf,
   valuesOf,
   type LocatedRun,
   type Mark,
@@ -113,8 +124,28 @@ const snapshotOf = (state: FoldState, digest: string | null): Snapshot | undefin
     : snapshot;
 };
 
-function headRoot(state: FoldState, head: TextContent, alignment: BaseAlignment): Rope {
-  const base = snapshotOf(state, state.base.digest)?.root ?? null;
+export type TextIdentity = { readonly blob: string | null; readonly digest: string | null };
+
+type Origin = { readonly root: Rope; readonly version: TextIdentity; readonly side: () => BaseSide };
+
+function originOf(state: FoldState, ended: ReadonlySet<string>): Origin {
+  for (let link = state.rows; link !== null; link = link.previous) {
+    if (!ended.has(link.row.id)) continue;
+    const digest = digestOf(link.row.after);
+    if (digest === undefined || digest === state.base.digest) break;
+    const snapshot = lookup(state.snapshots, digestKey(digest));
+    if (snapshot === undefined) break;
+    return {
+      root: snapshot.root,
+      version: { blob: digest, digest },
+      side: () => baseSide(digest === null ? contentOf(null) : contentOf(textOf(snapshot.root), undefined, digest)),
+    };
+  }
+  return { root: snapshotOf(state, state.base.digest)?.root ?? null, version: state.base, side: () => baseSide(state.base) };
+}
+
+function headRoot(origin: Origin, head: TextContent, alignment: BaseAlignment): Rope {
+  const base = origin.root;
   const source = headSource(head);
   if ('reason' in alignment.aligned) return null;
   let root: Rope = null;
@@ -448,8 +479,10 @@ function sliceRegions(
 
 export type Projected = { readonly result: Verdict; readonly alignment: BaseAlignment | null };
 
-export function projectFold(state: FoldState, head: Content, working: Content, budget: Deadline, alignment?: BaseAlignment): Verdict {
-  return completeFold(projectWork(state, head, working, budget, alignment), budget).result;
+export type Alignments = (before: TextIdentity, after: TextIdentity) => BaseAlignment | undefined;
+
+export function projectFold(state: FoldState, head: Content, working: Content, budget: Deadline, alignments?: Alignments): Verdict {
+  return completeFold(projectWork(state, head, working, budget, alignments), budget).result;
 }
 
 export type FormedLine = { readonly formed: string; readonly from: readonly string[] };
@@ -461,7 +494,7 @@ export function* projectWork(
   head: Content,
   working: Content,
   budget: Deadline,
-  alignment?: BaseAlignment,
+  alignments?: Alignments,
   formed: readonly FormedLine[] = [],
   landed: readonly Landed[] = [],
   ended: ReadonlySet<string> = NONE,
@@ -474,16 +507,6 @@ export function* projectWork(
   if (working.kind === 'unread') return unknown({ reason: 'unread', side: 'working', cause: working.cause });
   if ((head.kind !== 'text' && head.kind !== 'absent') || (working.kind !== 'text' && working.kind !== 'absent'))
     return unknown({ reason: 'opaque', cause: 'The projected text does not match the recorded line layout', side: 'projection' });
-  if (
-    alignment !== undefined &&
-    (alignment.from !== state.base.blob ||
-      alignment.to !== head.blob ||
-      alignment.beforeDigest !== state.base.digest ||
-      alignment.afterDigest !== head.digest ||
-      alignment.normalized !== state.normalized)
-  )
-    return unknown({ reason: 'alignment' });
-  used = alignment ?? null;
   if (head.digest === working.digest) return done(summarize([], [], null, new Map()));
   const before = contentLines(head);
   const after = contentLines(working);
@@ -496,13 +519,23 @@ export function* projectWork(
   if (recalled !== undefined) root = recalled.root;
   else if (composed !== undefined && composed !== 'unfilled') root = composed.root;
   else {
-    const baseRequest: BaseWork = { before: baseSide(state.base), after: baseSide(head), normalized: state.normalized };
+    const origin = originOf(state, ended);
+    const kept = alignments?.(origin.version, head);
+    if (
+      kept !== undefined &&
+      (kept.from !== origin.version.blob ||
+        kept.to !== head.blob ||
+        kept.beforeDigest !== origin.version.digest ||
+        kept.afterDigest !== head.digest ||
+        kept.normalized !== state.normalized)
+    )
+      return unknown({ reason: 'alignment' });
+    const request = (): BaseWork => ({ before: origin.side(), after: baseSide(head), normalized: state.normalized });
     const base =
-      alignment ??
-      (state.base.digest === head.digest ? alignBase(baseRequest, budget) : yield* askFold({ kind: 'base', work: baseRequest }));
+      kept ?? (origin.version.digest === head.digest ? alignBase(request(), budget) : yield* askFold({ kind: 'base', work: request() }));
     if ('reason' in base.aligned) return unknown(base.aligned);
     used = base;
-    const aligned = headRoot(state, head, base);
+    const aligned = headRoot(origin, head, base);
     const filled = composed === 'unfilled' ? landedRoot(state, head, landed, removedOf, holesOf(aligned, newer, head)) : undefined;
     root = filled === undefined || filled === 'unfilled' ? aligned : filled.root;
     traced = false;

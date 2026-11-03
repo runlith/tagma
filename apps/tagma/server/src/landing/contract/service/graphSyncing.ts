@@ -11,4 +11,6 @@ export type GraphCarried = (projectId: number) => Effect.Effect<boolean, StoreFa
 
 export type GraphSettled = (projectId: number, checkout: string) => Effect.Effect<void, GateRefusal>;
 
+export type TwinBehind = (projectId: number, checkout: string, branch: string, base: string) => Effect.Effect<boolean | null, GateRefusal>;
+
 export type GraphHeld = (projectId: number, checkout: string) => Effect.Effect<void, GateRefusal, Scope.Scope>;
