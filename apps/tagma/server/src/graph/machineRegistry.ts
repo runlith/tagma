@@ -14,8 +14,8 @@ export const policyRows = registryPart({
     storage: Schema.Literals([...STORAGE_MODES, 'plain']),
   },
   tables: [projectPolicy],
-  dump: (db) =>
-    Effect.map(projectsWithPolicy(db), (rows) =>
+  dump: (unit, db) =>
+    Effect.map(unit.run(projectsWithPolicy(db)), (rows) =>
       rows.map(({ id, strictProvenance, private: hidden, storage }) => ({ id, strictProvenance, private: hidden, storage })),
     ),
   restore: Effect.fnUntraced(function* (unit, db, rows) {

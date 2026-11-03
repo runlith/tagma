@@ -18,8 +18,8 @@ export const projectRows = registryPart({
     removedAt: Schema.optional(Schema.NullOr(Schema.String)),
   },
   tables: [project],
-  dump: (db) =>
-    Effect.map(db.select().from(project), (rows) =>
+  dump: (unit, db) =>
+    Effect.map(unit.run(db.select().from(project)), (rows) =>
       rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), removedAt: row.removedAt?.toISOString() ?? null })),
     ),
   restore: (unit, db, rows) =>
@@ -45,6 +45,6 @@ export const memberRows = registryPart({
   fields: { projectId: Schema.Number, groupId: Schema.Number, ord: Schema.Number },
   optional: true,
   tables: [groupMember],
-  dump: (db) => db.select().from(groupMember),
+  dump: (unit, db) => unit.run(db.select().from(groupMember)),
   restore: (unit, db, rows) => insertRows(unit, db, groupMember, rows),
 });

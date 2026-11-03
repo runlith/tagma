@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import type { RegistryPart, RegistryRestore, RegistryRow } from '../../platform/contract/service/machineRegistry.js';
 import { dataPathOf, MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { RegistryUnreadable } from '../contract/wire/registry.js';
+import { MachineUnits } from '../../platform/contract/service/units.js';
+import { RegistryIncoherent, RegistryUnreadable } from '../contract/wire/registry.js';
 
 export function registryPathFor(storePath: string): string | null {
   const data = dataPathOf(storePath);
@@ -21,15 +22,27 @@ const joined = (standing: readonly RegistryRow[], rows: readonly RegistryRow[]):
 
 export const dumpMachineRegistry = Effect.fn('registry.dump')(function* (
   parts: readonly RegistryPart[],
-): Effect.fn.Return<void, StoreFailure, MachineStore> {
+): Effect.fn.Return<void, StoreFailure | RegistryIncoherent, MachineStore | MachineUnits> {
   const { db, path: storePath } = yield* MachineStore;
   const path = registryPathFor(storePath);
   if (path === null) return;
-  const sections = new Map<string, readonly RegistryRow[]>();
+  const sections = yield* (yield* MachineUnits).read(
+    (unit) =>
+      Effect.gen(function* () {
+        const read = new Map<string, readonly RegistryRow[]>();
+        for (const part of parts) {
+          const rows = yield* part.dump(unit, db);
+          const standing = read.get(part.section);
+          read.set(part.section, standing === undefined ? rows : joined(standing, rows));
+        }
+        return read;
+      }),
+    { snapshot: true },
+  );
   for (const part of parts) {
-    const rows = yield* part.dump(db);
-    const standing = sections.get(part.section);
-    sections.set(part.section, standing === undefined ? rows : joined(standing, rows));
+    yield* part
+      .read(sections.get(part.section))
+      .pipe(Effect.mapError((failure) => new RegistryIncoherent({ path, reason: `${part.section}: ${failure.message}` })));
   }
   const text = `${JSON.stringify(Object.fromEntries(sections), null, 2)}\n`;
   yield* Effect.sync(() => {

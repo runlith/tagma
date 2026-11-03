@@ -1,7 +1,7 @@
 import { existsSync, renameSync, rmSync } from 'node:fs';
 import { Context, Effect, Layer } from 'effect';
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
-import { sql } from 'drizzle-orm';
+import { getTableName, sql } from 'drizzle-orm';
 import type { RegistryOwner, RegistryPart, RegistryRestore } from '../../platform/contract/service/machineRegistry.js';
 import {
   type GraphStore,
@@ -10,7 +10,9 @@ import {
   type StoreOpenFailure,
   type StoreFailure,
 } from '../../platform/contract/service/store.js';
+import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
+import { unitsLayer } from '../../platform/store/units.js';
 import { machineFileLayer, poolOf, type PoolSource, storeLayer } from '../../platform/store/open.js';
 import { MachineRegistry } from '../contract/service/registry.js';
 import type { RegistryUnreadable } from '../contract/wire/registry.js';
@@ -56,10 +58,16 @@ const restoreMachineRegistry = Effect.fn('registry.restore')(function* (
 const openMachineRegistry = Effect.fn('registry.open')(function* (
   parts: readonly RegistryPart[],
   read: readonly RegistryRestore[] | null,
-): Effect.fn.Return<void, StoreFailure | RegistryUnreadable, MachineStore> {
+): Effect.fn.Return<void, StoreFailure | RegistryUnreadable, MachineStore | MachineUnits> {
   const store = yield* MachineStore;
-  const held = yield* store.db.all<{ held: number }>(sql`select exists(select 1 from project) or exists(select 1 from setting) as held`);
-  if (held[0]?.held === 1) {
+  const standing = new Set(
+    (yield* store.db.all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)).map(({ name }) => name),
+  );
+  const tables = [...new Set(parts.flatMap((part) => part.tables))].filter((table) => standing.has(getTableName(table)));
+  const held = yield* Effect.forEach(tables, (table) =>
+    Effect.map(store.db.all<{ held: number }>(sql`select exists(select 1 from ${table}) as held`), (rows) => rows[0]?.held === 1),
+  );
+  if (held.includes(true)) {
     return yield* dumpMachineRegistry(parts).pipe(
       Effect.catchCause((cause) => Effect.logError('machine registry dump failed at boot', cause)),
     );
@@ -70,9 +78,9 @@ const openMachineRegistry = Effect.fn('registry.open')(function* (
 });
 
 const registryOf = (parts: readonly RegistryPart[]) =>
-  Effect.map(MachineStore, (store) =>
+  Effect.map(Effect.context<MachineStore | MachineUnits>(), (context) =>
     MachineRegistry.of({
-      dump: Effect.provideService(dumpMachineRegistry(parts), MachineStore, store),
+      dump: Effect.provide(dumpMachineRegistry(parts), context),
       watch: (changed) => Effect.forEach(parts, (part) => part.watch?.(changed) ?? Effect.void, { discard: true }),
     }),
   );
@@ -93,6 +101,9 @@ export const machineStoreLayer = (
       return Layer.merge(
         Layer.effectDiscard(Effect.orDie(openMachineRegistry(parts, restored ? null : found))),
         Layer.effect(MachineRegistry, registryOf(parts)),
-      ).pipe(Layer.provideMerge(Layer.orDie(machineFileLayer(path, migrations, {}, pool))));
+      ).pipe(
+        Layer.provide(unitsLayer(MachineUnits, MachineStore)),
+        Layer.provideMerge(Layer.orDie(machineFileLayer(path, migrations, {}, pool))),
+      );
     }).pipe(Effect.orDie),
   );

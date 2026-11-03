@@ -17,7 +17,8 @@ export const settingRows = registryPart({
     updatedAt: Schema.String,
   },
   tables: [setting],
-  dump: (db) => Effect.map(db.select().from(setting), (rows) => rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() }))),
+  dump: (unit, db) =>
+    Effect.map(unit.run(db.select().from(setting)), (rows) => rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() }))),
   restore: (unit, db, rows) =>
     insertRows(
       unit,

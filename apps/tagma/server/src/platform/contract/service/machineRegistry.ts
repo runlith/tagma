@@ -2,7 +2,7 @@ import type { Table } from 'drizzle-orm';
 import { Data, Effect, Option, Schema, type Context, type Scope } from 'effect';
 import { ContributionPoint } from './contribution.js';
 import type { StoreDb, StoreFailure } from './store.js';
-import type { WriteUnit } from './units.js';
+import type { Unit, WriteUnit } from './units.js';
 
 export type RegistryRow = { readonly [field: string]: unknown };
 
@@ -13,7 +13,7 @@ export type RegistryPart = {
   readonly fields: Schema.Struct.Fields;
   readonly optional?: true;
   readonly tables: readonly Table[];
-  readonly dump: (db: StoreDb<'machine'>) => Effect.Effect<readonly RegistryRow[], StoreFailure>;
+  readonly dump: (unit: Unit<'machine'>, db: StoreDb<'machine'>) => Effect.Effect<readonly RegistryRow[], StoreFailure>;
   readonly read: (rows: unknown) => Effect.Effect<RegistryRestore, Schema.SchemaError>;
   readonly watch?: (changed: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>;
 };
@@ -35,7 +35,7 @@ export const registryPart = <const F extends Fields, I, S>(part: {
   readonly fields: F;
   readonly optional?: true;
   readonly tables: readonly Table[];
-  readonly dump: (db: StoreDb<'machine'>) => Effect.Effect<ReadonlyArray<Schema.Struct.Encoded<F>>, StoreFailure>;
+  readonly dump: (unit: Unit<'machine'>, db: StoreDb<'machine'>) => Effect.Effect<ReadonlyArray<Schema.Struct.Encoded<F>>, StoreFailure>;
   readonly restore: (
     unit: WriteUnit<'machine'>,
     db: StoreDb<'machine'>,
