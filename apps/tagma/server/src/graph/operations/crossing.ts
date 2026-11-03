@@ -469,8 +469,7 @@ const heldApart = (name: string, target: GraphTarget, here: GraphCopy | null) =>
   );
 };
 
-export const localId = Effect.fn('crossing.localId')(function* (name: string) {
-  const target = yield* locate(name);
+const idHere = Effect.fn('crossing.idHere')(function* (name: string, target: Target) {
   const current = yield* CurrentGraph;
   const here = current === null ? null : { projectId: current.projectId, checkout: current.checkout, tree: current.layout.treeRoot };
   return yield* (yield* BlockNames)
@@ -480,6 +479,10 @@ export const localId = Effect.fn('crossing.localId')(function* (name: string) {
         Effect.fail(refusal.code === 'not-found' ? (heldApart(name, target, here) ?? refusal) : refusal),
       ),
     );
+});
+
+export const localId = Effect.fn('crossing.localId')(function* (name: string) {
+  return yield* idHere(name, yield* locate(name));
 });
 
 export const linkTarget = Effect.fn('crossing.linkTarget')(function* (name: string, owner: { readonly projectId: number }, kind: EdgeKind) {
@@ -556,7 +559,6 @@ export const unlink = Effect.fnUntraced(function* (input: BlockLink) {
 
 export const documentScope = Effect.fnUntraced(function* (projectId: number) {
   const context = yield* Effect.context<GraphServices | GraphCall>();
-  const names = yield* BlockNames;
   const resolve = Effect.fnUntraced(function* (name: string) {
     const target = yield* locate(name);
     if (target.projectId !== projectId) {
@@ -569,7 +571,7 @@ export const documentScope = Effect.fnUntraced(function* (projectId: number) {
         ],
       );
     }
-    return yield* names.idOfName(target.row.uuid);
+    return yield* idHere(name, target);
   });
   return {
     references: {

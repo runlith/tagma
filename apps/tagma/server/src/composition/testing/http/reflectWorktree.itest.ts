@@ -316,6 +316,11 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
           edges: [{ kind: 'discovered-from', to: mainParentName }],
         }),
       ).toMatchObject({ status: 409, body: { code: 'not-found' } });
+      const batched = yield* asThread('apply_batch', {
+        ops: [{ op: 'create', parentId: mainParentName, title: 'A batch child of a main parent' }],
+      });
+      expect(batched).toMatchObject({ status: 409, body: { code: 'not-found' } });
+      expect((batched.body as { unblock: readonly string[] }).unblock.some((way) => way.includes('update_worktree'))).toBe(true);
       const filing = { title: 'friction on this branch', command: 'tagma op x', expected: 'a branch record', actual: 'a branch defect' };
       const filed = yield* answered(yield* doors.atNative('file_reflection', filing, placed));
       expect(filed.block).toMatchObject({ parentName: area });
