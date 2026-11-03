@@ -42,7 +42,9 @@ import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { TranslationLayer } from '$lib/features/graph/translation/layer.js';
 import { LinksPlacement } from './LinksPlacement.svelte.js';
+import { BlockSections } from './sections.js';
 import BlockPage from './BlockPage.svelte';
+import SectionProbe from './SectionProbe.fixture.svelte';
 
 await loadCatalog();
 
@@ -174,7 +176,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-test('a part page in the main pane and another block in the right-hand tab both stand, and only opening a block moves it up the trail', async () => {
+test('a part page in the main pane and another block in the right-hand tab both stand with the sections features contribute, and only opening a block moves it up the trail', async () => {
   const rows = graph();
   rows.set(TWIN, { ...row(TWIN.slice(-8), PART, 5, 'Same-name neighbour'), ...{ identity: TWIN, rowKey: 9_000_000_001 } });
   const trashed = {
@@ -297,6 +299,8 @@ test('a part page in the main pane and another block in the right-hand tab both 
       JournalLive,
       Visits,
       LinksPlacement,
+      BlockSections,
+      BlockSections.contribute('probe', { id: 'probe', order: 0, payload: { component: SectionProbe } }),
       TranslationLayer,
     ),
     Layer.mergeAll(
@@ -360,6 +364,7 @@ test('a part page in the main pane and another block in the right-hand tab both 
   const side = app.draw(BlockSeat as never, { placed: { projectId: 1, branch: null, name: MODULE, diff: null } });
   await vi.waitFor(() => expect(titleOf(side)).toBe('Agent threads'));
   flushSync();
+  expect([main, side].map((page) => page.querySelector('[data-section]')?.textContent)).toEqual(['Agents', 'Agent threads']);
 
   expect(readState.trailOf).toEqual([identityOf(MODULE), identityOf(PART)]);
 
@@ -533,6 +538,7 @@ test('a project root opened in a tab from another project lists its parts beside
       JournalLive,
       Visits,
       LinksPlacement,
+      BlockSections,
       TranslationLayer,
     ),
     Layer.mergeAll(

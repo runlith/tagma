@@ -75,7 +75,7 @@ test('a colliding rule opens its own enforcement', async () => {
     Layer.mergeAll(Cache.of({ defaultOptions: { queries: { retry: false } } }), GraphDoor, BlocksRepo, RulesRepo),
     Layer.mergeAll(
       Layer.of(Door, testDoor(answer)),
-      Layer.of(TagCatalog, { enforced: () => true, workTag: null } as never),
+      Layer.of(TagCatalog, { bearsLaw: () => true, enforced: () => true, workTag: null } as never),
       Layer.of(SessionRegistry, { writerOf: () => null } as never),
       Layer.of(Notices, { refusal: () => undefined } as never),
       Layer.of(Opening, {} as never),
@@ -176,7 +176,7 @@ test('enforcing a colliding rule assigns the newly created debt owner by identit
     Layer.mergeAll(Cache.of({ defaultOptions: { queries: { retry: false } } }), GraphDoor, BlocksRepo, RulesRepo),
     Layer.mergeAll(
       Layer.of(Door, testDoor(answer)),
-      Layer.of(TagCatalog, { enforced: () => false, switchedOff: () => false, workTag: 'task' } as never),
+      Layer.of(TagCatalog, { bearsLaw: () => true, enforced: () => false, switchedOff: () => false, workTag: 'task' } as never),
       Layer.of(Notices, {
         refusal: (error: unknown) => {
           refusal = error;

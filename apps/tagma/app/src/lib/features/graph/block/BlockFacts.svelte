@@ -1,16 +1,17 @@
 <script lang="ts">
   import type { BlockRead } from '@tagma/server/graph/contract/wire/rows';
   import { refusalLines } from '@runlith/agent/tool/refusal';
-  import type { Snippet } from 'svelte';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
   import TypeFields from '$lib/features/graph/block/TypeFields.svelte';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+  import { BlockSections } from './sections.js';
 
-  let { read, enforcement }: { read: BlockRead; enforcement?: Snippet<[BlockRead]> } = $props();
+  let { read }: { read: BlockRead } = $props();
 
   const tags = TagCatalog.use();
+  const sections = BlockSections.use();
 
   const facts = $derived(tags.factsOf(read));
-  const lawful = $derived(tags.bearsLaw(read));
   const delivery = $derived(read.reach === null ? null : tags.deliveryOf(read, read.sources.length > 0));
   const unheard = $derived(read.reach !== null && tags.reachesNobody(read, read.sources.length > 0));
   const everywhere = $derived(read.sources.some((one) => one.ref.replace(/\/+$/, '') === '.'));
@@ -64,8 +65,6 @@
   </dl>
 {/if}
 
-{#if lawful && enforcement}
-  {#key read.identity}
-    {@render enforcement(read)}
-  {/key}
-{/if}
+{#key read.identity}
+  <PointView point={sections} props={{ read }} />
+{/key}

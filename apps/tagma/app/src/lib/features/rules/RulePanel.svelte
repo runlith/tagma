@@ -9,8 +9,10 @@
   const tags = TagCatalog.use();
 </script>
 
-{#if tags.enforced(read)}
-  <Engine name={read.identity} updatedAt={read.updatedAt} />
-{:else if !tags.switchedOff(read)}
-  <RuleText name={read.identity} />
+{#if tags.bearsLaw(read)}
+  {#if tags.enforced(read)}
+    <Engine name={read.identity} updatedAt={read.updatedAt} />
+  {:else if !tags.switchedOff(read)}
+    <RuleText name={read.identity} />
+  {/if}
 {/if}

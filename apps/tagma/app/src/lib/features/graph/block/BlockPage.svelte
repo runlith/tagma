@@ -3,7 +3,7 @@
   import Check from '@lucide/svelte/icons/check';
   import Copy from '@lucide/svelte/icons/copy';
   import Folder from '@lucide/svelte/icons/folder';
-  import { untrack, type Snippet } from 'svelte';
+  import { untrack } from 'svelte';
   import { Router } from '@runlith/layer/Router';
   import { currentBranch, currentLanguage, diffLensHref, diffRangeOf, languageLensHref } from '$lib/features/workspace/address.js';
   import LensStrip from './LensStrip.svelte';
@@ -49,6 +49,7 @@
   import { GraphFeed } from '$lib/features/graph/Feed.js';
   import { SessionRegistry } from '$lib/features/graph/SessionRegistry.svelte.js';
   import { LinksPlacement } from './LinksPlacement.svelte.js';
+  import { BlockSections } from './sections.js';
   import { Subject } from './Subject.svelte.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import { timeAgo } from '$lib/shared/time.js';
@@ -74,19 +75,15 @@
 
   let {
     blockName,
-    enforcement,
     aside = false,
     diff = null,
     lang = null,
-    ready = true,
     read: shown = $bindable(null),
   }: {
     blockName?: string;
-    enforcement?: Snippet<[BlockRead]>;
     aside?: boolean;
     diff?: string | null;
     lang?: string | null;
-    ready?: boolean;
     read?: BlockRead | null;
   } = $props();
 
@@ -128,6 +125,7 @@
   const graph = GraphRung.Current.use();
   const project = $derived(workspace.find(graph.projectId));
   const here = App.current();
+  const waits = BlockSections.use().items.flatMap((section) => (section.ready === undefined ? [] : [section.ready(here)]));
   const roads = PathRoads.use();
   let crumbModified = false;
   const pathRoot = $derived(checkout.row?.rootId);
@@ -151,6 +149,7 @@
     (next) => showLanguage(next),
   );
   const read = $derived(subject.read);
+  const ready = $derived(read === null || waits.every((answered) => answered(read)));
   const rootBlock = $derived<TreeBlock | undefined>(subject.root ?? read ?? undefined);
   const unavailable = $derived(subject.unavailable);
   const placed = $derived(subject.root !== undefined || store.rootAbsent);
@@ -570,7 +569,7 @@
         <BlockBody {store} body={read.body} {paths} />
       {/if}
 
-      <BlockFacts {read} {enforcement} />
+      <BlockFacts {read} />
 
       {#if placed}
         {#if tags.supports(rootBlock, LEAF)}
