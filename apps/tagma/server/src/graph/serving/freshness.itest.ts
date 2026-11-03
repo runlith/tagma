@@ -90,7 +90,7 @@ layer(demoGraphLayer({ repos: ['topology'] }).pipe(Layer.provideMerge(BunFileSys
               (held) => Effect.sync(held.unregister),
             );
             const name = blockName(rootId);
-            const titles = [{ name, uuid: rootId, title: 'Topology', projectId: row.id }];
+            const titles = [{ name, uuid: rootId, title: 'Topology', projectId: row.id, rowKey: expect.any(Number) }];
             const served = yield* pool.resolve({ projectId: row.id, cwd: checkout });
             expect(yield* Context.get(served.context, Selection).titles([name])).toEqual(titles);
             expect(yield* served.copyFailures()).toMatchObject([
