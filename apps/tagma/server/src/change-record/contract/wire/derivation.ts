@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import { placeRole } from '../../../platform/contract/wire/place.js';
 
 export const Argv = Schema.NonEmptyArray(Schema.NonEmptyString);
 
@@ -7,7 +8,7 @@ export const RepositoryPath = Schema.String.check(Schema.isPattern(/^(?!\/)(?!(?
 });
 
 export const DeriveCommand = Schema.Struct({
-  paths: Schema.NonEmptyArray(RepositoryPath),
+  paths: Schema.NonEmptyArray(RepositoryPath).annotate(placeRole('value')),
   run: Argv,
 });
 export type DeriveCommand = typeof DeriveCommand.Type;
