@@ -138,12 +138,24 @@ test('a kind command runs its own package files of that kind and leaves nested p
     writeFileSync(join(root, dir, 'foreign.e2e.ts'), "throw new Error('a foreign e2e ran');");
   }
   writeFileSync(join(root, 'nested', 'package.json'), '{}');
+  const staged = Bun.spawnSync(['git', 'add', 'scripts/own.itest.ts', 'nested'], { cwd: root });
+  expect(staged.exitCode, staged.stderr.toString()).toBe(0);
   const itest = await run(root, ['itest']);
   expect(itest.code, itest.output).toBe(0);
   expect(names(itest.files)).toEqual(['own.itest.ts']);
   const e2e = await run(root, ['e2e']);
   expect(e2e.code, e2e.output).toBe(0);
   expect(names(e2e.files)).toEqual(['own.e2e.ts']);
+});
+
+test('outside git a kind command discovers its files by scanning its package', async () => {
+  const root = directory();
+  writeFileSync(join(root, 'unit.test.ts'), sum);
+  mkdirSync(join(root, 'src'));
+  writeFileSync(join(root, 'src', 'own.itest.ts'), sum);
+  const itest = await run(root, ['itest']);
+  expect(itest.code, itest.output).toBe(0);
+  expect(names(itest.files)).toEqual(['own.itest.ts']);
 });
 
 test('an empty e2e or itest selection fails without falling back to ordinary tests', async () => {

@@ -8,7 +8,7 @@ export default defineConfig({
     projects: [
       { extends: true, test: { name: 'unit', include: ['src/**/*.test.ts'], exclude: isolatedUnit, isolate: false } },
       { extends: true, test: { name: 'unit-isolated', include: isolatedUnit, isolate: true } },
-      { extends: true, test: { name: 'integration', include: ['src/**/*.itest.ts'], isolate: false } },
+      { extends: true, test: { name: 'integration', include: ['**/*.itest.ts'], isolate: false } },
     ],
     setupFiles: ['@runlith/testbed/vitest/setup'],
     globalSetup: ['@runlith/testbed/vitest/global'],

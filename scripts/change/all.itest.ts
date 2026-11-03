@@ -55,26 +55,32 @@ test('a package script is one suite whose runner gets every file it selects, how
   expect(plan[0]!.stages).toEqual([expect.stringMatching(/ itest --no-isolate --randomize --seed=7$/)]);
 });
 
-test('an integration file its package runs no test:integration for refuses the plan', () => {
-  const files = new Map([
-    ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
-    ['packages/w/package.json', JSON.stringify({ scripts: { test: 'testbed bun test' } })],
-    ['packages/w/scripts/tool.itest.ts', ''],
-  ]);
-  expect(() =>
-    suitesOf(
-      packagesOf([...files.keys()], (path) => files.get(path)!),
-      [...files.keys()],
-      {
-        root: '/',
-        jobs: undefined,
-        seed: undefined,
-        randomize: false,
-        reports: '/reports',
-        combineVitest: false,
-      },
-    ),
-  ).toThrow('packages/w/scripts/tool.itest.ts');
+test('test:all refuses its plan while an integration file stands where no package run discovers it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'unrun-itests-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    const write = (path: string, text: string) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    const plan = () =>
+      Bun.spawnSync([process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--plan'], { stdout: 'pipe', stderr: 'pipe' });
+    write('package.json', JSON.stringify({ workspaces: ['packages/*'] }));
+    write('packages/w/package.json', JSON.stringify({ scripts: { 'test:integration': 'testbed itest' } }));
+    write('packages/w/sample/package.json', '{}');
+    write('packages/w/sample/fixture.itest.ts', '');
+    const nested = plan();
+    expect(nested.exitCode).not.toBe(0);
+    expect(nested.stderr.toString()).toContain('packages/w/sample/fixture.itest.ts');
+    rmSync(join(root, 'packages/w/sample'), { recursive: true });
+    write('packages/w/package.json', JSON.stringify({ scripts: { test: 'testbed bun test' } }));
+    write('packages/w/scripts/tool.itest.ts', '');
+    const missing = plan();
+    expect(missing.exitCode).not.toBe(0);
+    expect(missing.stderr.toString()).toContain('packages/w/scripts/tool.itest.ts');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a cut native suite stays pending and its CPU survives a successful resume', async () => {

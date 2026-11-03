@@ -38,10 +38,12 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
   for (const path of paths) {
     if (kindOf(path) !== 'resource') continue;
     const owner = owners.find((pkg) => pkg.dir === '' || path.startsWith(`${pkg.dir}/`));
-    if (owner === undefined || owner.scripts['test:integration'] !== undefined) continue;
+    if (owner === undefined) continue;
+    const script = owner.scripts['test:integration'];
+    if (script === undefined) throw new Error(`${owner.dir || '.'} has no test:integration script to run ${path}`);
     const own = owner.dir === '' ? path : path.slice(owner.dir.length + 1);
-    if (runsAs('resource', own, (directory) => listed.has(join(owner.dir, directory, 'package.json'))))
-      throw new Error(`${owner.dir || '.'} has no test:integration script to run ${path}`);
+    if (!/\bvitest\b/.test(script) && !runsAs('resource', own, (directory) => listed.has(join(owner.dir, directory, 'package.json'))))
+      throw new Error(`${owner.dir || '.'}:test:integration never discovers ${path}: it lies in a dot, build or nested package directory`);
   }
   const result: Suite[] = [];
   const vitest = options.combineVitest ? new Set(vitestConfigsOf(packages, paths).map((config) => config.directory)) : new Set<string>();

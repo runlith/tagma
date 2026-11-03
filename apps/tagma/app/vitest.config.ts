@@ -40,7 +40,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
-          include: ['src/**/*.itest.ts'],
+          include: ['**/*.itest.ts'],
           environment: 'jsdom',
           isolate: false,
         },

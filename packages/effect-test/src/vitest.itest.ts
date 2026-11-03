@@ -10,7 +10,7 @@ const vitest = async (files: readonly string[]) => {
 };
 
 test('Vitest runs the Effect testers with owned resources, controlled time and an isolated DOM per file', async () => {
-  const { status, stdout, stderr } = await vitest(['src/testing/vitest.fixture.ts', 'src/testing/vitestIsolation.fixture.ts']);
+  const { status, stdout, stderr } = await vitest(['--exclude', '**/vitestFailures.fixture.ts']);
   if (status !== 0) throw new Error(`Vitest fixtures exited ${status}:\n${stdout}\n${stderr}`);
 });
 
