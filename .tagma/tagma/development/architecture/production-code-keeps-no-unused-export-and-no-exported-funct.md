@@ -6486,10 +6486,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/contract/wire/feed.ts#feedArchiveSchema",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/contract/wire/feed.ts#feedReleaseSchema",
           "owner": "5a3bed29"
         },
