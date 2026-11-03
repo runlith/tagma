@@ -30,7 +30,7 @@ import { makeThreadRecords } from '../../../thread-record/layer.js';
 
 const signed = signedBy({ harness: 'test', key: 'copied-blocks' });
 
-const TOOLS = ['update_block', 'create_block', 'link_blocks', 'unlink_blocks', 'read_block'];
+const TOOLS = ['update_block', 'create_block', 'delete_block', 'answer_reflection', 'link_blocks', 'unlink_blocks', 'read_block'];
 
 const toolsAt = Effect.fnUntraced(function* (
   routed: ReturnType<typeof routedContext>,
@@ -238,6 +238,45 @@ layer(
           expect(yield* call('read_block', { blockIds: [`${brand.id}/${child.block.name}`] })).toMatchObject({
             reads: [{ name: child.block.name, projectId: brand.id, parentName: born.block.name }],
           });
+          const reflection = (yield* call('create_block', {
+            project: law.id,
+            parentId: sourceRoot,
+            tags: ['reflection'],
+            title: 'A local answer is required',
+            fields: { command: 'update_block', expected: 'a local answer', actual: 'a missing local identity' },
+          })) as { block: { name: string } };
+          const local = (yield* call('create_block', {
+            project: law.id,
+            parentId: sourceRoot,
+            tags: ['rule'],
+            title: 'A local answer',
+          })) as { block: { name: string } };
+          const answer = { project: law.id, blockId: reflection.block.name, by: born.block.name };
+          const localOnly = yield* call('answer_reflection', answer);
+          expect(localOnly).toMatchObject({ code: 'not-found' });
+          expect((localOnly.unblock as readonly string[]).join(' ')).toContain(branchRoot);
+          expect(yield* call('answer_reflection', { ...answer, by: local.block.name })).toMatchObject({ status: 'ok' });
+
+          const destinationBranch = yield* fixture.directory('destination-live');
+          yield* runGit(graph.git, 'destination-live', ['add', '-A'], { cwd: brand.rootPath });
+          yield* runGit(
+            graph.git,
+            'destination-live',
+            ['-c', 'user.name=team', '-c', 'user.email=team@tagma', 'commit', '-qm', 'live copy'],
+            {
+              cwd: brand.rootPath,
+            },
+          );
+          yield* runGit(graph.git, 'destination-live', ['worktree', 'add', '-b', 'destination-live', destinationBranch], {
+            cwd: brand.rootPath,
+          });
+          yield* pool.resolve({ projectId: brand.id, cwd: destinationBranch });
+          expect(yield* call('delete_block', { project: brand.id, blockId: address })).toMatchObject({ status: 'ok' });
+          const branchOnly = yield* call('update_block', { ...input, blockId: reflection.block.name });
+          expect(branchOnly).toMatchObject({ code: 'not-found', reason: expect.stringContaining(branchRoot) });
+          const trashed = yield* call('answer_reflection', { ...answer, by: address });
+          expect(trashed).toMatchObject({ code: 'not-found' });
+          expect((trashed.unblock as readonly string[])[0]!.split(' ')[0]).not.toBe(address);
         }),
       ),
     ),

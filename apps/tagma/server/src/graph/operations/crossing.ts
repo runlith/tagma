@@ -9,7 +9,7 @@ import { addressed, blockAddress, blockName, distinctLength, distinctTails, tail
 import { BlockNames } from '../contract/service/acts.js';
 import { type BlockRow } from '../contract/service/acts.js';
 import type { GraphServices } from '../contract/service/services.js';
-import { GateRefusal, refusalBody, type OpenRefusal, type ReferenceRefusal } from '../../platform/contract/wire/refusal.js';
+import { GateRefusal, refusalBody, type OpenRefusal, type ReferenceRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { OtherGraphs } from '../serving/policy.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -59,16 +59,14 @@ const indexHolding = Effect.fn('crossing.indexHolding')(function* (
   const hold = (projectId: number, canonical: boolean, checkout: string, uuid: string | null, trashed = false) => {
     const known = holding.get(projectId);
     const blocks = new Set(known?.blocks);
-    const live = new Set(known?.live);
-    if (uuid !== null) {
-      blocks.add(uuid);
-      if (!trashed) live.add(uuid);
-    }
+    if (uuid !== null) blocks.add(uuid);
     const better =
       known === undefined ||
       (uuid !== null && known.blocks.size === 0) ||
       (canonical && !known.canonical && (uuid !== null || known.blocks.size === 0));
     const kept = better ? { canonical, checkout } : known;
+    const live = new Set(better ? undefined : known?.live);
+    if (uuid !== null && !trashed && checkout === kept.checkout) live.add(uuid);
     holding.set(projectId, { canonical: kept.canonical, checkout: kept.checkout, blocks, live });
   };
   for (const row of reading.titles) hold(row.projectId, row.canonical, row.checkout, row.uuid, row.trashed);
@@ -482,27 +480,34 @@ const heldApart = Effect.fn('crossing.heldApart')(function* (name: string, targe
     const tail = copy.blocks.size === 1 ? short : tailOf(target.row.uuid, distinctLength([...copy.blocks]));
     return [{ project, address: addressed(project.id, tail) }];
   });
+  const localWays: Unblock =
+    there.projectId !== here.projectId
+      ? [`name a block of project ${here.projectId} that the writing copy holds`]
+      : [
+          'carry it into this copy, then call again: merge_worktree lands a worktree in main, update_worktree brings main into a worktree',
+          `or name a block the copy of ${here.checkout} holds`,
+        ];
   const [first, ...rest] = holders.map(
-    ({ project, address }) => `${address} — use this address for the block in project "${project.name}" (${project.id})`,
+    ({ project, address }) =>
+      `${address} — the live block in project "${project.name}" (${project.id}); use it if this reference may cross projects`,
   );
   if (first !== undefined) {
     return new GateRefusal(
       'not-found',
       `${name} is absent from this graph copy; it stands in ${holders.map(({ project }) => `project "${project.name}" (${project.id})`).join(', ')}`,
-      [first, ...rest],
+      [
+        first,
+        ...rest,
+        `if this reference must stay in project ${here.projectId}${there.projectId === here.projectId ? `, from ${there.checkout}` : ''}: ${localWays.join('; ')}`,
+      ],
     );
   }
   if (there.projectId !== here.projectId)
-    return new GateRefusal('not-found', `${name} stands in project ${there.projectId}, not in the graph this call writes`, [
-      `${addressed(there.projectId, blockAddress(name).name)} — use this address for the block in project ${there.projectId}`,
-    ]);
+    return new GateRefusal('not-found', `${name} stands in project ${there.projectId}, not in the graph this call writes`, localWays);
   return new GateRefusal(
     'not-found',
     `${name} stands in the graph copy of ${there.checkout}, not in ${here.checkout}, where this call writes`,
-    [
-      'carry it into this copy, then call again: merge_worktree lands a worktree in main, update_worktree brings main into a worktree',
-      `or name a block the copy of ${here.checkout} holds`,
-    ],
+    localWays,
   );
 });
 
