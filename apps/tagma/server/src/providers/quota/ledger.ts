@@ -5,7 +5,7 @@ import { Cause, Clock, Data, Effect, Exit, Fiber, FiberMap, Layer, Queue, Result
 import type { AccountRows, DefaultAccounts, StoredAccount } from '../contract/service/accounts.js';
 import { AccountQuota } from '../contract/service/quota.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { AccountQuotaRow, QuotaTable } from '../contract/wire/accounts.js';
+import type { AccountBorrower, AccountProblem, AccountQuotaRow, QuotaTable } from '../contract/wire/accounts.js';
 import type { QuotaReading, QuotaReadingChange, QuotaReadings } from './readings.js';
 import { quotaRefresh } from './refresh.js';
 
@@ -15,10 +15,15 @@ export type AccountQuotaProvider = {
   readonly shownAs?: string | null;
 };
 
-const lentQuota = (row: AccountQuotaRow, lent: AccountQuotaRow | undefined): AccountQuotaRow =>
-  lent === undefined || lent.quota === null || (row.quota !== null && row.quota.observedAt >= lent.quota.observedAt)
-    ? row
-    : { ...row, quota: lent.quota, restored: lent.restored, failure: lent.failure, failedAt: lent.failedAt };
+const lentQuota = (row: AccountQuotaRow, lent: readonly AccountQuotaRow[]): AccountQuotaRow => {
+  const borrowers: AccountBorrower[] = lent.map(({ provider, problem }) => ({ provider, problem }));
+  let merged: AccountQuotaRow = { ...row, lent: borrowers };
+  for (const borrower of lent) {
+    if (borrower.quota !== null && (merged.quota === null || merged.quota.observedAt < borrower.quota.observedAt))
+      merged = { ...merged, quota: borrower.quota, restored: borrower.restored, failure: borrower.failure, failedAt: borrower.failedAt };
+  }
+  return merged;
+};
 
 type AccessUse = {
   readonly provider: string;
@@ -84,12 +89,25 @@ const rowKey = (provider: string, account: AccountKey): string => `${provider}/$
 const sameOrigin = (left: AccountQuotaRow['origin'], right: AccountQuotaRow['origin']): boolean =>
   left.kind === right.kind && (left.kind === 'own' || (right.kind === 'cli' && left.place === right.place));
 
+const sameProblem = (left: AccountProblem | null, right: AccountProblem | null): boolean =>
+  left === null
+    ? right === null
+    : right !== null &&
+      left.kind === right.kind &&
+      (left.kind !== 'unreadable' || (right.kind === 'unreadable' && left.reason === right.reason)) &&
+      (left.kind !== 'unsupported-method' || (right.kind === 'unsupported-method' && left.method === right.method));
+
 const sameRow = (left: AccountQuotaRow, right: AccountQuotaRow): boolean =>
   left.provider === right.provider &&
   left.account === right.account &&
   left.label === right.label &&
   sameOrigin(left.origin, right.origin) &&
-  left.problem?.kind === right.problem?.kind &&
+  sameProblem(left.problem, right.problem) &&
+  left.lent.length === right.lent.length &&
+  left.lent.every((entry, index) => {
+    const other = right.lent[index];
+    return other !== undefined && entry.provider === other.provider && sameProblem(entry.problem, other.problem);
+  }) &&
   left.default === right.default &&
   left.expiresAt === right.expiresAt &&
   left.quota === right.quota &&
@@ -196,15 +214,20 @@ export const accountQuotaLayer = (
           providers().map((provider) => [provider.id, provider.shownAs === undefined ? provider.id : provider.shownAs]),
         );
         const own: AccountQuotaRow[] = [];
-        const lent = new Map<string, AccountQuotaRow>();
+        const lent = new Map<string, AccountQuotaRow[]>();
         for (const { row } of state.values()) {
           const named = shown.get(row.provider);
           const target = named === undefined ? row.provider : named;
           if (target === row.provider) own.push(row);
-          else if (target !== null) lent.set(rowKey(target, row.account), row);
+          else if (target !== null) {
+            const key = rowKey(target, row.account);
+            const borrowers = lent.get(key);
+            if (borrowers === undefined) lent.set(key, [row]);
+            else borrowers.push(row);
+          }
         }
         return own
-          .map((row) => lentQuota(row, lent.get(rowKey(row.provider, row.account))))
+          .map((row) => lentQuota(row, lent.get(rowKey(row.provider, row.account)) ?? []))
           .sort(
             (left, right) =>
               (order.get(left.provider) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.provider) ?? Number.MAX_SAFE_INTEGER) ||
@@ -290,6 +313,7 @@ export const accountQuotaLayer = (
               label: stored.label,
               origin: stored.origin,
               problem: stored.problem,
+              lent: [],
               default: stored.key === group.defaultAccount,
               expiresAt: stored.expiresAt,
               quota: enrolled ? previous.row.quota : restored,

@@ -30,12 +30,16 @@ export const accountProblemSchema = Schema.Union([
 ]);
 export type AccountProblem = typeof accountProblemSchema.Type;
 
+const accountBorrowerSchema = Schema.Struct({ provider: Schema.String, problem: Schema.NullOr(accountProblemSchema) });
+export type AccountBorrower = typeof accountBorrowerSchema.Type;
+
 export const accountQuotaRowSchema = Schema.Struct({
   provider: Schema.String,
   account: AccountKey,
   label: Schema.String,
   origin: CredentialOrigin,
   problem: Schema.NullOr(accountProblemSchema),
+  lent: Schema.Array(accountBorrowerSchema),
   default: Schema.Boolean,
   expiresAt: Schema.optional(Schema.Number),
   quota: Schema.NullOr(QuotaObservation),

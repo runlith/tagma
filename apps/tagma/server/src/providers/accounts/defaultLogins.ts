@@ -9,7 +9,7 @@ import { AccountCli, LoginPlaces, type LoginEnvironment } from '../contract/serv
 import { ProviderRegistry } from '../contract/service/registry.js';
 import type { DirectoryAccount } from '../contract/wire/harnessAccounts.js';
 import { credentialRefusal } from '../credentials/refusal.js';
-import { HarnessDirectories, type HarnessDirectoryStore } from './harnessRows.js';
+import { HarnessDirectories } from './harnessRows.js';
 
 export const DEFAULT_LOGIN = AccountKey.make('default');
 
@@ -17,8 +17,9 @@ export const LISTED_MS = 30_000;
 
 type Reading = { readonly read: Effect.Effect<DirectoryAccount | null, GateRefusal>; readonly forget: Effect.Effect<void> };
 
-export const makeDefaultLoginBook = (input: { readonly rows: HarnessDirectoryStore; readonly cli: AccountCli['Service'] }) => {
-  const { rows, cli } = input;
+export const makeDefaultLoginBook = Effect.gen(function* () {
+  const rows = yield* HarnessDirectories;
+  const cli = yield* AccountCli;
   const readings = new WeakMap<CliHarnessProvider, Reading>();
   const places = new WeakMap<CliHarnessProvider, string | null>();
   const locks = new WeakMap<CliHarnessProvider, Map<string | null, Semaphore.Semaphore>>();
@@ -115,8 +116,8 @@ export const makeDefaultLoginBook = (input: { readonly rows: HarnessDirectorySto
     focus: Effect.void as Effect.Effect<void>,
     changes: Stream.empty as Stream.Stream<string>,
   };
-};
-export type DefaultLoginBook = ReturnType<typeof makeDefaultLoginBook>;
+});
+export type DefaultLoginBook = Effect.Success<typeof makeDefaultLoginBook>;
 
 export class DefaultLogins extends Context.Service<DefaultLogins, DefaultLoginBook>()('tagma/providers/DefaultLogins') {}
 
@@ -127,7 +128,7 @@ export const defaultLoginsLayer = Layer.effect(
     const cli = yield* AccountCli;
     const registry = yield* ProviderRegistry;
     const bound = yield* Effect.serviceOption(LoginPlaces);
-    const book = makeDefaultLoginBook({ rows, cli });
+    const book = yield* makeDefaultLoginBook;
     if (Option.isNone(bound)) return book;
     const places = bound.value;
     const files = yield* FileSystem.FileSystem;
@@ -151,7 +152,11 @@ export const defaultLoginsLayer = Layer.effect(
     let profilePending = true;
     const scans = yield* Semaphore.make(1);
 
-    const read = Effect.fn('DefaultLogins.observe')(function* (provider: CliHarnessProvider, directory = book.directoryOf(provider)) {
+    const read = Effect.fn('DefaultLogins.observe')(function* (
+      provider: CliHarnessProvider,
+      directory = book.directoryOf(provider),
+      changed = false,
+    ) {
       const before = book.revision();
       const answer = yield* book.observe(provider, directory);
       if (directory === book.directoryOf(provider)) {
@@ -159,7 +164,7 @@ export const defaultLoginsLayer = Layer.effect(
         if (answer?.signed && answer.problem == null) signed.add(provider.id);
         else signed.delete(provider.id);
       }
-      if (book.revision() !== before) {
+      if (changed || book.revision() !== before) {
         pending.add(provider.id);
         yield* PubSub.publish(moved, undefined);
       }
@@ -188,7 +193,7 @@ export const defaultLoginsLayer = Layer.effect(
           let next = yield* fingerprint(target);
           while (next !== stamp) {
             stamp = next;
-            yield* read(provider, directory);
+            yield* read(provider, directory, true);
             next = yield* fingerprint(target);
           }
         });

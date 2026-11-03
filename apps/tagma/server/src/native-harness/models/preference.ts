@@ -164,7 +164,7 @@ export const makeBirthModels = Effect.fnUntraced(function* ({ rows }: { readonly
   const birthAccount = (provider: string, draft: string | undefined): Effect.Effect<string | null, HarnessFailure> =>
     draft === undefined
       ? Effect.succeed(null)
-      : accountKeys(provider).pipe(
+      : accountKeys(registry.current().accountSource(provider)).pipe(
           Effect.flatMap((keys) => (keys.includes(draft) ? Effect.succeed(draft) : unknownAccount(provider, draft, keys))),
         );
   return BirthModelSelection.of({

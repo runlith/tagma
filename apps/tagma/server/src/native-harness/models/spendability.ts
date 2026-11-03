@@ -21,6 +21,8 @@ function signedSpend(
   if (rows.length === 0) return { spendable: false, reason: 'not-connected' } satisfies Spendability;
   const row = account === null ? signingRow(rows) : rows.find((candidate) => String(candidate.account) === account);
   if (row === undefined) return { spendable: false, reason: 'no-account' } satisfies Spendability;
+  if (row.problem !== null || row.lent.some((borrower) => borrower.provider === provider && borrower.problem !== null))
+    return { spendable: false, reason: 'not-connected' } satisfies Spendability;
   const retryAt = rateLimitedUntil(row);
   if (retryAt !== null && retryAt > now) return { spendable: false, reason: 'rate-limited', until: retryAt } satisfies Spendability;
   const until = quotaUntil(option, row, now);
