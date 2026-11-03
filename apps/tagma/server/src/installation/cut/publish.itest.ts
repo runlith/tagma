@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, expect } from 'bun:test';
+import { afterAll, expect, spyOn } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
@@ -10,10 +10,11 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
 import type { Feed } from '../contract/wire/feed.js';
-import type { Publisher } from './descriptor.js';
+import type { Composition, Publisher } from './descriptor.js';
+import { KEPT_MAPS } from './pipeline.js';
 import { MAPS, RELEASE_RECORD, type ReleaseRecord } from './stage.js';
 import type { Notary } from './notarize.js';
-import { publishRelease } from './publish.js';
+import { publishRelease, shipCommand } from './publish.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-publish-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -45,13 +46,21 @@ const cutInto = (at: string, commit: string, release: string, made = 'the archiv
   writeFileSync(join(at, RELEASE_RECORD), JSON.stringify(record));
 };
 
+const weighed = (at: string, record: ReleaseRecord) =>
+  Object.fromEntries(
+    Object.entries(record.images).map(([platform, image]) => {
+      const bytes = readFileSync(join(at, image));
+      return [platform, { sha256: sha(bytes), size: bytes.length }];
+    }),
+  );
+
 const notary: Notary = {
   seal: (cut, into, record) =>
     Effect.sync(() => {
       mkdirSync(into, { recursive: true });
       for (const file of [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)])
         writeFileSync(join(into, file), readFileSync(join(cut, file)));
-      return { ...record, notarized: true };
+      return { ...record, imageDigests: weighed(into, record), notarized: true };
     }),
 };
 
@@ -137,4 +146,105 @@ it.live(
       expect(missing._tag === 'Failure' && missing.failure.step).toBe('verify');
       expect(git(['-C', checkout, 'rev-parse', '--verify', '--quiet', 'v0.3.0']).exitCode).not.toBe(0);
     }),
+);
+
+const repository = (name: string) => {
+  const checkout = join(scratch, name);
+  mkdirSync(checkout);
+  expect(git(['-C', checkout, 'init', '-q', '-b', 'main']).exitCode).toBe(0);
+  expect(
+    git(['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'feat: one']).exitCode,
+  ).toBe(0);
+  return { checkout, head: said(['-C', checkout, 'rev-parse', 'HEAD']) };
+};
+
+it.live('a notarized cut whose disk image changed after it was sealed is refused before anything is placed', () =>
+  Effect.gen(function* () {
+    const { checkout, head } = repository('tampered');
+    const { publisher, placed } = shelf();
+    const place = { cut: join(scratch, 'tampered-release'), checkout, kept: join(scratch, 'tampered-maps') };
+    cutInto(place.cut, head, '0.4.0');
+    const cut = JSON.parse(readFileSync(join(place.cut, RELEASE_RECORD), 'utf8')) as ReleaseRecord;
+    writeFileSync(join(place.cut, RELEASE_RECORD), JSON.stringify({ ...cut, imageDigests: weighed(place.cut, cut), notarized: true }));
+    writeFileSync(join(place.cut, cut.images['darwin-arm64']!), 'an image changed after it was sealed');
+
+    const refused = yield* Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
+
+    expect(refused._tag === 'Failure' && refused.failure.step).toBe('image');
+    expect(placed).toEqual([]);
+  }),
+);
+
+it.live(
+  'the source maps are kept before the tag, so a keep that fails leaves the checkout untagged and publishing again completes it',
+  () =>
+    Effect.gen(function* () {
+      const { checkout, head } = repository('mapped');
+      const { publisher } = shelf();
+      const kept = join(scratch, 'mapped-maps');
+      const place = { cut: join(scratch, 'mapped-release'), checkout, kept };
+      cutInto(place.cut, head, '0.5.0');
+      writeFileSync(kept, 'a file where the maps directory belongs');
+
+      const stopped = yield* Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
+      const taggedAfterStop = git(['-C', checkout, 'rev-parse', '--verify', '--quiet', 'v0.5.0']).exitCode === 0;
+      rmSync(kept);
+      const completed = yield* Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
+
+      expect([stopped._tag, taggedAfterStop]).toEqual(['Failure', false]);
+      expect(completed._tag).toBe('Success');
+      expect(said(['-C', checkout, 'rev-parse', 'v0.5.0^{commit}'])).toBe(head);
+      expect(readFileSync(join(kept, '0.5.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.5.0"}');
+      expect(readdirSync(kept)).toEqual(['0.5.0']);
+    }),
+);
+
+it.live('ship on a tagged HEAD answers released only while its source maps are kept, and finishes the publication when they are lost', () =>
+  Effect.gen(function* () {
+    const { checkout, head } = repository('shipped');
+    const { publisher } = shelf();
+    const data = join(scratch, 'shipped-data');
+    const cut = join(scratch, 'shipped-release');
+    const place = { cut, checkout, kept: join(data, KEPT_MAPS) };
+    cutInto(cut, head, '0.6.0');
+    yield* publishRelease(publisher, notary, place).pipe(Effect.provide(machine));
+    const composition = {
+      roots: { checkout },
+      workshop: { data: '.shipped' },
+      channel: { name: 'Tagma' },
+      signing: { team: 'NOSUCHTEAM', notary: 'none' },
+      brand: { assets: '' },
+      publisher,
+      feed: null,
+    } as unknown as Composition;
+    const previous = process.env.TAGMA_DATABASE_PATH;
+    process.env.TAGMA_DATABASE_PATH = join(data, 'tagma.db');
+    const printed: string[] = [];
+    const logging = spyOn(console, 'log').mockImplementation((line: unknown) => void printed.push(String(line)));
+    const exiting = spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exited');
+    }) as never);
+    const ship = () => Effect.exit(shipCommand(['--out', cut, '--json'], composition)).pipe(Effect.map(() => printed.splice(0)));
+    const answers = yield* Effect.gen(function* () {
+      const kept = yield* ship();
+      rmSync(join(data, KEPT_MAPS), { recursive: true, force: true });
+      const lost = yield* ship();
+      return { kept, lost };
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          logging.mockRestore();
+          exiting.mockRestore();
+          if (previous === undefined) delete process.env.TAGMA_DATABASE_PATH;
+          else process.env.TAGMA_DATABASE_PATH = previous;
+        }),
+      ),
+    );
+    const completed = yield* Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
+
+    expect(answers.kept).toEqual(['{"release":"0.6.0","published":true}']);
+    expect(answers.lost.map((line) => JSON.parse(line).published)).toEqual([undefined]);
+    expect(completed._tag).toBe('Success');
+    expect(existsSync(join(data, KEPT_MAPS, '0.6.0', 'http.js.map'))).toBe(true);
+  }),
 );

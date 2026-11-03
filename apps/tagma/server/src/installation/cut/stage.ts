@@ -10,6 +10,7 @@ import {
   type FeedArchive,
   FEED_FILE,
   type FeedRelease,
+  feedArchiveSchema,
   feedSchema,
   platformArchivesSchema,
   RELEASE_NUMBER,
@@ -27,11 +28,14 @@ const RETIRED = 'retired';
 const NEXT = 'next';
 const OWNED = '.cut';
 
+const imageDigestSchema = Schema.Struct({ sha256: feedArchiveSchema.fields.sha256, size: feedArchiveSchema.fields.size });
+
 export const ReleaseRecord = Schema.Struct({
   release: Schema.String.check(Schema.isPattern(RELEASE_NUMBER)),
   commit: Schema.NonEmptyString,
   platforms: platformArchivesSchema,
   images: Schema.Record(Schema.String, Schema.NonEmptyString),
+  imageDigests: Schema.optional(Schema.Record(Schema.String, imageDigestSchema)),
   stores: storeMarksSchema,
   irreversible: Schema.Array(IrreversibleChange),
   notarized: Schema.Boolean,
@@ -78,14 +82,25 @@ export const feedEntry = (one: ReleaseRecord, address: (archive: string) => stri
   changes: one.irreversible,
 });
 
-export const digestOf = (file: string): Promise<string> =>
+export type Weight = { readonly sha256: string; readonly size: number };
+
+export const weigh = (file: string): Promise<Weight> =>
   new Promise((resolved, failed) => {
     const hash = createHash('sha256');
+    let size = 0;
     createReadStream(file)
-      .on('data', (chunk) => hash.update(chunk))
+      .on('data', (chunk) => {
+        hash.update(chunk);
+        size += chunk.length;
+      })
       .on('error', failed)
-      .on('end', () => resolved(hash.digest('hex')));
+      .on('end', () => resolved({ sha256: hash.digest('hex'), size }));
   });
+
+export const digestOf = (file: string): Promise<string> => weigh(file).then((weight) => weight.sha256);
+
+export const imagesWeighed = (record: ReleaseRecord): boolean =>
+  Object.keys(record.platforms).every((platform) => record.imageDigests?.[platform] !== undefined);
 
 export const homeOf = (out: string, cut: Pick<ReleaseRecord, 'release' | 'commit' | 'notarized'>): string =>
   `${out}-${cut.release}-${cut.commit.slice(0, 12)}${cut.notarized ? `-${NOTARIZED}` : ''}`;
@@ -214,6 +229,11 @@ export const landNotarized = Effect.fn('installation.landNotarized')(function* (
   }
   yield* recorded(home, record).pipe(Effect.mapError(unreadable(home)));
   yield* stand(out, home);
+  return home;
+});
+
+export const recordedInPlace = Effect.fn('installation.recordCutInPlace')(function* (home: string, record: ReleaseRecord) {
+  yield* recorded(home, record).pipe(Effect.mapError(unreadable(home)));
   return home;
 });
 

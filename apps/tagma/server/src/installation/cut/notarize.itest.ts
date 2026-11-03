@@ -69,6 +69,58 @@ const accepting = (opens: Apple['opens']): Apple => {
   };
 };
 
+it.live('the sealed cut records the digest and size of each final disk image, and an image changed afterwards refuses the cut', () =>
+  Effect.gen(function* () {
+    const out = yield* cutAt('digest');
+    const notary = yield* sealingNotary(accepting(() => Effect.void)).pipe(Effect.provide(machine));
+    const notarize = () => Effect.result(notarizeRelease(notary, out).pipe(Effect.provide(machine)));
+
+    const sealed = yield* notarize();
+    const record = recordAt(out);
+    const weighed = Object.fromEntries(
+      Object.entries(record.images).map(([platform, image]) => [
+        platform,
+        { sha256: sha(join(out, image)), size: readFileSync(join(out, image)).length },
+      ]),
+    );
+    writeFileSync(join(out, record.images['darwin-arm64']!), 'an image changed after it was sealed');
+    const changed = yield* notarize();
+
+    expect([sealed._tag, record.notarized]).toEqual(['Success', true]);
+    expect(record.imageDigests).toEqual(weighed);
+    expect(changed._tag === 'Failure' && changed.failure.step).toBe('image');
+  }),
+);
+
+it.live(
+  'a notarized cut recorded before its images were weighed is sealed in place, judged by Gatekeeper and recorded with their digests',
+  () =>
+    Effect.gen(function* () {
+      const out = yield* cutAt('legacy');
+      writeFileSync(join(out, RELEASE_RECORD), JSON.stringify({ ...recordAt(out), notarized: true }));
+      const opened = new Set<string>();
+      const notary = yield* sealingNotary({
+        ...accepting(() => Effect.void),
+        opens: (image) => Effect.sync(() => void opened.add(basename(image))),
+      }).pipe(Effect.provide(machine));
+
+      yield* notarizeRelease(notary, out).pipe(Effect.provide(machine));
+      const record = recordAt(out);
+
+      expect([...opened].sort()).toEqual(['Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg']);
+      expect(record.notarized).toBe(true);
+      expect(
+        Object.entries(record.images).map(([platform, image]) => [
+          platform,
+          record.imageDigests?.[platform]?.sha256 === sha(join(out, image)),
+        ]),
+      ).toEqual([
+        ['darwin-arm64', true],
+        ['darwin-x64', true],
+      ]);
+    }),
+);
+
 it.live('a disk image Gatekeeper would not open refuses the notarization, and the cut stands unnotarized and whole', () =>
   Effect.gen(function* () {
     const out = yield* cutAt('refused');

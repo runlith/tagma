@@ -1,12 +1,11 @@
 import { basename, join } from 'node:path';
-import { stat } from 'node:fs/promises';
 import { type Context, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Signing } from '@runlith/codesign/codesign';
 import { output } from './command.js';
 import { diskImage } from './dmg.js';
 import { packRelease } from './pipeline.js';
-import { digestOf, type ReleaseRecord, replaced } from './stage.js';
+import { type ReleaseRecord, replaced, type Weight, weigh } from './stage.js';
 import type { FeedArchive } from '../contract/wire/feed.js';
 
 export class NotarizationRefused extends Data.TaggedError('NotarizationRefused')<{
@@ -180,18 +179,19 @@ const sealed = Effect.fn('Notarize.seal')(function* (
     yield* apple.accepted(yield* submission(join(staging, IMAGE_SUBMISSION), image));
     yield* apple.staple(image);
     yield* apple.opens(image);
-    const [sha256, size] = yield* Effect.tryPromise({
-      try: () => Promise.all([digestOf(archive), stat(archive).then((info) => info.size)]),
-      catch: (error) => refused(`${archive} could not be read: ${String(error)}`),
+    const [weight, imageWeight] = yield* Effect.tryPromise({
+      try: () => Promise.all([weigh(archive), weigh(image)]),
+      catch: (error) => refused(`${archive} or ${image} could not be read: ${String(error)}`),
     });
-    return { platform, archive: { archive: archiveName, sha256, size }, image: imageName };
+    return { platform, archive: { archive: archiveName, ...weight }, image: imageName, imageWeight };
   });
   const chains = yield* Effect.forEach(Object.entries(record.platforms), ([platform, one]) => chain(platform, one), {
     concurrency: 'unbounded',
   });
   const platforms: Record<string, FeedArchive> = Object.fromEntries(chains.map((one) => [one.platform, one.archive]));
   const images: Record<string, string> = Object.fromEntries(chains.map((one) => [one.platform, one.image]));
-  return { ...record, platforms, images, notarized: true };
+  const imageDigests: Record<string, Weight> = Object.fromEntries(chains.map((one) => [one.platform, one.imageWeight]));
+  return { ...record, platforms, images, imageDigests, notarized: true };
 });
 
 export const appleNotary = (developer: Developer): Effect.Effect<Notary, never, FileSystem.FileSystem | Spawner> =>

@@ -15,15 +15,17 @@ import { releaseNotes } from './notes.js';
 import { checkoutTags, highestOf, precedingOf } from './published.js';
 import {
   decodeRecord,
-  digestOf,
   feedEntry,
   homeOf,
+  imagesWeighed,
   landNotarized,
   MAPS,
   openHome,
+  recordedInPlace,
   standingHome,
   RELEASE_RECORD,
   type ReleaseRecord,
+  weigh,
 } from './stage.js';
 
 const USAGE = 'bun run tagma:release publish [--version <x.y.z>] [--out <dir>] [--json]';
@@ -87,17 +89,23 @@ const cutStanding = Effect.fnUntraced(function* (cut: string): Effect.fn.Return<
       if (!(yield* present(path))) return yield* refused('release', `${path}, which ${RELEASE_RECORD} names, is absent`, [RECUT]);
     }
   }
-  for (const one of Object.values(record.platforms)) {
-    const path = join(home, one.archive);
-    const size = Number((yield* files.stat(path).pipe(Effect.mapError(unreadable(path)))).size);
-    const sha256 = yield* Effect.tryPromise({
-      try: () => digestOf(path),
+  const proofs = [
+    ...Object.values(record.platforms).map((one) => ({ step: 'archive', path: join(home, one.archive), expected: one })),
+    ...(record.notarized
+      ? Object.entries(record.imageDigests ?? {}).flatMap(([platform, expected]) =>
+          record.images[platform] === undefined ? [] : [{ step: 'image', path: join(home, record.images[platform]), expected }],
+        )
+      : []),
+  ];
+  for (const { step, path, expected } of proofs) {
+    const weight = yield* Effect.tryPromise({
+      try: () => weigh(path),
       catch: (error) => refused('release', `${path} could not be read: ${String(error)}`),
     });
-    if (size !== one.size || sha256 !== one.sha256) {
+    if (weight.size !== expected.size || weight.sha256 !== expected.sha256) {
       return yield* refused(
-        'archive',
-        `${path} is ${size} bytes with sha256 ${sha256}, and ${RELEASE_RECORD} records ${one.size} bytes with sha256 ${one.sha256}`,
+        step,
+        `${path} is ${weight.size} bytes with sha256 ${weight.sha256}, and ${RELEASE_RECORD} records ${expected.size} bytes with sha256 ${expected.sha256}`,
         [RECUT],
       );
     }
@@ -110,13 +118,19 @@ const notarizedCut = Effect.fnUntraced(function* (
   cut: string,
   standing: Standing,
 ): Effect.fn.Return<Standing, PublishRefused, FileSystem.FileSystem> {
-  if (standing.record.notarized) return standing;
+  if (standing.record.notarized && imagesWeighed(standing.record)) return standing;
   const failed = (failure: { readonly detail: string; readonly unblock: readonly string[] }) =>
     refused('notarization', failure.detail, failure.unblock);
-  const into = homeOf(cut, { ...standing.record, notarized: true });
-  yield* openHome(into).pipe(Effect.mapError(failed));
+  const sealedBefore = standing.record.notarized;
+  const into = sealedBefore ? standing.home : homeOf(cut, { ...standing.record, notarized: true });
+  if (!sealedBefore) yield* openHome(into).pipe(Effect.mapError(failed));
   const record = yield* notary.seal(standing.home, into, standing.record).pipe(Effect.mapError(failed));
-  const home = yield* landNotarized(cut, standing.home, record).pipe(Effect.mapError(failed));
+  if (!imagesWeighed(record)) {
+    return yield* refused('notarization', `the notary sealed ${record.release} without the digest of every disk image`, [AGAIN]);
+  }
+  const home = sealedBefore
+    ? yield* recordedInPlace(standing.home, record).pipe(Effect.mapError(failed))
+    : yield* landNotarized(cut, standing.home, record).pipe(Effect.mapError(failed));
   return { record, home };
 });
 
@@ -240,6 +254,14 @@ export const publishRelease = (
       const landed = yield* publisher.publish({ record, home, files: shipped, feed, notes }).pipe(Effect.mapError(troubled('publish')));
       yield* verified(publisher, release, home, shipped);
 
+      const maps = join(kept, release);
+      const part = `${maps}.part`;
+      yield* files.makeDirectory(kept, { recursive: true }).pipe(Effect.mapError(unreadable(kept)));
+      yield* files.remove(part, { recursive: true, force: true }).pipe(Effect.mapError(unreadable(part)));
+      yield* files.copy(join(home, MAPS), part, { overwrite: true }).pipe(Effect.mapError(unreadable(join(home, MAPS))));
+      yield* files.remove(maps, { recursive: true, force: true }).pipe(Effect.mapError(unreadable(maps)));
+      yield* files.rename(part, maps).pipe(Effect.mapError(unreadable(maps)));
+
       if (!tagged) {
         yield* git.run(['tag', tag, commit], { cwd: checkout }).pipe(
           Effect.mapError((failure) => refused('tag', failure.message, [AGAIN])),
@@ -250,10 +272,6 @@ export const publishRelease = (
           ),
         );
       }
-      const maps = join(kept, release);
-      yield* files.remove(maps, { recursive: true, force: true }).pipe(Effect.mapError(unreadable(maps)));
-      yield* files.makeDirectory(kept, { recursive: true }).pipe(Effect.mapError(unreadable(kept)));
-      yield* files.copy(join(home, MAPS), maps, { overwrite: true }).pipe(Effect.mapError(unreadable(join(home, MAPS))));
 
       return {
         release,
@@ -337,32 +355,48 @@ export const cutCommand = Effect.fnUntraced(function* (given: readonly string[],
 
 type Head = { readonly _tag: 'Released'; readonly release: string } | { readonly _tag: 'Cut' } | { readonly _tag: 'Uncut' };
 
-const headOf = Effect.fnUntraced(function* (checkout: string, cut: string): Effect.fn.Return<Head, string, CutMachine> {
+const headOf = Effect.fnUntraced(function* (
+  checkout: string,
+  cut: string,
+  kept: string,
+): Effect.fn.Return<Head, PublishRefused, CutMachine> {
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
   const asked = (args: readonly string[]) =>
-    git.run(args, { cwd: checkout }).pipe(Effect.mapError((failure) => `git ${args[0]}: ${failure.message}`));
+    git.run(args, { cwd: checkout }).pipe(Effect.mapError((failure) => refused('head', `git ${args[0]}: ${failure.message}`, [AGAIN])));
   const head = yield* asked(['rev-parse', 'HEAD']);
-  if (head.status !== 0) return yield* Effect.fail(`git rev-parse HEAD exited ${head.status}: ${head.stderr.trim()}`);
+  if (head.status !== 0) return yield* refused('head', `git rev-parse HEAD exited ${head.status}: ${head.stderr.trim()}`, [AGAIN]);
   const commit = head.stdout.trim();
   const tagged = yield* asked(['tag', '--points-at', commit, '--list', tagOf('*')]);
-  if (tagged.status !== 0) return yield* Effect.fail(`git tag --points-at exited ${tagged.status}: ${tagged.stderr.trim()}`);
+  if (tagged.status !== 0) return yield* refused('head', `git tag --points-at exited ${tagged.status}: ${tagged.stderr.trim()}`, [AGAIN]);
   const released = tagged.stdout
     .split('\n')
     .map((line) => releaseOfTag(line.trim()))
     .filter((release) => release !== null)
     .sort((one, other) => compareReleases(other, one))[0];
-  if (released !== undefined) return { _tag: 'Released', release: released };
-  const home = yield* standingHome(cut).pipe(Effect.mapError((failure) => failure.detail));
-  const recordPath = join(home ?? cut, RELEASE_RECORD);
-  const present = yield* files.exists(recordPath).pipe(Effect.mapError((error) => `${recordPath}: ${error.reason._tag}`));
-  if (home === null || !present) return { _tag: 'Uncut' };
-  const decoded = decodeRecord(
-    yield* files.readFileString(recordPath).pipe(Effect.mapError((error) => `${recordPath}: ${error.reason._tag}`)),
-  );
-  if (decoded._tag === 'Failure') return { _tag: 'Uncut' };
-  const cutFrom = yield* asked(['rev-parse', '--verify', '--quiet', `${decoded.success.commit}^{commit}`]);
-  return cutFrom.status === 0 && cutFrom.stdout.trim() === commit ? { _tag: 'Cut' } : { _tag: 'Uncut' };
+  const unread = (path: string) => (error: PlatformError.PlatformError) => refused('head', `${path}: ${error.reason._tag}`, [AGAIN]);
+  const cutAtHead = Effect.gen(function* () {
+    const home = yield* standingHome(cut).pipe(Effect.mapError((failure) => refused('head', failure.detail, failure.unblock)));
+    const recordPath = join(home ?? cut, RELEASE_RECORD);
+    const present = yield* files.exists(recordPath).pipe(Effect.mapError(unread(recordPath)));
+    if (home === null || !present) return null;
+    const decoded = decodeRecord(yield* files.readFileString(recordPath).pipe(Effect.mapError(unread(recordPath))));
+    if (decoded._tag === 'Failure') {
+      return yield* refused('record', `${recordPath} does not read as a release record: ${decoded.failure.message}`, [
+        `move the unreadable cut at ${home} aside, then run the same command again`,
+      ]);
+    }
+    const cutFrom = yield* asked(['rev-parse', '--verify', '--quiet', `${decoded.success.commit}^{commit}`]);
+    return cutFrom.status === 0 && cutFrom.stdout.trim() === commit ? decoded.success : null;
+  });
+  if (released !== undefined) {
+    const keptPath = join(kept, released);
+    const mapsKept = yield* files.exists(keptPath).pipe(Effect.mapError(unread(keptPath)));
+    if (mapsKept) return { _tag: 'Released', release: released };
+    const finishing = yield* cutAtHead;
+    return finishing?.release === released ? { _tag: 'Cut' } : { _tag: 'Released', release: released };
+  }
+  return (yield* cutAtHead) === null ? { _tag: 'Uncut' } : { _tag: 'Cut' };
 });
 
 export const shipCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
@@ -370,9 +404,11 @@ export const shipCommand = Effect.fnUntraced(function* (given: readonly string[]
   const told = toldBy(USAGE, () => json);
   const flags = flagsOf(given, told);
   json = flags.json;
-  const { cut } = cutIn(composition, flags.value('--out'), told);
-  const head = yield* Effect.result(headOf(composition.roots.checkout, cut).pipe(Effect.provide(machine)));
-  if (head._tag === 'Failure') return told('publish-refused', `head: ${head.failure}`, [AGAIN]);
+  const { data, cut } = cutIn(composition, flags.value('--out'), told);
+  const head = yield* Effect.result(headOf(composition.roots.checkout, cut, join(data, KEPT_MAPS)).pipe(Effect.provide(machine)));
+  if (head._tag === 'Failure') {
+    return told('publish-refused', `${head.failure.step}: ${head.failure.detail}`, head.failure.unblock);
+  }
   if (head.success._tag === 'Released') {
     const { release } = head.success;
     if (json) console.log(JSON.stringify({ release, published: true }));
