@@ -249,7 +249,8 @@ export const makeCheckoutPathService = Effect.gen(function* () {
     return Effect.suspend(() => {
       const attempted = revisions.get(projectId) ?? 0;
       let omitted = false;
-      const fence = (refusal: PlaceUnread, place: string | undefined): Effect.Effect<readonly ProjectRoot[], PlaceUnread> => {
+      let place: string | undefined;
+      const fence = (refusal: PlaceUnread): Effect.Effect<readonly ProjectRoot[], PlaceUnread> => {
         const registered = projectsAt.get(projectId);
         const fences = [
           ...new Set([
@@ -273,12 +274,11 @@ export const makeCheckoutPathService = Effect.gen(function* () {
           failure.reason === 'unestablished' || failure.reason === 'moved' ? coverage.cover(projectId) : Effect.fail(failure),
         ),
         Effect.map((covered) => covered.roots),
-        Effect.catch((failure) =>
-          fence(
-            new PlaceUnread({ path, reason: failure.message }),
-            'path' in failure && typeof failure.path === 'string' ? failure.path : undefined,
-          ),
-        ),
+        Effect.mapError((failure) => {
+          place = 'path' in failure && typeof failure.path === 'string' ? failure.path : undefined;
+          return new PlaceUnread({ path, reason: failure.message });
+        }),
+        Effect.catchTag('PlaceUnread', fence),
         Effect.flatMap((roots) => {
           return Effect.forEach(roots, (root) =>
             Effect.map(
