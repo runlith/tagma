@@ -55,10 +55,6 @@ edges:
   - kind: imports
     to: 01a0fd8b-bedd-7f22-b461-adddedf810fe
   - kind: imports
-    to: 01a0fd8b-bee9-7760-9b13-b9847a70e34e
-  - kind: imports
-    to: 01a0fd8b-beeb-7ef2-bff4-d6d3b824564e
-  - kind: imports
     to: 01a0fd8b-beed-7934-884b-a443f92da92b
   - kind: imports
     to: 01a0fd8b-bef1-758e-b119-40b1d962023e
@@ -80,6 +76,10 @@ edges:
     to: 01a12c51-8120-7250-9703-61feea5c74f4
   - kind: imports
     to: 01a13b1a-1851-79b3-ba84-3b0e9f581885
+  - kind: imports-tests
+    to: 01a0fd8b-bee9-7760-9b13-b9847a70e34e
+  - kind: imports-tests
+    to: 01a0fd8b-beeb-7ef2-bff4-d6d3b824564e
   - kind: imports-tests
     to: 01a127e3-cc5c-73fa-99ff-b228d2a60527
 sources:

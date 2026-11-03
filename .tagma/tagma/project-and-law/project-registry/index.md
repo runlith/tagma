@@ -25,9 +25,6 @@ fields:
         "at": "resolution.ts"
       },
       {
-        "at": "store/restore.ts"
-      },
-      {
         "at": "store/table.ts"
       },
       {
