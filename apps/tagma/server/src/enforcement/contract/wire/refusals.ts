@@ -1,8 +1,8 @@
-import type { InspectionFailure, JudgeRefusalReport, RuleBodies, RuleCrossing } from '../contract/wire/enforcement.js';
-import { findingLines } from '../contract/wire/findings.js';
-import { MAP_RECOVERY } from '../contract/wire/document.js';
-import type { Words } from '../../platform/contract/wire/refusal.js';
-import { COMMIT_OPERATIONS } from '../contract/wire/checks.js';
+import type { InspectionFailure, JudgeRefusalReport, RuleBodies, RuleCrossing } from './enforcement.js';
+import { findingLines } from './findings.js';
+import { MAP_RECOVERY } from './document.js';
+import type { Words } from '../../../platform/contract/wire/refusal.js';
+import { COMMIT_OPERATIONS } from './checks.js';
 
 export const MERGE_OP = 'merge_worktree';
 

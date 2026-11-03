@@ -43,7 +43,7 @@ import { measuredRoot } from '../../graph/contract/service/serving.js';
 import { judgeBindings, type BoundRule } from '../programs/bindings.js';
 import { covers, enforcedRules, enforcedStatutes, moduleMapOf, runsBefore, afterTriggered, runsOn } from '../rules/reach.js';
 import { attributed, evidenceOf, wireOf } from './excess.js';
-import { type Failed, failedRefusal, MERGE_OP, type Rule, violatedRefusal } from './refusals.js';
+import { type Failed, failedRefusal, MERGE_OP, type Rule, violatedRefusal } from '../contract/wire/refusals.js';
 
 type Ruled = Rule & { readonly body: string };
 
