@@ -13,7 +13,7 @@ import {
 
 export type ScrollOutcome = 'no-overflow' | 'at-bottom' | 'auto' | 'reader-moved';
 
-export type Hold = 'press' | 'selection' | 'focus';
+export type Hold = 'press' | 'selection';
 
 export type FollowingViewportOptions = {
   autoFollows(): boolean;
@@ -37,7 +37,7 @@ export class FollowingViewport {
   private scrollFrame: number | undefined;
   private scrollForced = false;
   private readonly holds = new Set<Hold>();
-  private selected = false;
+  private selectionContent: HTMLElement | undefined;
   private overruled = false;
   private previousTop = 0;
   private readerDirection = 0;
@@ -188,9 +188,18 @@ export class FollowingViewport {
   follow(): void {
     this.cancelScroll();
     this.holds.clear();
-    this.overruled = this.selected;
+    const content = this.selectionContent;
+    this.overruled = content !== undefined && selectionInside(content.ownerDocument.getSelection(), content);
     this.readerDirection = 0;
     this.setFollowing(true);
+  }
+
+  touched(): void {
+    this.overruled = false;
+  }
+
+  unreported(): boolean {
+    return this.root !== undefined && this.root.scrollTop !== this.previousTop;
   }
 
   gesture(delta: number): void {
@@ -224,9 +233,10 @@ export class FollowingViewport {
   }
 
   syncSelection(selection: Selection | null, content: HTMLElement): void {
-    this.selected = selectionInside(selection, content);
-    if (!this.selected) this.overruled = false;
-    if (this.selected && !this.overruled) this.hold('selection');
+    this.selectionContent = content;
+    const selected = selectionInside(selection, content);
+    if (!selected) this.overruled = false;
+    if (selected && !this.overruled) this.hold('selection');
     else this.release('selection');
   }
 
