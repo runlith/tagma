@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a1a5df-8d95-74d4-a1cd-79467ef2e8f4",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 `forkNotice.itest.ts` › "native forks preserve request bytes across birth doors, history cuts and compaction" is one scenario of ~14 scripted turns, 4 spawns, 3 branches and a compaction. It does not hang: CI run 41766802714 spent 66.6 s CPU over 172.7 s body wall and was cut by the 180 s guard (run 41763572270 passed at 55.8 s CPU / 132 s); locally under `taskpolicy -c background` it measured 59.6 s body CPU and failed at the guard once, passed at 136 s once. The "project 2 was not removed: null" line is the leave finalizer's `remove_project` being answered 503 after the guard interrupted the test.
