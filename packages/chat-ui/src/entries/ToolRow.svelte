@@ -111,14 +111,14 @@
         <ul class="grid min-w-0">
           {#each display.items as item, index (index)}
             {@const at = nameAt(item.label)}
-            <li class="flex h-6 min-w-0 items-baseline gap-2 font-mono text-small leading-6">
-              <span class="flex min-w-0 items-baseline">
-                {#if at > 0}<span class="min-w-0 text-muted-foreground" data-fade="start" {@attach clipFade}
+            <li data-line class="items-baseline gap-2 font-mono text-small leading-6">
+              <span data-line class="items-baseline">
+                {#if at > 0}<span class="text-muted-foreground" data-yield="start" data-fade="start" {@attach clipFade}
                     ><bdi>{item.label.slice(0, at)}</bdi></span
-                  >{/if}<span class="max-w-full shrink-0 text-foreground/80" data-fade {@attach clipFade}>{item.label.slice(at)}</span>
+                  >{/if}<span class="text-foreground/80" data-fade {@attach clipFade}>{item.label.slice(at)}</span>
               </span>
               {#if item.detail}
-                <span class="min-w-0 flex-1 text-muted-foreground" data-fade {@attach clipFade}>{item.detail}</span>
+                <span class="text-muted-foreground" data-yield data-fade {@attach clipFade}>{item.detail}</span>
               {/if}
             </li>
           {/each}
