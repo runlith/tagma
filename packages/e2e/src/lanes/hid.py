@@ -36,12 +36,7 @@ async def events(reader, command, terminal):
     last = None
     while True:
         if command is None:
-            pending = asyncio.ensure_future(reader.readline())
-            while not pending.done():
-                await asyncio.wait({pending}, timeout=INTERVAL)
-                if not pending.done() and last is not None:
-                    yield sample(*last)
-            line = pending.result()
+            line = await reader.readline()
             if not line:
                 raise EOFError("touch input ended without an explicit release")
             command = json.loads(line)
@@ -129,6 +124,10 @@ async def main():
         logging.getLogger("e2e.hid"),
         exchange_metadata=False,
     ) as client:
+        async with client.stub.hid.open() as stream:
+            await stream.send_request(end=True)
+            if await stream.recv_message() is None:
+                raise RuntimeError("the companion did not acknowledge its HID transport")
         while line := await reader.readline():
             command = json.loads(line)
             phase = command["phase"]
