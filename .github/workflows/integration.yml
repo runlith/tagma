@@ -1,4 +1,5 @@
 name: integration
+run-name: integration ${{ inputs.package || 'all packages' }}
 
 on:
   workflow_dispatch:
