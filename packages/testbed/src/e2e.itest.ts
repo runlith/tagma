@@ -52,7 +52,7 @@ console.log(JSON.stringify({ root, units: Number(process.env.${SLOT_ENV}.split('
   for (const cores of [8, 1]) {
     const result = await run(root, ['e2e', '--program', './bench.ts', '--sample', 'frames'], {
       TESTBED_CORES: String(cores),
-      TESTBED_BUDGET: undefined,
+      CI: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'units'),
       [SLOT_ENV]: undefined,
     });
@@ -194,7 +194,7 @@ test('worker allowance', async () => {
       cores === 1 ? ['e2e', '--parallel-delay=0'] : ['bun', 'test', '--parallel-delay=0', './0.e2e.ts', './1.e2e.ts', './2.e2e.ts'];
     const result = await run(root, command, {
       TESTBED_CORES: String(cores),
-      TESTBED_BUDGET: undefined,
+      CI: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'units'),
       [SLOT_ENV]: undefined,
     });

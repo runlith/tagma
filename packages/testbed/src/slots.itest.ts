@@ -22,7 +22,7 @@ const pool = () => {
   const env: Record<string, string | undefined> = {
     ...process.env,
     TESTBED_CORES: String(CORES),
-    TESTBED_BUDGET: undefined,
+    CI: undefined,
     TESTBED_BUDGET_ROOT: units,
   };
   delete env[SLOT_ENV];
@@ -101,9 +101,11 @@ test('worker families fit CPU and memory capacity without starving a small machi
   expect(machineBudget({ TESTBED_CORES: '1' }, gib / 2)).toBe(1);
 });
 
-test('a fixed budget replaces the shared-machine formula', () => {
-  expect(machineBudget({ TESTBED_CORES: '3', TESTBED_BUDGET: '3' }, 7 * 1024 ** 3)).toBe(3);
-  expect(() => machineBudget({ TESTBED_BUDGET: '0' })).toThrow('TESTBED_BUDGET must be a positive integer');
+test('on a CI machine the tests are its only tenant and take every core its memory holds', () => {
+  const gib = 1024 ** 3;
+  expect(machineBudget({ TESTBED_CORES: '3', CI: 'true' }, 7 * gib)).toBe(3);
+  expect(machineBudget({ TESTBED_CORES: '16', CI: 'true' }, 16 * gib)).toBe(8);
+  expect(machineBudget({ TESTBED_CORES: '3', CI: 'false' }, 7 * gib)).toBe(1);
 });
 
 test('runs share the machine budget at entry, never exceed it, and get back the processes of a killed run', async () => {

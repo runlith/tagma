@@ -418,7 +418,7 @@ test('reads through open', () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '1',
-      TESTBED_BUDGET: undefined,
+      CI: undefined,
       TESTBED_BUDGET_ROOT: join(external, 'budget'),
       RUNLITH_SQLITE_HOSTING: 'inline',
     };
@@ -470,7 +470,7 @@ test('the files a change check selects in one package run side by side on the ma
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '12',
-      TESTBED_BUDGET: undefined,
+      CI: undefined,
       TESTBED_BUDGET_ROOT: join(marks, 'budget'),
       MEET: machineBudget({ TESTBED_CORES: '12' }) > 1 ? '1' : '0',
     };

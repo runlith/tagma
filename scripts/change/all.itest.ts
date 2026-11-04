@@ -305,7 +305,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '12',
-      TESTBED_BUDGET: undefined,
+      CI: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'budget'),
     };
     delete env['RUNLITH_TEST_SLOT'];

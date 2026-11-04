@@ -41,7 +41,7 @@ export default class {
   const env: Record<string, string | undefined> = {
     ...process.env,
     TESTBED_CORES: '5',
-    TESTBED_BUDGET: undefined,
+    CI: undefined,
     TESTBED_BUDGET_ROOT: join(root, 'units'),
   };
   delete env['RUNLITH_TEST_SLOT'];
