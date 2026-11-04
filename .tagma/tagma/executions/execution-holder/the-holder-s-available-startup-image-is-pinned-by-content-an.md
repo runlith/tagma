@@ -9,5 +9,9 @@ sources:
   - kind: symbol
     ref: packages/execution-host/native/holder/src/posix/mod.rs
     symbol: open
+  - kind: file
+    ref: packages/execution-host/native/holder/src/macos/image.rs
+  - kind: file
+    ref: packages/execution-host/native/holder/src/posix/backend.rs
 ---
-So that a bundle swap or deletion of the source binary does not change the live holder's trampoline, macOS pins a separate image by content digest after matching LC_UUID with the running image. The copy syncs before atomic publication; reuse requires a digest match. The lease enters the holder's standing and is not recomputed on each launch. Cleanup under the writer claim is best-effort. If the image cannot be pinned, the holder diagnoses the cause and launches the trampoline via current_exe: terminal availability kept, but independence from later replacement of that path is not guaranteed in that mode.
+A bundle swap or removal of the original pathname must not change a live holder's trampoline. Shared POSIX custody pins the selected backend's running image by content, synchronizes it before publication and retains a lease across launches. macOS validates LC_UUID against its loaded image; Linux reads /proc/self/exe. Reuse requires the content digest to match. If pinning refuses, a diagnosed fallback keeps terminals available: Linux's locator still identifies the running image, while macOS current_exe cannot guarantee independence from later pathname replacement. Cleanup of unused images under the writer claim remains best-effort.
