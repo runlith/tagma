@@ -12,6 +12,7 @@ import type { UiTokensParams } from './ui-tokens/declaration';
 import type { DeadParams, RepeatedParams } from './declarations/declaration';
 import type { VendorParams } from './architecture/inspections';
 import type { CallParams } from './architecture/calls/params';
+import { judgedFile } from './judged';
 import { withReader } from './store';
 
 const root = process.cwd();
@@ -43,7 +44,7 @@ const checked =
   (id: string) =>
   async (input: InspectionInput<object>): Promise<Answer> =>
     withReader(root, input.tree.commit, async () => {
-      await (engine ??= prepared());
+      await (engine ??= prepared(input.tree.commit));
       const check = await checkOf(id, input.params);
       const reading = async (name: Named, side: Side): Promise<Reading> => {
         const reach = new Set(side.paths);
@@ -78,9 +79,9 @@ const checked =
 
 let engine: Promise<void> | undefined;
 
-const prepared = async (): Promise<void> => {
-  const { prepareEngine, selectEngine } = await import('@runlith/sqlite-process/engine');
-  await prepareEngine();
+const prepared = async (commit: string): Promise<void> => {
+  const { prepareEngineFrom, selectEngine, SOURCE_ARCHIVE } = await import('@runlith/sqlite-process/engine');
+  await prepareEngineFrom(judgedFile(root, commit, SOURCE_ARCHIVE));
   selectEngine();
 };
 
@@ -88,7 +89,7 @@ const stored =
   (id: 'migrations' | 'step-places') =>
   async (input: InspectionInput<object>): Promise<Answer> =>
     withReader(root, input.tree.commit, async () => {
-      await (engine ??= prepared());
+      await (engine ??= prepared(input.tree.commit));
       const judge = storedJudge(root, input.tree.commit, input.base?.commit ?? null);
       const readings = await judge.judge({ key: id, id, params: input.params });
       judge.save();
@@ -103,7 +104,7 @@ const lazily =
   <Params extends object>(load: () => Promise<{ readonly default: { readonly [key: string]: Program<never> } }>, key: string) =>
   async (input: InspectionInput<Params>): Promise<Answer> =>
     withReader(root, input.tree.commit, async () => {
-      await (engine ??= prepared());
+      await (engine ??= prepared(input.tree.commit));
       const handler = (await load()).default[key] as Program<Params> | undefined;
       if (handler === undefined) throw new Error(`the law programs hold no handler for ${key}`);
       return handler(input);

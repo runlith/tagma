@@ -42,7 +42,7 @@ export const supplied = (files: EngineFiles): Engine => {
       if (await Bun.file(files.archive).exists()) {
         const sources = stamp(files.sources);
         if (read(verified) === `${sources} ${stamp([files.library])}`) return;
-        await (await import('./artifact.js')).buildEngine();
+        await (await import('./artifact.js')).buildEngine(undefined, { archive: files.archive, library: files.library });
         if (stamp(files.sources) === sources) record(verified, `${sources} ${stamp([files.library])}`);
       } else if (!(await Bun.file(files.library).exists())) {
         throw new Error('The supplied SQLite native asset is missing from this program.');

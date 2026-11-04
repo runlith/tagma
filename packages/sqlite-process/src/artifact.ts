@@ -51,8 +51,12 @@ const present = async (path: string): Promise<Uint8Array | undefined> => {
   }
 };
 
-const extract = async (name: string): Promise<Uint8Array> => {
-  const child = Bun.spawn(['unzip', '-p', ARCHIVE, `${AMALGAMATION}/${name}`], { stdout: 'pipe', stderr: 'pipe' });
+type EnginePlace = { readonly archive: string; readonly library: string };
+
+const HOME: EnginePlace = { archive: ARCHIVE, library: fileURLToPath(new URL('./sqlite.native', import.meta.url)) };
+
+const extract = async (archive: string, name: string): Promise<Uint8Array> => {
+  const child = Bun.spawn(['unzip', '-p', archive, `${AMALGAMATION}/${name}`], { stdout: 'pipe', stderr: 'pipe' });
   const [bytes, trouble, code] = await Promise.all([new Response(child.stdout).bytes(), new Response(child.stderr).text(), child.exited]);
   if (code !== 0) throw new Error(`The SQLite source ${name} could not be extracted: ${trouble}`);
   return bytes;
@@ -60,7 +64,7 @@ const extract = async (name: string): Promise<Uint8Array> => {
 
 const MACHINE_ARCHES: Readonly<Record<string, string>> = { arm64: 'arm64', x64: 'x86_64' };
 
-export const buildEngine = async (arch?: string): Promise<EngineAsset> => {
+export const buildEngine = async (arch?: string, place: EnginePlace = HOME): Promise<EngineAsset> => {
   if (process.platform !== 'darwin' && process.platform !== 'linux') {
     throw new Error(`The SQLite native build is not declared for ${process.platform}.`);
   }
@@ -68,15 +72,15 @@ export const buildEngine = async (arch?: string): Promise<EngineAsset> => {
   if (arch !== undefined && (process.platform !== 'darwin' || machine === undefined)) {
     throw new Error(`The SQLite native build for ${arch} is declared on macOS for arm64 and x64.`);
   }
-  const archive = hash(await readFile(ARCHIVE));
+  const archive = hash(await readFile(place.archive));
   if (archive !== '1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d') {
     throw new Error(`The fixed SQLite source archive has digest ${archive}.`);
   }
   const root =
     arch === undefined
-      ? join(dirname(ARCHIVE), 'build', `${process.platform}-${process.arch}`)
-      : join(dirname(ARCHIVE), 'build', 'targets', `${process.platform}-${arch}`);
-  const path = arch === undefined ? fileURLToPath(new URL('./sqlite.native', import.meta.url)) : join(root, LIBRARY_NAME);
+      ? join(dirname(place.archive), 'build', `${process.platform}-${process.arch}`)
+      : join(dirname(place.archive), 'build', 'targets', `${process.platform}-${arch}`);
+  const path = arch === undefined ? place.library : join(root, LIBRARY_NAME);
   const named = [
     ...(process.platform === 'darwin' ? [`-Wl,-install_name,@rpath/${LIBRARY_NAME}`] : []),
     ...(machine === undefined ? [] : ['-arch', machine]),
@@ -91,14 +95,14 @@ export const buildEngine = async (arch?: string): Promise<EngineAsset> => {
       return { path, name: LIBRARY_NAME, digest: saved.digest, role: 'carrier' };
     }
   }
-  const source = await extract('sqlite3.c');
+  const source = await extract(place.archive, 'sqlite3.c');
   const digest = hash(source, 'sha3-256');
   if (digest !== SOURCE_DIGEST) throw new Error(`The SQLite source digest is ${digest}; expected ${SOURCE_DIGEST}.`);
   await mkdir(root, { recursive: true });
   const work = await mkdtemp(join(root, 'compile-'));
   try {
     await writeFile(join(work, 'sqlite3.c'), source);
-    await writeFile(join(work, 'sqlite3.h'), await extract('sqlite3.h'));
+    await writeFile(join(work, 'sqlite3.h'), await extract(place.archive, 'sqlite3.h'));
     const output = join(work, LIBRARY_NAME);
     const child = Bun.spawn(
       [
