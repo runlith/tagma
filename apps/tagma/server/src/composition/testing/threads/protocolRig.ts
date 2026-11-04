@@ -268,10 +268,19 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
   const hostCommand = yield* prepareHostFixture(canonical, fixture, bundleRoot);
   yield* startHostFixture({ command: hostCommand, state: canonical });
   const rigScope = yield* Effect.scope;
-  const replaceHost = Effect.fn('testing.protocolReplaceHost')(function* () {
-    yield* endHosts(owned);
-    yield* startHostFixture({ command: hostCommand, state: canonical }).pipe(Scope.provide(rigScope));
-  });
+  let hostFailure: Cause.Cause<Effect.Error<ReturnType<typeof endHosts>> | Effect.Error<ReturnType<typeof startHostFixture>>> | null = null;
+  const replaceHost = Effect.fn('testing.protocolReplaceHost')(
+    function* () {
+      yield* endHosts(owned);
+      yield* startHostFixture({ command: hostCommand, state: canonical }).pipe(Scope.provide(rigScope));
+      hostFailure = null;
+    },
+    Effect.tapCause((cause) =>
+      Effect.sync(() => {
+        hostFailure = cause;
+      }),
+    ),
+  );
   const context = yield* Layer.build(
     hostWorkspace(machineWorld).pipe(
       Layer.provideMerge(worktreeRecordsLayer),
@@ -328,6 +337,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     );
   });
   const floor = Effect.fn('testing.protocolFloor')(function* (reported: Said[], options: Floor = { fails: 0, refuses: false }) {
+    if (hostFailure !== null) return yield* Effect.failCause(hostFailure);
     const address = yield* hostAddress(world.canonical, fixture);
     const connectionScope = yield* Scope.fork(yield* Effect.scope);
     const connection = yield* executionHost(address).pipe(Scope.provide(connectionScope));

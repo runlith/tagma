@@ -1,17 +1,26 @@
 import { basename } from 'node:path';
-import { Data, Effect } from 'effect';
+import { Data, Effect, Predicate } from 'effect';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 
 export class ProcessesUnmeasured extends Data.TaggedError('ProcessesUnmeasured')<{
   readonly command: readonly string[];
   readonly detail: string;
-}> {}
+  readonly cause?: unknown;
+}> {
+  override get message(): string {
+    const errno = Predicate.hasProperty(this.cause, 'code') ? ` (${String(this.cause.code)})` : '';
+    return `fixture process command ${this.command.join(' ')} failed${errno}: ${this.detail}`;
+  }
+}
 
 const read = Effect.fn('FixtureProcesses.read')(function* (command: readonly string[]) {
   const result = yield* spawnedEffect(command);
   if (result.exitCode === 0) return new TextDecoder().decode(result.stdout);
   if (result.exitCode === 1 && (command[0] === 'pgrep' || (command[0] === 'ps' && result.stderr.length === 0))) return '';
-  return yield* new ProcessesUnmeasured({ command, detail: result.stderr.toString() });
+  return yield* new ProcessesUnmeasured({
+    command,
+    detail: `exit ${result.exitCode}, signal ${result.signalCode}: ${result.stderr.toString()}`,
+  });
 });
 
 const hosts = Effect.fn('FixtureProcesses.hosts')(function* (root: string) {
@@ -38,7 +47,7 @@ const hosts = Effect.fn('FixtureProcesses.hosts')(function* (root: string) {
         }
         return [{ pid: identity, group: session, holder }];
       }),
-    catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause) }),
+    catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause), cause }),
   });
 });
 
@@ -56,7 +65,7 @@ const childGroups = Effect.fn('FixtureProcesses.children')(function* (holders: R
         }
         return holders.has(parent!) && pid !== process.pid ? [group!] : [];
       }),
-    catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause) }),
+    catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause), cause }),
   });
 });
 
@@ -79,7 +88,7 @@ export const endHosts = Effect.fn('FixtureProcesses.end')(function* (root: strin
           if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause;
         }
       },
-      catch: (cause) => new ProcessesUnmeasured({ command: ['kill', '-KILL', String(-group)], detail: String(cause) }),
+      catch: (cause) => new ProcessesUnmeasured({ command: ['kill', '-KILL', String(-group)], detail: String(cause), cause }),
     });
   }
   for (;;) {
