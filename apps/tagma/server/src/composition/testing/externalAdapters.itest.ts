@@ -120,7 +120,7 @@ layer(rooted.pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestService
       }),
   );
 
-  it.effect('an update installs again from the recorded source, and a removed adapter stops serving and leaves no folder', () =>
+  it.effect('an update uses the recorded source, and removal stops serving while a pinned run keeps its package until restart', () =>
     Effect.gen(function* () {
       const { root } = yield* Adapters;
       const at = yield* adapterPackage('kept', '1.0.0', 'Acme kept', 'kept');
@@ -130,6 +130,8 @@ layer(rooted.pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestService
 
       expect(updated).toMatchObject({ state: { state: 'loaded', version: '1.0.0' }, label: 'Acme kept' });
       expect(removed).toMatchObject({ state: { removed: 'acme-adapter' }, label: null });
+      expect((yield* entries(machine)).sort()).toEqual(['acme-adapter@1.0.0', 'installed.json']);
+      yield* probe(['--no-install'], machine, []);
       expect(yield* entries(machine)).toEqual(['installed.json']);
     }),
   );
