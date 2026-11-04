@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ButtonType, DisabledTrait, elementsOf, PositionedFrame, readAX } from './accessibility.ts';
 import { attempted, boot, command, decode, empty, remove, simctl, SimulatorUnavailable, stateOf, type Device } from './device.ts';
-import { input, tap, type Input } from './input.ts';
+import { input, type Input } from './input.ts';
 import type { Tools } from './iosTools.ts';
 
 export type TemplateParams = {
@@ -114,7 +114,7 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
           Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the native onboarding button has no usable frame', cause })),
         );
         yield* attempted('the native onboarding button did not accept a tap', () =>
-          tap(control, { x: frame.X + frame.Width / 2, y: frame.Y + frame.Height / 2 }),
+          control.tap({ x: frame.X + frame.Width / 2, y: frame.Y + frame.Height / 2 }),
         );
       } else if (ready && !hasSystemAlert && !popover && elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'ReloadButton')) return;
       else yield* Effect.sleep(100);

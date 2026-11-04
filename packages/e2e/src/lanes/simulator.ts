@@ -11,7 +11,7 @@ import { onFailure } from '../artifacts.ts';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
 import { attempted, boot, decode, empty, remove, simctl, SimulatorUnavailable, type Device } from './device.ts';
 import type { NativeSwipe, NativeTouch } from './hid.ts';
-import { input, tap, type Input } from './input.ts';
+import { input, type Input } from './input.ts';
 import type { Point, SimulatorOptions, SimulatorTiming } from './ios.ts';
 import { cacheDirectory, cachedTools, COMPANION_VERSION, CLIENT_VERSION, PYTHON_VERSION } from './iosTools.ts';
 import { prepare, resolve, type Preparation, type TemplateParams } from './template.ts';
@@ -198,7 +198,7 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     screenshot: async (path) => {
       await simctl(set, 'io', udid, 'screenshot', path);
     },
-    tap: (point) => tap(driver, point),
+    tap: driver.tap,
     touch: driver.touch,
     swipe: driver.swipe,
     webFrame: async (title, pid) => {

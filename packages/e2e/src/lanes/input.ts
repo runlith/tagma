@@ -1,30 +1,14 @@
 import { holding } from '@runlith/testbed/fixture';
-import { Effect, Option, Schema } from 'effect';
-import { execFile, spawn } from 'node:child_process';
+import { Effect, Schema } from 'effect';
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { attempted, command, decode, SimulatorUnavailable, type Device } from './device.ts';
+import { attempted, decode, SimulatorUnavailable, type Device } from './device.ts';
 import { nativeInput, type NativeInput } from './hid.ts';
-import type { Point } from './ios.ts';
 import type { Tools } from './iosTools.ts';
 
 export type Input = NativeInput & {
-  readonly run: (...args: string[]) => Promise<string>;
-  readonly launch: (bundleId: string) => Promise<number>;
   readonly quiet: (pid: number) => Promise<void>;
   readonly diagnostics: () => string;
-};
-const Verdict = Schema.fromJsonString(
-  Schema.Struct({ retry: Schema.Literals(['safe', 'safe_after_reread', 'unsafe']), retry_reason: Schema.String }),
-);
-const Launched = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)) }));
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
-    throw error;
-  }
 };
 export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools: Tools) {
   let stderr = '';
@@ -80,61 +64,15 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
         lines.once('close', () => reject(new Error(stderr)));
       }),
   );
-  const answered = (pid: number) =>
-    new Promise<boolean>((resolve, reject) => {
-      const args = [
-        '--companion',
-        `localhost:${port}`,
-        '--retry-verdict',
-        'ui',
-        'quiet',
-        '0',
-        '--pid',
-        String(pid),
-        '--json',
-        '--udid',
-        device.udid,
-      ];
-      execFile(tools.client, args, { encoding: 'utf8' }, (cause, out, err) => {
-        try {
-          const verdict = cause === null ? undefined : Schema.decodeUnknownOption(Verdict)(err.trim().split('\n').at(-1));
-          if (verdict === undefined) resolve(true);
-          else if (Option.isSome(verdict) && verdict.value.retry === 'safe' && alive(pid)) resolve(false);
-          else
-            reject(
-              new SimulatorUnavailable({
-                message: `the native interface of pid ${pid} did not go quiet\n${err.trim()}\n${out.trim()}`,
-                cause,
-              }),
-            );
-        } catch (failure) {
-          reject(failure);
-        }
-      });
-    });
+  const native = yield* nativeInput({ tools, port }).pipe(
+    Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })),
+  );
   const control: Input = {
-    run: (...args) => command(tools.client, ['--companion', `localhost:${port}`, ...args, '--udid', device.udid]),
-    launch: async (bundleId) =>
-      decode(
-        Launched,
-        await command(tools.client, [
-          '--companion',
-          `localhost:${port}`,
-          'launch',
-          '--foreground-if-running',
-          '--udid',
-          device.udid,
-          bundleId,
-        ]),
-      ).pid,
+    ...native,
     quiet: async (pid) => {
-      while (!(await answered(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
+      while (!(await native.quiescence(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
     },
     diagnostics: () => stderr,
-    ...(yield* nativeInput({ tools, port })),
   };
   return control;
 });
-export const tap = async (control: Input, point: Point): Promise<void> => {
-  await control.run('ui', 'tap', String(Math.round(point.x)), String(Math.round(point.y)));
-};
