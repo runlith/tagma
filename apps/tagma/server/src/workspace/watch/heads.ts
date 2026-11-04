@@ -16,6 +16,7 @@ type Watched = {
   readonly owed: Set<Listener>;
   readonly scope: Scope.Closeable;
   wake: (() => void) | null;
+  live: boolean;
   head: string | null | undefined;
   admin: { readonly gitDir: string; readonly commonDir: string } | null | undefined;
 };
@@ -46,6 +47,10 @@ export const makeHeadWatches = Effect.gen(function* () {
     const standing = watched.get(checkout);
     if (standing !== undefined) {
       standing.listeners.add(listener);
+      if (standing.live && standing.head !== undefined) {
+        listener({ kind: 'read', checkout, head: standing.head });
+        return listener;
+      }
       standing.owed.add(listener);
       standing.wake?.();
       return listener;
@@ -55,6 +60,7 @@ export const makeHeadWatches = Effect.gen(function* () {
       owed: new Set([listener]),
       scope: Scope.forkUnsafe(scope),
       wake: null,
+      live: false,
       head: undefined,
       admin: undefined,
     };
@@ -92,6 +98,7 @@ export const makeHeadWatches = Effect.gen(function* () {
           for (;;) {
             const proved = yield* read(checkout, entry);
             if (!watching.watching()) return;
+            entry.live = proved;
             if (proved) {
               readingWait = REOPEN_MS;
               yield* Queue.take(due);
@@ -100,7 +107,13 @@ export const makeHeadWatches = Effect.gen(function* () {
               readingWait = Math.min(readingWait * 2, REOPEN_CEILING_MS);
             }
           }
-        }),
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              entry.live = false;
+            }),
+          ),
+        ),
       );
       yield* Effect.scoped(
         Effect.gen(function* () {
