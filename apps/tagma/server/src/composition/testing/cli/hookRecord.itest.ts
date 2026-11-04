@@ -13,7 +13,7 @@ import { GRANT_HEADER, GRANT_VARIABLE } from '../../../platform/contract/service
 import { grantFor, grantEnvironment } from '../../../platform/testing/grants.js';
 import { SHIPPED_HARNESSES, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import type { HarnessName } from '../../../threads/contract/wire/harness/names.js';
-import { birthsOf } from '../../../threads/testing/doubles.js';
+import { born, hookThreads, running } from '../hookFixture.js';
 import { contentDigest } from '@runlith/files/content';
 import { ChangeRecord } from '../../../change-record/contract/service/record.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
@@ -296,11 +296,11 @@ layer(Layer.effect(Records, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
     Effect.gen(function* () {
       const { world, shared: project } = yield* Records;
       const files = yield* FileSystem.FileSystem;
-      const threadId = (yield* birthsOf(world.runtime.owners).create({
-        projectId: project.id,
-        createdBySessionId: null,
-        type: 'harness:claude-code',
-      })).thread.id;
+      const threadId = yield* hookThreads(world).bornThread(
+        crypto.randomUUID(),
+        project.id,
+        yield* running(born('claude-code', 'cc-shell')),
+      );
       const call = {
         session_id: 'cc-shell',
         cwd: project.root,

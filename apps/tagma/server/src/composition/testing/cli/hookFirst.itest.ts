@@ -46,20 +46,18 @@ const posted = Effect.fnUntraced(function* (key: string, id: string, event: Reco
 layer(Layer.effect(First, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('the first hook on a cold server', (it) => {
-  it.effect(
-    'the first Claude Grep a server ever hears for a project brings the rule of what it found and a pointer to its note, and the next Read brings the note',
-    () =>
-      Effect.gen(function* () {
-        const { project, threads } = yield* First;
-        const id = yield* threads.bornThread(crypto.randomUUID(), project.id, yield* running(born('claude-code', 'first')));
-        const grep = yield* posted('first', id, {
-          tool_name: 'Grep',
-          tool_input: { pattern: 'value', output_mode: 'content' },
-          tool_response: { mode: 'content', numFiles: 0, filenames: [], content: 'gate.ts:1:export const value = 1;', numLines: 1 },
-        });
-        expect([grep.includes(RULE), grep.includes(NOTE), grep.includes(BODY)]).toEqual([true, true, false]);
-        const read = yield* posted('first', id, { tool_name: 'Read', tool_input: { file_path: join(project.root, 'gate.ts') } });
-        expect(read.includes(BODY)).toBe(true);
-      }),
+  it.effect('the first Claude Grep brings an explanation pointer without code law, and the next Read brings both', () =>
+    Effect.gen(function* () {
+      const { project, threads } = yield* First;
+      const id = yield* threads.bornThread(crypto.randomUUID(), project.id, yield* running(born('claude-code', 'first')));
+      const grep = yield* posted('first', id, {
+        tool_name: 'Grep',
+        tool_input: { pattern: 'value', output_mode: 'content' },
+        tool_response: { mode: 'content', numFiles: 0, filenames: [], content: 'gate.ts:1:export const value = 1;', numLines: 1 },
+      });
+      expect([grep.includes(RULE), grep.includes(NOTE), grep.includes(BODY)]).toEqual([false, true, false]);
+      const read = yield* posted('first', id, { tool_name: 'Read', tool_input: { file_path: join(project.root, 'gate.ts') } });
+      expect([read.includes(RULE), read.includes(BODY)]).toEqual([true, true]);
+    }),
   );
 });
