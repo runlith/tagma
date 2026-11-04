@@ -20,4 +20,4 @@ sources:
   - kind: dir
     ref: packages/dev-runner
 ---
-A dev session is several processes meaningful only together: something prepares the tree, a server starts, a client aims at it. The package owns that supervision: preparation steps run in order, the participant with the ready URL holds the next until it answers, a participant with a changed artifact restarts alone, and one participant's exit ends the session unless the stand asked otherwise. Which processes form the stand and whose code runs on the already-answering URL is the caller's decision.
+A dev session is several processes meaningful only together: something prepares the tree, a server starts, a client aims at it. The package owns that supervision: preparation steps run in order, the participant with the ready URL holds the next until it answers, a participant with a changed artifact restarts alone, and one participant's exit ends the session unless the stand asked otherwise. Which processes form the stand and whose code runs on the already-answering URL is the caller's decision. A participant's owner may explain a native failure from its drained diagnostics before the runner ends the stack.
