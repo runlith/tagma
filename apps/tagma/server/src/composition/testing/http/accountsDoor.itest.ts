@@ -89,35 +89,31 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
         }),
       );
 
+      const ownAccounts = (body: unknown) =>
+        (body as { accounts: { provider: string }[] }).accounts.filter((row) => row.provider === OPENAI_OAUTH_PROVIDER);
       const response = yield* world.op('list_accounts', {});
       expect(response.status).toBe(200);
-      expect((response.body as { accounts: unknown }).accounts).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            provider: OPENAI_OAUTH_PROVIDER,
-            account,
-            quota: expect.objectContaining({ source: 'reply', windows: [{ kind: 'session', usedPercent: 61 }] }),
-          }),
-        ]),
-      );
+      expect(ownAccounts(response.body)).toEqual([
+        expect.objectContaining({
+          provider: OPENAI_OAUTH_PROVIDER,
+          account,
+          quota: expect.objectContaining({ source: 'reply', windows: [{ kind: 'session', usedPercent: 61 }] }),
+        }),
+      ]);
 
       const refreshed = yield* world.op('refresh_accounts', { provider: OPENAI_OAUTH_PROVIDER, account });
       expect(refreshed.status).toBe(200);
-      expect((refreshed.body as { accounts: unknown }).accounts).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            provider: OPENAI_OAUTH_PROVIDER,
-            account,
-            quota: expect.objectContaining({ source: 'usage', windows: [{ kind: 'session', usedPercent: 22 }] }),
-          }),
-        ]),
-      );
+      expect(ownAccounts(refreshed.body)).toEqual([
+        expect.objectContaining({
+          provider: OPENAI_OAUTH_PROVIDER,
+          account,
+          quota: expect.objectContaining({ source: 'usage', windows: [{ kind: 'session', usedPercent: 22 }] }),
+        }),
+      ]);
 
       const selected = yield* world.op('set_default_account', { provider: OPENAI_OAUTH_PROVIDER, account });
       expect(selected.status).toBe(200);
-      expect((selected.body as { accounts: unknown }).accounts).toEqual(
-        expect.arrayContaining([expect.objectContaining({ provider: OPENAI_OAUTH_PROVIDER, account, default: true })]),
-      );
+      expect(ownAccounts(selected.body)).toEqual([expect.objectContaining({ provider: OPENAI_OAUTH_PROVIDER, account, default: true })]);
     }),
   );
 
