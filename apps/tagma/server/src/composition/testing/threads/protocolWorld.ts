@@ -1,6 +1,7 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Context, Effect, FileSystem, Layer, Queue } from 'effect';
+import { Context, Effect, FileSystem, Layer, Queue, Scope } from 'effect';
 import { eq, inArray, or } from 'drizzle-orm';
+import { watch } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
@@ -60,23 +61,33 @@ const makeProtocolWorld = Effect.fn('testing.protocolWorld')(function* <E, R>({ 
     state.pendingInput.queued.length === 0 &&
     state.pendingInput.steers.length === 0 &&
     (state.latestRun === null || state.latestRun.settledNotifiedAt !== null);
-  const rest = Effect.fn('testing.protocolWorldRest')(function* (threadId: string) {
-    const changed = yield* Queue.sliding<void>(1);
+  const changes = Effect.fnUntraced(function* (threadId: string): Effect.fn.Return<Effect.Effect<unknown>, never, Scope.Scope> {
+    const changed = yield* Effect.acquireRelease(Queue.sliding<void>(1), Queue.shutdown);
+    const wake = () => {
+      Queue.offerUnsafe(changed, undefined);
+    };
     yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        kernel.reads.subscribe(threadId, () => {
-          Queue.offerUnsafe(changed, undefined);
-        }),
-      ),
-      (unsubscribe) => Effect.sync(unsubscribe),
+      Effect.sync(() => {
+        const watcher = watch(installation, wake);
+        const unsubscribe = kernel.reads.subscribe(threadId, wake);
+        return () => {
+          watcher.close();
+          unsubscribe();
+        };
+      }),
+      (close) => Effect.sync(close),
     );
+    return Queue.take(changed);
+  });
+  const rest = Effect.fn('testing.protocolWorldRest')(function* (threadId: string) {
+    const changed = yield* changes(threadId);
     const thread = kernel.threads.handle(threadId, 'operator');
     yield* thread.stop();
     yield* thread.release();
     for (;;) {
       const state = yield* kernel.reads.snapshot(threadId);
       if (resting(state)) return;
-      yield* Queue.take(changed);
+      yield* changed;
     }
   }, Effect.scoped);
   const birth = Effect.fn('testing.protocolWorldBirth')(function* (parent?: string) {
@@ -133,7 +144,7 @@ const makeProtocolWorld = Effect.fn('testing.protocolWorld')(function* <E, R>({ 
       );
     }).pipe(Effect.orDie),
   );
-  return { world, projectId, checkout, birth, agent, rest, forget: (threadId: string) => born.delete(threadId) };
+  return { world, projectId, checkout, birth, agent, rest, changes, forget: (threadId: string) => born.delete(threadId) };
 });
 
 export class ProtocolWorld extends Context.Service<ProtocolWorld, Effect.Success<ReturnType<typeof makeProtocolWorld>>>()(

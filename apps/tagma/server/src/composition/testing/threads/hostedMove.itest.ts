@@ -40,7 +40,7 @@ const worktree = Effect.fnUntraced(function* (name: string) {
 });
 
 const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'review') {
-  const { world, projectId, agent, birth } = yield* ProtocolWorld;
+  const { world, projectId, agent, birth, changes } = yield* ProtocolWorld;
   const files = yield* FileSystem.FileSystem;
   const report = yield* agent(label);
   const threadId = yield* birth();
@@ -54,6 +54,7 @@ const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'r
       Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes(`said-${toolCallId}`) ? true : null)),
       `the agent sealed ${toolCallId}`,
       report,
+      changes(threadId),
     );
     return yield* Schema.decodeUnknownEffect(calledSchema)((yield* asThread('call_hosted_tool', { toolCallId, name, input })).body);
   });
@@ -62,6 +63,7 @@ const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'r
     Effect.map(heard(report), (lines) => (lines.some((line) => line.method === 'session/prompt') ? true : null)),
     'the turn reached the agent',
     report,
+    changes(threadId),
   );
   yield* asThread('open_hosted_turn', {});
   return { threadId, report, called, release: files.writeFileString(`${report}.release`, 'release') };
@@ -87,7 +89,7 @@ describe('a Tagma agent on ACP moves between worktrees like a native one', () =>
 
     it.effect('a move that lands while a call waits for its approval takes effect after that call, which finishes where it was asked', () =>
       Effect.gen(function* () {
-        const { world, projectId, checkout } = yield* ProtocolWorld;
+        const { world, projectId, checkout, changes } = yield* ProtocolWorld;
         const files = yield* FileSystem.FileSystem;
         const aside = yield* worktree('aside');
         yield* files.writeFileString(join(aside.destination, 'aside-marker'), 'the worktree\n');
@@ -98,6 +100,7 @@ describe('a Tagma agent on ACP moves between worktrees like a native one', () =>
           Effect.map(harness.runs.questions().open(threadId), (open) => open[0] ?? null),
           'the write asked the operator',
           report,
+          changes(threadId),
         );
         expect((yield* world.op('move_thread', { threadId, worktree: aside.rootId }, `project=${projectId}`)).body).toMatchObject({
           status: 'pending',

@@ -77,7 +77,7 @@ describe('a native conversation crosses Claude Code and returns through the real
       'native tool history is accepted as a vendor transcript, and the Claude answer reaches the next native request in one feed',
       () =>
         Effect.gen(function* () {
-          const { world, projectId, checkout, agent, birth } = yield* ProtocolWorld;
+          const { world, projectId, checkout, agent, birth, changes } = yield* ProtocolWorld;
           const files = yield* FileSystem.FileSystem;
           yield* files.writeFileString(join(checkout, 'handover.txt'), 'SEAL-42');
           const server = yield* Effect.acquireRelease(
@@ -109,6 +109,8 @@ describe('a native conversation crosses Claude Code and returns through the real
                   ),
                 ),
               'completed the handover turn',
+              report,
+              changes(threadId),
             );
           const entries = () =>
             units.read((unit) =>
