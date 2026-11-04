@@ -47,7 +47,7 @@ export const command = (scenario: Scenario, transport: LaunchTransport, size = 9
       case 'handles':
         return `${start}use POSIX; opendir(my $d,"/dev/fd") or die "fds"; my @fds=grep { /^\\d+$/ && $_>2 } readdir($d); closedir($d); for my $fd (@fds){ my @stat=POSIX::fstat($fd); print "$fd\\n" if @stat; }`;
       case 'limits':
-        return `${start}exec "/bin/sh","-c","ulimit -n; ulimit -u";`;
+        return `${start}exec "/bin/bash","-c","ulimit -n; ulimit -u";`;
       case 'cost':
         return `${start}print "READY\\n"; sysread(STDIN,my $go,1); my $n=0; $n+=sin($_) for 1..3000000; print "DONE\\n";`;
     }

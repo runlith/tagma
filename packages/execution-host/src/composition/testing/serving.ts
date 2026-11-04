@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { Effect, Stream } from 'effect';
 import type { Served } from '@runlith/executions/protocol/capability';
 import { Host, type HostAdapter } from './session';
+import { testSystem } from './system';
 
 export const machineLoadContract = Effect.fnUntraced(function* (host: Host['Service']) {
   const served = yield* host.client.served();
@@ -58,8 +59,11 @@ export const servingContracts = (adapter: HostAdapter, expected: Served) =>
     it.effect('announces exactly the capabilities its adapter supports', () =>
       Effect.gen(function* () {
         const host = yield* Host;
+        const system = yield* Effect.orDie(testSystem);
         const served = yield* host.client.served();
-        expect([...served].sort()).toEqual([...expected].sort());
+        const wanted = new Set(expected);
+        if (system.raises) wanted.add('pace-raise');
+        expect([...served].sort()).toEqual([...wanted].sort());
       }),
     );
     it.effect('delivers live machine and installation readings or refuses the unsupported capability', () =>

@@ -179,10 +179,14 @@ export const evidenceProbe = Effect.gen(function* () {
             const matched = /^socket:\[(\d+)\]$/u.exec(link);
             return matched === null ? [] : [matched[1]!];
           }),
-        ))
-          held.set(inode, [...(held.get(inode) ?? []), row]);
+        )) {
+          const owners = held.get(inode);
+          if (owners === undefined) held.set(inode, [row]);
+          else owners.push(row);
+        }
       }
       const found: ListenerSnapshot[] = [];
+      const hidden = new Map<number, Set<string>>();
       for (const socket of sockets) {
         const owners = held.get(socket.inode) ?? [];
         for (const owner of owners)
@@ -197,14 +201,18 @@ export const evidenceProbe = Effect.gen(function* () {
             port: socket.port,
             holder: { pid: owner.pid, birth: owner.birth },
           });
-        if (request._tag === 'Inventory' && owners.length === 0)
-          unmeasured.push({
-            region: `the holder of port ${socket.port}`,
-            port: socket.port,
-            reason: 'refused',
-            detail: 'the socket table exposed this endpoint but no visible process descriptor proved its owner',
-          });
+        if (request._tag !== 'Inventory' || owners.length > 0) continue;
+        const addresses = hidden.get(socket.port);
+        if (addresses === undefined) hidden.set(socket.port, new Set([socket.address]));
+        else addresses.add(socket.address);
       }
+      for (const [port, addresses] of hidden)
+        unmeasured.push({
+          region: `listening sockets without a visible owner on port ${port}`,
+          port,
+          reason: 'refused',
+          detail: `the socket table lists ${[...addresses].join(', ')}; no process descriptor this reader can see proved their owner`,
+        });
       return { observedAt, found, unmeasured, completeness: tables === 0 ? 'unavailable' : complete(unmeasured) };
     }),
   });

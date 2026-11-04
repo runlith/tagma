@@ -14,7 +14,7 @@ const text = new TextEncoder();
 const chars = new TextDecoder();
 const message = Schema.decodeUnknownOption(HostMessage);
 
-layer(hosted('POSIX', posix(), { executions: 24, nofile: 36 }).layer.pipe(Layer.merge(BunFileSystem.layer)), {
+layer(hosted('POSIX', posix(), { executions: 24, nofile: 64 }).layer.pipe(Layer.merge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('POSIX welcome limits', (it) => {
   it.effect('welcome subscriptions use the initialized profile rather than its bootstrap upper bound', () =>

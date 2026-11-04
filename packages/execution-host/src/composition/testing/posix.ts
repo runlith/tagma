@@ -78,7 +78,7 @@ export const posix = () =>
               if ('refusal' in held) return Effect.fail(new ProcessesUnreadable({ detail: held.detail }));
               return Effect.succeed({ logic: logic.count, holder: held.count });
             }),
-          softLimits: read('/bin/sh', ['-c', 'ulimit -n; ulimit -u']),
+          softLimits: read('/bin/bash', ['-c', 'ulimit -n; ulimit -u']),
         }),
       );
     }),

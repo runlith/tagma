@@ -15,6 +15,7 @@ import { HOLDER_BINARY } from '../../posix/testing/holder';
 import { nativeArtifact } from '../artifact';
 import { hostPolicy, hostShare, hostWireLimits, registrationOf, spawned } from '../../hostFixture';
 import type { Client } from './session';
+import { testSystem } from './system';
 
 const HOLDER_PART = 'native/execution-holder';
 const LIBRARY_PART = `native/${nativeArtifact()!.library}`;
@@ -98,8 +99,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
     if (offer.holder === 'distinct') {
       holder = join(directory, `holder-${offer.build}`);
       copyFileSync(HOLDER_BINARY, holder);
-      const signed = await spawned(['/usr/bin/codesign', '--force', '-s', '-', '-i', `tagma.holder.${offer.build}`, holder]);
-      if (signed.exitCode !== 0) throw new Error(`the distinct holder could not be signed: ${signed.stderr}`);
+      await run(Effect.flatMap(testSystem, (system) => system.distinct(holder, offer.build)));
     }
     const answer = await run(copyBundle(root, offer.build));
     let manifest = answer.manifest;

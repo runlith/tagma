@@ -12,6 +12,7 @@ export const liveTempoContracts = (adapter: HostAdapter) =>
           Effect.gen(function* () {
             const host = yield* Host;
             const platform = yield* Adapter;
+            const raises = (yield* host.client.served()).has('pace-raise');
             yield* host.client.pace(initial);
             const child = yield* start(transport, 'fork', undefined, true);
             yield* withExecution(
@@ -22,6 +23,13 @@ export const liveTempoContracts = (adapter: HostAdapter) =>
                 const descendant = Number((yield* textUntil(host, child.execution, stream, '\n')).trim());
                 if (child.native.pid === undefined) return yield* Effect.die(new Error('the host must identify the live leader'));
                 const leader = child.native.pid;
+                if (!raises) {
+                  const kept = yield* host.client.pace('lowest');
+                  expect(kept).toEqual({ _tag: 'Applied', pace: 'lowest', reached: 0, kept: 2, failed: 0 });
+                  expect(yield* platform.background(leader)).toBe(false);
+                  expect(yield* platform.background(descendant)).toBe(false);
+                  return;
+                }
                 if (initial === 'lowest') {
                   yield* platform
                     .background(descendant)
@@ -33,13 +41,10 @@ export const liveTempoContracts = (adapter: HostAdapter) =>
                 expect(lowest).toEqual({ _tag: 'Applied', pace: 'lowest', reached: 2, kept: 0, failed: 0 });
                 expect(yield* platform.background(leader)).toBe(true);
                 expect(yield* platform.background(descendant)).toBe(true);
-                const served = yield* host.client.served();
                 const full = yield* host.client.pace('full');
-                const raises = served.has('pace-raise');
-                expect(full._tag).toBe(raises ? 'Applied' : 'Unavailable');
-                const remains = !raises;
-                expect(yield* platform.background(leader)).toBe(remains);
-                expect(yield* platform.background(descendant)).toBe(remains);
+                expect(full._tag).toBe('Applied');
+                expect(yield* platform.background(leader)).toBe(false);
+                expect(yield* platform.background(descendant)).toBe(false);
               }),
             );
           }),
