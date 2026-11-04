@@ -82,7 +82,7 @@ if (program) {
   let positional = false;
   for (let at = 1; at < command.length; at++) {
     const part = command[at]!;
-    if (!positional && selected.kind === 'e2e' && part === '--headed') {
+    if (!positional && part === '--headed') {
       headed = true;
       continue;
     }
