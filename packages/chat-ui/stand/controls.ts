@@ -88,6 +88,13 @@ export async function measureControls(
     if (!outOfRange) candidates.push(recording);
     envelope = controlEnvelope(candidates);
     observe?.({ recordings, discarded, reach: region.reach, envelope });
+    const top = recording.frames[0]?.scrollTop;
+    if (recording.frames.every((frame) => frame.scrollTop === top)) {
+      const moves = recording.touches.filter((one) => one.type === 'touchmove').length;
+      throw new Error(
+        `The ${source} fling of ${recording.name} moved no content: scrollTop stayed ${top} while the page received ${moves} touchmove of ${recording.touches.length} touch events`,
+      );
+    }
   }
   return { recordings, discarded, reach: region.reach, envelope };
 }
