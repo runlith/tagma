@@ -73,7 +73,8 @@ export const ENFORCEMENT_OPERATIONS = {
         description: 'The key of the inspection in `tagma.config.ts` at HEAD. Absent, what stands.',
       }),
       owners: Schema.optional(Schema.Record(fingerprint, blockRef)).annotate({
-        description: 'Fingerprint → the standing task or spec that removes that debt entry.',
+        description:
+          'Fingerprint → the standing task or spec that removes that debt entry. A key is the fingerprint as check_rules and read_enforcement print it, inspection-key prefix included; one matching no violation found, no debt entry kept and no absorbed fingerprint refuses `inspection-failed`, naming the fingerprint standing.',
       }),
       owner: Schema.optional(blockRef).annotate({
         description:
@@ -169,7 +170,8 @@ export const ENFORCEMENT_OPERATIONS = {
           'Measure the proposed map at HEAD and return its debt changes and escaped fingerprints without writing cards or enforcement.',
       }),
       owners: Schema.optional(Schema.Record(fingerprint, blockRef)).annotate({
-        description: 'Fingerprint → the standing task or spec that removes that debt entry.',
+        description:
+          'Fingerprint → the standing task or spec that removes that debt entry. A key matching none of the measured rules’ violations, debt entries or absorbed fingerprints refuses `inspection-failed`.',
       }),
       owner: Schema.optional(blockRef).annotate({
         description: 'The standing task or spec that owns every absorbed entry `owners` does not name.',

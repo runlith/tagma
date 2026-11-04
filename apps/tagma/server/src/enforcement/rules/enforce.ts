@@ -87,6 +87,7 @@ export type Prepared = EnforcementPlan & {
   readonly at: string | null;
   readonly stood: unknown;
   readonly document: LawEnforcement | null;
+  readonly known: readonly string[];
   readonly read: readonly string[] | null;
   readonly footprint?: Footprint;
   readonly packCheck?: true;
@@ -147,6 +148,31 @@ const ownersOf = Effect.fn('enforcement.ownersOf')(function* (
     else unowned.push({ fingerprint, why: `${fingerprint}: ${owner.why}` });
   }
   return { named, unowned };
+});
+
+const UNMATCHED_SHOWN = 10;
+
+export const ownersMatched = Effect.fn('enforcement.ownersMatched')(function* (
+  owners: Readonly<Record<string, string>> | undefined,
+  plans: readonly Prepared[],
+) {
+  const known = new Set(plans.flatMap((plan) => plan.known));
+  const unmatched = Object.keys(owners ?? {}).filter((key) => !known.has(key));
+  if (unmatched.length === 0) return;
+  const prefixed = (key: string): string | undefined => [...known].find((fingerprint) => fingerprint.endsWith(` ${key}`));
+  const said = unmatched.slice(0, UNMATCHED_SHOWN).map((key) => {
+    const near = prefixed(key);
+    return near === undefined ? `"${key}"` : `"${key}" (the fingerprint standing is "${near}")`;
+  });
+  const example = [...known][0];
+  return yield* new GateRefusal(
+    'inspection-failed',
+    `owners names ${unmatched.length} fingerprint(s) that match no violation the measurement found and no debt entry it keeps: ${said.join('; ')}${unmatched.length > UNMATCHED_SHOWN ? `; and ${unmatched.length - UNMATCHED_SHOWN} more` : ''}`,
+    [
+      `write each owners key as the rule's entries spell the fingerprint, which is how check_rules and read_enforcement print it${example === undefined ? '' : `, e.g. "${example}"`}; a program's findings are stored under their inspection key as a prefix`,
+      'check_rules with over "all" prints the fingerprints standing at HEAD',
+    ],
+  );
 });
 
 export type Pinned = CheckoutPlace & { readonly root: string };
@@ -234,6 +260,7 @@ export const planEnforcement = Effect.fn('enforcement.plan')(function* (row: Blo
       unjudged: [],
       ms: null,
       document: null,
+      known: [],
       read: [],
     } satisfies Prepared;
   }
@@ -483,6 +510,9 @@ export const planEnforcement = Effect.fn('enforcement.plan')(function* (row: Blo
     unjudged: measured.verdict.unjudged,
     ms: measured.ms,
     document: written,
+    known: [
+      ...new Set([...found.keys(), ...priorDebt.map((entry) => entry.fingerprint), ...carriedDebt.map((entry) => entry.fingerprint)]),
+    ],
     sources: ledgerSources(ledger, found),
     remeasure: measured.remeasure,
     read: measured.read,

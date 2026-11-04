@@ -116,6 +116,24 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
         })(),
       ),
     );
+    it.effect('an owners key matching no fingerprint refuses naming the standing form, and writes nothing', () =>
+      withEnforcement((fx) =>
+        Effect.fnUntraced(function* () {
+          const rule = yield* fx.created(['rule'], 'Import only downward');
+          const owner = yield* fx.created(['task'], 'Move the view off the panel');
+          const refusal = yield* fx.refused({
+            blockId: rule,
+            strictness: 'gate',
+            inspection: LAYERED_KEY,
+            owner,
+            owners: { 'order core/view.ts -> ui/': owner },
+          });
+          expect(refusal.code).toBe('inspection-failed');
+          expect(refusal.reason).toContain('"order core/view.ts -> ui/" (the fingerprint standing is "app order core/view.ts -> ui/")');
+          expect(yield* fx.documentOf(rule)).toBeUndefined();
+        })(),
+      ),
+    );
     it.effect('absorption refuses every fingerprint absent at HEAD without writing partial debt or a journal entry', () =>
       withEnforcement((fx) =>
         Effect.fnUntraced(function* () {

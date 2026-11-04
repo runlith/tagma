@@ -31,7 +31,7 @@ import { type ChangeFault, type ChangePart, changedSet } from './moduleChange.js
 import { ModuleFaults } from './moduleFaults.js';
 import { refResolver, type RefWorld } from './moduleRefs.js';
 import { type Enforced, enforcedRules } from './reach.js';
-import { enforcementWriteOf, measurementKept, type Prepared, planEnforcement, staleUnder } from './enforce.js';
+import { enforcementWriteOf, measurementKept, ownersMatched, type Prepared, planEnforcement, staleUnder } from './enforce.js';
 
 type Draft = { -readonly [K in keyof ModuleCard]: ModuleCard[K] };
 
@@ -530,6 +530,7 @@ export const planModules = Effect.fn('enforcement.planModules')(function* (input
         }),
       );
     }
+    if (measured.length > 0) yield* ownersMatched(input.owners, measured);
   }
   return {
     projectId: input.projectId,

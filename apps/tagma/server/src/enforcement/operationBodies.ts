@@ -3,7 +3,7 @@ import { said } from '../platform/contract/service/presentation.js';
 import { keyOrder, page, type PageKey, type PageQuestion, pageRows, pastKey, readCursor } from '@runlith/paging';
 import { Context, Effect, Option, Result } from 'effect';
 import { ChangeRecord } from '../change-record/contract/service/record.js';
-import { applyEnforcement, type ChangeCrossings, type Prepared, planEnforcement } from './rules/enforce.js';
+import { applyEnforcement, type ChangeCrossings, ownersMatched, type Prepared, planEnforcement } from './rules/enforce.js';
 import type { TreeSubject } from './contract/wire/checks.js';
 import type { ChangeInput } from '../change-record/contract/service/prepared.js';
 import { GateMemory, rememberGating } from './judging/gateMemory.js';
@@ -263,7 +263,7 @@ const enforcePreparing = Effect.fn('enforce_rule.prepare')(function* (
   const id = yield* (yield* BlockNames).idOfName(input.blockId);
   const row = yield* (yield* Blocks).blockById(id);
   const subjects = yield* OperationSubjects;
-  return yield* enforcing(
+  const planned = yield* enforcing(
     planEnforcement(row, {
       change: yield* changeCrossings(row, caller),
       caller: actorOf(caller, row.projectId),
@@ -277,6 +277,8 @@ const enforcePreparing = Effect.fn('enforce_rule.prepare')(function* (
       absorb: input.absorb,
     }),
   );
+  yield* enforcing(ownersMatched(input.owners, [planned]));
+  return planned;
 });
 
 const unheard = Effect.fnUntraced(function* (rule: string, document: LawEnforcement | null) {
