@@ -7,7 +7,7 @@ import { HANG_MS } from '@runlith/testbed/kinds';
 import { Cause, Clock, Effect, Exit, Fiber, Scope } from 'effect';
 
 export type FailureArtifact = (directory: string) => Promise<void>;
-type Recording = { readonly directory: string; readonly failures: Set<FailureArtifact> };
+export type Recording = { readonly directory: string; readonly failures: Set<FailureArtifact> };
 const recording = new AsyncLocalStorage<Recording>();
 const pending = new Set<FailureArtifact>();
 
@@ -31,8 +31,9 @@ export const artifactDirectory = (file: string, name: string): string => {
   return directory;
 };
 
-export const record = <A>(directory: string, work: () => Promise<A>): Promise<A> =>
-  recording.run({ directory, failures: new Set(pending) }, work);
+export const recordingFor = (name: string): Recording => ({ directory: artifactDirectory(Bun.main, name), failures: new Set(pending) });
+
+export const record = <A>(active: Recording, work: () => Promise<A>): Promise<A> => recording.run(active, work);
 
 export const captureFailure = async (): Promise<void> => {
   const active = recording.getStore();
@@ -47,13 +48,14 @@ export const captureFailure = async (): Promise<void> => {
 };
 
 export const recorded = Effect.fn('e2e.recorded')(function* <A, E>(
-  name: string,
+  name: string | Recording,
   work: (directory: string) => Effect.Effect<A, E, Scope.Scope>,
 ) {
-  const directory = artifactDirectory(Bun.main, name);
+  const active = typeof name === 'string' ? recordingFor(name) : name;
+  const { directory } = active;
   const clock = yield* Clock.Clock;
   return yield* Effect.callback<A>((resume, signal) => {
-    const running = record(directory, () =>
+    const running = record(active, () =>
       Effect.runPromiseExit(
         Effect.provideService(
           Effect.scoped(

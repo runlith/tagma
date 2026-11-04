@@ -1,9 +1,10 @@
-import { afterAll, beforeAll } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe } from 'bun:test';
 import { createRemoteDebugger, type RemoteDebugger } from 'appium-remote-debugger';
 import { it } from '@runlith/effect-test';
-import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
+import { Data, Deferred, Effect, Exit, Schema, Scope } from 'effect';
+import { measure } from '@runlith/testbed/fixture';
 import { join } from 'node:path';
-import { onFailure, recorded } from '../artifacts.ts';
+import { onFailure, recorded, recordingFor, type Recording } from '../artifacts.ts';
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
 import { makeTouch, type Touch } from '../touch.ts';
@@ -465,8 +466,6 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
   };
   const unhook = onFailure(async (directory) => {
     const results = await Promise.allSettled([
-      fixture.screenshot(join(directory, 'screenshot.png')),
-      Bun.write(join(directory, 'ios-driver.log'), held.diagnostics()),
       Bun.write(join(directory, 'console.log'), console.join('\n')),
       current === undefined
         ? Promise.resolve()
@@ -502,18 +501,15 @@ export const iosSession = (options: SimulatorOptions): Effect.Effect<IOSSession,
   preparedSession(options).pipe(Effect.map((prepared) => prepared.fixture));
 
 const execute = Effect.fn('e2e.iosRecording')(function* <E>(
-  name: string,
-  options: SimulatorOptions,
+  recording: Recording,
+  { fixture, failed }: IOSPrepared,
   body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>,
 ) {
-  yield* recorded(name, (artifacts) =>
-    Effect.gen(function* () {
-      const { fixture, failed } = yield* preparedSession(options);
-      yield* Effect.raceFirst(
-        body({ ...fixture, artifacts }).pipe(Effect.andThen(Effect.promise(() => fixture.evaluate(flushErrors, Schema.Void)))),
-        Deferred.await(failed),
-      );
-    }),
+  yield* recorded(recording, (artifacts) =>
+    Effect.raceFirst(
+      body({ ...fixture, artifacts }).pipe(Effect.andThen(Effect.promise(() => fixture.evaluate(flushErrors, Schema.Void)))),
+      Deferred.await(failed),
+    ),
   );
 });
 const runtimes = (options: IOSRun): readonly string[] => {
@@ -534,8 +530,41 @@ const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effe
   }
   for (const runtime of runtimes(options)) {
     const title = `${name} [ios-${runtime}]`;
-    beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));
-    it.live(title, () => execute(title, { runtime, deviceType: options.deviceType }, body), Infinity);
+    describe.serial(() => {
+      let scope: Scope.Closeable | undefined;
+      let recording: Recording;
+      let prepared: IOSPrepared;
+      beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));
+      beforeEach(
+        () =>
+          measure('tenant', () => {
+            recording = recordingFor(title);
+            return Effect.runPromise(
+              recorded(recording, () =>
+                Effect.gen(function* () {
+                  scope = yield* Scope.make();
+                  prepared = yield* Scope.provide(preparedSession({ runtime, deviceType: options.deviceType }), scope);
+                  yield* Effect.promise(() => prepared.fixture.open('about:blank'));
+                }),
+              ).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) && scope !== undefined ? Scope.close(scope, exit) : Effect.void))),
+            );
+          }),
+        Infinity,
+      );
+      it.live(title, () => execute(recording, prepared, body), Infinity);
+      afterEach(
+        () =>
+          measure('tenant', () => {
+            const held = scope;
+            return held === undefined
+              ? Promise.resolve()
+              : Effect.runPromise(recorded(recording, () => Scope.close(held, Exit.void))).finally(() => {
+                  scope = undefined;
+                });
+          }),
+        Infinity,
+      );
+    });
   }
 };
 export const ios = Object.assign(register, { effect: registerEffect });

@@ -7,10 +7,11 @@ import { Clock, Effect, FileSystem, Schema, type Scope } from 'effect';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { onFailure } from '../artifacts.ts';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
-import { attempted, boot, decode, empty, remove, simctl, SimulatorUnavailable } from './device.ts';
+import { attempted, boot, decode, empty, remove, simctl, SimulatorUnavailable, type Device } from './device.ts';
 import type { NativeSwipe, NativeTouch } from './hid.ts';
-import { input, tap } from './input.ts';
+import { input, tap, type Input } from './input.ts';
 import type { Point, SimulatorOptions, SimulatorTiming } from './ios.ts';
 import { cacheDirectory, cachedTools, COMPANION_VERSION, CLIENT_VERSION, PYTHON_VERSION } from './iosTools.ts';
 import { prepare, resolve, type Preparation, type TemplateParams } from './template.ts';
@@ -28,7 +29,6 @@ export type Simulator = {
   readonly tap: (point: Point) => Promise<void>;
   readonly touch: NativeTouch;
   readonly webFrame: (title: string, pid: number) => Promise<Rect>;
-  readonly diagnostics: () => string;
 };
 type Template = { readonly preparation: Preparation; readonly runtime: string; readonly clones: string };
 
@@ -137,6 +137,23 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
   const template = yield* once(templates, parameters(options));
   const set = template.value.clones;
   const started = yield* Clock.currentTimeMillis;
+  let phase = 'clone';
+  let device: Device | undefined;
+  let control: Input | undefined;
+  let timing: SimulatorTiming | undefined;
+  const unhook = onFailure(async (directory) => {
+    const results = await Promise.allSettled([
+      Bun.write(
+        join(directory, 'ios-startup.json'),
+        JSON.stringify({ phase, device: device ?? null, runtime: template.value.runtime, timing: timing ?? null }),
+      ),
+      control === undefined ? Promise.resolve() : Bun.write(join(directory, 'ios-driver.log'), control.diagnostics()),
+      device === undefined ? Promise.resolve() : simctl(device.set, 'io', device.udid, 'screenshot', join(directory, 'screenshot.png')),
+    ]);
+    const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, 'native startup evidence was incomplete');
+  });
+  yield* Effect.addFinalizer(() => Effect.sync(unhook));
   const udid = yield* Effect.acquireRelease(
     prepare(template.value.preparation, (source) =>
       attempted('the Safari template could not be cloned', () =>
@@ -146,36 +163,46 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     (udid) => attempted('the iOS clone did not shut down and delete', () => remove({ udid, set })).pipe(Effect.orDie),
   );
   const cloned = yield* Clock.currentTimeMillis;
-  const device = { set, udid };
-  yield* boot(device);
+  const target = { set, udid };
+  device = target;
+  phase = 'boot';
+  yield* boot(target);
   const booted = yield* Clock.currentTimeMillis;
-  const timing = { clone: cloned - started, boot: booted - cloned };
-  console.info(`iOS ${template.value.runtime}: clone ${timing.clone} ms, boot ${timing.boot} ms`);
-  const control = yield* input(device, tools);
+  const measured = { clone: cloned - started, boot: booted - cloned };
+  timing = measured;
+  console.info(`iOS ${template.value.runtime}: clone ${measured.clone} ms, boot ${measured.boot} ms`);
+  phase = 'input';
+  const driver = yield* input(target, tools);
+  control = driver;
+  phase = 'device-ready';
   return {
     udid,
     deviceSet: set,
     runtime: template.value.runtime,
-    timing,
+    timing: measured,
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
+      phase = 'launch';
       console.info('iOS: launching Safari');
-      const pid = await control.launch('com.apple.mobilesafari');
+      const pid = await driver.launch('com.apple.mobilesafari');
+      phase = 'quiescence';
       console.info(`iOS: waiting for Safari ${pid} accessibility`);
-      await control.quiet(pid);
+      await driver.quiet(pid);
+      phase = 'accessibility';
       console.info(`iOS: acquiring Safari ${pid} native geometry`);
-      await readAX(device, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
+      await readAX(target, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
+      phase = 'native-ready';
       console.info(`iOS native accessibility ready for Safari ${pid}`);
       return pid;
     },
     screenshot: async (path) => {
       await simctl(set, 'io', udid, 'screenshot', path);
     },
-    tap: (point) => tap(control, point),
-    touch: control.touch,
-    swipe: control.swipe,
+    tap: (point) => tap(driver, point),
+    touch: driver.touch,
+    swipe: driver.swipe,
     webFrame: async (title, pid) => {
-      const root = await readAX(device, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
+      const root = await readAX(target, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
       const elements = elementsOf(root);
       const view = elements.find((one) => one.XC_kAXXCAttributeIdentifier === 'WebView');
       if (view === undefined) throw new SimulatorUnavailable({ message: 'native accessibility exposed no Safari WebView' });
@@ -191,6 +218,5 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
       const frame = decode(PositionedFrame, content.XC_kAXXCAttributeFrame);
       return { x: frame.X, y: frame.Y, width: frame.Width, height: frame.Height };
     },
-    diagnostics: control.diagnostics,
   };
 });
