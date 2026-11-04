@@ -1,10 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe } from 'bun:test';
 import { createRemoteDebugger, type RemoteDebugger } from 'appium-remote-debugger';
 import { it } from '@runlith/effect-test';
-import { Data, Deferred, Effect, Exit, Schema, Scope } from 'effect';
-import { measure } from '@runlith/testbed/fixture';
+import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
 import { join } from 'node:path';
-import { onFailure, recorded, recordingFor, type Recording } from '../artifacts.ts';
+import { fixtureHooks, onFailure, recordedFixture, type RecordedFixture } from '../artifacts.ts';
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
 import { makeTouch, type Touch } from '../touch.ts';
@@ -502,11 +501,10 @@ export const iosSession = (options: SimulatorOptions): Effect.Effect<IOSSession,
   preparedSession(options).pipe(Effect.map((prepared) => prepared.fixture));
 
 const execute = Effect.fn('e2e.iosRecording')(function* <E>(
-  recording: Recording,
-  { fixture, failed }: IOSPrepared,
+  recording: RecordedFixture<IOSPrepared>,
   body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>,
 ) {
-  yield* recorded(recording, (artifacts) =>
+  yield* recording.run(({ fixture, failed }, artifacts) =>
     Effect.raceFirst(
       body({ ...fixture, artifacts }).pipe(Effect.andThen(Effect.promise(() => fixture.evaluate(flushErrors, Schema.Void)))),
       Deferred.await(failed),
@@ -532,39 +530,18 @@ const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effe
   for (const runtime of runtimes(options)) {
     const title = `${name} [ios-${runtime}]`;
     describe.serial(() => {
-      let scope: Scope.Closeable | undefined;
-      let recording: Recording;
-      let prepared: IOSPrepared;
+      const recording = recordedFixture(title, () =>
+        Effect.gen(function* () {
+          const prepared = yield* preparedSession({ runtime, deviceType: options.deviceType });
+          yield* Effect.promise(() => prepared.fixture.open('about:blank'));
+          return prepared;
+        }),
+      );
       beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));
-      beforeEach(
-        () =>
-          measure('tenant', () => {
-            recording = recordingFor(title);
-            return Effect.runPromise(
-              recorded(recording, () =>
-                Effect.gen(function* () {
-                  scope = yield* Scope.make();
-                  prepared = yield* Scope.provide(preparedSession({ runtime, deviceType: options.deviceType }), scope);
-                  yield* Effect.promise(() => prepared.fixture.open('about:blank'));
-                }),
-              ).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) && scope !== undefined ? Scope.close(scope, exit) : Effect.void))),
-            );
-          }),
-        Infinity,
-      );
-      it.live(title, () => execute(recording, prepared, body), Infinity);
-      afterEach(
-        () =>
-          measure('tenant', () => {
-            const held = scope;
-            return held === undefined
-              ? Promise.resolve()
-              : Effect.runPromise(recorded(recording, () => Scope.close(held, Exit.void))).finally(() => {
-                  scope = undefined;
-                });
-          }),
-        Infinity,
-      );
+      const hooks = fixtureHooks(recording);
+      beforeEach(hooks.setup, Infinity);
+      it.live(title, () => execute(recording, body), Infinity);
+      afterEach(hooks.close, Infinity);
     });
   }
 };
