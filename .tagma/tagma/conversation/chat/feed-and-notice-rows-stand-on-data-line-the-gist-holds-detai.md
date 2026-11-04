@@ -1,6 +1,6 @@
 ---
 id: 01a17dfb-ed8a-7e10-aee9-fec32f21aee8
-title: A step row and a notice squeeze one text — the gist; unbounded details yield first
+title: "Feed and notice rows stand on data-line: the gist holds, details leave whole, the tail stays outside"
 ord: 71
 tags: ["explanation"]
 edges:
@@ -20,6 +20,8 @@ sources:
 ---
 Flexbox splits a space shortage between squeezable neighbours in proportion to their content width. When the row's gist (event words, label, subject) and an unbounded detail (a raw command line, thread title, queue reason) stand side by side as two squeezable fields, the long detail takes almost everything: of "Command completed" next to a hundred-character command, "Co" remained.
 
-So the row's gist is one text with a fade at the end: event, then label or subject. The unbounded detail yields first (`shrink-[1000]`, like value facts): the thread chip (`ThreadChip`, with a `max-w-60` ceiling and its own fade), the queue reason, the preview of an agent-addressed step. A grouped notice and a list row in a step body stand on `data-line` instead: the lead or path holds its width and the chips or detail after it leave whole or fade at the line's end. A preview next to a thread chip yields before the chip itself: it stands on a zero basis and grows only to its width (`flex-1 max-w-max`), so it takes only the place left after the verb, chip and tail, and the chip starts fading only once the preview is gone. Two neighbours with `shrink-[1000]` would split the shortage by width again, and a chip with a short agent name would lose letters next to a long task text. The tail — outcome, time, count — never squeezes, so "Refused" and `exit 1` stay visible at any width. A path in a list row fades from the start, the file name stays whole.
+So a step row, a notice row, a grouped notice and a list row in a step body stand on `data-line`. The gist is one text — the verb with its subject, detail and preview — that holds its width and fades at its end only once it stands alone. Value facts, chips and a preview after chips leave the line whole, and only the last of them fades at the line's end. In a notice row the thread chips come before the words and give way at the line's start (`data-yield="start"`), so the words stay readable while the chips fade from the left. A thread chip keeps its width up to its `max-w-60` ceiling and fades its own title inside its frame.
+
+The tail — outcome, time, count, a hold's status — stands outside the line, so "Refused" and `exit 1` stay visible at any width. The queue reason is the row's last element: it stands on a zero basis after "Queued" and takes only the place left, fading at the row's end. A path in a list row fades from the start, the file name stays whole.
 
 A machine row never joins the row: a command-end notice carries the label (`label` — the agent's description or the command head) apart from the full command; the row shows the label, and the command stands as the well's first line above the output tail — as in the bash step's own body.
