@@ -278,8 +278,8 @@ export const serve = async (build: Build): Promise<void> => {
   if (placedHost !== undefined) process.once('exit', withdrawn);
   const readerWord = process.env.TAGMA_SQLITE_READERS;
   const readerCeiling = readerWord === undefined ? undefined : Number(readerWord);
-  if (readerCeiling !== undefined && (!Number.isSafeInteger(readerCeiling) || readerCeiling < 0)) {
-    throw new Error('TAGMA_SQLITE_READERS must name a non-negative integer.');
+  if (readerCeiling !== undefined && (!Number.isSafeInteger(readerCeiling) || readerCeiling < 1)) {
+    throw new Error('TAGMA_SQLITE_READERS must name a positive integer.');
   }
   const processes = new ProcessPool(readerCeiling, 'stop', undefined, childHosting);
   if (predecessor !== undefined) {
