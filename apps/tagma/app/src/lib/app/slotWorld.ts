@@ -161,6 +161,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
         remembered: {},
       }),
     }),
+    connection: stubSingle({ loadOrThrow: async () => [] }),
     favorites: stubSingle({ loadOrThrow: async () => ({ models: [] }) }),
     types: stubMutation(),
     ...over.threads,
