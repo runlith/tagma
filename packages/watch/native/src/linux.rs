@@ -23,7 +23,13 @@ const MASK: u32 = libc::IN_ATTRIB
     | libc::IN_ONLYDIR
     | libc::IN_EXCL_UNLINK;
 
-const ABOVE: u32 = libc::IN_DELETE | libc::IN_MOVED_FROM | libc::IN_DONT_FOLLOW | libc::IN_ONLYDIR | libc::IN_MASK_ADD;
+const ABOVE: u32 = libc::IN_DELETE
+    | libc::IN_DELETE_SELF
+    | libc::IN_MOVE_SELF
+    | libc::IN_MOVED_FROM
+    | libc::IN_DONT_FOLLOW
+    | libc::IN_ONLYDIR
+    | libc::IN_MASK_ADD;
 
 const GONE: &str = "the watched directory, or one above it, was deleted or moved";
 
@@ -281,7 +287,8 @@ impl Inotify {
             };
             for (directory, sink, guards) in targets {
                 if let Some(child) = guards {
-                    if event.mask & (libc::IN_DELETE | libc::IN_MOVED_FROM) != 0 && name == child {
+                    let named = event.mask & (libc::IN_DELETE | libc::IN_MOVED_FROM) != 0 && name == child;
+                    if named || event.mask & (libc::IN_DELETE_SELF | libc::IN_MOVE_SELF) != 0 {
                         sink.ended(GONE);
                     }
                     continue;
