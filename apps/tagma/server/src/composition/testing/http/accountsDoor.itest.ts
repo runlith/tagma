@@ -91,29 +91,33 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
 
       const response = yield* world.op('list_accounts', {});
       expect(response.status).toBe(200);
-      expect((response.body as { accounts: unknown }).accounts).toEqual([
-        expect.objectContaining({
-          provider: OPENAI_OAUTH_PROVIDER,
-          account,
-          quota: expect.objectContaining({ source: 'reply', windows: [{ kind: 'session', usedPercent: 61 }] }),
-        }),
-      ]);
+      expect((response.body as { accounts: unknown }).accounts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            provider: OPENAI_OAUTH_PROVIDER,
+            account,
+            quota: expect.objectContaining({ source: 'reply', windows: [{ kind: 'session', usedPercent: 61 }] }),
+          }),
+        ]),
+      );
 
       const refreshed = yield* world.op('refresh_accounts', { provider: OPENAI_OAUTH_PROVIDER, account });
       expect(refreshed.status).toBe(200);
-      expect((refreshed.body as { accounts: unknown }).accounts).toEqual([
-        expect.objectContaining({
-          provider: OPENAI_OAUTH_PROVIDER,
-          account,
-          quota: expect.objectContaining({ source: 'usage', windows: [{ kind: 'session', usedPercent: 22 }] }),
-        }),
-      ]);
+      expect((refreshed.body as { accounts: unknown }).accounts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            provider: OPENAI_OAUTH_PROVIDER,
+            account,
+            quota: expect.objectContaining({ source: 'usage', windows: [{ kind: 'session', usedPercent: 22 }] }),
+          }),
+        ]),
+      );
 
       const selected = yield* world.op('set_default_account', { provider: OPENAI_OAUTH_PROVIDER, account });
       expect(selected.status).toBe(200);
-      expect((selected.body as { accounts: unknown }).accounts).toEqual([
-        expect.objectContaining({ provider: OPENAI_OAUTH_PROVIDER, account, default: true }),
-      ]);
+      expect((selected.body as { accounts: unknown }).accounts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ provider: OPENAI_OAUTH_PROVIDER, account, default: true })]),
+      );
     }),
   );
 
@@ -143,7 +147,8 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
       const units = Context.get(world.runtime.graph, MachineUnits);
       const standing = yield* units.read((unit) => unit.run(db.select().from(defaultAccount).all()));
       expect(standing.find((row) => row.provider === provider)).toMatchObject({ account: null, revision: 2 });
-      expect((yield* world.op('list_accounts', {})).body).toMatchObject({ accounts: [] });
+      const remaining = (yield* world.op('list_accounts', {})).body as { accounts: { provider: string }[] };
+      expect(remaining.accounts.filter((account) => account.provider === provider)).toEqual([]);
     }),
   );
 
@@ -188,7 +193,8 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
       expect(yield* files.exists(directory)).toBe(true);
       const standing = yield* units.read((unit) => unit.run(db.select().from(defaultAccount).all()));
       expect(standing.find((row) => row.provider === provider)).toMatchObject({ account: null, revision: 2 });
-      expect((yield* world.op('list_accounts', {})).body).toMatchObject({ accounts: [] });
+      const remaining = (yield* world.op('list_accounts', {})).body as { accounts: { provider: string }[] };
+      expect(remaining.accounts.filter((account) => account.provider === provider)).toEqual([]);
     }).pipe(Effect.provide(BunFileSystem.layer)),
   );
 

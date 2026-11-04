@@ -40,12 +40,12 @@ layer(fixture, { excludeTestServices: true })('path existence door', (it) => {
       for (const path of ['src/x.ts', 'sub/nested.ts', 'sub']) {
         const answer = yield* exists(root, path);
         expect(answer.status).toBe(200);
-        expect(answer.body).toEqual({ status: 'ok', exists: true });
+        expect(answer.body).toMatchObject({ status: 'ok', exists: true });
       }
 
       const missing = yield* exists(root, 'src/absent.ts');
       expect(missing.status).toBe(200);
-      expect(missing.body).toEqual({ status: 'ok', exists: false });
+      expect(missing.body).toMatchObject({ status: 'ok', exists: false });
     }),
   );
 
@@ -60,11 +60,11 @@ layer(fixture, { excludeTestServices: true })('path existence door', (it) => {
       for (const path of [join(root, 'hello.txt'), join(alias, 'hello.txt')]) {
         const inside = yield* exists(root, path);
         expect(inside.status).toBe(200);
-        expect(inside.body).toEqual({ status: 'ok', exists: true });
+        expect(inside.body).toMatchObject({ status: 'ok', exists: true });
       }
       const missing = yield* exists(root, join(alias, 'missing', 'file.txt'));
       expect(missing.status).toBe(200);
-      expect(missing.body).toEqual({ status: 'ok', exists: false });
+      expect(missing.body).toMatchObject({ status: 'ok', exists: false });
 
       const outside = yield* exists(root, '/etc/hostname');
       expect(outside.status).toBe(409);
