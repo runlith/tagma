@@ -15,15 +15,16 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/browser/engine/drive.ts
 ---
-**Value.** A page dialog, a renderer hang, or a crash does not stop work silently: human and agent see that the page is waiting and answer it.
+**Value.** Dialogs and renderer failures have one shared state for the operator and the agent.
 
-**How.** A plaque above the page in the panel and on the phone; the `answer_page_dialog` operation; page state in `list_pages` and the `browser.pages` feed.
+**How.** A plaque above the page in the panel and on the phone; `answer_page_dialog`; page state in `list_pages` and the `browser.pages` feed.
 
 **Behaviour.**
-- Alert, confirm, prompt, and "leave the page?" show as a plaque with an answer. While a dialog is open, other actions on the page refuse with `dialog-open`.
-- Closing a page that asks to stay opens its leave-dialog and waits for an answer: agreeing closes, refusing keeps the page and answers `page-stayed`.
-- On desktop, a dialog on a page driven by an agent waits for the engine's answer; without an agent it shows natively, and on an agent-session break it goes to the human at once.
-- A hung page is marked "not responding" with Reload and Close buttons; a crashed one — "crashed" with Reload. Agent actions on them refuse except reload and stop. An engine-owned CPU slowdown scales the responsiveness threshold, and an engine-owned pause suspends it, so measurements do not falsely mark or replace the renderer.
-- The engine probes an attached out-of-process iframe separately. Its hang marks the page unresponsive and refuses page work, including in-place reload, with the frame's identity and address. Recovery guidance offers another profile or waiting for the profile browser to end, and names live same-profile pages with their opening threads or non-thread origins: agents close only their own pages, asking the operator about the rest.
+- Alert, confirm, prompt and leave dialogs show an answer. While one is open, page actions refuse `dialog-open`.
+- Closing a page that asks to stay waits for its leave answer: agreeing closes it; refusing keeps it and answers `page-stayed`.
+- On desktop, a dialog on an agent-driven page waits for the engine; without an agent it shows natively, and an agent-session break returns it to the person.
+- A renderer proved unresponsive is marked with Reload and Close actions; a crashed renderer is marked with Reload. Agent work refuses on those known states except recovery navigation.
+- A hang verdict requires CPU consumed by the same attributed renderer while its probe stays unanswered. A pause excludes sampled CPU; throttling spends less actual CPU rather than widening a wall-clock deadline. Desktop root renderers have native PID and creation-time attribution.
+- Without exact attribution, silence produces no hang verdict. Managed pages and engine out-of-process frame sessions wait for their own answer, crash, close or session end, and their callers can cancel the wait.
 
-**Limits.** On desktop `prompt()` is not supported by Electron: the page gets `null` at once. A leave started by the page itself does not repeat after agreeing — its next attempt goes through. Desktop watchdog strain follows exact renderer process identity; CPU strain widens to the profile only during pending navigation toward an unknown speculative renderer, returning on commit or failure, while heap pause stays on its captured PID. Managed watchdogs and engine OOP-frame probes use profile scope where CDP exposes no renderer identity, so another genuinely hung page or frame within that scope is detected only after the known strain ends.
+**Limits.** Electron does not support `prompt()`: the page receives `null`. A page-initiated leave does not repeat after agreement; its next attempt goes through. A silent managed renderer may survive target closure and be reused by a same-site page; a profile-browser exit or another profile is the recovery boundary when its process cannot be identified exactly.

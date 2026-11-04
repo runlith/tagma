@@ -34,6 +34,7 @@ Why not Chrome DevTools MCP: it drives a separate Chrome whose tabs Tagma knows 
 - One engine for all hosts talks to a host through ports: page life and navigation at host level plus an on-demand CDP session to the page. Human pages on desktop live without CDP until an agent drives them, another device watches them, or element picking runs: Cloudflare reads an attached debugger as a bot signal.
 - The desktop host lives in Electron main and connects itself to its own server's socket: it registers, performs port calls, and forwards `webContents.debugger` frames. Raw CDP never leaves that channel and the server; there are no new listening ports.
 - The managed-Chromium host is an adapter in the server: it launches a profiled build as a child process and talks CDP to it over a pipe.
+- A hang verdict counts CPU consumed by the same attributed renderer process while a probe remains unanswered, never wall time. A host or frame session without exact attribution waits for its own answer or end and keeps the caller's cancellation.
 - Whatever depends on the host or build — identity, page policies, storage place, fingerprint-config format — belongs to the adapter. The core knows the profile, its adapter, and its adapter document without reading it; at stage 2 — also the proxy.
 - Showing is the client's business: a native view when this desktop holds the page, otherwise screencast. The only exception is desktop popup windows, which main shows. Server ports never include showing.
 
