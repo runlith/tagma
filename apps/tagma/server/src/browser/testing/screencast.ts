@@ -254,7 +254,12 @@ export const screencastScenarios = (input: CastHost): void => {
       Effect.gen(function* () {
         const page = yield* open('/count');
         const viewing = yield* watching(page, { width: 400, height: 300, scale: 1, layout: true });
-        const flowing = sizeOf((yield* frameWhere(viewing, (frame) => frame.width === 400)).data);
+        const flowing = sizeOf(
+          (yield* frameWhere(viewing, (frame) => {
+            const size = sizeOf(frame.data);
+            return frame.width === 400 && frame.height === 300 && size.width === 400 && size.height === 300;
+          })).data,
+        );
         const press = { action: 'click', x: 140, y: 100 } as const;
         const clicks = Effect.forEach(
           [1, 2, 3],
