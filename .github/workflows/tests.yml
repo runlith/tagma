@@ -105,6 +105,8 @@ jobs:
         run: |
           sandbox="$(bun -e 'const path = require("node:path"); console.log(path.join(path.dirname(require("electron")), "chrome-sandbox"))')"
           sudo install -o root -g root -m 4755 "$sandbox" "$RUNNER_TEMP/chrome-devel-sandbox"
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
           printf 'CHROME_DEVEL_SANDBOX=%s\n' "$RUNNER_TEMP/chrome-devel-sandbox" >> "$GITHUB_ENV"
       - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
         name: Virtual display for Electron
