@@ -12,6 +12,7 @@ import { Blocks } from '../../graph/contract/service/blocks.js';
 import { BlockNames } from '../../graph/contract/service/acts.js';
 import { blockName } from '../../graph/contract/wire/references.js';
 import type { LawEnforcement } from '../../graph/contract/wire/enforcement.js';
+import type { BlockDiff } from '../../graph/contract/wire/reads.js';
 import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { unsignedEnvironment } from '../../platform/credentials/grants.js';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
@@ -142,6 +143,15 @@ const makeCommitFixture = Effect.fn('commitFixture.make')(function* () {
         yield* Queue.take(changes);
       }
     });
+    const historyWhen = Effect.fn('commitFixture.historyWhen')(function* (blockId: string, done: (diff: BlockDiff) => boolean) {
+      for (;;) {
+        const reading = yield* world.tagma(['op', 'read_block_diff', '--json', JSON.stringify({ blockId })], { cwd: repo, env: OPERATOR });
+        expect(reading.code, reading.err || reading.out).toBe(0);
+        const { diff } = JSON.parse(reading.out) as { diff: BlockDiff };
+        if (done(diff)) return diff;
+        yield* Queue.take(changes);
+      }
+    });
     return {
       world: { ...world, directory },
       repo,
@@ -157,9 +167,10 @@ const makeCommitFixture = Effect.fn('commitFixture.make')(function* () {
         Effect.orDie(git.run(['-C', cwd, ...args], { env: present(unsignedEnvironment(process.env, sessionIdentity)) })),
       documentOf,
       documentWhen,
+      historyWhen,
     };
   });
-  return { scene: yield* take() };
+  return { scene: yield* take(), take };
 });
 
 export class CommitFixture extends Context.Service<CommitFixture, Effect.Success<ReturnType<typeof makeCommitFixture>>>()(

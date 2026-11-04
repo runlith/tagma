@@ -3,6 +3,7 @@ import { Schema } from 'effect';
 import { fieldsField, tagsField } from './fields.js';
 import { BlockIdentity, BlockName } from './references.js';
 import { nodeActionsSchema } from './tags/actions.js';
+import { unjudgedSchema } from './journalPayloads.js';
 
 export const pageFacts = {
   shown: Schema.Number,
@@ -88,6 +89,7 @@ export const blockChangeSchema = Schema.Struct({
   label: Schema.String,
   peerName: Schema.NullOr(BlockName),
   peerIdentity: Schema.NullOr(BlockIdentity),
+  unjudged: Schema.optional(unjudgedSchema),
 });
 export type BlockChange = typeof blockChangeSchema.Type;
 
