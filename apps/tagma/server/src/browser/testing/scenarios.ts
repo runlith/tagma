@@ -188,10 +188,23 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('a covered element refuses element-obscured and names what covers it', () =>
+    it.effect('a ref click passes a pointer-transparent layer but refuses a real cover', () =>
       Effect.gen(function* () {
         const page = yield* open('/covered');
-        const refused = yield* refusalOf(act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Under"/) }));
+        yield* evaluate(
+          page,
+          `(() => {
+          const cover = document.getElementById('cover');
+          cover.style.cssText = 'position:fixed;inset:0;opacity:0;pointer-events:none';
+          document.getElementById('under').onclick = event => { event.currentTarget.dataset.clicked = 'yes'; };
+          return true;
+        })()`,
+        );
+        const ref = refIn(yield* snapshot(page), /button "Under"/);
+        yield* act(page, { action: 'click', ref });
+        expect(yield* evaluate(page, 'document.getElementById("under").dataset.clicked')).toBe('yes');
+        yield* evaluate(page, `document.getElementById('cover').style.pointerEvents = 'auto'`);
+        const refused = yield* refusalOf(act(page, { action: 'click', ref }));
         expect(refused.code).toBe('element-obscured');
         expect(refused.reason).toContain('#cover');
       }),

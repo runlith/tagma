@@ -198,7 +198,7 @@ const hitAt = Effect.fnUntraced(function* (attached: Attached, child: string | u
         x: Math.round(at.x + cssLayoutViewport.pageX),
         y: Math.round(at.y + cssLayoutViewport.pageY),
         includeUserAgentShadowDOM: false,
-        ignorePointerEventsNone: true,
+        ignorePointerEventsNone: false,
       },
       child,
     )
