@@ -82,6 +82,7 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
   );
   const pid = yield* attempted('MobileSafari did not launch', () => control.launch('com.apple.mobilesafari'));
   const systemPID = yield* attempted('the native system UI process is unavailable', () => readSystemPID(device));
+  console.info(`iOS onboarding: Safari ${pid}, system UI ${systemPID}`);
   const navigation = yield* Effect.forkScoped(
     Effect.tryPromise({
       try: (signal) => command('xcrun', ['simctl', '--set', device.set, 'openurl', device.udid, server.url.href], signal),
@@ -98,10 +99,9 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
       console.info('iOS onboarding: reading native accessibility');
       const snapshot = async (target: number) =>
         elementsOf(await readAX(device, tools, { pid: target, automation: true, depth: 64, nodes: 4096, traversal: 'single-fetch' }));
-      const [elements, systemElements] = yield* attempted('the native accessibility tree is unavailable', () =>
-        Promise.all([snapshot(pid), snapshot(systemPID)]),
-      );
+      const systemElements = yield* attempted('the native system UI tree is unavailable', () => snapshot(systemPID));
       const hasSystemAlert = systemElements.some((one) => one.XC_kAXXCAttributeLabel === 'Search Engine Preference');
+      const elements = hasSystemAlert ? [] : yield* attempted('the native Safari tree is unavailable', () => snapshot(pid));
       const popover = elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'PopoverDismissRegion');
       const buttons = (hasSystemAlert ? systemElements : elements).filter(
         (one) => one.XC_kAXXCAttributeAutomationType === ButtonType && ((one.XC_kAXXCAttributeTraits ?? 0) & DisabledTrait) === 0,
