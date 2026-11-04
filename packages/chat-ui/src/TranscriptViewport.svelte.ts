@@ -143,6 +143,11 @@ export class TranscriptViewport {
     this.followingViewport.syncSelection(selection, content);
   }
 
+  syncFocus(focused: Element | null): void {
+    if (focused?.matches(':focus-visible')) this.followingViewport.hold('focus');
+    else this.release('focus');
+  }
+
   useMessages(read: () => readonly { readonly id: string }[]): void {
     this.messages = read;
   }
@@ -277,9 +282,13 @@ export class TranscriptViewport {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!SCROLL_KEYS.has(event.key)) return;
-    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.defaultPrevented || (event.key === ' ' && (event.metaKey || event.ctrlKey || event.altKey))) return;
     const target = event.target;
-    if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, button'))) return;
+    if (
+      target instanceof HTMLElement &&
+      (target.isContentEditable || target.closest('input, textarea, select') || (event.key === ' ' && target.closest('button')))
+    )
+      return;
     const upward = event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home' || (event.key === ' ' && event.shiftKey);
     this.input(target, upward ? -1 : 1, !event.repeat);
   };

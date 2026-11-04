@@ -79,12 +79,14 @@ for (const lane of ['chromium', 'webkit'] as const) {
         await tail(page);
       }
 
+      await page.locator('textarea').blur();
       await page
         .locator('[data-timeline-key="stream-answer"] p')
-        .last()
+        .first()
         .evaluate((text) => {
           const range = document.createRange();
           range.selectNodeContents(text);
+          window.getSelection()!.removeAllRanges();
           window.getSelection()!.addRange(range);
         });
       await page.locator('textarea').evaluate((area: HTMLTextAreaElement) => {

@@ -301,7 +301,7 @@ export class TranscriptVirtualizer {
       const item = index < 0 ? undefined : virtualizer.measurementsCache[index];
       if (item !== undefined) travel = (virtualizer.scrollOffset ?? 0) - item.start - held.offset;
     }
-    let reader = Math.abs(travel) >= MOVED_PX && !virtualizer.isScrollingToEnd();
+    let reader = !this.keepsEnd && Math.abs(travel) >= MOVED_PX;
     const aim = this.aim;
     if (aim !== undefined && !aim.landed) {
       if (aim.via !== undefined && Math.abs((virtualizer.scrollOffset ?? 0) - aim.via) < this.height) {
@@ -315,6 +315,7 @@ export class TranscriptVirtualizer {
       this.aim = undefined;
     }
     this.scrolled(reader);
+    this.holdTail();
   }
 
   private anchorAt(virtualizer: Feed): Anchor | undefined {

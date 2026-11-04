@@ -13,7 +13,7 @@ import {
 
 export type ScrollOutcome = 'no-overflow' | 'at-bottom' | 'auto' | 'reader-moved';
 
-export type Hold = 'press' | 'selection';
+export type Hold = 'press' | 'selection' | 'focus';
 
 export type FollowingViewportOptions = {
   autoFollows(): boolean;

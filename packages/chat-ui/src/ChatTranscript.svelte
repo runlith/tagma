@@ -277,11 +277,13 @@
     const focusIn = (event: FocusEvent) => {
       focused = keyOf(event.target as Node | null);
       keep();
+      viewport.syncFocus(event.target instanceof Element ? event.target : null);
     };
     const focusOut = (event: FocusEvent) => {
       if (element.contains(event.relatedTarget as Node | null)) return;
       focused = undefined;
       keep();
+      viewport.syncFocus(null);
     };
     const pressed = (event: MouseEvent) => {
       const control = (event.target as Element | null)?.closest<HTMLElement>('[aria-expanded], summary');

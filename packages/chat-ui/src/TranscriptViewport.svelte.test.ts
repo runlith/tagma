@@ -549,12 +549,38 @@ describe('a paused reader', () => {
 });
 
 describe('whose hand moved the feed', () => {
-  test('a movement no input explains is read from where the view now is: the reader leaves the tail', async () => {
-    const { browser, viewport, settle } = await opened();
+  test('a movement no input explains is the tail undone for a feed riding it, and the reader own for a paused one', async () => {
+    const { browser, viewport, settle, read } = await opened();
     browser.root.scrollTop = 2000;
     await settle();
+    expect(viewport.following).toBe(true);
+    expect(browser.atEnd()).toBe(true);
 
+    await read(6000);
+    browser.root.scrollTop = 2000;
+    await settle();
+    expect(browser.root.scrollTop).toBe(2000);
     expect(viewport.following).toBe(false);
+    viewport.dispose();
+  });
+
+  test('keyboard focus inside the feed holds it while it stays, and the feed returns to the tail when focus leaves', async () => {
+    const { browser, viewport, settle } = await opened();
+    const top = browser.root.scrollTop;
+    const control = document.createElement('button');
+    browser.rows.get('row-199')!.inner.append(control);
+    control.focus();
+    viewport.syncFocus(control);
+
+    browser.resize('row-199', 400);
+    await settle();
+    expect(browser.root.scrollTop).toBe(top);
+
+    control.blur();
+    viewport.syncFocus(null);
+    await settle();
+    expect(browser.atEnd()).toBe(true);
+    expect(viewport.following).toBe(true);
     viewport.dispose();
   });
 
