@@ -1,61 +1,59 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
-import { inspectArchive } from './archive.js';
+import { openArchive } from './archive.js';
+import { paxRecord as record, tarEntry as entry, writeArchive } from './testing/tarball.js';
 
 const scratch = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), 'release-archive-'))),
   (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
 );
 
-const record = (key: string, value: string): string => {
-  const body = ` ${key}=${value}\n`;
-  let size = Buffer.byteLength(body) + 1;
-  while (size !== Buffer.byteLength(body) + String(size).length) size = Buffer.byteLength(body) + String(size).length;
-  return `${size}${body}`;
-};
+const archive = (root: string, name: string, entries: readonly Buffer[]): string => writeArchive(root, name, entries).file;
 
-const entry = (name: string, body = Buffer.alloc(0), type = '0', target = '', declared?: string): Buffer => {
-  const header = Buffer.alloc(512);
-  header.write(name, 0, 100);
-  header.write('0000644\0', 100, 8);
-  header.write(declared ?? `${body.length.toString(8).padStart(11, '0')}\0`, 124, 12);
-  header.fill(0x20, 148, 156);
-  header.write(type, 156, 1);
-  header.write(target, 157, 100);
-  header.write('ustar\0', 257, 6);
-  header.write('00', 263, 2);
-  const sum = header.reduce((total, byte) => total + byte, 0);
-  header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8);
-  return Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512)]);
-};
-
-const archive = (root: string, name: string, entries: readonly Buffer[]): string => {
-  const file = join(root, `${name}.tar.gz`);
-  writeFileSync(file, gzipSync(Buffer.concat([...entries, Buffer.alloc(1024)])));
-  return file;
-};
-
-it.live('a release archive exposes its real file footprint while admitting ordinary, PAX and GNU names and internal links', () =>
-  Effect.gen(function* () {
-    const root = yield* scratch;
-    const bytes = Buffer.alloc(1 << 20);
-    const named = `./${'long-'.repeat(30)}`;
-    const file = archive(root, 'ordinary', [
-      entry('./', undefined, '5'),
-      entry('./payload', bytes),
-      entry('PaxHeader', Buffer.from(record('path', './pax') + record('size', '3')), 'x'),
-      entry('./ignored', Buffer.from('abc')),
-      entry('./LongName', Buffer.from(`${named}\0`), 'L'),
-      entry('./ignored', Buffer.from('de')),
-      entry('./internal', undefined, '2', 'payload'),
-    ]);
-    expect(yield* inspectArchive(file)).toEqual({ bytes: bytes.length + 5, entries: 5 });
-  }),
+it.live(
+  'a release archive measures and materializes ordinary, PAX and GNU names, executable files and internal links without restoring metadata',
+  () =>
+    Effect.gen(function* () {
+      const root = yield* scratch;
+      const bytes = Buffer.alloc(1 << 20);
+      const named = `./${'long-'.repeat(30)}`;
+      const file = archive(root, 'ordinary', [
+        entry('./', undefined, '5', '', undefined, 0o755),
+        entry('./payload', bytes),
+        entry(
+          'PaxHeader',
+          Buffer.from(
+            record('path', './pax') +
+              record('size', '3') +
+              record('SCHILY.xattr.user.release', 'ignored') +
+              record('SCHILY.fflags', 'uchg') +
+              record('SCHILY.acl.access', 'ignored'),
+          ),
+          'x',
+        ),
+        entry('./ignored', Buffer.from('abc'), '0', '', undefined, 0o755),
+        entry('./LongName', Buffer.from(`${named}\0`), 'L'),
+        entry('./ignored', Buffer.from('de')),
+        entry('./internal', undefined, '2', 'payload'),
+      ]);
+      const opened = yield* openArchive(file);
+      expect(opened.footprint).toEqual({ bytes: bytes.length + 5, entries: 5 });
+      const into = join(root, 'unpacked');
+      yield* opened.unpack(into);
+      expect(readFileSync(join(into, 'payload'))).toEqual(bytes);
+      expect(readFileSync(join(into, 'pax'), 'utf8')).toBe('abc');
+      expect(readFileSync(join(into, named), 'utf8')).toBe('de');
+      expect(readlinkSync(join(into, 'internal'))).toBe('payload');
+      expect(lstatSync(join(into, 'pax')).mode & 0o777).toBe(0o755);
+      expect(lstatSync(join(into, 'pax')).uid).toBe(lstatSync(root).uid);
+      writeFileSync(join(into, 'pax'), 'writable after extracting immutable metadata');
+      expect(readFileSync(join(into, 'pax'), 'utf8')).toBe('writable after extracting immutable metadata');
+    }),
 );
 
 it.live('release archive inspection rejects unsafe entries, malformed sizes and truncated input before extraction', () =>
@@ -82,11 +80,11 @@ it.live('release archive inspection rejects unsafe entries, malformed sizes and 
     ];
     for (const [at, malformed] of bad.entries()) {
       const file = archive(root, `bad-${at}`, [malformed, entry('./file')]);
-      expect((yield* Effect.result(inspectArchive(file)))._tag).toBe('Failure');
+      expect((yield* Effect.result(Effect.scoped(openArchive(file))))._tag).toBe('Failure');
     }
     const truncated = join(root, 'truncated.tar.gz');
     writeFileSync(truncated, gzipSync(entry('./file', Buffer.from('a')).subarray(0, 513)));
-    expect((yield* Effect.result(inspectArchive(truncated)))._tag).toBe('Failure');
+    expect((yield* Effect.result(Effect.scoped(openArchive(truncated))))._tag).toBe('Failure');
   }),
 );
 
@@ -104,6 +102,6 @@ it.live('a sparse release archive is refused before its unreported expanded file
     const map = Buffer.alloc(512);
     map.write('1\n0\n1\n');
     const file = archive(root, 'sparse', [entry('PaxHeader', metadata, 'x'), entry('./large', Buffer.concat([map, Buffer.from('x')]))]);
-    expect((yield* Effect.result(inspectArchive(file)))._tag).toBe('Failure');
+    expect((yield* Effect.result(Effect.scoped(openArchive(file))))._tag).toBe('Failure');
   }),
 );

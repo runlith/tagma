@@ -105,7 +105,7 @@ const merged = (previous: ReadonlyMap<string, string>, next: ReadonlyMap<string,
   return all;
 };
 
-export const walkTarball = async (file: string, visit: (entry: TarEntry) => EntrySink | null): Promise<void> => {
+export const walkTarball = async (file: string, visit: (entry: TarEntry) => EntrySink | null, signal?: AbortSignal): Promise<void> => {
   let globals: ReadonlyMap<string, string> = new Map();
   let pending: Pending = { records: new Map(), name: null, target: null };
   let metadata = 0;
@@ -163,7 +163,7 @@ export const walkTarball = async (file: string, visit: (entry: TarEntry) => Entr
     else if (body.type === 'K') pending = { ...pending, target: text(data, 0, data.length) };
   };
 
-  const source = createReadStream(file);
+  const source = createReadStream(file, { signal });
   const stream = source.pipe(createGunzip({ chunkSize: 1 << 20 }));
   source.on('error', (error) => stream.destroy(error));
   try {

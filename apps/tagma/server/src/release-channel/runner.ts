@@ -6,8 +6,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { type InstallRefused, NextInstallation, type RestartRefused, type StopRefused } from '../installation/contract/service/next.js';
 import { askedRestart, occupied, restarting } from '../installation/next/asking.js';
 import { makeKeptRecord } from '../platform/durable/keptRecord.js';
-import { logLine, logSink, shownTail, sizeOf } from '../platform/durable/logFile.js';
-import { answered } from '../platform/command.js';
+import { logLine, shownTail, sizeOf } from '../platform/durable/logFile.js';
 import type { Applications } from '../installation/contract/service/applications.js';
 import type { MachinePlatform } from '../installation/contract/service/platform.js';
 import { DowngradeSteps } from '../installation/contract/service/steps.js';
@@ -24,8 +23,8 @@ import { manifestAt, releaseAt } from '../installation/closure/manifests.js';
 import { downgradePreflight } from '../installation/operations/downgrade.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { inspectArchive, unpackCommand } from './archive.js';
-import type { ArchiveFootprint } from './inspection.js';
+import { openArchive } from './archive.js';
+import type { ArchiveFootprint } from './protocol.js';
 import { installFrom } from './installer.js';
 import { downloaded, Undelivered, undelivered } from './delivery.js';
 import type { Feed, ReleaseArchive } from '../installation/contract/wire/feed.js';
@@ -369,15 +368,6 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     return installed?.since === active.installing.since ? installed : null;
   });
 
-  const ran = Effect.fn('ReleaseChannel.ran')(function* (title: string, command: readonly string[]) {
-    yield* say(`\n--- ${title}: ${command.join(' ')} ---`);
-    const answer = yield* Effect.scoped(
-      Effect.flatMap(onDisk(logSink(place.places.log)), (sink) => answered(command[0]!, command.slice(1), { env: place.env, sink })),
-    ).pipe(Effect.orDie);
-    if (answer.status === null) return yield* undelivered(`${title} could not start: ${answer.text.trim()}`);
-    if (answer.status !== 0) return yield* undelivered(`${title} ended with code ${answer.status}`);
-  });
-
   const clean = Effect.fn('ReleaseChannel.clean')(function* (path: string) {
     yield* files.remove(path, { recursive: true, force: true }).pipe(Effect.orDie);
   }, Effect.uninterruptible);
@@ -385,10 +375,12 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   const unpacked = Effect.fn('ReleaseChannel.unpack')(function* (release: ReleaseArchive, file: string) {
     const into = join(place.places.staging, release.release);
     yield* clean(into);
-    const footprint = yield* inspectArchive(file);
-    yield* spaced(release, footprint).pipe(Effect.mapError((failure) => undelivered(failure.reason)));
-    mkdirSync(into, { recursive: true });
-    yield* ran('unpack', unpackCommand(file, into));
+    const archive = yield* openArchive(file);
+    yield* spaced(release, archive.footprint).pipe(Effect.mapError((failure) => undelivered(failure.reason)));
+    yield* Effect.gen(function* () {
+      yield* say(`\n--- unpack: ${file} → ${into} ---`);
+      yield* archive.unpack(into);
+    }).pipe(Effect.withSpan('ReleaseChannel.ran'));
     rmSync(file, { force: true });
     const carried = place.applications.carried(into);
     if (carried === null) return yield* undelivered(`the archive of release ${release.release} holds no one application at its root`);
@@ -407,7 +399,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
       }),
     );
     yield* clean(into);
-  });
+  }, Effect.scoped);
 
   const deliver = Effect.fn('ReleaseChannel.deliver')(function* (release: ReleaseArchive) {
     const started = clock.currentTimeMillisUnsafe();
