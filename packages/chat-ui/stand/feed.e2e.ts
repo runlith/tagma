@@ -215,6 +215,13 @@ for (const lane of ['chromium', 'webkit'] as const)
             expect(Math.abs(state.height - state.viewport - state.top)).toBeLessThanOrEqual(1 / recording.frames.at(-1)!.dpr);
           }
         },
-        { lanes: [lane], context: { viewport: { width: 1280, height: 900 }, hasTouch: name !== 'thumb-history' } },
+        {
+          lanes: [lane],
+          context: {
+            viewport: { width: 1280, height: 900 },
+            hasTouch: name !== 'thumb-history',
+            isMobile: lane === 'chromium' && name !== 'thumb-history',
+          },
+        },
       );
     }

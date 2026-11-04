@@ -49,13 +49,22 @@ export async function fling(
   speed = 2200,
   afterRelease?: () => Promise<void>,
 ): Promise<void> {
-  const { x, y } = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.point());
+  const { x, y, bottom, pixel } = await page.evaluate(() => {
+    const port = (globalThis as StandGlobal).feedStand!;
+    return {
+      ...port.point(),
+      bottom: port.targets().viewport.bottom,
+      pixel: 1 / (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio,
+    };
+  });
   if (cdp !== undefined) {
+    const travel = source === 'touch' ? Math.min(distance, bottom - y - pixel) : distance;
+    if (travel <= 0) throw new Error('The contact has no path inside the feed viewport');
     await frames(page, 2);
-    await page.evaluate(
-      ({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false),
-      { distance, speed },
-    );
+    await page.evaluate(({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false), {
+      distance: travel,
+      speed,
+    });
     const released =
       afterRelease === undefined
         ? undefined
@@ -66,7 +75,7 @@ export async function fling(
       cdp.send('Input.synthesizeScrollGesture', {
         x,
         y,
-        yDistance: distance,
+        yDistance: travel,
         speed,
         gestureSourceType: source === 'wheel' ? 'mouse' : 'touch',
         preventFling: false,
