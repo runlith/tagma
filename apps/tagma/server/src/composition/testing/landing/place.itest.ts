@@ -1,9 +1,10 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
-import { Clock, Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { Clock, Context, Deferred, Effect, FileSystem, Layer, Schema } from 'effect';
 import { makeWalks } from '../../../change-record/lines/walks.js';
 import { threadWireSnapshotPayloadSchema } from '../../../threads/contract/wire/snapshot.js';
+import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
 import { contentDigest } from '@runlith/files/content';
 import { workspaceChangeHunk } from '@runlith/files/hunk';
@@ -440,6 +441,19 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
           status: 200,
           body: { paths: ['shared.ts'] },
         });
+        const reads = Context.get(world.runtime.owners, ThreadHarness).reads;
+        const rested = yield* Deferred.make<void>();
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            reads.subscribeStates((state) => {
+              if (state.thread.id === child.threadId && state.activeRun === null && state.latestRun !== null)
+                Deferred.doneUnsafe(rested, Effect.void);
+            }),
+          ),
+          (unsubscribe) => Effect.sync(unsubscribe),
+        );
+        const state = yield* reads.snapshot(child.threadId);
+        if (state.activeRun !== null || state.latestRun === null) yield* Deferred.await(rested);
         expect(yield* op('submit_work', { subject: 'parent lands its rested child by project' }, project.id, parent)).toMatchObject({
           status: 200,
           body: { submitted: { status: 'landed', committed: ['shared.ts'] } },
