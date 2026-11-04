@@ -13,4 +13,4 @@ So two lists are stored: pinned places in order, and daily places the operator r
 
 The list also keeps places missing from the current project (a disabled app's section). A move inserts the place before the visible neighbour, so such places keep position and stand on it when the app returns to the set.
 
-Every record first re-reads the store, and a `storage` event updates the other windows. So two windows do not overwrite each other's set.
+Every record first re-reads the window's copy of the app document, which the server's feed keeps current with what other windows wrote. So two windows do not overwrite each other's set.

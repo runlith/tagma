@@ -36,6 +36,8 @@ edges:
     to: 01a174f2-3d51-75fa-8183-c8b41c9696ea
   - kind: imports
     to: 01a193f8-0f6e-7d7b-ab47-f2ac80ffecb0
+  - kind: imports
+    to: 01a1a698-f793-7779-8b4b-3e9a010f34d2
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
 sources:

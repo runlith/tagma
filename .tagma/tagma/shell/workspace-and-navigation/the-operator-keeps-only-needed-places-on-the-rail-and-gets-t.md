@@ -30,11 +30,11 @@ sources:
 - A newly pinned place stands at the rail's end. A place dropped on the rail stands where it was released.
 - When an open place is not on the rail, "…" is highlighted.
 - Hover, pin and drag in "…" do not steal focus. If the operator was typing in an input, they keep typing there.
-- Set and order are a personal setting, one for all projects. Changes show in all windows at once.
+- Set and order are a personal setting, one for all projects, kept on the server. Changes show at once in every window, on every device.
 - When the product later makes a new place daily, it appears on the rail on its own — except places the operator removed.
 
 **Limits.**
-- The setting lives in the window's store. It does not move to another machine or browser.
+- The setting belongs to one server: another server the operator runs keeps its own.
 - An app's place is only visible in a project where the app is enabled. In other projects it leaves no empty cell.
 - From the keyboard a place can be pinned and unpinned, but only the mouse reorders.
 - The mobile shell has no rail.

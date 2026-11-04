@@ -32,6 +32,6 @@ sources:
 
 **How.** A dock in the rail or tabs above the header; the look is picked in the app menu and the bar's context menu. Projects are also in the palette and the full list.
 
-**Behaviour.** A visited project joins one shared model of set and order. Dragging changes the order, removing from the bar neither unregisters nor moves off the current project. Set and look sync between windows, recents are kept per window. Pulse comes from the server; the dock also shows activity of projects past the scroll edge. Hovering pre-readies the move's code without opening the project's data.
+**Behaviour.** A visited project joins one shared model of set and order. Dragging changes the order, removing from the bar neither unregisters nor moves off the current project. Set, order, look and recents live on the server and follow the operator to every window and device; only the projects a window itself visited since it opened are its own. Pulse comes from the server; the dock also shows activity of projects past the scroll edge. Hovering pre-readies the move's code without opening the project's data.
 
 **Limits.** The bar appears only with several plain projects. Numeric chords and the recents switcher are on desktop macOS; browser keeps the bar and the palette. Opening a separate window uses the desktop-host capability.
