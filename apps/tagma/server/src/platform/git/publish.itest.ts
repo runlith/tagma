@@ -2,7 +2,8 @@ import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Clock, Deferred, Effect, Fiber, FileSystem, Layer } from 'effect';
+import { TestClock } from 'effect/testing';
 import { GitUnavailable, Git } from '@runlith/git/Git';
 import { liveGitLayer } from '../../composition/testing/liveGit.js';
 import { publish } from './publish.js';
@@ -98,6 +99,33 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       expect(outcome.outcome).toBe('published');
       if (outcome.outcome !== 'published' || !('paths' in outcome.settlement)) return yield* Effect.die('not settled');
       expect(outcome.commit).toBe(yield* run(['rev-parse', 'HEAD'], tree));
+      expect(Object.fromEntries(outcome.settlement.paths)).toEqual({ 'a.txt': 'synced', 'b.txt': 'synced' });
+      expect(yield* run(['status', '--porcelain'], tree)).toBe('');
+    }),
+  );
+
+  it.effect('a settlement whose git holds the index lock for minutes still settles every entry', () =>
+    Effect.gen(function* () {
+      const git = yield* Git;
+      const { tree, publication } = yield* prepared;
+      const clock = yield* TestClock.make();
+      const entered = yield* Deferred.make<void>();
+      const released = yield* Deferred.make<void>();
+      const slow: Git['Service'] = {
+        run: (args, options) =>
+          args.includes('--index-info')
+            ? Effect.andThen(Deferred.succeed(entered, undefined), Effect.andThen(Deferred.await(released), git.run(args, options)))
+            : git.run(args, options),
+      };
+      const publishing = yield* Effect.forkScoped(
+        publish(slow, publication, () => Effect.void).pipe(Effect.provideService(Clock.Clock, clock)),
+      );
+      yield* Deferred.await(entered);
+      yield* TestClock.adjust('10 minutes').pipe(Effect.provideService(Clock.Clock, clock));
+      yield* Deferred.succeed(released, undefined);
+      const outcome = yield* Fiber.join(publishing);
+      expect(outcome.outcome).toBe('published');
+      if (outcome.outcome !== 'published' || !('paths' in outcome.settlement)) return yield* Effect.die('not settled');
       expect(Object.fromEntries(outcome.settlement.paths)).toEqual({ 'a.txt': 'synced', 'b.txt': 'synced' });
       expect(yield* run(['status', '--porcelain'], tree)).toBe('');
     }),

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
-import { copyFile, open, rename, rm, stat } from 'node:fs/promises';
-import { Data, Duration, Effect } from 'effect';
+import { copyFile, open, rename, rm } from 'node:fs/promises';
+import { Data, Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { declare } from '@runlith/held/Held';
@@ -34,56 +34,15 @@ const LOCK_TRIES = 3;
 const LOCK_PAUSE_MS = 100;
 const WINDOWS_COMMAND_LINE = 32_767;
 const PATHSPEC_BYTES = Math.floor(WINDOWS_COMMAND_LINE / 2);
-const PROBE_BYTES = 1024 * 1024;
-const INDEX_IO_MARGIN = 4;
-const deviceRates = new Map<number, Promise<number>>();
 
-const probeRate = async (index: string): Promise<number> => {
-  const path = `${index}.tagma-probe-${randomUUID()}`;
-  const handle = await open(path, 'wx', 0o600);
-  try {
-    const started = performance.now();
-    await handle.writeFile(Buffer.alloc(PROBE_BYTES));
-    await handle.sync();
-    return PROBE_BYTES / Math.max(1, performance.now() - started) / INDEX_IO_MARGIN;
-  } finally {
-    try {
-      await handle.close();
-    } finally {
-      await rm(path, { force: true });
-    }
-  }
-};
-
-const indexMeasure = async (index: string): Promise<{ readonly bytes: number; readonly bytesPerMs: number }> => {
-  const snapshot = await stat(index).catch((cause: NodeJS.ErrnoException) => (cause.code === 'ENOENT' ? null : Promise.reject(cause)));
-  if (snapshot === null || snapshot.size === 0) return { bytes: 0, bytesPerMs: 1 };
-  let rate = deviceRates.get(snapshot.dev);
-  if (rate === undefined) {
-    rate = probeRate(index).catch((cause: unknown) => {
-      deviceRates.delete(snapshot.dev);
-      throw cause;
-    });
-    deviceRates.set(snapshot.dev, rate);
-  }
-  return { bytes: snapshot.size, bytesPerMs: await rate };
-};
-
-const indexSection = declare<{ readonly path: string; readonly bytesPerMs: number }>({
+const indexSection = declare<string>({
   name: 'git-index',
   owner: 'platform',
   rank: 300,
-  key: ({ path }) => path,
+  key: (path) => path,
   concurrency: 1,
   threshold: '500 millis',
-  ceilings: {
-    hold: {
-      base: '5 seconds',
-      bySize: (bytes, keys) => Duration.millis(bytes / keys[0]!.bytesPerMs),
-    },
-    wait: '1 second',
-    leaves: "the paths stay unsettled and git's own index.lock is removed",
-  },
+  ceilings: 'none',
   external: { named: "git under git's own index.lock", callsBack: false },
 });
 
@@ -201,11 +160,9 @@ export type IndexEdit<A, E, R> = {
 export const editHeldIndex = Effect.fn('platform.index.edit')(function* <A, E, R, W, S>(
   index: string,
   edit: Effect.Effect<IndexEdit<A, W, S>, E, R>,
-): Effect.fn.Return<A, E | W | IndexBusy | IndexWriteFailed | HoldStalled | HoldCut, R | S> {
-  const measured = yield* Effect.tryPromise({ try: () => indexMeasure(index), catch: failed(index) });
+): Effect.fn.Return<A, E | W | IndexBusy | IndexWriteFailed, R | S> {
   return yield* indexSection.hold(
-    { path: dirname(index), bytesPerMs: measured.bytesPerMs },
-    measured.bytes,
+    dirname(index),
     Effect.suspend(() => {
       const temporary = `${index}.tagma-${randomUUID()}`;
       let renamed = false;
