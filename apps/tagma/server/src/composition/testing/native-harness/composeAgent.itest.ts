@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
 import { type AgentRunner, makeAgentRunner, type AgentSink } from '@runlith/agent/AgentRunner';
 import { RunStop } from '@runlith/agent/RunStop';
+import type { AgentProfile } from '@runlith/agent/thread/agents/AgentProfile';
 import type { AgentRuntimeGuidance } from '@runlith/agent/contracts';
 import type { AgentToolOutputs } from '@runlith/agent/ToolOutput';
 import type { ModelRequestInput, ModelStreamInput } from '@runlith/agent/modelPort';
@@ -1184,6 +1185,70 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         }),
       ),
     ),
+  );
+  it.effect(
+    'a tools allowlist refuses only a name no world could offer: a plugin-shaped list and a name the sandbox merely lacks are born',
+    () =>
+      withDemo((demo) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const {
+              prompts,
+              composeAgent,
+              scriptedRunner,
+              sandboxWorld,
+              context,
+              input,
+              thread,
+              answer,
+              undelegatedThreads,
+              namesOnly,
+              launch,
+            } = yield* makeComposition(demo);
+            const offered: { tools: string[]; messages: readonly Message[] }[] = [];
+            const runner = yield* scriptedRunner((turn) => answer(turn, 'Done.'), offered);
+            const world = sandboxWorld();
+            const base = composeAgent(
+              {
+                id: 'declared',
+                name: 'Declared',
+                description: 'The base a file agent runs as.',
+                identity: 'You are nobody.',
+                capabilities: ['files', 'shell'],
+                sources: conversationSources(),
+              },
+              runner,
+              undelegatedThreads.rows,
+              undelegatedThreads.mandate,
+              namesOnly,
+              (view: ThreadView) => Effect.succeed({ ...context(world), thread: view }),
+            );
+            const born = (id: string, overlay: Omit<AgentProfile, 'id' | 'baseAgentId' | 'description'>) =>
+              Effect.flatMap(
+                launch(
+                  base,
+                  input(base, id, [Message.user('Go.')], {
+                    ...thread,
+                    id,
+                    profile: { id, overlay: { id, baseAgentId: 'declared', description: id, ...overlay } },
+                  }),
+                ),
+                (run) => run.output.response,
+              );
+            yield* born('plugin', {
+              prompt: 'Review.',
+              tools: ['read', 'spawn_agent', 'load_skill', 'read_output', 'stop_command', 'webfetch'],
+            });
+            yield* born('sandbox', { prompt: 'Check.', capabilities: ['shell'], tools: ['bash', SUBMIT_OPERATION, 'check_rules'] });
+            expect(prompts).toHaveLength(2);
+            const refused = yield* Effect.flip(
+              born('typo', { prompt: 'Check.', capabilities: ['shell'], tools: ['bash', 'no_such_tool'] }),
+            );
+            expect(refused).toMatchObject({ cause: { code: 'agent-invalid' } });
+            expect(prompts).toHaveLength(2);
+          }),
+        ),
+      ),
   );
   const CHECKOUT: WorldFacts = { shared: true, history: true, network: true };
   const SANDBOX: WorldFacts = { shared: false, history: false, network: false };

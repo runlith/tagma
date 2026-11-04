@@ -8,7 +8,7 @@ import { Deferred, Effect, Fiber, FileSystem } from 'effect';
 import { pool } from './inspectionLanes.js';
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('worker retirement', (it) => {
-  it.effect('interrupting a slice job after its idle probe retires its retained worker without another request', () =>
+  it.effect('interrupting a slice job retires its retained worker before serving another request', () =>
     Effect.gen(function* () {
       const home = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'inspection-retirement-' });
       const entry = join(home, 'worker.ts');
@@ -45,7 +45,6 @@ self.addEventListener('message', ({ data }) => {
         ),
       );
       yield* Deferred.await(entered);
-      yield* Effect.sleep(10);
       yield* Fiber.interrupt(job);
       yield* Deferred.await(stopped);
       const answer = yield* held.answer({ kind: 'packs', root: home, commit: 'HEAD' });

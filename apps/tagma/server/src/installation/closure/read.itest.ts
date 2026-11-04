@@ -17,7 +17,7 @@ afterAll(() => rmSync(tree, { recursive: true, force: true }));
 
 const run = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem>) => work.pipe(Effect.provide(BunFileSystem.layer));
 
-const platform = { os: 'darwin', arch: 'arm64' } as const;
+const platform = { os: process.platform, arch: process.arch };
 
 const wrote = (root: string, relative: string, text: string, mode = 0o600): void => {
   mkdirSync(dirname(join(root, relative)), { recursive: true });
@@ -211,11 +211,11 @@ describe('the launcher', () => {
     Effect.gen(function* () {
       const { root, path: elsewhere, shell } = place('foreign-launcher');
       installed(root);
-      yield* run(writeLauncher(root, elsewhere, { os: 'linux', arch: 'x64' }, shell));
+      yield* run(writeLauncher(root, elsewhere, { ...platform, os: 'foreign' }, shell));
       chmodSync(elsewhere, 0o700);
       const said = yield* spawnedEffect([elsewhere], { stdout: 'pipe', stderr: 'pipe' });
       expect(said.exitCode).toBe(1);
-      expect(said.stderr.toString()).toContain('linux/x64');
+      expect(said.stderr.toString()).toContain(`foreign/${platform.arch}`);
     }),
   );
 });

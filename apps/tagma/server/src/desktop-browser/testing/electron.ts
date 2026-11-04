@@ -1,3 +1,5 @@
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
+import type { Failure } from '@runlith/chrome-for-testing/launch/platform';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -5,7 +7,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { kind, world } from '@runlith/testbed/worlds';
-import { Context, Deferred, Effect, Layer } from 'effect';
+import { Context, Data, Deferred, Effect, Layer } from 'effect';
 import { build, stop } from 'esbuild';
 import { Hosts } from '../../browser/contract/service/hosts.js';
 import { absentAdapter, browserWorld, type BrowserFixture } from '../../browser/testing/world.js';
@@ -33,12 +35,21 @@ const ENTRY = fileURLToPath(new URL('../../../../desktop/src/browser/testing/hos
 const SERVER_ENV = 'TAGMA_TEST_BROWSER_SERVER';
 const DATA_ENV = 'TAGMA_TEST_BROWSER_DATA';
 
-export type Command = { readonly show: string } | { readonly reload: true };
+export type Command = { readonly show: string } | { readonly reload: true } | { readonly nativeProbe: string };
 
 export type Electron = {
   readonly control: (command: Command) => Effect.Effect<void>;
-  readonly exited: Effect.Effect<string>;
+  readonly exited: Effect.Effect<Failure>;
 };
+
+class NativeFailed extends Data.TaggedError('NativeFailed')<{ readonly message: string; readonly refusal: Failure }> {}
+const unavailable = (refusal: Failure) =>
+  Effect.die(
+    new NativeFailed({
+      message: `${refusal.problem}: ${refusal.message}\n${refusal.unblock.join('\n')}`,
+      refusal,
+    }),
+  );
 
 const electronBinary = (): string => createRequire(import.meta.url)('electron') as string;
 
@@ -61,10 +72,17 @@ const bundled = (into: string) =>
 export const launchElectron = Effect.fnUntraced(function* (home: string, url: URL) {
   const folder = join(home, 'desktop');
   mkdirSync(folder, { recursive: true });
+  const platform = currentPlatform();
+  const preparation = yield* Effect.promise(() => platform.prepare(true));
+  if (preparation._tag === 'LaunchRefused') return yield* unavailable(preparation);
   const bundle = yield* bundled(folder);
-  const env: Record<string, string | undefined> = { ...process.env, [SERVER_ENV]: url.toString(), [DATA_ENV]: join(folder, 'data') };
+  const env: Record<string, string | undefined> = {
+    ...preparation.environment,
+    [SERVER_ENV]: url.toString(),
+    [DATA_ENV]: join(folder, 'data'),
+  };
   delete env.ELECTRON_RUN_AS_NODE;
-  const exited = yield* Deferred.make<string>();
+  const exited = yield* Deferred.make<Failure>();
   const acknowledged = new Map<number, Deferred.Deferred<void>>();
   let asked = 0;
   const child = yield* Effect.acquireRelease(
@@ -77,10 +95,16 @@ export const launchElectron = Effect.fnUntraced(function* (home: string, url: UR
       createInterface({ input: launched.stdout }).on('line', (line) => {
         const done = /^\{"done":(\d+)\}$/u.exec(line);
         if (done === null) said = `${said}${line}\n`.slice(-8_000);
-        else Deferred.doneUnsafe(acknowledged.get(Number(done[1]))!, Effect.void);
+        else {
+          const waiting = acknowledged.get(Number(done[1]));
+          if (waiting !== undefined) Deferred.doneUnsafe(waiting, Effect.void);
+        }
       });
-      launched.on('exit', (code, signal) =>
-        Deferred.doneUnsafe(exited, Effect.succeed(`the Electron host left with ${signal ?? code}:\n${said}`)),
+      launched.on('close', (code, signal) =>
+        Deferred.doneUnsafe(exited, Effect.succeed(platform.failed(`the Electron host left with ${signal ?? code}:\n${said}`))),
+      );
+      launched.on('error', (failure) =>
+        Deferred.doneUnsafe(exited, Effect.succeed(platform.failed(`the Electron host did not start: ${failure.message}\n${said}`))),
       );
       return launched;
     }),
@@ -97,23 +121,34 @@ export const launchElectron = Effect.fnUntraced(function* (home: string, url: UR
       const done = Deferred.makeUnsafe<void>();
       acknowledged.set(id, done);
       child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
-      return Deferred.await(done);
+      return Effect.raceFirst(Deferred.await(done), Effect.flatMap(Deferred.await(exited), unavailable)).pipe(
+        Effect.ensuring(Effect.sync(() => acknowledged.delete(id))),
+      );
     });
   return { control, exited: Deferred.await(exited) } satisfies Electron;
+});
+
+export const connected = Effect.fnUntraced(function* (electron: Electron) {
+  const hosts = yield* Hosts;
+  const attached = yield* Deferred.make<void>();
+  yield* hosts.watch({
+    attached: (host) => (host.adapter === DESKTOP ? Effect.asVoid(Deferred.succeed(attached, undefined)) : Effect.void),
+    detached: () => Effect.void,
+  });
+  if (hosts.connected(DESKTOP) === undefined)
+    yield* Effect.raceFirst(Deferred.await(attached), Effect.flatMap(electron.exited, unavailable));
 });
 
 export const electronHost = (home: string) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const { url } = yield* ServedChannel;
-      const hosts = yield* Hosts;
-      const attached = yield* Deferred.make<void>();
-      yield* hosts.watch({
-        attached: (host) => (host.adapter === DESKTOP ? Effect.asVoid(Deferred.succeed(attached, undefined)) : Effect.void),
-        detached: () => Effect.void,
-      });
       const electron = yield* launchElectron(home, url);
-      yield* Effect.raceFirst(Deferred.await(attached), Effect.flatMap(electron.exited, Effect.die));
-      yield* Effect.forkScoped(Effect.flatMap(electron.exited, (said) => Effect.logError(said)));
+      yield* connected(electron);
+      yield* Effect.forkScoped(
+        Effect.flatMap(electron.exited, (failure) =>
+          Effect.logError(failure.message, { problem: failure.problem, unblock: failure.unblock }),
+        ),
+      );
     }),
   );

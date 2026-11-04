@@ -26,7 +26,7 @@ function runHeap(file: string, options?: HeapReadOptions): Effect.Effect<HeapSum
     return Effect.callback<HeapSummary | HeapReport, HeapUnreadable>((resume) => {
       const failed = (message: string) => resume(Effect.fail(new HeapUnreadable({ file, message })));
       try {
-        worker = new Worker(new URL('./heap/worker.ts', import.meta.url), { workerData: { file, options } });
+        worker = new Worker(new URL('./heap.worker.ts', import.meta.url), { workerData: { file, options } });
       } catch {
         failed('the heap reader worker could not start');
         return;

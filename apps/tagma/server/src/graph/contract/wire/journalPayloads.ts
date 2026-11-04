@@ -24,6 +24,8 @@ const ending = {
 
 const list = Schema.optional(Schema.Array(Schema.Unknown));
 
+export const unjudgedSchema = Schema.Struct({ op: Schema.String, cause: Schema.String, failed: Schema.String, base: Schema.String });
+
 const SHAPES = {
   create: Schema.Struct({ renamed: Schema.optional(Schema.Array(Schema.Number)) }),
   update: Schema.Struct({
@@ -62,7 +64,7 @@ const SHAPES = {
   }),
   enforce: Schema.Struct({ strictness: Schema.optional(Schema.String), imported: Schema.optional(Schema.Boolean) }),
   remeasure: Schema.Struct({ retired: list, escaped: list, fixed: list }),
-  unjudged: Schema.Struct({ op: Schema.String, cause: Schema.String, failed: Schema.String, base: Schema.String }),
+  unjudged: unjudgedSchema,
   answer: Schema.Struct({
     by: Schema.optional(Schema.Number),
     commit: Schema.optional(Schema.String),

@@ -7,11 +7,12 @@ import { Clock, Effect, FileSystem, Schema, type Scope } from 'effect';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { onFailure } from '../artifacts.ts';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
-import { attempted, boot, decode, empty, launchSafari, remove, simctl, SimulatorUnavailable } from './device.ts';
-import type { NativeTouch } from './hid.ts';
-import { input, tap } from './input.ts';
-import type { Point, Swipe, SimulatorOptions, SimulatorTiming } from './ios.ts';
+import { attempted, boot, decode, empty, remove, simctl, SimulatorUnavailable, type Device } from './device.ts';
+import type { NativeSwipe, NativeTouch } from './hid.ts';
+import { input, type Input } from './input.ts';
+import type { Point, SimulatorOptions, SimulatorTiming } from './ios.ts';
 import { cacheDirectory, cachedTools, COMPANION_VERSION, CLIENT_VERSION, PYTHON_VERSION } from './iosTools.ts';
 import { prepare, resolve, type Preparation, type TemplateParams } from './template.ts';
 
@@ -24,11 +25,10 @@ export type Simulator = {
   readonly socket: () => Promise<string>;
   readonly launchSafari: () => Promise<number>;
   readonly screenshot: (path: string) => Promise<void>;
-  readonly swipe: (gesture: Swipe) => Promise<void>;
+  readonly swipe: NativeSwipe;
   readonly tap: (point: Point) => Promise<void>;
   readonly touch: NativeTouch;
   readonly webFrame: (title: string, pid: number) => Promise<Rect>;
-  readonly diagnostics: () => string;
 };
 type Template = { readonly preparation: Preparation; readonly runtime: string; readonly clones: string };
 
@@ -109,7 +109,6 @@ const parameters = (options: SimulatorOptions): TemplateParams => ({
   client: CLIENT_VERSION,
   python: PYTHON_VERSION,
 });
-export const prepareSimulator = (options: SimulatorOptions) => once(templates, parameters(options)).pipe(Effect.asVoid);
 export const holdLane = (): (() => void) => {
   const base = join(Effect.runSync(cacheDirectory()), 'simulators');
   mkdirSync(base, { recursive: true });
@@ -130,13 +129,44 @@ export const prepareTemplate = Effect.fn('e2e.iosTemplateAhead')(function* (opti
   return yield* prepare({ base, params, tools, ...(yield* resolve(params.runtime)) }, Effect.succeed);
 }, Effect.provide(BunFileSystem.layer));
 
-export const simulator = Effect.fn('e2e.iosSimulator')(function* (
+export type Lane = { readonly device: Device; readonly runtime: string; readonly timing: SimulatorTiming };
+const LaneRecord = Schema.fromJsonString(
+  Schema.Struct({
+    device: Schema.Struct({ set: Schema.String, udid: Schema.String }),
+    runtime: Schema.String,
+    timing: Schema.Struct({ clone: Schema.Number, boot: Schema.Number }),
+  }),
+);
+const LENT = 'E2E_IOS_LANE';
+export const lent = (held: Lane): Record<string, string> => ({ [LENT]: JSON.stringify(held) });
+export const borrowing = (): boolean => process.env[LENT] !== undefined;
+
+export const lane = Effect.fn('e2e.iosLane')(function* (
   options: SimulatorOptions,
-): Effect.fn.Return<Simulator, SimulatorUnavailable, Scope.Scope> {
-  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
+): Effect.fn.Return<Lane, SimulatorUnavailable, Scope.Scope> {
+  const borrowed = process.env[LENT];
+  if (borrowed !== undefined)
+    return yield* Schema.decodeUnknownEffect(LaneRecord)(borrowed).pipe(
+      Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the lent iOS lane could not be read', cause })),
+    );
   const template = yield* once(templates, parameters(options));
   const set = template.value.clones;
   const started = yield* Clock.currentTimeMillis;
+  let phase = 'clone';
+  let device: Device | undefined;
+  let timing: SimulatorTiming | undefined;
+  const unhook = onFailure(async (directory) => {
+    const results = await Promise.allSettled([
+      Bun.write(
+        join(directory, 'ios-lane.json'),
+        JSON.stringify({ phase, device: device ?? null, runtime: template.value.runtime, timing: timing ?? null }),
+      ),
+      device === undefined ? Promise.resolve() : simctl(device.set, 'io', device.udid, 'screenshot', join(directory, 'screenshot.png')),
+    ]);
+    const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, 'native lane evidence was incomplete');
+  });
+  yield* Effect.addFinalizer(() => Effect.sync(unhook));
   const udid = yield* Effect.acquireRelease(
     prepare(template.value.preparation, (source) =>
       attempted('the Safari template could not be cloned', () =>
@@ -146,46 +176,76 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     (udid) => attempted('the iOS clone did not shut down and delete', () => remove({ udid, set })).pipe(Effect.orDie),
   );
   const cloned = yield* Clock.currentTimeMillis;
-  const device = { set, udid };
-  yield* boot(device);
+  const target = { set, udid };
+  device = target;
+  phase = 'boot';
+  yield* boot(target);
   const booted = yield* Clock.currentTimeMillis;
-  const timing = { clone: cloned - started, boot: booted - cloned };
-  console.info(`iOS ${template.value.runtime}: clone ${timing.clone} ms, boot ${timing.boot} ms`);
-  const control = yield* input(device, tools);
+  const measured = { clone: cloned - started, boot: booted - cloned };
+  timing = measured;
+  console.info(`iOS ${template.value.runtime}: clone ${measured.clone} ms, boot ${measured.boot} ms`);
+  phase = 'booted';
+  return { device: target, runtime: template.value.runtime, timing: measured };
+});
+
+export const simulator = Effect.fn('e2e.iosSimulator')(function* (
+  held: Lane,
+): Effect.fn.Return<Simulator, SimulatorUnavailable, Scope.Scope> {
+  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
+  const { device: target, runtime, timing } = held;
+  const { set, udid } = target;
+  let phase = 'input';
+  let control: Input | undefined;
+  const unhook = onFailure(async (directory) => {
+    const results = await Promise.allSettled([
+      Bun.write(join(directory, 'ios-startup.json'), JSON.stringify({ phase, device: target, runtime, timing })),
+      control === undefined ? Promise.resolve() : Bun.write(join(directory, 'ios-driver.log'), control.diagnostics()),
+      simctl(set, 'io', udid, 'screenshot', join(directory, 'screenshot.png')),
+    ]);
+    const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, 'native startup evidence was incomplete');
+  });
+  yield* Effect.addFinalizer(() => Effect.sync(unhook));
+  const driver = yield* input(target, tools);
+  control = driver;
+  let launched = false;
+  yield* Effect.addFinalizer(() =>
+    launched
+      ? attempted('MobileSafari did not terminate after its test', () => simctl(set, 'terminate', udid, 'com.apple.mobilesafari')).pipe(
+          Effect.orDie,
+        )
+      : Effect.void,
+  );
+  phase = 'device-ready';
   return {
     udid,
     deviceSet: set,
-    runtime: template.value.runtime,
+    runtime,
     timing,
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
-      const pid = await launchSafari(device);
-      await control.quiet(pid);
-      await readAX(device, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
+      phase = 'launch';
+      console.info('iOS: launching Safari');
+      launched = true;
+      const pid = await driver.launch('com.apple.mobilesafari');
+      phase = 'quiescence';
+      console.info(`iOS: waiting for Safari ${pid} accessibility`);
+      await driver.quiet(pid);
+      phase = 'accessibility';
+      console.info(`iOS: acquiring Safari ${pid} native geometry`);
+      await readAX(target, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
+      phase = 'native-ready';
       console.info(`iOS native accessibility ready for Safari ${pid}`);
       return pid;
     },
     screenshot: async (path) => {
       await simctl(set, 'io', udid, 'screenshot', path);
     },
-    tap: (point) => tap(control, point),
-    touch: control.touch,
-    swipe: async ({ from, to, duration = 0.15, delta = 5 }) => {
-      await control.run(
-        'ui',
-        'swipe',
-        String(Math.round(from.x)),
-        String(Math.round(from.y)),
-        String(Math.round(to.x)),
-        String(Math.round(to.y)),
-        '--duration',
-        String(duration),
-        '--delta',
-        String(delta),
-      );
-    },
+    tap: driver.tap,
+    touch: driver.touch,
+    swipe: driver.swipe,
     webFrame: async (title, pid) => {
-      const root = await readAX(device, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
+      const root = await readAX(target, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
       const elements = elementsOf(root);
       const view = elements.find((one) => one.XC_kAXXCAttributeIdentifier === 'WebView');
       if (view === undefined) throw new SimulatorUnavailable({ message: 'native accessibility exposed no Safari WebView' });
@@ -201,6 +261,14 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
       const frame = decode(PositionedFrame, content.XC_kAXXCAttributeFrame);
       return { x: frame.X, y: frame.Y, width: frame.Width, height: frame.Height };
     },
-    diagnostics: control.diagnostics,
   };
 });
+
+export const warm = Effect.fn('e2e.iosLaneWarm')((held: Lane) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const session = yield* simulator(held);
+      yield* attempted('MobileSafari did not become ready on the booted lane device', () => session.launchSafari());
+    }),
+  ),
+);

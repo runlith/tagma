@@ -9,5 +9,11 @@ edges:
 sources:
   - kind: file
     ref: apps/tagma/server/src/installation/archive/tarball.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/archive/materialize.ts
+  - kind: file
+    ref: apps/tagma/server/src/release-channel/archive.ts
+  - kind: file
+    ref: apps/tagma/server/src/release-channel/archive.worker.ts
 ---
-Proof and delivery use one tar decoder so the archive's names and sizes cannot be interpreted differently before extraction. File contents stream without accumulating a listing; extended metadata has a bounded inspection buffer because compressed metadata can otherwise consume arbitrary memory. Sparse layouts are refused because an ordinary file-size sum does not describe their extraction footprint.
+Proof, delivery inspection and materialization use one tar decoder so names and sizes cannot change meaning between the footprint check and extraction. File contents stream without accumulating a listing; extended metadata has a bounded inspection buffer because compressed metadata can otherwise consume arbitrary memory. Sparse layouts are refused because an ordinary file-size sum does not describe their extraction footprint. Materialization restores file contents, ordinary modes and internal links into new files, leaving archived owners, extended attributes, ACLs and file flags unapplied. Its worker is joined before staging cleanup: cancellation aborts the input stream and waits for the remote operation to release its files.

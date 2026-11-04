@@ -81,6 +81,19 @@ it.live(
     }),
 );
 
+it.live('a source that starts a module outside its own directory refuses instead of shipping a path the bundles lack', () =>
+  Effect.gen(function* () {
+    const root = join(tree, 'nested');
+    const entry = wrote(join(root, 'main.ts'), starting('jobs/job.worker.ts'));
+    wrote(join(root, 'jobs/job.worker.ts'), 'postMessage(1);\n');
+
+    const outcome = yield* Effect.result(bundle(entry, 'main.js'));
+
+    expect(outcome._tag).toBe('Failure');
+    if (outcome._tag === 'Failure') expect(outcome.failure.detail).toContain('./jobs/job.worker.ts');
+  }),
+);
+
 it.live('two sources that start different files under one name refuse instead of shipping either', () =>
   Effect.gen(function* () {
     const root = join(tree, 'collides');

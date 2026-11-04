@@ -118,16 +118,14 @@ it.live(
     );
     try {
       const standing = await nextStanding(home, null);
-      const pending = ask(standing, 'pending').then(
-        (response) => response.text(),
-        (cause: unknown) => cause,
-      );
+      const pending = ask(standing, 'pending').then((response) => response.json());
       const marker = join(home, 'candidate');
       while (!existsSync(marker)) await Bun.sleep(20);
       const candidate = Number(readFileSync(marker, 'utf8'));
       expect(pidAlive(candidate)).toBe(true);
       await launch.stop('SIGHUP');
-      await pending;
+      const refusal = Schema.decodeUnknownSync(Schema.Struct({ failure: Schema.String }))(await pending);
+      expect(refusal.failure.length).toBeGreaterThan(0);
       expect(pidAlive(candidate)).toBe(false);
       expect(pidAlive(standing.pid)).toBe(false);
       expect(dataDirectoryHolder(home)).toBeNull();

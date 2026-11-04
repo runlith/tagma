@@ -16,7 +16,14 @@ import { checkHistorical } from './historical.fixture';
 class BaselineFailed extends Data.TaggedError('BaselineFailed')<{ readonly message: string; readonly cause: unknown }> {}
 const attempted = <A>(message: string, work: () => Promise<A>) =>
   Effect.tryPromise({ try: work, catch: (cause) => new BaselineFailed({ message, cause }) });
-type Result = { lane: string; scenario: string; refusal: string | null; evidence: Evidence | null; movement: DisplacementEvidence | null; artifacts: string };
+type Result = {
+  lane: string;
+  scenario: string;
+  refusal: string | null;
+  evidence: Evidence | null;
+  movement: DisplacementEvidence | null;
+  artifacts: string;
+};
 type Calibration = { source: MotionSource; artifacts: string; envelope: ControlEnvelope | null; refusal: string | null };
 
 const measure = Effect.fnUntraced(function* (url: string, lane: 'chromium' | 'webkit') {
@@ -36,7 +43,9 @@ const measure = Effect.fnUntraced(function* (url: string, lane: 'chromium' | 'we
     if (lane === 'webkit' && chromiumOnly.includes(name)) continue;
     const source = controlSource(name, fixture.cdp);
     if (source !== undefined && !envelopes.has(source)) {
-      const measured = yield* Effect.result(attempted(`${lane}:${source}: control flings failed`, () => controls(fixture.page, fixture.cdp, url, source)));
+      const measured = yield* Effect.result(
+        attempted(`${lane}:${source}: control flings failed`, () => controls(fixture.page, fixture, url, source)),
+      );
       const artifacts = artifactDirectory(Bun.main, `${lane}-${source}-controls`);
       if (measured._tag === 'Failure') {
         envelopes.set(source, null);
@@ -46,7 +55,15 @@ const measure = Effect.fnUntraced(function* (url: string, lane: 'chromium' | 'we
         envelopes.set(source, measured.success.envelope);
         yield* files.writeFileString(join(artifacts, 'controls.json'), JSON.stringify(measured.success));
         calibrations.push({ source, artifacts, envelope: measured.success.envelope, refusal: null });
-        console.log(JSON.stringify({ lane, source, controls: measured.success.envelope.controls, discarded: measured.success.envelope.discarded, artifacts }));
+        console.log(
+          JSON.stringify({
+            lane,
+            source,
+            controls: measured.success.envelope.controls,
+            discarded: measured.success.envelope.discarded,
+            artifacts,
+          }),
+        );
       }
     }
     const envelope = (source === undefined ? undefined : envelopes.get(source)) ?? undefined;
@@ -57,12 +74,13 @@ const measure = Effect.fnUntraced(function* (url: string, lane: 'chromium' | 'we
           const held = name === 'drag-page-landing' ? await heldControls(fixture.page, url, fixture.touch) : undefined;
           await fixture.page.goto(url);
           await ready(fixture.page);
-          return await runScenario(fixture.page, fixture.cdp, name, { jump: 'jumpToLatest', held });
+          return await runScenario(fixture.page, fixture, name, { jump: 'jumpToLatest', held });
         },
         catch: (cause) => cause,
       }),
     );
-    const recording = outcome._tag === 'Success' ? outcome.success : outcome.failure instanceof ScenarioFailure ? outcome.failure.recording : null;
+    const recording =
+      outcome._tag === 'Success' ? outcome.success : outcome.failure instanceof ScenarioFailure ? outcome.failure.recording : null;
     const refusal = outcome._tag === 'Failure' ? reason(outcome.failure) : null;
     if (recording === null) {
       results.push({ lane, scenario: name, refusal, evidence: null, movement: null, artifacts });
@@ -79,7 +97,12 @@ const measure = Effect.fnUntraced(function* (url: string, lane: 'chromium' | 'we
         scenario: name,
         refusal,
         evidence: result,
-        movement: { maxError: movement.maxError, failures: movement.failures.length, unchecked: movement.unchecked.length, lateWheels: movement.lateWheels.length },
+        movement: {
+          maxError: movement.maxError,
+          failures: movement.failures.length,
+          unchecked: movement.unchecked.length,
+          lateWheels: movement.lateWheels.length,
+        },
         artifacts,
       }),
     );

@@ -1,4 +1,4 @@
-import { type BaseWindow, BrowserWindow, type Rectangle, type WebContents, type WebContentsView } from 'electron';
+import { type BaseWindow, BrowserWindow, type Rectangle, screen, type WebContents, type WebContentsView } from 'electron';
 
 export const VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -23,6 +23,18 @@ export type Placed = {
 
 export type Elsewhere = (window: BrowserWindow, panel: string, placed: Placed) => void;
 
+const HIDDEN_PAINTS = process.platform === 'darwin';
+
+const DISPLAY_CHANGES = ['display-added', 'display-removed', 'display-metrics-changed'] as const;
+
+const beyondScreens = (): { readonly x: number; readonly y: number } => {
+  const displays = screen.getAllDisplays().map((display) => display.bounds);
+  return {
+    x: Math.max(...displays.map((bounds) => bounds.x + bounds.width)),
+    y: Math.max(...displays.map((bounds) => bounds.y + bounds.height)),
+  };
+};
+
 const visible = (window: BaseWindow): boolean => !window.isDestroyed() && window.isVisible() && !window.isMinimized();
 
 const awake = (placed: Placed): boolean =>
@@ -35,6 +47,7 @@ export class Placement {
   private readonly where = new Map<WebContentsView, BaseWindow | BrowserWindow>();
   private readonly watched = new WeakSet<BrowserWindow>();
   private readonly placed = new Set<Placed>();
+  private displaysWatched = false;
 
   constructor(private readonly elsewhere: Elsewhere) {}
 
@@ -78,8 +91,17 @@ export class Placement {
   hold(placed: Placed, hold: number, ready: () => void, stale: () => boolean): void {
     placed.holds.add(hold);
     this.settle(placed);
+    this.painted(placed, ready, () => stale() || !placed.holds.has(hold));
+  }
+
+  wake(placed: Placed, ready: () => void, stale: () => boolean): void {
+    if (this.settle(placed)) this.painted(placed, ready, stale);
+    else ready();
+  }
+
+  private painted(placed: Placed, ready: () => void, stale: () => boolean): void {
     const ask = () => {
-      if (stale() || !placed.holds.has(hold) || placed.contents.isDestroyed()) return;
+      if (stale() || placed.contents.isDestroyed()) return;
       placed.contents.capturePage().then(
         (image) => (image.isEmpty() ? setTimeout(ask, FRAME_ASK_MS) : ready()),
         () => setTimeout(ask, FRAME_ASK_MS),
@@ -93,10 +115,12 @@ export class Placement {
     this.settle(placed);
   }
 
-  settle(placed: Placed): void {
-    if (placed.contents.isDestroyed()) return;
+  settle(placed: Placed): boolean {
+    if (placed.contents.isDestroyed()) return false;
     const shown = placed.shown;
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
+    if (placed.home !== null && placed.home.window.isDestroyed()) return false;
+    const wanted = awake(placed);
     const window =
       placed.shown === null || placed.shown.frozen || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
     if (window === null) this.park(placed);
@@ -111,16 +135,17 @@ export class Placement {
         height: Math.round(rect.height * zoom),
       });
     }
-    const wanted = awake(placed);
-    if (placed.awake === wanted) return;
+    const mapped = !HIDDEN_PAINTS && this.map(placed, wanted);
+    if (placed.awake === wanted) return mapped;
     placed.awake = wanted;
     placed.contents.setBackgroundThrottling(!wanted);
     placed.view.setVisible(wanted);
+    return mapped;
   }
 
   private park(placed: Placed): void {
     const home = placed.home;
-    if (home !== null && !home.window.isDestroyed()) {
+    if (home !== null) {
       this.move(placed, home.window);
       placed.view.setBounds(home.bounds());
       return;
@@ -139,6 +164,32 @@ export class Placement {
     }
     this.move(placed, placed.parking);
     placed.view.setBounds({ x: 0, y: 0, width: placed.size.width, height: placed.size.height });
+  }
+
+  private map(placed: Placed, awake: boolean): boolean {
+    const stand = placed.parking;
+    if (stand === null || stand.isDestroyed()) return false;
+    const mapped = awake && this.where.get(placed.view) === stand;
+    if (mapped && !stand.isVisible()) {
+      this.watchDisplays();
+      const away = beyondScreens();
+      stand.setPosition(away.x, away.y);
+      stand.showInactive();
+      return true;
+    }
+    if (!mapped && stand.isVisible()) stand.hide();
+    return false;
+  }
+
+  private watchDisplays(): void {
+    if (this.displaysWatched) return;
+    this.displaysWatched = true;
+    const away = () => {
+      const { x, y } = beyondScreens();
+      for (const { parking } of this.placed)
+        if (parking !== null && !parking.isDestroyed() && parking.isVisible()) parking.setPosition(x, y);
+    };
+    for (const name of DISPLAY_CHANGES) screen.on(name as 'display-added', away);
   }
 
   private move({ view, contents }: Placed, window: BaseWindow | BrowserWindow): void {

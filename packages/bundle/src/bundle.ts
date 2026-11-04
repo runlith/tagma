@@ -40,6 +40,12 @@ const READ_AT_ONCE = 32;
 
 const besideOf = (text: string): ReadonlySet<string> => new Set(Array.from(text.matchAll(BESIDE), (match) => match[2]!));
 
+const STARTED = /new URL\(\s*(["'`])(\.{1,2}\/[^"'`]+\.(?:[cm]?[jt]s|tsx))\1\s*,\s*import\.meta\.url\s*\)/g;
+
+const elsewhereOf = (text: string): readonly string[] => [
+  ...new Set(Array.from(text.matchAll(STARTED), (match) => match[2]!).filter((path) => !/^\.\/[^/\\]+$/u.test(path))),
+];
+
 const OWN = /\.([cm]?[jt]s)$/u;
 const KEPT = ['//!', '/*!'] as const;
 
@@ -151,6 +157,13 @@ export const bundle = Effect.fn('bundle')(function* (
     const source = sources.get(next)!;
     const one = yield* built(source, options);
     done.push({ name: next, source, text: one.text, map: one.map, inputs: one.inputs });
+    const elsewhere = elsewhereOf(one.text);
+    if (elsewhere.length > 0) {
+      return yield* new BundleRefused({
+        entry: source,
+        detail: `its bundle starts ${elsewhere.join(', ')} outside its own directory, and bundles carry only modules started beside themselves`,
+      });
+    }
     const names = besideOf(one.text);
     if (names.size === 0) continue;
     const found = yield* spelled(source, one.inputs, names);

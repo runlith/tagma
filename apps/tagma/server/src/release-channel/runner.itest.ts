@@ -21,8 +21,9 @@ import { releasePlaces } from './places.js';
 import { type ChannelPlace, makeReleaseChannel } from './runner.js';
 import { releaseFeed } from './settings.js';
 import { CHANNELS } from '../installation/contract/wire/channel.js';
-import { macPlatform } from '../installation/setup/macos.js';
+import type { MachinePlatform } from '../installation/contract/service/platform.js';
 import { carriedIn, packRelease, serverless, syntheticReleaseEffect, trustedApplications, type Packed } from './testing/release.js';
+import { tarEntry, writeArchive } from './testing/tarball.js';
 
 const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
   const files = yield* FileSystem.FileSystem;
@@ -33,7 +34,8 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
   const places = releasePlaces(data);
   const executable = Bun.which('bun');
   if (executable === null) return yield* Effect.die('the release fixture needs a native bun on PATH');
-  const native = { platform: yield* macPlatform.current, executable };
+  const native = { platform: { os: process.platform, arch: process.arch }, executable };
+  const machine: MachinePlatform = { current: Effect.succeed(native.platform) };
   const platformKey = `${native.platform.os}-${native.platform.arch}`;
 
   let feed: Feed | null = null;
@@ -115,7 +117,7 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     runsFrom: servingFrom(serving),
     places,
     applications,
-    machine: macPlatform,
+    machine,
     downgrade,
     restart: Effect.sync(() => {
       restarts.push(running);
@@ -161,6 +163,12 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
     changes: irreversible ? [{ store: 'graph' as const, release }] : [],
   });
+
+  const archived = (build: string, entries: readonly Buffer[]): Packed => {
+    const packed = writeArchive(home, build, entries);
+    archives.set(`/archive/${build}.tar.gz`, packed.file);
+    return packed;
+  };
 
   const packed = Effect.fnUntraced(function* (
     build: string,
@@ -217,6 +225,7 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     ended,
     releaseOf,
     packed,
+    archived,
     buildOf,
     standing,
     versionOf,
@@ -340,6 +349,52 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           );
           expect(tampered.installed?.outcome).toBe('failed');
           expect(tampered.installed?.detail).toContain('SHA-256');
+          expect(standing()).toBe(before);
+          expect(existsSync(places.staging)).toBe(false);
+        });
+
+        yield* Effect.gen(function* () {
+          const world = yield* World;
+          const { archived, standing, channel, placed, until, ended, places, releaseOf } = world;
+          const before = standing();
+          const conflicting = archived('0.2.1', [
+            tarEntry('./Tagma.app/blocked', Buffer.from('a file')),
+            tarEntry('./Tagma.app/blocked/payload', Buffer.from('cannot be written')),
+          ]);
+          world.feed = { releases: [releaseOf('0.2.1', conflicting, false)] };
+          const refused = yield* channel(placed('0.2.0', before), (next) =>
+            Effect.gen(function* () {
+              yield* until(next, (frame) => frame.offers[0]?.id === '0.2.1');
+              const { installing } = yield* next.install('0.2.1', null, null);
+              return yield* ended(next, installing.since);
+            }),
+          );
+          expect(refused.installed?.outcome).toBe('failed');
+          expect(refused.installed?.detail).toContain('blocked');
+          expect(standing()).toBe(before);
+          expect(existsSync(places.staging)).toBe(false);
+        });
+
+        yield* Effect.gen(function* () {
+          const world = yield* World;
+          const { third, standing, channel, placed, until, places, releaseOf } = world;
+          const before = standing();
+          const checking = yield* Deferred.make<void>();
+          const applications: ChannelPlace['applications'] = {
+            ...trustedApplications,
+            signature: () => Deferred.succeed(checking, undefined).pipe(Effect.andThen(Effect.never)),
+          };
+          world.feed = { releases: [releaseOf('0.3.0', third, false)] };
+          const stopped = yield* channel(placed('0.2.0', before, null, applications), (next) =>
+            Effect.gen(function* () {
+              yield* until(next, (frame) => frame.offers[0]?.id === '0.3.0');
+              yield* next.install('0.3.0', null, null);
+              yield* Deferred.await(checking);
+              expect(existsSync(join(carriedIn(join(places.staging, '0.3.0/Tagma.app')), 'install.json'))).toBe(true);
+              return yield* next.stop();
+            }),
+          );
+          expect(stopped?.outcome).toBe('stopped');
           expect(standing()).toBe(before);
           expect(existsSync(places.staging)).toBe(false);
         });
@@ -518,9 +573,9 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           const { fourth, releaseOf, standing, channel, placed, until } = world;
           const newest = releaseOf('0.7.0', fourth, false);
           world.feed = {
-            releases: [{ ...newest, platforms: { 'linux-x64': Object.values(newest.platforms)[0]! } }, releaseOf('0.6.0', fourth, false)],
+            releases: [{ ...newest, platforms: { foreign: Object.values(newest.platforms)[0]! } }, releaseOf('0.6.0', fourth, false)],
           };
-          const denied = yield* channel({ ...placed('0.5.0', standing()), machine: macPlatform }, (next) =>
+          const denied = yield* channel(placed('0.5.0', standing()), (next) =>
             Effect.gen(function* () {
               yield* until(next, (frame) => frame.issue?.code === 'platform-unavailable');
               return { reading: yield* next.reading, install: yield* Effect.result(next.install('0.7.0', null, null)) };

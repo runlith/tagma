@@ -7,6 +7,7 @@ use std::ffi::{CStr, CString};
 use std::fs;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 
@@ -22,11 +23,22 @@ const MASK: u32 = libc::IN_ATTRIB
     | libc::IN_ONLYDIR
     | libc::IN_EXCL_UNLINK;
 
+const ABOVE: u32 = libc::IN_DELETE
+    | libc::IN_DELETE_SELF
+    | libc::IN_MOVE_SELF
+    | libc::IN_MOVED_FROM
+    | libc::IN_DONT_FOLLOW
+    | libc::IN_ONLYDIR
+    | libc::IN_MASK_ADD;
+
+const GONE: &str = "the watched directory, or one above it, was deleted or moved";
+
 const READ_BYTES: usize = 64 * 1024;
 
 struct Entry {
     path: String,
     sink: Sink,
+    guards: Option<String>,
 }
 
 #[derive(Default)]
@@ -81,12 +93,14 @@ impl Inotify {
         Ok(inotify)
     }
 
-    fn add(&self, table: &mut Table, sink: &Sink, path: &str) -> Result<(), i32> {
+    fn add(&self, table: &mut Table, sink: &Sink, path: &str, guards: Option<&str>) -> Result<(), i32> {
         let encoded = CString::new(path).map_err(|_| libc::EINVAL)?;
-        let wd = unsafe { libc::inotify_add_watch(self.fd.as_raw_fd(), encoded.as_ptr(), MASK) };
+        let mask = if guards.is_some() { ABOVE } else { MASK };
+        let wd = unsafe { libc::inotify_add_watch(self.fd.as_raw_fd(), encoded.as_ptr(), mask) };
         if wd < 0 {
             return Err(io::Error::last_os_error().raw_os_error().unwrap_or(libc::EIO));
         }
+        let displaced = table.paths.get(&sink.id()).and_then(|paths| paths.get(path)).copied().filter(|old| *old != wd);
         let entries = table.watched.entry(wd).or_default();
         let paths = table.paths.entry(sink.id()).or_default();
         match entries.iter_mut().find(|entry| entry.sink.id() == sink.id()) {
@@ -95,16 +109,49 @@ impl Inotify {
                     paths.remove(&entry.path);
                 }
                 entry.path = path.to_owned();
+                entry.guards = guards.map(str::to_owned);
             }
-            None => entries.push(Entry { path: path.to_owned(), sink: sink.clone() }),
+            None => entries.push(Entry { path: path.to_owned(), sink: sink.clone(), guards: guards.map(str::to_owned) }),
         }
         paths.insert(path.to_owned(), wd);
+        if let Some(old) = displaced
+            && table.detach(old, sink.id())
+        {
+            unsafe { libc::inotify_rm_watch(self.fd.as_raw_fd(), old) };
+        }
+        Ok(())
+    }
+
+    fn guard(&self, sink: &Sink, covered: &mut HashSet<String>) -> Result<(), String> {
+        let root = Path::new(&sink.scope().root);
+        let mut unreadable: Option<String> = None;
+        for below in root.ancestors().take_while(|path| path.parent().is_some()) {
+            let (Some(directory), Some(name)) = (below.parent(), below.file_name()) else { continue };
+            let directory = directory.to_string_lossy();
+            match self.add(&mut locked(&self.table), sink, &directory, Some(&name.to_string_lossy())) {
+                Ok(()) => {
+                    covered.insert(directory.into_owned());
+                    unreadable = None;
+                }
+                Err(libc::ENOSPC) => return Err(limit(&directory)),
+                Err(libc::EACCES) => {
+                    if let Some(neighbour) = unreadable {
+                        return Err(format!(
+                            "{neighbour} and {directory} cannot be watched: neither can be read, so moving {neighbour} within {directory} cannot be observed (grant read access to one of every two adjacent directories above the watched root)"
+                        ));
+                    }
+                    unreadable = Some(directory.into_owned());
+                }
+                Err(errno) => return Err(format!("{directory} cannot be watched: {}", io::Error::from_raw_os_error(errno))),
+            }
+        }
         Ok(())
     }
 
     fn refresh(&self, sink: &Sink) -> Result<(), String> {
         let mut covered = HashSet::new();
         self.cover_into(sink, &sink.scope().root.clone(), false, &mut covered)?;
+        self.guard(sink, &mut covered)?;
         let mut table = locked(&self.table);
         let stale: Vec<(String, i32)> = match table.paths.get(&sink.id()) {
             Some(paths) => paths.iter().filter(|(path, _)| !covered.contains(*path)).map(|(path, wd)| (path.clone(), *wd)).collect(),
@@ -130,7 +177,7 @@ impl Inotify {
         let mut created = Vec::new();
         let mut pending = vec![from.to_owned()];
         while let Some(directory) = pending.pop() {
-            let added = self.add(&mut locked(&self.table), sink, &directory);
+            let added = self.add(&mut locked(&self.table), sink, &directory, None);
             match added {
                 Ok(()) => {
                     covered.insert(directory.clone());
@@ -243,17 +290,24 @@ impl Inotify {
                     {
                         paths.remove(&entry.path);
                     }
-                    if entry.path == entry.sink.scope().root {
-                        entry.sink.ended("the watched directory was deleted or moved");
+                    if entry.guards.is_some() || entry.path == entry.sink.scope().root {
+                        entry.sink.ended(GONE);
                     }
                 }
                 continue;
             }
-            let targets: Vec<(String, Sink)> = match locked(&self.table).watched.get(&event.wd) {
-                Some(entries) => entries.iter().map(|entry| (entry.path.clone(), entry.sink.clone())).collect(),
+            let targets: Vec<(String, Sink, Option<String>)> = match locked(&self.table).watched.get(&event.wd) {
+                Some(entries) => entries.iter().map(|entry| (entry.path.clone(), entry.sink.clone(), entry.guards.clone())).collect(),
                 None => continue,
             };
-            for (directory, sink) in targets {
+            for (directory, sink, guards) in targets {
+                if let Some(child) = guards {
+                    let named = event.mask & (libc::IN_DELETE | libc::IN_MOVED_FROM) != 0 && name == child;
+                    if named || event.mask & (libc::IN_DELETE_SELF | libc::IN_MOVE_SELF) != 0 {
+                        sink.ended(GONE);
+                    }
+                    continue;
+                }
                 let path = if name.is_empty() { directory.clone() } else { joined(&directory, &name) };
                 let (_, events) = batches.entry(sink.id()).or_insert_with(|| (sink.clone(), Vec::new()));
                 let is_directory = event.mask & libc::IN_ISDIR != 0;
@@ -278,7 +332,7 @@ impl Inotify {
                 } else if event.mask & (libc::IN_MODIFY | libc::IN_ATTRIB) != 0 {
                     events.push((path, batch::UPDATED));
                 } else if event.mask & (libc::IN_DELETE_SELF | libc::IN_MOVE_SELF) != 0 && directory == sink.scope().root {
-                    sink.ended("the watched directory was deleted or moved");
+                    sink.ended(GONE);
                 }
             }
         }
@@ -324,7 +378,7 @@ impl Platform {
             Err(error) => return Err(format!("{} cannot be watched: {error}", sink.scope().root)),
         }
         let root = sink.scope().root.clone();
-        if let Err(reason) = inotify.cover(&sink, &root, false) {
+        if let Err(reason) = inotify.guard(&sink, &mut HashSet::new()).and_then(|()| inotify.cover(&sink, &root, false)) {
             inotify.forget(&mut locked(&inotify.table), sink.id(), None);
             return Err(reason);
         }

@@ -41,4 +41,6 @@ Read at ee24295b8e:
 Unclear:
 - `cut/signing.ts:27-29` `/usr/bin/security`, `/usr/bin/codesign`; `cut/world.ts:29-30` `codesign` and `lsregister`; `cut/notarize.ts:81` and `cut/dmg.ts:44` `ditto` and `xattr`; `cut/sealing.ts:4`, `cut/dmg.ts:5`, `cut/notarize.ts:4` import `@runlith/codesign`. The pipeline is macOS by nature and `@runlith/codesign` is a macOS adapter, but the steps stand in a module with no macOS in its name or contract; whether the module is the macOS adapter or needs a release-target contract is the owner's call.
 
+Linux CI run 41895806886 at dcd1721ea confirms two shared tests are blocked by those choices: `cut/release.itest.ts:130` receives the `platform` refusal before reaching its failed producer, and `cut/target.itest.ts:31` receives no Rust-install remedy because `targetTrouble` returns the macOS-only refusal at `target.ts:27`. Neither shared test is platform-marked. The DMG and notarization subjects run on macOS; archive content, developer-input and source-comment proof remains in an unmarked suite.
+
 Done when the cut declares a release-target contract (platform, archive, signing, notarization), the Apple steps are one macOS adapter behind it, and the cut's OS-independent parts pass on a Linux runner.

@@ -11,4 +11,6 @@ Headless=new differs from windowed Chrome only by the `HeadlessChrome/<major>` U
 
 Rejected: `Emulation.setUserAgentOverride` with metadata on each target via auto-attach — `Network.setUserAgentOverride` does not change a shared worker's `navigator.userAgent`, and the debugger wait at target start holds service worker registration, hanging the page that registers it.
 
+Only a `hidden` profile carries the flag: a `shown` one runs windowed Chrome, whose own UA has no `HeadlessChrome` and whose high-entropy hints stay filled.
+
 The flag's price is empty high-entropy client hints (full version list, platform version, architecture), like any Chrome started with `--user-agent`. Platform strings are frozen reduced-UA values; major comes from the build release: a constant for Chrome for Testing, `--version` for installed Chrome, on Windows the version directory name next to `chrome.exe`. The identity system test only catches `HeadlessChrome`; if Chrome changes the reduced-UA format the test stays green while the UA drifts from windowed.

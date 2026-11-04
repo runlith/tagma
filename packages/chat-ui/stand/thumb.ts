@@ -1,6 +1,6 @@
 import type { Page } from 'playwright-core';
 import type { StandGlobal } from './port';
-import type { Frame, Recording, Sentinel, ThumbControl, ThumbReference, ThumbSample } from './recording';
+import type { Frame, Recording, Scrollbar, Sentinel, ThumbControl, ThumbReference, ThumbSample } from './recording';
 
 const CONTROL_STEPS = 64;
 const TRIAL_PORTIONS = 64;
@@ -69,7 +69,8 @@ function scaleOf(control: ThumbControl): number {
   if (!Number.isFinite(scale) || scale <= 0 || extent < scrollbar.viewport * 2) reject(control, 'vacuous native movement');
   const quantum = scale + tolerance;
   for (const sample of samples) {
-    if (Math.abs(sample.top - meanTop - scale * (sample.y - meanY)) > quantum) reject(control, 'nonlinear native mapping beyond one thumb pixel');
+    if (Math.abs(sample.top - meanTop - scale * (sample.y - meanY)) > quantum)
+      reject(control, 'nonlinear native mapping beyond one thumb pixel');
     if (sample.top <= 0 || sample.top >= scrollbar.range) reject(control, 'the control reached a range clamp');
   }
   for (let index = 0; index < frames.length; index += 1) {
@@ -173,7 +174,7 @@ async function sample(page: Page, y: number): Promise<ThumbSample> {
     async ({ y, settled }) => {
       const port = (globalThis as StandGlobal).feedStand!;
       let top = port.scrollbar().top;
-      for (let still = 0; still < settled; ) {
+      for (let still = 0; still < settled;) {
         await port.frames();
         const next = port.scrollbar().top;
         still = next === top ? still + 1 : 0;
@@ -183,6 +184,49 @@ async function sample(page: Page, y: number): Promise<ThumbSample> {
     },
     { y, settled: SETTLED_FRAMES },
   );
+}
+
+async function grabThumb(page: Page, scrollbar: Scrollbar, dpr: number): Promise<number> {
+  let from = Math.ceil(scrollbar.track.top * dpr);
+  let to = Math.floor(scrollbar.track.bottom * dpr) - 1;
+  const proportional = (scrollbar.track.height * scrollbar.viewport) / (scrollbar.range + scrollbar.viewport);
+  let pixel = Math.round(
+    (scrollbar.track.top + ((scrollbar.track.height - proportional) * scrollbar.top) / scrollbar.range + proportional / 2) * dpr,
+  );
+  while (from <= to) {
+    const y = pixel / dpr;
+    await page.evaluate((top) => (globalThis as StandGlobal).feedStand!.position(top), scrollbar.top);
+    const before = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.scrollbar().top);
+    const ending = await page.locator('[data-scrollable][role="group"]').evaluateHandle((root) => {
+      const ended = Promise.withResolvers<void>();
+      const finish = () => ended.resolve();
+      root.addEventListener('scrollend', finish, { once: true });
+      return { ended: ended.promise, dispose: () => root.removeEventListener('scrollend', finish) };
+    });
+    let after: ThumbSample;
+    let grip: 'open' | 'held' | 'handed' = 'open';
+    try {
+      await page.mouse.move(scrollbar.x, y);
+      await page.mouse.down();
+      grip = 'held';
+      after = await sample(page, y);
+      if (after.top === before) {
+        grip = 'handed';
+        return y;
+      }
+      await page.mouse.up();
+      grip = 'open';
+      await ending.evaluate((state) => state.ended);
+    } finally {
+      if (grip === 'held') await page.mouse.up();
+      await ending.evaluate((state) => state.dispose());
+      await ending.dispose();
+    }
+    if (after.top > before) to = pixel - 1;
+    else from = pixel + 1;
+    pixel = Math.floor((from + to) / 2);
+  }
+  throw new Error('No native scrollbar thumb lies inside its measured track');
 }
 
 export async function prepareThumb(page: Page): Promise<ThumbReference> {
@@ -195,18 +239,19 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
   await page.evaluate(async (top) => {
     const port = (globalThis as StandGlobal).feedStand!;
     await port.position(top);
-    port.start('thumb-control');
     await port.frames(3);
   }, warmed.start);
   const scrollbar = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.scrollbar());
   const dpr = await pixelRatio(page);
-  const proportional = (scrollbar.track.height * scrollbar.viewport) / (scrollbar.range + scrollbar.viewport);
-  let y = snap(scrollbar.track.top + ((scrollbar.track.height - proportional) * scrollbar.top) / scrollbar.range + proportional / 2, dpr);
   const step = 1 / dpr;
   const samples: ThumbSample[] = [];
-  await page.mouse.move(scrollbar.x, y);
-  await page.mouse.down();
   try {
+    let y = await grabThumb(page, scrollbar, dpr);
+    await page.evaluate(async () => {
+      const port = (globalThis as StandGlobal).feedStand!;
+      port.start('thumb-control');
+      await port.frames(3);
+    });
     for (let index = 0; index < ESTABLISH_STEPS; index += 1) {
       y -= step;
       await page.mouse.move(scrollbar.x, y);

@@ -32,6 +32,7 @@ export class CapabilityOffers extends Context.Service<
   CapabilityOffers,
   {
     offers(capability: CapabilityId, facts: OfferFacts): readonly OfferedOperation[];
+    everywhere(capability: CapabilityId): readonly OfferedOperation[];
   }
 >()('tagma/native-harness/CapabilityOffers') {}
 

@@ -156,11 +156,10 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
           title: titleFrom === null || titleTo === null ? null : { from: titleFrom, to: titleTo },
           status: statusTo === null ? null : { from: statusFrom, to: statusTo },
           tag: tagFrom !== null && tagTo !== null ? { from: tagFrom, to: tagTo } : yield* settledPair(entries),
-          changes: raw.map(({ kind, label, peerId }) => {
+          changes: raw.map(({ peerId, ...change }) => {
             const uuid = peerId === null ? undefined : peers.get(peerId);
             return {
-              kind,
-              label,
+              ...change,
               peerName: uuid === undefined ? null : blockName(uuid),
               peerIdentity: uuid === undefined ? null : blockIdentity(uuid),
             };
@@ -227,7 +226,7 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
   }),
 );
 
-type RawChange = { kind: BlockChange['kind']; label: string; peerId: number | null };
+type RawChange = Omit<BlockChange, 'peerName' | 'peerIdentity'> & { peerId: number | null };
 
 const typeWords = (tags: readonly string[]): string => (tags.length === 0 ? 'note' : tags.join(' #'));
 
@@ -301,6 +300,7 @@ function changeOf(entry: ActEntry): Changes {
         kind: 'unjudged',
         label: `${p.op} left this rule unjudged (${p.cause}): ${p.failed}`,
         peerId: null,
+        unjudged: p,
       }));
     case 'settle':
       return plain('settle', 'Settled into a doc');

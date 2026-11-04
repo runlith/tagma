@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { InvalidSnapshot, readSnapshot } from './reader.ts';
-import { ReportUnreadable, reportSummary } from './report.ts';
-import type { HeapAnswer, HeapJob } from './wire.js';
+import { InvalidSnapshot, readSnapshot } from './heap/reader.ts';
+import { ReportUnreadable, reportSummary } from './heap/report.ts';
+import type { HeapAnswer, HeapJob } from './heap/wire.js';
 
 const job: HeapJob = workerData;
 let answer: HeapAnswer;

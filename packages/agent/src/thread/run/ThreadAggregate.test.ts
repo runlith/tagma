@@ -449,14 +449,14 @@ describe('ThreadAggregate over the composed graph', () => {
     }),
   );
   it.effect(
-    'a picture without words waits for its own turn',
+    'a picture without words sent during an agent run stands in its steers',
     Effect.fnUntraced(function* () {
       const h = yield* kernelOver();
       yield* h.start();
-      expect(yield* h.send('   ', [{ id: 'shot-1' }])).toMatchObject({ status: 'queued', runId: 'run-1' });
+      expect(yield* h.send('   ', [{ id: 'shot-1' }])).toMatchObject({ status: 'steered', runId: 'run-1' });
       const waiting = yield* h.snapshot();
-      expect(waiting.pendingInput.queued).toMatchObject([{ text: '', attachments: [{ id: 'shot-1' }] }]);
-      expect(waiting.pendingInput.steers).toEqual([]);
+      expect(waiting.pendingInput.steers).toMatchObject([{ text: '', attachments: [{ id: 'shot-1' }] }]);
+      expect(waiting.pendingInput.queued).toEqual([]);
     }),
   );
   it.effect(

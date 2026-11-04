@@ -54,6 +54,7 @@ const prepared = Effect.gen(function* () {
       tree: built,
       message: 'landed\n',
       job: 'job-1',
+      author: { name: 'operator', email: 'operator@test' },
       entries: [
         { path: 'a.txt', base: blobA, landed: landedA },
         { path: 'b.txt', base: blobB, landed: landedB },

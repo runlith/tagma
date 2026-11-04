@@ -57,6 +57,10 @@ edges:
     to: 01a14828-bfa9-7e91-992b-e05c97a922df
   - kind: imports
     to: 01a14a07-3665-70b6-8d89-89ac09510f24
+  - kind: imports-tests
+    to: 01a1a83d-f5b5-71c2-b345-4b5f6df10877
+  - kind: imports-tests
+    to: 01a1a83d-f5be-74d5-8aa8-06b53d10c144
 sources:
   - kind: dir
     ref: apps/tagma/server/src/desktop-browser

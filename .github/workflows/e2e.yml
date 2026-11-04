@@ -8,6 +8,10 @@ on:
         description: Workspace directory to run alone; empty runs every package
         required: false
         default: ''
+      test-pattern:
+        description: Test name regex; empty runs every test
+        required: false
+        default: ''
       platform:
         description: Platform to check
         type: choice
@@ -16,6 +20,10 @@ on:
           - linux
           - ios
         default: all
+      lanes:
+        description: Linux engine lanes to provision and run
+        required: false
+        default: chromium,webkit,electron
 
 permissions:
   contents: read
@@ -28,9 +36,10 @@ jobs:
       name: e2e-linux
       script: test:e2e
       runner: ubuntu-latest
-      shards: 4
+      shards: ${{ inputs.test-pattern != '' && 1 || 4 }}
       package: ${{ inputs.package }}
-      lanes: chromium,webkit,electron
+      test-pattern: ${{ inputs.test-pattern }}
+      lanes: ${{ inputs.lanes }}
 
   ios:
     if: inputs.platform != 'linux'
@@ -41,4 +50,5 @@ jobs:
       runner: macos-latest
       shards: 1
       package: ${{ inputs.package }}
+      test-pattern: ${{ inputs.test-pattern }}
       lanes: ios

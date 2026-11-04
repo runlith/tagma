@@ -96,6 +96,7 @@ await Effect.runPromise(
           Bun.serve({
             hostname: '127.0.0.1',
             port: 0,
+            idleTimeout: 0,
             async fetch(request) {
               const path = new URL(request.url).pathname;
               if (path === '/fail') {
@@ -164,7 +165,7 @@ await Effect.runPromise(
       renameSync(standing, join(home, 'standing.json'));
       yield* serving(notified);
       yield* Deferred.await(stopped);
-      door.stop(true);
+      yield* Effect.promise(() => door.stop());
       if (predecessor === undefined && process.env.LAUNCH_TEST_HOLD_CLOSE === '1') {
         writeFileSync(join(home, 'closing'), String(process.pid));
         while (!existsSync(join(home, 'close'))) yield* Effect.sleep('10 millis');

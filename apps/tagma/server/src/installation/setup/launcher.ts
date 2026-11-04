@@ -51,7 +51,10 @@ fi
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then arch=arm64; fi
-if [ "$arch" = x86_64 ]; then arch=x64; fi
+case "$arch" in
+  x86_64) arch=x64 ;;
+  aarch64) arch=arm64 ;;
+esac
 if [ "$os" != ${quoted(platform.os)} ] || { [ "$arch" != ${quoted(platform.arch)} ] && ! { [ "$os" = darwin ] && [ "$arch" = arm64 ] && [ ${quoted(platform.arch)} = x64 ]; }; }; then
   echo "tagma: this installation was built for ${platform.os}/${platform.arch} and this machine is $os/$arch; install the one built for this machine" >&2
   exit 1

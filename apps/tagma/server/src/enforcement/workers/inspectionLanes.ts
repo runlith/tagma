@@ -156,7 +156,7 @@ const seat = (entry: URL, name: string, options: LaneOptions) => {
     } else if (!ended.value.answered) {
       yield* Effect.logWarning(`the ${name} could not keep its state before stopping`, { reason: ended.value.reason });
     }
-    if (thread === worker && waiting === undefined && !wanted()) stop(worker);
+    if (thread === worker && waiting === undefined) stop(worker);
   });
 
   const started = (): Worker => {

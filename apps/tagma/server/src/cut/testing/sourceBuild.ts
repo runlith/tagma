@@ -1,6 +1,6 @@
 import { join } from 'node:path';
-import { Effect } from 'effect';
-import { testProcesses } from '../../installation/testing/processes.js';
+import { Effect, Layer } from 'effect';
+import { Processes } from '@runlith/execution-host/ProcessReader';
 import { build } from '../build.js';
 import { runCut } from '../command.js';
 import { CHANNELS } from '../../installation/contract/wire/channel.js';
@@ -17,6 +17,23 @@ const unused: BuildServer = {
   baseUrl: () => 'http://127.0.0.1:1',
 };
 
+const unread = (): never => {
+  throw new Error('a source build captures files without inspecting running processes');
+};
+const processes = Layer.succeed(
+  Processes,
+  Processes.of({
+    scan: () => Effect.die('a source build does not inspect running processes'),
+    table: Effect.die('a source build does not inspect running processes'),
+    members: () => Effect.die('a source build does not inspect running processes'),
+    facts: () => Effect.die('a source build does not inspect running processes'),
+    identity: unread,
+    resolve: unread,
+    compareBirth: unread,
+    bornBetween: unread,
+  }),
+);
+
 const runProducer = async (root: string): Promise<void> => {
   const command = await Bun.file(join(root, 'build.command')).text();
   const child = Bun.spawn(['sh', '-c', command], { cwd: root, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
@@ -31,7 +48,7 @@ export const runSourceBuild = async (root: string, args: readonly string[]): Pro
       checkout: root,
       inputs: process.env.SOURCE_INPUTS?.split('\n').filter((path) => path !== '') ?? [],
       composition: Effect.die('a source build evaluates its captured entry instead of the working composition'),
-    }).pipe(Effect.provide(testProcesses)),
+    }).pipe(Effect.provide(processes)),
   );
 };
 

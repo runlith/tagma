@@ -48,6 +48,10 @@ type Leaving = { readonly retry: (() => void) | null; readonly stay: (() => void
 
 type Closing = { readonly stay: () => void; readonly done: Promise<boolean> };
 
+type NativeProbe = { phase: 'starting' | 'waiting' | 'unresponsive' };
+
+type RootProcess = { readonly pid: number; readonly host: number };
+
 const STAYED = 'the page asked to stay, and leaving it was dismissed';
 
 type RunDialog = {
@@ -85,9 +89,9 @@ export class HeldPage {
   private closing: Closing | null = null;
   private ending: Promise<boolean> | null = null;
   private allowLeave = false;
-  private responsive = true;
+  private unresponsiveProcess: RootProcess | null = null;
   private restarting = false;
-  private unresponsive: 'starting' | 'waiting' | null = null;
+  private probe: NativeProbe | null = null;
   private readonly budget = new Probe(5_000);
   private readonly firefox: string | null;
 
@@ -301,6 +305,12 @@ export class HeldPage {
     return done;
   }
 
+  private get responsive(): boolean {
+    const failed = this.unresponsiveProcess;
+    const pid = this.contents.getOSProcessId();
+    return failed === null || pid <= 0 || failed.pid !== pid || failed.host !== this.contents.mainFrame.processId;
+  }
+
   private hungAlone(): boolean {
     const renderer = this.contents.getOSProcessId();
     if (this.responsive || this.restarting || renderer <= 0) return false;
@@ -318,12 +328,17 @@ export class HeldPage {
     return this.strains.current(this.contents.getOSProcessId(), this.profile);
   }
 
+  private get share(): number {
+    const strain = this.strain;
+    return this.dialogOpen || strain.paused ? 0 : 1 / strain.factor;
+  }
+
   driving(driven: Driven | null): void {
     this.driven = driven;
     this.placed.driven = driven !== null;
-    if (driven !== null) this.clearUnresponsive();
+    if (driven !== null) this.clearProbe();
     driven?.watch({
-      paused: () => this.dialogOpen || this.strain.paused,
+      share: () => this.share,
       report: (responsive) => this.respond(responsive),
     });
     if (driven === null && this.held !== null && !this.held.told) this.surface(this.held);
@@ -421,6 +436,10 @@ export class HeldPage {
     }
   }
 
+  get needsCpu(): boolean {
+    return this.driven !== null ? this.driven.needsCpu : this.probe !== null && this.probe.phase !== 'unresponsive';
+  }
+
   suspend(): void {
     this.budget.suspend();
     this.driven?.suspend();
@@ -431,26 +450,51 @@ export class HeldPage {
       this.driven.sample(cpu);
       return;
     }
-    if (this.unresponsive === 'starting') {
+    const probe = this.probe;
+    if (probe === null) return;
+    if (probe.phase === 'starting') {
+      if (cpu === null || this.share === 0) return;
+      probe.phase = 'waiting';
       this.budget.start(cpu);
-      this.unresponsive = 'waiting';
-    } else if (this.unresponsive === 'waiting' && this.budget.sample(cpu, this.strain.paused || this.dialogOpen)) {
-      this.clearUnresponsive();
+      const frame = this.contents.mainFrame;
+      const process = frame.processId;
+      const pid = this.contents.getOSProcessId();
+      void frame.executeJavaScript('0').then(
+        () => {
+          if (this.probe !== probe) return;
+          this.clearProbe();
+          if (
+            !this.contents.isDestroyed() &&
+            !frame.isDestroyed() &&
+            this.contents.mainFrame.processId === process &&
+            this.contents.getOSProcessId() === pid
+          )
+            this.respond(true);
+        },
+        (error: unknown) => {
+          if (this.probe !== probe) return;
+          this.clearProbe();
+          console.debug(`[tagma-desktop] the native renderer probe was not answered: ${String(error)}`);
+        },
+      );
+    } else if (probe.phase === 'waiting' && this.budget.sample(cpu, this.share)) {
+      probe.phase = 'unresponsive';
       this.respond(false);
     }
   }
 
-  private clearUnresponsive(): void {
-    this.unresponsive = null;
+  private clearProbe(): void {
+    this.probe = null;
   }
 
-  private nativeUnresponsive(): void {
-    if (this.driven === null && this.unresponsive === null) this.unresponsive = 'starting';
+  private probeRoot(): void {
+    if (this.driven === null && this.probe === null) this.probe = { phase: 'starting' };
   }
 
   private respond(responsive: boolean): void {
-    if (this.responsive === responsive) return;
-    this.responsive = responsive;
+    const process = responsive ? null : { pid: this.contents.getOSProcessId(), host: this.contents.mainFrame.processId };
+    if (this.unresponsiveProcess?.pid === process?.pid && this.unresponsiveProcess?.host === process?.host) return;
+    this.unresponsiveProcess = process;
     this.emit((page) => (responsive ? { kind: 'responsive', page } : { kind: 'unresponsive', page }));
   }
 
@@ -584,9 +628,14 @@ export class HeldPage {
       const key = details.isMainFrame ? contents.mainFrame.frameTreeNodeId : details.frame?.frameTreeNodeId;
       if (key !== undefined && this.pending.has(key)) this.pending.set(key, details.url);
     });
-    contents.on('did-frame-navigate', (_event, url, _code, _status, main, process, routing) =>
-      this.finishNavigation(url, main, process, routing),
-    );
+    contents.on('did-frame-navigate', (_event, url, _code, _status, main, process, routing) => {
+      if (main && this.unresponsiveProcess !== null && this.responsive) {
+        this.clearProbe();
+        this.respond(true);
+        this.probeRoot();
+      }
+      this.finishNavigation(url, main, process, routing);
+    });
     const failed = (
       _event: Event,
       _code: number,
@@ -610,14 +659,12 @@ export class HeldPage {
     });
     contents.on('page-title-updated', (_event, title) => this.changed({ title }));
     contents.on('page-favicon-updated', (_event, favicons) => this.changed({ favicon: favicons[0] ?? null }));
-    contents.on('unresponsive', () => this.nativeUnresponsive());
-    contents.on('responsive', () => {
-      this.clearUnresponsive();
-      this.respond(true);
-    });
+    contents.on('unresponsive', () => this.probeRoot());
+    contents.on('responsive', () => this.probeRoot());
     contents.on('render-process-gone', () => {
       this.pending.clear();
-      this.clearUnresponsive();
+      this.clearProbe();
+      this.unresponsiveProcess = null;
       this.held = null;
       this.leaving = null;
       if (this.closing !== null) contents.close();
@@ -628,7 +675,7 @@ export class HeldPage {
     contents.once('destroyed', () => {
       this.pending.clear();
       this.restrictions.disconnect();
-      this.clearUnresponsive();
+      this.clearProbe();
       this.events.closed(this);
     });
   }

@@ -10,10 +10,18 @@ export type DevStep = {
   env?: NodeJS.ProcessEnv;
 };
 
+type ProcessFailure = {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stderr: string;
+  readonly error: Error | null;
+};
+
 export type DevProcess = DevStep & {
   readyUrl?: URL;
   whenRunning?: 'adopt' | 'replace';
   restartOn?: RestartWatch;
+  explainFailure?: (failure: ProcessFailure) => string;
 };
 
 export type RestartWatch = {
@@ -134,22 +142,32 @@ class DevSupervisor {
     this.spawnManaged(proc);
   }
 
-  private spawnManaged(proc: DevStep): ChildProcess {
+  private spawnManaged(proc: DevProcess): ChildProcess {
     const child = spawn(proc.command, [...proc.args], {
       cwd: proc.cwd,
       env: proc.env ?? process.env,
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', proc.explainFailure === undefined ? 'inherit' : 'pipe'],
     });
+    let stderr = '';
+    if (child.stderr !== null) {
+      child.stderr.pipe(process.stderr, { end: false });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr = `${stderr}${chunk.toString()}`.slice(-8_000);
+      });
+    }
     this.children.set(child, proc.name);
     this.standing.set(proc.name, child);
     child.once('exit', (exitCode, signal) => {
       this.children.delete(child);
       if (this.restarting.delete(child)) return;
       if (this.stopping) return;
+      if ((exitCode !== 0 || signal !== null) && proc.explainFailure !== undefined)
+        console.error(proc.explainFailure({ code: exitCode, signal, stderr, error: null }));
       void this.shutdown(exitCode ?? (signal ? 1 : 0));
     });
     child.once('error', (error) => {
-      console.error(`[${this.label}] ${proc.name} failed to start`, error);
+      if (proc.explainFailure !== undefined) console.error(proc.explainFailure({ code: null, signal: null, stderr, error }));
+      else console.error(`[${this.label}] ${proc.name} failed to start`, error);
       void this.shutdown(1);
     });
     return child;

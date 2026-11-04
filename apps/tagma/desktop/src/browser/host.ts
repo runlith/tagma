@@ -369,17 +369,16 @@ export class BrowserHost implements Executor {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
         page.driven?.detach();
-        const driven = Driven.attach(page.contents, call.session, reporter, (gone) => {
+        const driven = Driven.attach(page.contents, call.session, reporter, (gone, end) => {
           this.sessions.delete(gone.session);
           if (page.driven !== gone) return;
           page.driving(null);
-          this.placement.settle(page.placed);
+          if (end !== 'closed') this.placement.settle(page.placed);
         });
         if (!(driven instanceof Driven)) return fail(driven);
         this.sessions.set(call.session, driven);
         page.driving(driven);
-        this.placement.settle(page.placed);
-        return answer();
+        return this.placement.wake(page.placed, answer, () => this.reporter !== reporter);
       }
       case 'profileSession': {
         const service = this.service(call.profile);
@@ -505,9 +504,10 @@ export class BrowserHost implements Executor {
   }
 
   private sampleRenderers(): void {
+    const pages = [...this.pages.values()].filter((page) => page.needsCpu && !page.contents.isDestroyed());
+    if (pages.length === 0) return;
     const metrics = new Map(app.getAppMetrics().map((metric) => [metric.pid, metric]));
-    for (const page of this.pages.values()) {
-      if (page.contents.isDestroyed()) continue;
+    for (const page of pages) {
       const metric = metrics.get(page.contents.getOSProcessId());
       const cpu = metric?.cpu.cumulativeCPUUsage;
       page.sample(

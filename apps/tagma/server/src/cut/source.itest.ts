@@ -86,14 +86,14 @@ it.live(
           },
         });
       const deliberate = yield* runBuild('tree', ['--tree']);
-      expect(deliberate.exitCode).toBe(0);
+      expect(deliberate.exitCode, new TextDecoder().decode(deliberate.stderr)).toBe(0);
       const treeProgram = yield* spawnedEffect([process.execPath, join(tree, 'tree/current/value.js')]);
       expect(new TextDecoder().decode(treeProgram.stdout).trim()).toBe('uncommitted peer code');
       expect(readFileSync(join(tree, 'tree/current/skills.txt'), 'utf8')).toBe('ignored peer skill\n');
 
       writeFileSync(join(checkout, 'producer.ts'), 'throw new Error("unfinished working composition");\n');
       const built = yield* runBuild('head', [], { MOVE_HEAD: '1' });
-      expect(built.exitCode).toBe(0);
+      expect(built.exitCode, new TextDecoder().decode(built.stderr)).toBe(0);
       const program = yield* spawnedEffect([process.execPath, join(tree, 'head/current/value.js')]);
       expect(new TextDecoder().decode(program.stdout).trim()).toBe('committed code');
       expect(readFileSync(join(tree, 'head/current/skills.txt'), 'utf8')).toBe('');
@@ -127,7 +127,7 @@ it.live(
           PEER_COMMIT: 'the next commit during release',
         },
       });
-      expect(released.exitCode).toBe(0);
+      expect(released.exitCode, new TextDecoder().decode(released.stderr)).toBe(0);
       const releaseProgram = yield* spawnedEffect([process.execPath, join(tree, 'release/current/value.js')]);
       expect(new TextDecoder().decode(releaseProgram.stdout).trim()).toBe('release source');
       const releasedSource = JSON.parse(readFileSync(join(tree, 'release/current/source.json'), 'utf8')) as { head: string; root: string };
@@ -191,7 +191,7 @@ it.live(
         cwd: checkout,
         env: { ...process.env, TAGMA_INSTALL_ROOT: join(tree, 'head') },
       });
-      expect(built.exitCode).toBe(0);
+      expect(built.exitCode, new TextDecoder().decode(built.stderr)).toBe(0);
       expect(readFileSync(join(tree, 'head/value.txt'), 'utf8')).toBe('pinned\n');
       for (const repository of [checkout, submodule])
         expect(

@@ -1,13 +1,13 @@
-import { afterAll, beforeAll } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe } from 'bun:test';
 import { createRemoteDebugger, type RemoteDebugger } from 'appium-remote-debugger';
 import { it } from '@runlith/effect-test';
 import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
 import { join } from 'node:path';
-import { onFailure, recorded } from '../artifacts.ts';
+import { fixtureHooks, onFailure, recordedFixture, type RecordedFixture } from '../artifacts.ts';
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
 import { makeTouch, type Touch } from '../touch.ts';
-import { holdLane, prepareSimulator, simulator } from './simulator.ts';
+import { borrowing, holdLane, lane as provision, simulator, warm, type Lane } from './simulator.ts';
 
 export type Point = { readonly x: number; readonly y: number };
 export type Swipe = { readonly from: Point; readonly to: Point; readonly duration?: number; readonly delta?: number };
@@ -253,10 +253,8 @@ const pageRecording = async (
 };
 
 type IOSPrepared = { readonly fixture: IOSSession; readonly failed: Deferred.Deferred<never, PageFailed | IOSUnavailable> };
-const preparedSession = Effect.fn('e2e.iosSession')(function* (
-  options: SimulatorOptions,
-): Effect.fn.Return<IOSPrepared, IOSUnavailable, Scope.Scope> {
-  const held = yield* simulator(options).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause })));
+const preparedSession = Effect.fn('e2e.iosSession')(function* (lane: Lane): Effect.fn.Return<IOSPrepared, IOSUnavailable, Scope.Scope> {
+  const held = yield* simulator(lane).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause })));
   const { udid, runtime, timing } = held;
   let selected: RemoteDebugger | undefined;
   let application: number | undefined;
@@ -418,6 +416,7 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
         current = decode(Schema.String, await evaluatePage(debugger_, 'globalThis.__runlithChannel'));
         return;
       }
+      current = undefined;
       const loaded = new Promise<void>((resolve, reject) => {
         const disconnect = () => {
           debugger_.removeClientEventListener('Page.loadEventFired');
@@ -445,7 +444,19 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
       current = landed.channel;
     },
     evaluate: async (expression, schema) => decode(schema, await evaluateChannel(expression)),
-    swipe: held.swipe,
+    swipe: async (gesture) => {
+      await evaluateChannel(`void (window.__runlithSwipePressed = new Promise(resolve => {
+        const pressed = event => {
+          if (!event.isTrusted) return;
+          document.removeEventListener('touchstart', pressed, true);
+          resolve();
+        };
+        document.addEventListener('touchstart', pressed, { capture: true, passive: true });
+      }))`);
+      await held.swipe(gesture, async () => {
+        await evaluateChannel('window.__runlithSwipePressed');
+      });
+    },
     tap: held.tap,
     pagePoint: async (point) => (await mapping())(point),
     screenshot: held.screenshot,
@@ -453,9 +464,24 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
   };
   const unhook = onFailure(async (directory) => {
     const results = await Promise.allSettled([
-      fixture.screenshot(join(directory, 'screenshot.png')),
-      Bun.write(join(directory, 'ios-driver.log'), held.diagnostics()),
       Bun.write(join(directory, 'console.log'), console.join('\n')),
+      current === undefined
+        ? Promise.resolve()
+        : fixture
+            .evaluate(
+              `(() => {
+        const active = document.activeElement;
+        const view = visualViewport;
+        return {
+          href: location.href, ready: document.readyState,
+          active: active === null ? null : { tag: active.tagName, id: active.id },
+          viewport: view === null ? null : { width: view.width, height: view.height, top: view.offsetTop, scale: view.scale },
+          layout: { width: innerWidth, height: innerHeight }
+        };
+      })()`,
+              Schema.Unknown,
+            )
+            .then((value) => Bun.write(join(directory, 'ios-page.json'), JSON.stringify(value))),
       current === undefined
         ? Promise.resolve()
         : evaluateChannel('window.__runlithIOSRecording').then((value) =>
@@ -469,22 +495,15 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
   return { fixture, failed };
 });
 
-export const iosSession = (options: SimulatorOptions): Effect.Effect<IOSSession, IOSUnavailable, Scope.Scope> =>
-  preparedSession(options).pipe(Effect.map((prepared) => prepared.fixture));
-
 const execute = Effect.fn('e2e.iosRecording')(function* <E>(
-  name: string,
-  options: SimulatorOptions,
+  recording: RecordedFixture<IOSPrepared>,
   body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>,
 ) {
-  yield* recorded(name, (artifacts) =>
-    Effect.gen(function* () {
-      const { fixture, failed } = yield* preparedSession(options);
-      yield* Effect.raceFirst(
-        body({ ...fixture, artifacts }).pipe(Effect.andThen(Effect.promise(() => fixture.evaluate(flushErrors, Schema.Void)))),
-        Deferred.await(failed),
-      );
-    }),
+  yield* recording.run(({ fixture, failed }, artifacts) =>
+    Effect.raceFirst(
+      body({ ...fixture, artifacts }).pipe(Effect.andThen(Effect.promise(() => fixture.evaluate(flushErrors, Schema.Void)))),
+      Deferred.await(failed),
+    ),
   );
 });
 const runtimes = (options: IOSRun): readonly string[] => {
@@ -494,19 +513,74 @@ const runtimes = (options: IOSRun): readonly string[] => {
 };
 const register = (name: string, body: (fixture: IOSTest) => Promise<void>, options: IOSRun = {}): void =>
   registerEffect(name, (fixture) => Effect.promise(() => body(fixture)), options);
-let lane: (() => void) | undefined;
-const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>, options: IOSRun = {}): void => {
-  if (runtimes(options).length > 0 && lane === undefined) {
-    lane = holdLane();
-    afterAll(() => {
-      lane?.();
-      lane = undefined;
-    });
+let lock: (() => void) | undefined;
+const closing: (() => Promise<void>)[] = [];
+const lanes = new Map<string, () => Lane>();
+export const iosLane = (options: SimulatorOptions): (() => Lane) => {
+  const key = `${options.runtime} ${options.deviceType ?? ''}`;
+  const standing = lanes.get(key);
+  if (standing !== undefined) return standing;
+  if (lock === undefined && !borrowing()) {
+    lock = holdLane();
+    afterAll(async () => {
+      try {
+        for (const close of closing) await close();
+      } finally {
+        closing.length = 0;
+        lock?.();
+        lock = undefined;
+      }
+    }, Infinity);
   }
+  let held: Lane | undefined;
+  const fixture = recordedFixture(`iOS ${key.trim()} lane`, () =>
+    provision(options).pipe(
+      Effect.tap((made) =>
+        Effect.sync(() => {
+          held = made;
+        }),
+      ),
+      Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause })),
+    ),
+  );
+  const hooks = fixtureHooks(fixture);
+  const warmed = fixtureHooks(
+    recordedFixture(`iOS ${key.trim()} lane first launch`, () =>
+      borrowing() ? Effect.void : warm(device()).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause }))),
+    ),
+  );
+  const close = () =>
+    hooks.close().finally(() => {
+      lanes.delete(key);
+    });
+  beforeAll(hooks.setup, Infinity);
+  beforeAll(warmed.setup, Infinity);
+  if (lock === undefined) afterAll(close, Infinity);
+  else closing.push(close);
+  const device = (): Lane => {
+    if (held === undefined) throw new IOSUnavailable({ message: 'the iOS lane is not provisioned before its hook' });
+    return held;
+  };
+  lanes.set(key, device);
+  return device;
+};
+const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>, options: IOSRun = {}): void => {
   for (const runtime of runtimes(options)) {
     const title = `${name} [ios-${runtime}]`;
-    beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));
-    it.live(title, () => execute(title, { runtime, deviceType: options.deviceType }, body), Infinity);
+    const device = iosLane({ runtime, deviceType: options.deviceType });
+    describe.serial(() => {
+      const recording = recordedFixture(title, () =>
+        Effect.gen(function* () {
+          const prepared = yield* preparedSession(device());
+          yield* Effect.promise(() => prepared.fixture.open('about:blank'));
+          return prepared;
+        }),
+      );
+      const hooks = fixtureHooks(recording);
+      beforeEach(hooks.setup, Infinity);
+      it.live(title, () => execute(recording, body), Infinity);
+      afterEach(hooks.close, Infinity);
+    });
   }
 };
 export const ios = Object.assign(register, { effect: registerEffect });

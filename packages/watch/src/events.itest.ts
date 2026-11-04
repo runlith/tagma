@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { mkdir, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Clock, Effect, Queue } from 'effect';
 import { makeWatchClient } from './client.js';
@@ -165,6 +165,38 @@ it.live(
       yield* changesUntil(next.heard, naming('after'));
       expect({ alive: before !== '', same: watchers() === before }).toEqual({ alive: true, same: true });
     }),
+);
+
+it.live('a root whose ancestor is renamed away or deleted ends its watch though nothing inside it changed', () =>
+  Effect.gen(function* () {
+    const { tree, place } = yield* world();
+    const client = yield* makeWatchClient({ dir: place, lifetime: 'with-client' });
+    const watch = Effect.fnUntraced(function* (ancestor: string, leave: () => Promise<void>) {
+      yield* Effect.promise(() => mkdir(join(tree, ancestor, 'middle', 'root'), { recursive: true }));
+      const heard = yield* hearing;
+      yield* client.subscribe(join(tree, ancestor, 'middle', 'root'), TREE, heard.into);
+      yield* Effect.promise(leave);
+      return yield* Queue.take(heard.heard);
+    });
+    const renamed = yield* watch('renamed', () => rename(join(tree, 'renamed'), join(tree, 'renamed-away')));
+    const deleted = yield* watch('deleted', () => rm(join(tree, 'deleted'), { recursive: true }));
+    expect([renamed, deleted]).toEqual([{ ended: expect.any(String) }, { ended: expect.any(String) }]);
+  }),
+);
+
+it.live('a root whose ancestor sits in an unreadable directory still ends its watch when that ancestor is renamed', () =>
+  Effect.gen(function* () {
+    const { tree, place } = yield* world();
+    const hidden = join(tree, 'hidden');
+    yield* Effect.promise(() => mkdir(join(hidden, 'middle', 'root'), { recursive: true }));
+    yield* Effect.addFinalizer(() => Effect.promise(() => chmod(hidden, 0o700)));
+    yield* Effect.promise(() => chmod(hidden, 0o300));
+    const client = yield* makeWatchClient({ dir: place, lifetime: 'with-client' });
+    const heard = yield* hearing;
+    yield* client.subscribe(join(hidden, 'middle', 'root'), TREE, heard.into);
+    yield* Effect.promise(() => rename(join(hidden, 'middle'), join(hidden, 'middle-away')));
+    expect(yield* Queue.take(heard.heard)).toEqual({ ended: expect.any(String) });
+  }),
 );
 
 it.live('two subscriptions on one root with different exclusions each hear their own, and one closing leaves the other hearing', () =>

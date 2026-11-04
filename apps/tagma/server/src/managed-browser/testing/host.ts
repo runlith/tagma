@@ -6,6 +6,8 @@ import { kind, world } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientError } from 'effect/http';
 import { ChildProcessSpawner } from 'effect/process';
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
+import { LaunchPlatform } from '../contract/service/launch.js';
 import { type Host, Hosts } from '../../browser/contract/service/hosts.js';
 import { ProfileId } from '../../browser/contract/wire/ids.js';
 import { absentAdapter, browserWorld, type BrowserFixture } from '../../browser/testing/world.js';
@@ -38,17 +40,20 @@ export const chromeInstalled: boolean = Exit.isSuccess(
   await Effect.runPromise(
     Effect.exit(Effect.flatMap(makeInstalledChrome, (build) => build.launch)).pipe(
       Effect.provide(Layer.provideMerge(BunChildProcessSpawner.layer, platform)),
+      Effect.provide(Layer.sync(LaunchPlatform, currentPlatform)),
     ),
   ),
 );
 
 export const INSTALLED = ProfileId.make('installed-agent');
+export const SHOWN = ProfileId.make('shown-agent');
 export const OTHER = ProfileId.make('managed-other');
 export const testAdapter = {
   ...managedAdapter,
   seeds: [
     ...managedAdapter.seeds,
     { id: INSTALLED, name: 'Agent (installed Chrome)', document: { build: 'installed-chrome' } },
+    { id: SHOWN, name: 'Agent (installed Chrome, windowed)', document: { build: 'installed-chrome', window: 'shown' } },
     { id: OTHER, name: 'Other', document: { build: 'chrome-for-testing' } },
   ],
 };
@@ -93,6 +98,7 @@ export const managedTestHost = (home: string, options: TestHost = {}) => {
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(ManagedPlace, { builds, profiles: join(home, 'profiles'), downloads: join(home, 'downloads') }),
+        Layer.sync(LaunchPlatform, currentPlatform),
         Layer.effect(Background, makeBackground),
         offline(builds),
         (options.spawner === undefined

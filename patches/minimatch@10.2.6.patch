@@ -1,0 +1,26 @@
+diff --git a/dist/commonjs/brace-expressions.js b/dist/commonjs/brace-expressions.js
+index 2b7b03712b874e29341dcb990f3b8b6163f145d4..4b1c4d6ab38cc379bc4bcdd7e56d2834d58c0d6f 100644
+--- a/dist/commonjs/brace-expressions.js
++++ b/dist/commonjs/brace-expressions.js
+@@ -22,7 +22,7 @@ const posixClasses = {
+ };
+ // only need to escape a few things inside of brace expressions
+ // escapes: [ \ ] -
+-const braceEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
++const braceEscape = (s) => s.replace(/[[\]\\^-]/g, '\\$&');
+ // escape all regexp magic characters
+ const regexpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+ // everything has already been escaped, we just have to join
+diff --git a/dist/esm/brace-expressions.js b/dist/esm/brace-expressions.js
+index 4b49d40bd74210708c8afdee944010ca1023fb83..b9b6628bbee8fc324124e2cb6cdcaf4e403f2c9e 100644
+--- a/dist/esm/brace-expressions.js
++++ b/dist/esm/brace-expressions.js
+@@ -19,7 +19,7 @@ const posixClasses = {
+ };
+ // only need to escape a few things inside of brace expressions
+ // escapes: [ \ ] -
+-const braceEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
++const braceEscape = (s) => s.replace(/[[\]\\^-]/g, '\\$&');
+ // escape all regexp magic characters
+ const regexpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+ // everything has already been escaped, we just have to join

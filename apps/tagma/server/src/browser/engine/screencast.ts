@@ -569,6 +569,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
           break;
         }
         case 'copy':
+          yield* session.posted;
           copied = yield* selection(attached).pipe(Effect.catchIf(isCommandFailure, settle(cast.page)));
           break;
         case 'view':

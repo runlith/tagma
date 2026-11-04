@@ -187,7 +187,7 @@ it.live(
         accepted: (id) =>
           Effect.suspend(() => {
             const name = nameOf(id);
-            if (name === 'arm64') return Deferred.await(x64Sent).pipe(Effect.timeout('5 seconds'), Effect.orDie);
+            if (name === 'arm64') return Deferred.await(x64Sent);
             return name === 'Tagma-0.1.0-x64.dmg' && stopping.during
               ? Deferred.await(arm64Opened).pipe(Effect.andThen(Deferred.succeed(checking, undefined)), Effect.andThen(Effect.never))
               : Effect.void;

@@ -16,7 +16,7 @@ sources:
 ---
 `makeDeclaredAgents` takes a list of `AgentPackages` floors; native-harness fills it with the apps' floor and the plugins' one, so the threads module knows neither. The plugins' floor reads `EnabledPlugins.of` each time the library is listed or a type resolved and holds nothing: disabling the plugin in the project withdraws its agents at the next read.
 
-- An agent stands alone over the declared base with no capability list: its prompt is the plugin file's body, and the tools the format adapter mapped to Tagma names become its `tools` whitelist. A null list leaves every tool of the base; an empty list leaves none. Tools the adapter could not map are the plugin row's to list.
+- An agent stands alone over the declared base with no capability list: its prompt is the plugin file's body, and the tools the format adapter mapped to Tagma names become its `tools` whitelist. A null list leaves every tool of the base; an empty list leaves none. Tools the adapter could not map are the plugin row's to list. Mapped names no held capability offers are not refused: the allowlist check judges only definitions that list `capabilities`.
 - A plugin author, not the operator, wrote it, so it is offered to the operator alone until `agent.offered` opens it to agents, like a project file or an app agent.
 - Unlike an app agent it is born in the mode its creator or the project sets, not in `trust`: it carries no tools of its own that would make every turn ask.
 - Its id wins over a `.agents` file of the same name, which goes to rejected naming the winner; the library shows it with `plugin` origin, uneditable.

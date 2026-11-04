@@ -5,7 +5,7 @@ import { Context, Effect } from 'effect';
 import { OWN_GIT_VARIABLE } from '../platform/contract/service/credentials.js';
 import { grantEnvironment } from '../platform/testing/grants.js';
 import { testSessionIdentity } from '../platform/testing/identity.js';
-import { commitCase, commitFixture, DOWN, FORWARD, OPERATOR, SESSION } from '../composition/testing/commitFixture.js';
+import { CommitFixture, commitCase, commitFixture, DOWN, FORWARD, OPERATOR, SESSION } from '../composition/testing/commitFixture.js';
 import { TreeCommits } from '../graph/tree/commits.js';
 import type { GraphPool } from '../graph/serving/pool.js';
 import { treeGateKey } from '../graph/serving/permits.js';
@@ -209,7 +209,7 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
     'an inspection failure passes the session hooks unjudged, a real crossing still refuses, and the operator commit records its escape',
     () =>
       Effect.gen(function* () {
-        const gate = yield* commitCase;
+        const gate = yield* (yield* CommitFixture).take();
         yield* gate.put(
           'crash.js',
           "export default { crash: async ({ tree }) => {\n  for (const path of tree.paths) if (((await tree.read(path)) ?? '').includes('CRASH')) throw new Error('checker key failed');\n  return { tree: { findings: [] } };\n}, guard: async ({ tree }) => {\n  const findings = [];\n  for (const path of tree.paths) if (((await tree.read(path)) ?? '').includes('WRONG')) findings.push({ fingerprint: 'wrong', path, message: 'wrong value' });\n  return { tree: { findings } };\n} };\n",
@@ -304,14 +304,18 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
         expect(escaped.escaped.filter((one) => one.commit === later).map((one) => [one.path, one.holder])).toEqual([
           ['later.ts', 'operator'],
         ]);
-        const history = JSON.parse((yield* op(gate, gate.repo, 'read_events', { limit: 100 })).out) as {
-          events: { op: string; blockName: string; payload: string }[];
-        };
-        expect(
-          history.events
-            .filter((entry) => entry.op === 'unjudged' && entry.blockName === rule)
-            .map((entry) => JSON.parse(entry.payload).cause),
-        ).toContain('unsupported');
+        const history = yield* gate.historyWhen(rule, (diff) =>
+          diff.changes.some((change) => change.unjudged?.cause === 'unsupported' && change.unjudged.base === landed),
+        );
+        expect(history).toMatchObject({
+          blockName: rule,
+          changes: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'unjudged',
+              unjudged: { op: 'git_commit', base: landed, cause: 'unsupported', failed: expect.any(String) },
+            }),
+          ]),
+        });
       }),
   );
 

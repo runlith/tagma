@@ -6892,10 +6892,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/managed-browser/builds/build.ts#Launch",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/managed-browser/contract/wire/document.ts#BUILDS",
           "owner": "5a3bed29"
         },
@@ -13771,10 +13767,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/cdp/src/screencast.ts#CastFrame",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/cdp/src/session.ts#SendArgs",
           "owner": "5a3bed29"
         },
         {

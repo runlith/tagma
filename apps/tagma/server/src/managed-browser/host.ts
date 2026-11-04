@@ -10,7 +10,7 @@ import {
   isCommandFailure,
   type Session,
 } from '@runlith/cdp/session';
-import { Clock, Deferred, Effect, Exit, FileSystem, Option, Path, PubSub, Schema, Scope, Stream } from 'effect';
+import { Clock, Deferred, Effect, Exit, Fiber, FileSystem, Option, Path, PubSub, Schema, Scope, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import {
   type Host,
@@ -26,6 +26,7 @@ import { type HostEvent, type LivePage, type Navigation, type PageChange } from 
 import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
 import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
+import { LaunchPlatform } from './contract/service/launch.js';
 import { type BuildId, MANAGED, ManagedDocument } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
@@ -34,6 +35,7 @@ import { committed } from './commit.js';
 import { captureHost, hiddenTarget, lost, quiet } from './targets.js';
 import { makePermissions, type Permissions } from './permissions.js';
 import { makeNavigation, type NavigationGate } from './navigation.js';
+import { makeWindows, type Windows } from './windows.js';
 
 const IDLE_MS = 5 * 60_000;
 const UNLOAD_MS = 15 * 60_000;
@@ -79,6 +81,7 @@ type Running = {
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
   readonly dir: string;
+  readonly windows: Windows;
   users: number;
   idleSince: number | null;
 };
@@ -87,6 +90,7 @@ export const makeManagedHost = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const place = yield* ManagedPlace;
+  const platform = yield* LaunchPlatform;
   const spawner = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
   const builds: Readonly<Record<BuildId, Build>> = {
     'chrome-for-testing': yield* makeChromeForTesting,
@@ -152,10 +156,12 @@ export const makeManagedHost = Effect.gen(function* () {
     yield* changed(tab, { favicon: typeof result.value === 'string' && /^https?:/u.test(result.value) ? result.value : null });
   });
 
-  const onPage = Effect.fnUntraced(function* (tab: Tab, service: Session, event: CdpEvent) {
+  const onPage = Effect.fnUntraced(function* (state: Running, tab: Tab, service: Session, event: CdpEvent) {
     if (event.child !== undefined || tab.page === null) return;
     const page = tab.page;
     switch (event.method) {
+      case 'Page.frameResized':
+        return yield* state.windows.remember(tab.target);
       case 'Page.frameNavigated': {
         const { frame } = yield* eventParams('Page.frameNavigated', event);
         if (frame.parentId === undefined)
@@ -216,7 +222,7 @@ export const makeManagedHost = Effect.gen(function* () {
     const { sessionId } = yield* state.connection.root.send('Target.attachToTarget', { targetId: target, flatten: true });
     const service = yield* Scope.provide(state.connection.attach(sessionId), held);
     const stream = yield* Scope.provide(service.events(), held);
-    yield* Stream.runForEach(stream, (event) => onPage(tab, service, event).pipe(quiet(`an event of page ${page}`))).pipe(
+    yield* Stream.runForEach(stream, (event) => onPage(state, tab, service, event).pipe(quiet(`an event of page ${page}`))).pipe(
       Effect.forkIn(held),
     );
     yield* Scope.provide(state.navigation.bind(target, page, service), held);
@@ -318,6 +324,8 @@ export const makeManagedHost = Effect.gen(function* () {
     const document = yield* Schema.decodeUnknownEffect(ManagedDocument)(profile.document).pipe(
       Effect.mapError(() => refused(`profile ${profile.id} carries no document the managed browser reads`)),
     );
+    const preparation = yield* Effect.promise(() => platform.prepare(document.window === 'shown'));
+    if (preparation._tag === 'LaunchRefused') return yield* new HostRefused({ message: preparation.message, unblock: preparation.unblock });
     const build = yield* builds[document.build].launch.pipe(
       Effect.mapError((unavailable) => new HostRefused({ message: unavailable.message, unblock: unavailable.unblock })),
     );
@@ -328,12 +336,14 @@ export const makeManagedHost = Effect.gen(function* () {
       files.makeDirectory(downloads, { recursive: true }),
     ]).pipe(Effect.mapError((failure) => refused(`the profile directory could not be made: ${failure.message}`)));
     const held = yield* Scope.fork(scope);
+    let readDiagnostic: Effect.Effect<string> = Effect.succeed('');
     const opened = yield* Effect.gen(function* () {
       const handle = yield* Scope.provide(
-        ChildProcess.make(build.executable, [...build.args(dir)], {
+        ChildProcess.make(build.executable, [...build.args(dir, document.window)], {
           stdin: 'ignore',
           stdout: 'ignore',
-          stderr: 'ignore',
+          stderr: 'pipe',
+          env: preparation.environment,
           forceKillAfter: STOP_AFTER,
           additionalFds: { fd3: { type: 'input' }, fd4: { type: 'output' } },
         }),
@@ -342,13 +352,30 @@ export const makeManagedHost = Effect.gen(function* () {
         Effect.provide(spawner),
         Effect.mapError((failure) => refused(`the browser did not start: ${failure.message}`)),
       );
+      let diagnostic = '';
+      const stderr = yield* handle.stderr.pipe(
+        Stream.decodeText(),
+        Stream.runForEach((chunk) =>
+          Effect.sync(() => {
+            diagnostic = `${diagnostic}${chunk}`.slice(-8_000);
+          }),
+        ),
+        Effect.forkIn(scope),
+      );
+      readDiagnostic = Fiber.join(stderr).pipe(
+        Effect.map(() => diagnostic),
+        Effect.orDie,
+      );
       const transport = yield* Scope.provide(pipeTransport({ writer: handle.getInputFd(3), reader: handle.getOutputFd(4) }), held);
       const connection = yield* Scope.provide(connect(transport), held);
       const permissions = yield* makePermissions({ browser: connection.root });
       const navigation = yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held);
       yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
       const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
-      yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
+      const own = yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
+      const windows = yield* makeWindows({ browser: connection.root, own: own.targetId, mode: document.window }).pipe(
+        Effect.mapError(lost),
+      );
       const state: Running = {
         profile: profile.id,
         connection,
@@ -358,6 +385,7 @@ export const makeManagedHost = Effect.gen(function* () {
         permissions,
         navigation,
         dir,
+        windows,
         users: 0,
         idleSince: null,
       };
@@ -382,7 +410,15 @@ export const makeManagedHost = Effect.gen(function* () {
       );
       yield* Effect.flatMap(connection.ended, () => gone(state)).pipe(Effect.forkIn(scope));
       return state;
-    }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)));
+    }).pipe(
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)),
+      Effect.catchTag('HostLost', (failure) =>
+        Effect.flatMap(readDiagnostic, (diagnostic) => {
+          const refusal = platform.failed(`${failure.message}\n${diagnostic}`.trim());
+          return Effect.fail(new HostRefused({ message: refusal.message, unblock: refusal.unblock }));
+        }),
+      ),
+    );
     running.set(profile.id, opened);
     return opened;
   });
@@ -397,10 +433,10 @@ export const makeManagedHost = Effect.gen(function* () {
     yield* launch(profile).pipe(
       Effect.onExit((exit) =>
         Effect.andThen(
-          Deferred.done(done, exit),
           Effect.sync(() => {
             starting.delete(profile.id);
           }),
+          Deferred.done(done, exit),
         ),
       ),
       Effect.forkIn(scope),
@@ -432,7 +468,7 @@ export const makeManagedHost = Effect.gen(function* () {
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
     const url = tab.url || 'about:blank';
-    const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' });
+    const { targetId } = yield* state.connection.root.send('Target.createTarget', state.windows.page);
     yield* state.navigation.swap(tab.target, targetId);
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
@@ -503,15 +539,22 @@ export const makeManagedHost = Effect.gen(function* () {
       open: Effect.fn('ManagedHost.open')(function* (opening) {
         const state = yield* ensure(opening.profile);
         const url = opening.history?.entries[opening.history.at]?.url ?? opening.url;
-        const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' }).pipe(Effect.mapError(lost));
+        const { targetId } = yield* state.connection.root.send('Target.createTarget', state.windows.page).pipe(Effect.mapError(lost));
         yield* Effect.gen(function* () {
           const service = yield* bind(state, targetId, opening.page);
           yield* state.navigation.open(targetId, opening.policy);
           if (url === 'about:blank') return;
           yield* state.navigation.check(targetId, url);
-          const went = yield* service.send('Page.navigate', { url });
-          if (went.errorText !== undefined && went.errorText !== '')
-            yield* Effect.logInfo(`managed browser: page ${opening.page} opened on ${url} with ${went.errorText}`);
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const stream = yield* service.events();
+              const went = yield* service.send('Page.navigate', { url });
+              if (went.errorText !== undefined && went.errorText !== '')
+                return yield* Effect.logInfo(`managed browser: page ${opening.page} opened on ${url} with ${went.errorText}`);
+              if (went.isDownload === true) return;
+              yield* committed(targetId, stream, went.loaderId);
+            }),
+          );
         }).pipe(
           Effect.onError(() => abandon(state, targetId)),
           Effect.catchIf(isCommandFailure, (failure) => Effect.fail(lost(failure))),

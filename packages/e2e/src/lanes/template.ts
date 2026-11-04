@@ -3,20 +3,8 @@ import { Effect, Exit, Fiber, FileSystem, Option, Schema } from 'effect';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ButtonType, DisabledTrait, elementsOf, PositionedFrame, readAX } from './accessibility.ts';
-import {
-  attempted,
-  boot,
-  command,
-  decode,
-  empty,
-  launchSafari,
-  remove,
-  simctl,
-  SimulatorUnavailable,
-  stateOf,
-  type Device,
-} from './device.ts';
-import { input, tap, type Input } from './input.ts';
+import { attempted, boot, command, decode, empty, remove, simctl, SimulatorUnavailable, stateOf, type Device } from './device.ts';
+import { input, type Input } from './input.ts';
 import type { Tools } from './iosTools.ts';
 
 export type TemplateParams = {
@@ -92,8 +80,9 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
         await server.stop(true);
       }),
   );
-  const pid = yield* attempted('MobileSafari did not launch', () => launchSafari(device));
+  const pid = yield* attempted('MobileSafari did not launch', () => control.launch('com.apple.mobilesafari'));
   const systemPID = yield* attempted('the native system UI process is unavailable', () => readSystemPID(device));
+  console.info(`iOS onboarding: Safari ${pid}, system UI ${systemPID}`);
   const navigation = yield* Effect.forkScoped(
     Effect.tryPromise({
       try: (signal) => command('xcrun', ['simctl', '--set', device.set, 'openurl', device.udid, server.url.href], signal),
@@ -110,10 +99,9 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
       console.info('iOS onboarding: reading native accessibility');
       const snapshot = async (target: number) =>
         elementsOf(await readAX(device, tools, { pid: target, automation: true, depth: 64, nodes: 4096, traversal: 'single-fetch' }));
-      const [elements, systemElements] = yield* attempted('the native accessibility tree is unavailable', () =>
-        Promise.all([snapshot(pid), snapshot(systemPID)]),
-      );
+      const systemElements = yield* attempted('the native system UI tree is unavailable', () => snapshot(systemPID));
       const hasSystemAlert = systemElements.some((one) => one.XC_kAXXCAttributeLabel === 'Search Engine Preference');
+      const elements = hasSystemAlert ? [] : yield* attempted('the native Safari tree is unavailable', () => snapshot(pid));
       const popover = elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'PopoverDismissRegion');
       const buttons = (hasSystemAlert ? systemElements : elements).filter(
         (one) => one.XC_kAXXCAttributeAutomationType === ButtonType && ((one.XC_kAXXCAttributeTraits ?? 0) & DisabledTrait) === 0,
@@ -126,7 +114,7 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
           Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the native onboarding button has no usable frame', cause })),
         );
         yield* attempted('the native onboarding button did not accept a tap', () =>
-          tap(control, { x: frame.X + frame.Width / 2, y: frame.Y + frame.Height / 2 }),
+          control.tap({ x: frame.X + frame.Width / 2, y: frame.Y + frame.Height / 2 }),
         );
       } else if (ready && !hasSystemAlert && !popover && elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'ReloadButton')) return;
       else yield* Effect.sleep(100);

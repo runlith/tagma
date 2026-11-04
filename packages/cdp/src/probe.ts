@@ -7,17 +7,17 @@ export class Probe {
 
   constructor(private readonly threshold: number) {}
 
-  start(cpu: RendererCpu | null): void {
+  start(cpu: RendererCpu): void {
     this.previous = cpu;
     this.spent = 0;
-    this.attributed = cpu !== null;
+    this.attributed = true;
   }
 
   suspend(): void {
     this.attributed = false;
   }
 
-  sample(cpu: RendererCpu | null, paused: boolean): boolean {
+  sample(cpu: RendererCpu | null, share: number): boolean {
     const previous = this.previous;
     this.previous = cpu;
     if (!this.attributed) return false;
@@ -26,7 +26,7 @@ export class Probe {
       this.spent = 0;
       return false;
     }
-    if (!paused) this.spent += cpu.millis - previous.millis;
+    this.spent += (cpu.millis - previous.millis) * share;
     return this.spent >= this.threshold;
   }
 }

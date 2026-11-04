@@ -94,7 +94,8 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       const shell = yield* Git;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: 'team-resolution-' });
       const git = (...args: readonly string[]) => runGit(shell, 'test', ['-C', root, ...args]);
-      const commit = (subject: string) => git('-c', 'user.name=test', '-c', 'user.email=test@x', 'commit', '-qm', subject);
+      const identified = ['-c', 'user.name=test', '-c', 'user.email=test@x'] as const;
+      const commit = (subject: string) => git(...identified, 'commit', '-qm', subject);
       yield* git('init', '-q', '-b', 'main');
       const path = '.tagma/parent/index.md';
       yield* fs.makeDirectory(join(root, '.tagma', 'parent'), { recursive: true });
@@ -115,7 +116,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       yield* fs.writeFileString(join(root, 'code.ts'), 'export const code = 2;\n');
       yield* git('add', '-A');
       yield* commit('main');
-      expect((yield* gitAnswer(shell, 'test', ['-C', root, 'merge', '--no-edit', 'topic'])).status).toBe(1);
+      expect((yield* gitAnswer(shell, 'test', ['-C', root, ...identified, 'merge', '--no-edit', 'topic'])).status).toBe(1);
       const row: ProjectPolicyRow = { ...registered, name: 'team', rootPath: root, storage: 'team' };
       const switching = ServingSwitch.of({
         servedBy: () => Effect.succeed({ row, checkout: root }),

@@ -1,14 +1,17 @@
+import type { WindowMode } from '../contract/wire/document.js';
+
 const ARGS = [
   '--remote-debugging-pipe',
-  '--headless=new',
+  '--disable-blink-features=AutomationControlled',
+  '--test-type',
   '--no-first-run',
   '--no-default-browser-check',
-  '--mute-audio',
-  '--window-size=1280,800',
   '--disable-background-timer-throttling',
   '--disable-backgrounding-occluded-windows',
   '--disable-renderer-backgrounding',
 ];
+
+const HIDDEN = ['--headless=new', '--mute-audio', '--window-size=1280,800'];
 
 const SECRET_STORE: Readonly<Record<string, readonly string[]>> = {
   darwin: ['--use-mock-keychain'],
@@ -29,10 +32,10 @@ const agentOf = (release: string): string[] => {
     : [`--user-agent=Mozilla/5.0 (${token}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`];
 };
 
-export const chromeArgs = (release: string, profileDir: string): readonly string[] => [
+export const chromeArgs = (release: string, profileDir: string, window: WindowMode): readonly string[] => [
   ...ARGS,
+  ...(window === 'hidden' ? [...HIDDEN, ...agentOf(release)] : []),
   ...(SECRET_STORE[process.platform] ?? []),
-  ...agentOf(release),
   `--user-data-dir=${profileDir}`,
 ];
 

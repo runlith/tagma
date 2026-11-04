@@ -1,3 +1,4 @@
+import type { Touch } from '@runlith/e2e/touch';
 import type { CDPSession, Page } from 'playwright-core';
 import { dragPage, type HeldTouch } from './held';
 import type { Recording, ThumbReference } from './recording';
@@ -12,6 +13,7 @@ export const motionSource = (name: ScenarioName, cdp: CDPSession | undefined): M
 export const controlSource = (name: ScenarioName, cdp: CDPSession | undefined): MotionSource | undefined =>
   cdp !== undefined && name.includes('fling') ? motionSource(name, cdp) : undefined;
 
+export type EngineInput = { readonly cdp: CDPSession | undefined; readonly touch: Touch | undefined };
 export type ScenarioOptions = { readonly jump: string; readonly thumb?: ThumbReference; readonly held?: HeldTouch };
 
 export class ScenarioFailure extends Error {
@@ -31,6 +33,7 @@ async function refuse(page: Page, message: string): Promise<never> {
 const approach = (page: Page, distance: number): Promise<void> =>
   page.evaluate((distance) => (globalThis as StandGlobal).feedStand!.approach(distance), distance);
 const FLING_DISTANCE = 1400;
+const FRAME_RATE = 60;
 const frames = (page: Page, count = 1): Promise<void> =>
   page.evaluate((count) => (globalThis as StandGlobal).feedStand!.frames(count), count);
 const start = (page: Page, name: string): Promise<void> =>
@@ -41,37 +44,59 @@ export async function ready(page: Page): Promise<void> {
   await page.locator('[data-timeline-key]').first().waitFor({ state: 'attached' });
 }
 
+const contact = (page: Page) =>
+  page.evaluate(() => {
+    const port = (globalThis as StandGlobal).feedStand!;
+    return {
+      ...port.point(),
+      bottom: port.targets().viewport.bottom,
+      pixel: 1 / (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio,
+    };
+  });
+
+async function travelOf(page: Page, source: MotionSource, distance: number): Promise<number> {
+  if (source !== 'touch') return distance;
+  const { y, bottom, pixel } = await contact(page);
+  return Math.min(distance, bottom - y - pixel);
+}
+
 export async function fling(
   page: Page,
-  cdp: CDPSession | undefined,
-  source: 'touch' | 'wheel',
+  { cdp, touch }: EngineInput,
+  source: MotionSource,
   distance = 5000,
   speed = 2200,
   afterRelease?: () => Promise<void>,
 ): Promise<void> {
-  const { x, y } = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.point());
-  if (cdp !== undefined) {
+  const { x, y } = await contact(page);
+  const declare = (travel: number) =>
+    page.evaluate(({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false), {
+      distance: travel,
+      speed,
+    });
+  if (source === 'touch') {
+    if (touch === undefined) throw new Error('A touch fling requires a Chromium context with touch');
+    const travel = await travelOf(page, source, distance);
+    if (travel <= 0) throw new Error('The contact has no path inside the feed viewport');
+    const steps = Math.max(2, Math.ceil(travel / (speed / FRAME_RATE)));
     await frames(page, 2);
-    await page.evaluate(
-      ({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false),
-      { distance, speed },
-    );
-    const released =
-      afterRelease === undefined
-        ? undefined
-        : source === 'touch'
-          ? page.evaluate(() => (globalThis as StandGlobal).feedStand!.released()).then(afterRelease)
-          : frames(page, 3).then(afterRelease);
+    await declare(travel);
+    await touch.press({ x, y });
+    for (let step = 1; step <= steps; step += 1) {
+      await touch.move({ x, y: y + (travel * step) / steps });
+      if (step < steps) await frames(page);
+    }
+    await touch.release();
+    await page.evaluate(() => (globalThis as StandGlobal).feedStand!.released());
+    await afterRelease?.();
+    await frames(page, 2);
+    await page.evaluate(() => (globalThis as StandGlobal).feedStand!.endDrag());
+  } else if (cdp !== undefined) {
+    await frames(page, 2);
+    await declare(distance);
     await Promise.all([
-      cdp.send('Input.synthesizeScrollGesture', {
-        x,
-        y,
-        yDistance: distance,
-        speed,
-        gestureSourceType: source === 'wheel' ? 'mouse' : 'touch',
-        preventFling: false,
-      }),
-      released,
+      cdp.send('Input.synthesizeScrollGesture', { x, y, yDistance: distance, speed, gestureSourceType: 'mouse', preventFling: false }),
+      afterRelease === undefined ? undefined : frames(page, 3).then(afterRelease),
     ]);
     await frames(page, 2);
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.endDrag());
@@ -117,10 +142,11 @@ async function disclosure(page: Page, name: ScenarioName): Promise<void> {
 
 export async function runScenario(
   page: Page,
-  cdp: CDPSession | undefined,
+  input: EngineInput,
   name: ScenarioName,
   options: ScenarioOptions = { jump: 'jumpToLatest' },
 ): Promise<Recording> {
+  const cdp = input.cdp;
   if (name === 'thumb-history') {
     if (cdp === undefined) throw new Error('Native thumb history requires the Chromium lane');
     const recording = await dragThumb(page, options.thumb ?? (await prepareThumb(page)));
@@ -137,20 +163,21 @@ export async function runScenario(
     return trial.recording;
   }
   if (['streaming-paused', 'latest', 'width', 'keyboard'].includes(name) || name.startsWith('disclosure-')) await pause(page);
-  if (name === 'page-mid-fling') await approach(page, FLING_DISTANCE);
+  const paged = name === 'page-mid-fling' ? await travelOf(page, motionSource(name, cdp), FLING_DISTANCE) : 0;
+  if (name === 'page-mid-fling') await approach(page, paged);
   if (!name.startsWith('disclosure-')) await start(page, name);
   if (name === 'open-tail') {
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.remount());
     await frames(page, 30);
   }
   if (name === 'fling-wheel' || name === 'fling-touch') {
-    await fling(page, cdp, motionSource(name, cdp));
+    await fling(page, input, motionSource(name, cdp));
     await frames(page, 45);
   }
   if (name === 'page-mid-fling') {
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.pageLatency(20));
     let loaded = true;
-    await fling(page, cdp, motionSource(name, cdp), FLING_DISTANCE, 2200, async () => {
+    await fling(page, input, motionSource(name, cdp), paged, 2200, async () => {
       loaded = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.loadOlder());
     });
     if (!loaded) return refuse(page, 'The scripted older page did not land after touch release');
@@ -162,7 +189,7 @@ export async function runScenario(
     await frames(page, 12);
   }
   if (name === 'rail-during-fling') {
-    await fling(page, cdp, motionSource(name, cdp), 1400, 2200, async () => {
+    await fling(page, input, motionSource(name, cdp), 1400, 2200, async () => {
       await page.locator('[role="navigation"] button').nth(4).click();
     });
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.landed());

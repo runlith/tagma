@@ -1,4 +1,4 @@
-import { type CommandFailure, type Connection } from '@runlith/cdp/session';
+import { type CommandFailure, type Connection, type Params } from '@runlith/cdp/session';
 import { Effect } from 'effect';
 import { type CaptureHost, type HostFailure, HostLost, HostRefused, type ProfileRecord } from '../browser/contract/service/hosts.js';
 import { ProfileId } from '../browser/contract/wire/ids.js';
@@ -26,7 +26,11 @@ export const quiet =
       }),
     );
 
-export const hiddenTarget = Effect.fnUntraced(function* (browser: Browser) {
+const HIDDEN: Params<'Target.createTarget'> = { url: 'about:blank', hidden: true };
+
+const WINDOWED: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: true };
+
+const heldTarget = Effect.fnUntraced(function* (browser: Browser, opening: Params<'Target.createTarget'>) {
   yield* Effect.acquireRelease(
     Effect.sync(() => {
       browser.users += 1;
@@ -38,14 +42,14 @@ export const hiddenTarget = Effect.fnUntraced(function* (browser: Browser) {
       }),
   );
   const root = browser.connection.root;
-  const { targetId } = yield* Effect.acquireRelease(
-    root.send('Target.createTarget', { url: 'about:blank', hidden: true }).pipe(Effect.mapError(lost)),
-    (created) =>
-      root.send('Target.closeTarget', { targetId: created.targetId }).pipe(quiet(`closing the hidden target ${created.targetId}`)),
+  const { targetId } = yield* Effect.acquireRelease(root.send('Target.createTarget', opening).pipe(Effect.mapError(lost)), (created) =>
+    root.send('Target.closeTarget', { targetId: created.targetId }).pipe(quiet(`closing the hidden target ${created.targetId}`)),
   );
   const { sessionId } = yield* root.send('Target.attachToTarget', { targetId, flatten: true }).pipe(Effect.mapError(lost));
   return yield* browser.connection.attach(sessionId);
 });
+
+export const hiddenTarget = (browser: Browser) => heldTarget(browser, HIDDEN);
 
 const capturing = (build: BuildId): ProfileRecord => ({
   id: CAPTURE,
@@ -69,7 +73,7 @@ export const captureHost = (ensure: (record: ProfileRecord) => Effect.Effect<Bro
   );
   return {
     target: Effect.fn('ManagedHost.captureTarget')(function* (canvas) {
-      const session = yield* hiddenTarget(yield* browser);
+      const session = yield* heldTarget(yield* browser, WINDOWED);
       yield* session
         .send('Emulation.setDeviceMetricsOverride', {
           width: canvas.width,
