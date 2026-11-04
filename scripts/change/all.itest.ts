@@ -139,6 +139,65 @@ test('a cut native suite stays pending and its CPU survives a successful resume'
   }
 });
 
+test('the shards of one plan run every test file once and every suite without a test runner on the first shard', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'sharded-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    const write = (path: string, text: string) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    write('package.json', JSON.stringify({ workspaces: ['packages/*'] }));
+    write('packages/w/package.json', JSON.stringify({ scripts: { 'test:integration': 'testbed itest' } }));
+    for (const name of ['a', 'b', 'c'])
+      write(`packages/w/src/${name}.itest.ts`, `import { test } from 'bun:test';\ntest('${name}', () => {});\n`);
+    write('packages/n/package.json', JSON.stringify({ scripts: { 'test:integration': 'bun -e 0' } }));
+    const shard = async (value: string) => {
+      const report = join(root, `${value.replace('/', '-of-')}.json`);
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, 'all.ts'),
+          '--root',
+          root,
+          '--script',
+          'test:integration',
+          '--shard',
+          value,
+          '--report',
+          report,
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(code, stdout + stderr).toBe(0);
+      const ledger = join(`${report}.d`, `${encodeURIComponent('packages/w:test:integration')}.jsonl`);
+      return {
+        suites: (JSON.parse(readFileSync(report, 'utf8')) as { suites: { id: string }[] }).suites.map((suite) => suite.id),
+        files: readFileSync(ledger, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { type: string; file?: string })
+          .filter((row) => row.type === 'file')
+          .map((row) => row.file!.split('/').pop()!),
+      };
+    };
+    const one = await shard('1/2');
+    const two = await shard('2/2');
+    expect([...one.files, ...two.files].sort()).toEqual(['a.itest.ts', 'b.itest.ts', 'c.itest.ts']);
+    expect(one.suites).toContain('packages/n:test:integration');
+    expect(two.suites).not.toContain('packages/n:test:integration');
+    expect(existsSync(join(root, 'packages/w/.bun-test-timings.1-of-2.json'))).toBe(true);
+    expect(existsSync(join(root, 'packages/w/.bun-test-timings.2-of-2.json'))).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a package script finds the binaries its own package installs, as its package manager would', async () => {
   const root = mkdtempSync(join(tmpdir(), 'own-bin-'));
   try {

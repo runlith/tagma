@@ -9,9 +9,9 @@ import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
 import { acquireUnits, ADMITTED_ENV, budgetRoot, machineBudget, NICE, SLOT_ENV } from './slots.ts';
 import { junitOf, outcomesOf, runOf, slowOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
 import { HEADED_ENV } from './fixture.ts';
+import { shardTimings, TIMINGS } from './timings.ts';
 
 const REPO = resolve(import.meta.dir, '../../..');
-const TIMINGS = '.bun-test-timings.json';
 const TAIL_MS = 250;
 
 const KINDS: Readonly<Record<string, { readonly kind: Kind; readonly suffix: string; readonly pathspec: string }>> = {
@@ -224,8 +224,10 @@ const variantSeed = seed ?? (Number.isSafeInteger(inheritedSeed) ? inheritedSeed
 const junit = join(run.root, 'junit.xml');
 if (bunTest && option('--reporter') === undefined) command.push('--reporter=junit', `--reporter-outfile=${junit}`);
 if (bunTest && option('--timings') === undefined) {
-  command.push(`--timings=${TIMINGS}`);
-  if (option('--shard') === undefined) command.push('--update-timings');
+  const at = command.findIndex((part, index) => index < options() && (part === '--shard' || part.startsWith('--shard=')));
+  const shard = at === -1 ? undefined : command[at]!.startsWith('--shard=') ? command[at]!.slice('--shard='.length) : command[at + 1];
+  if (at !== -1 && shard === undefined) throw new Error('--shard needs a value');
+  command.push(...(shard === undefined ? [] : [`--timings=${shardTimings(shard)}`]), `--timings=${TIMINGS}`, '--update-timings');
 }
 
 const started = Number(process.hrtime.bigint()) / 1e6;

@@ -59,6 +59,10 @@
     "./memory": {
       "types": "./src/memory.ts",
       "default": "./src/memory.ts"
+    },
+    "./timings": {
+      "types": "./src/timings.ts",
+      "default": "./src/timings.ts"
     }
   },
   "scripts": {

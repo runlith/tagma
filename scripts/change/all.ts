@@ -6,13 +6,14 @@ import type { FileRow, Row } from '@runlith/testbed/ledger';
 import type { FileVerdict, OutcomeRow, RunRow } from '@runlith/testbed/report';
 import { machineBudget } from '@runlith/testbed/budget';
 import { runJobs, type Ended } from '@runlith/testbed/schedule';
+import { shardOf } from '@runlith/testbed/timings';
 import { packagesOf, workspacePaths } from './packages.ts';
 import { SCRIPTS, suitesOf, type Suite } from './suites.ts';
 
 const started = performance.now();
 const own = process.cpuUsage();
 const args = process.argv.slice(2);
-const values = new Set(['--root', '--jobs', '--seed', '--package', '--script', '--report', '--history', '--max-suites']);
+const values = new Set(['--root', '--jobs', '--seed', '--package', '--script', '--report', '--history', '--max-suites', '--shard']);
 for (let at = 0; at < args.length; at++) {
   if (values.has(args[at]!)) {
     if (args[at + 1] === undefined || args[at + 1]!.startsWith('--')) throw new Error(`${args[at]} needs a value`);
@@ -22,7 +23,7 @@ for (let at = 0; at < args.length; at++) {
 const value = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 if (args.includes('--help')) {
   console.log(
-    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan]`,
+    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--shard index/count] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan]`,
   );
   process.exit(0);
 }
@@ -35,6 +36,8 @@ const limit = Number(value('--max-suites') ?? Infinity);
 if (limit !== Infinity && (!Number.isInteger(limit) || limit < 1)) throw new Error('--max-suites must be a positive integer');
 const script = value('--script');
 if (script !== undefined && !SCRIPTS.some((one) => one === script)) throw new Error(`--script must be one of ${SCRIPTS.join(', ')}`);
+const shard = value('--shard');
+if (shard !== undefined) shardOf(shard);
 const paths = workspacePaths(root);
 const packages = packagesOf(paths, (path) => readFileSync(join(root, path), 'utf8'));
 if (value('--package') !== undefined && !packages.some((pkg) => (pkg.dir || '.') === value('--package')))
@@ -50,6 +53,7 @@ let suites = suitesOf(packages, paths, {
   randomize: args.includes('--randomize'),
   reports: artifacts,
   combineVitest: value('--package') === undefined,
+  shard,
 })
   .filter((suite) => value('--package') === undefined || (suite.directory || '.') === value('--package'))
   .filter((suite) => script === undefined || suite.script === script);
@@ -79,6 +83,7 @@ type Reading = {
   readonly jobs: number | undefined;
   readonly randomize: boolean;
   readonly seed: number | undefined;
+  readonly shard: string | undefined;
   readonly wall: number;
   readonly cpu: number;
   readonly complete: boolean;
@@ -88,8 +93,11 @@ type Reading = {
   readonly aborted: readonly Result[];
 };
 const previous = args.includes('--resume') ? (JSON.parse(readFileSync(report, 'utf8')) as Reading) : undefined;
-if (previous !== undefined && (previous.root !== root || previous.randomize !== args.includes('--randomize') || previous.seed !== seed))
-  throw new Error('--resume must use the same root, randomize and seed as its report');
+if (
+  previous !== undefined &&
+  (previous.root !== root || previous.randomize !== args.includes('--randomize') || previous.seed !== seed || previous.shard !== shard)
+)
+  throw new Error('--resume must use the same root, randomize, seed and shard as its report');
 if (previous === undefined && existsSync(report)) throw new Error(`Report already exists; use --resume or a new --report: ${report}`);
 if (previous !== undefined)
   suites = previous.plan.map((suite) =>
@@ -118,6 +126,7 @@ const save = (): Reading => {
     jobs,
     randomize: args.includes('--randomize'),
     seed,
+    shard,
     wall:
       (previous?.wall ?? 0) +
       performance.now() -
@@ -328,6 +337,6 @@ console.log(
 for (const result of results) for (const file of result.failed) console.log(`red: ${file}`);
 if (!reading.complete)
   console.log(
-    `Resume: bun run test:all --report '${report}' --resume${args.includes('--randomize') ? ' --randomize' : ''}${seed === undefined ? '' : ` --seed ${seed}`}${jobs === undefined ? '' : ` --jobs ${jobs}`}`,
+    `Resume: bun run test:all --report '${report}' --resume${args.includes('--randomize') ? ' --randomize' : ''}${seed === undefined ? '' : ` --seed ${seed}`}${shard === undefined ? '' : ` --shard ${shard}`}${jobs === undefined ? '' : ` --jobs ${jobs}`}`,
   );
 process.exitCode = results.some((row) => row.code !== 0) ? 1 : reading.complete ? 0 : 2;

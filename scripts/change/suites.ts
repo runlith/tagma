@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import { kindOf, runsAs } from '@runlith/testbed/kinds';
+import { shardOf } from '@runlith/testbed/timings';
 import type { Package } from './packages.ts';
 import { vitestConfigsOf } from './vitestConfigs.ts';
 
@@ -20,6 +21,7 @@ export type SuiteOptions = {
   readonly seed: number | undefined;
   readonly reports: string;
   readonly combineVitest: boolean;
+  readonly shard?: string | undefined;
 };
 
 export const SCRIPTS = ['test', 'test:integration', 'test:native'] as const;
@@ -33,6 +35,8 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
   if (options.jobs !== undefined && (!Number.isSafeInteger(options.jobs) || options.jobs < 1))
     throw new Error('--jobs must be a positive integer');
   const cli = `${quote(process.execPath)} ${quote(join(options.root, 'packages/testbed/src/cli.ts'))}`;
+  const first = options.shard === undefined || shardOf(options.shard).index === 1;
+  const sharded = options.shard === undefined ? '' : ` --shard=${options.shard}`;
   const listed = new Set(paths);
   const owners = [...packages].sort((a, b) => b.dir.length - a.dir.length);
   for (const path of paths) {
@@ -57,7 +61,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
       files: undefined,
       outputs: [output],
       stages: [
-        `${cli} ${quote(process.execPath)} --bun ${quote(VITEST)} run --config ${quote(join(options.root, 'scripts/change/vitest-all.ts'))} --reporter=default --reporter=json --outputFile=${quote(output)}${shuffled}`,
+        `${cli} ${quote(process.execPath)} --bun ${quote(VITEST)} run --config ${quote(join(options.root, 'scripts/change/vitest-all.ts'))} --reporter=default --reporter=json --outputFile=${quote(output)}${shuffled}${sharded && `${sharded} --passWithNoTests`}`,
       ],
     });
   }
@@ -68,19 +72,24 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
       const id = `${pkg.dir || '.'}:${script}`;
       const outputs: string[] = [];
       let named: number | undefined;
+      let shardable = false;
       const stages = source.split(/\s*&&\s*/).map((part, index) => {
         let command = part.replace(/^testbed\s+/, '');
         if (BUN_TEST.test(command)) {
+          shardable = true;
           if (!command.includes('$('))
             named = command.split(/\s+/).filter((part) => !part.startsWith('-') && TEST_FILE.test(part)).length || undefined;
           command = command.replace(/\s+--(?:randomize|seed=\S+)/g, '');
           if (options.randomize) command += ` --randomize${options.seed === undefined ? '' : ` --seed=${options.seed}`}`;
+          command += sharded;
         } else if (/\bvitest\s+run\b/.test(command)) {
+          shardable = true;
           command = command.replace(/\s+--sequence.seed(?:=\S+|\s+\d+)/g, '').replace(/\s+--(?:randomize|sequence.shuffle)/g, '');
           const output = join(options.reports, `${encodeURIComponent(id)}-${index}.vitest.json`);
           outputs.push(output);
           command += ` --reporter=default --reporter=json --outputFile=${quote(output)}`;
           if (options.randomize) command += ` --randomize${options.seed === undefined ? '' : ` --sequence.seed=${options.seed}`}`;
+          if (sharded !== '') command += `${sharded} --passWithNoTests`;
         } else if (options.jobs !== undefined && /\bswift\s+test\b/.test(command)) {
           command = command.replace(/\s+-j\s+\d+/g, '') + ` -j ${options.jobs}`;
         } else if (options.jobs !== undefined && /\bcargo\s+test\b/.test(command)) {
@@ -88,6 +97,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
         }
         return `${cli} ${command}`;
       });
+      if (!shardable && !first) continue;
       result.push({ id, directory: pkg.dir, script, files: named, stages, outputs });
     }
   }

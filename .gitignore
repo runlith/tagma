@@ -137,7 +137,7 @@ tsconfig.check.json
 coverage/
 *.lcov
 .nyc_output/
-.bun-test-timings.json
+.bun-test-timings*.json
 .jest-cache/
 playwright-report/
 test-results/
