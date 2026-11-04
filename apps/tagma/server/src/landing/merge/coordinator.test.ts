@@ -6,6 +6,7 @@ import { basisOf } from '../queue/basis.js';
 import { UNCHECKED } from '../../enforcement/contract/wire/checks.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import { BASE_ROOT, mergeFixture, SIDE_ROOT } from '../testing/mergeFixture.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 
 const refusal = <A, E extends { readonly _tag: string }>(work: Effect.Effect<A, E>) =>
   Effect.map(Effect.flip(work), (failure) => ('reason' in failure ? failure.reason : failure._tag));
@@ -82,6 +83,18 @@ it.effect('the merged tree is judged before publication and a refusal leaves bot
     expect(judged).toEqual([fixture.sideTree]);
     expect(fixture.memory.refs.get('refs/heads/main')).toBe(fixture.base);
     expect(fixture.memory.refs.get('refs/heads/side')).toBe(fixture.tip);
+  }),
+);
+
+it.effect('an unavailable judging graph leaves the merge unjudged and publishes its receipt', () =>
+  Effect.gen(function* () {
+    const fixture = yield* mergeFixture({
+      held: () => Effect.fail(new GateRefusal('inspection-failed', 'the judging graph does not open', ['repair the graph'])),
+      rules: { before: () => Effect.die('an unopened graph is not read inside the merge section'), after: () => Effect.void },
+    });
+    const merged = yield* fixture.merges.merge(1, SIDE_ROOT, {});
+    expect(merged.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining('the judging graph does not open') }]);
+    expect(fixture.memory.refs.get('refs/heads/main')).toBe(merged.base.head);
   }),
 );
 

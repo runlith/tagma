@@ -104,9 +104,18 @@ const committing = Effect.fn('checkout.commit')(function* (at: CheckoutAt, calle
           const origin = thread === null ? null : yield* origins.of({ projectId: home, threadId: thread }, root);
           const checkout: ChangeCheckout = { git, root, projectId, origin: proved };
           const held: ReshapeHolder = origin === null ? UNHELD : { _tag: 'held', work: origin.work };
-          const judge: IndexJudge | null = judging
-            ? (built, base, paths, merged) => checks.before({ kind: 'tree', projectId, root, base, built, merged, paths, caller: actor })
-            : null;
+          const judge: IndexJudge = (built, base, paths, merged) =>
+            checks.before({
+              kind: 'tree',
+              projectId,
+              root,
+              base,
+              built,
+              merged,
+              paths,
+              caller: actor,
+              advisory: judging ? undefined : true,
+            });
           const job = `checkout:${randomUUID()}`;
           const result = yield* Effect.result(
             making._tag === 'index'
@@ -184,7 +193,7 @@ const committing = Effect.fn('checkout.commit')(function* (at: CheckoutAt, calle
             (all, carried) => joined(all, carried._tag === 'Success' ? carried.success : NO_EDITS),
             staged._tag === 'Success' ? staged.success : NO_EDITS,
           );
-          if (judging) {
+          if (making._tag === 'index') {
             yield* checks.after({
               kind: 'tree',
               projectId,
@@ -192,6 +201,9 @@ const committing = Effect.fn('checkout.commit')(function* (at: CheckoutAt, calle
               commit: done.commit,
               paths: [...done.paths].sort(),
               caller: actor,
+              carried: judging
+                ? undefined
+                : read?.judgement?.watched.flatMap((one) => ('fingerprint' in one ? [{ ...one, holders: ['operator'] }] : [])),
             });
           } else {
             yield* rules.landed(GIT_COMMIT, {

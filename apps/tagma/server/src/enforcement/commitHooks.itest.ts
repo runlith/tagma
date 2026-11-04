@@ -48,6 +48,23 @@ const committed = Effect.fnUntraced(function* (root: string) {
 });
 
 layer(testGit, { excludeTestServices: true })('commit hooks', (it) => {
+  it.effect('an agent commit refuses when an executable CLI exits without a verdict', () =>
+    Effect.gen(function* () {
+      const root = yield* seeded;
+      const before = yield* ran(root, 'rev-parse', 'HEAD');
+      const entry = join(root, 'crashed.ts');
+      writeFileSync(entry, 'process.exit(3);\n');
+      yield* installCommitHooks(yield* Git, root, { ...ABSENT, runtime: process.execPath, entry });
+      writeFileSync(join(root, 'b.ts'), 'export const b = 1;\n');
+      yield* ran(root, 'add', 'b.ts');
+      const committed = yield* spawnedEffect(['git', 'commit', '-qm', 'no judgement'], {
+        cwd: root,
+        env: { ...person, [GRANT_VARIABLE]: 'thread' },
+      });
+      expect(committed.exitCode).not.toBe(0);
+      expect((yield* ran(root, 'rev-parse', 'HEAD')).out).toBe(before.out);
+    }),
+  );
   it.effect(
     'installing chains the hook that stood, installing again changes nothing, removing restores it, and a hooks path outside the repository is left alone',
     () =>

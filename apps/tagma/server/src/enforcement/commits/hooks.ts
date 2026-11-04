@@ -40,6 +40,7 @@ const bodies = (cli: HookCli): Readonly<Record<CommitHook, string>> => {
   const tagma = `runtime=${quoted(cli.runtime)}\nentry=${quoted(cli.entry)}`;
   const standing = '[ -x "$runtime" ] && [ -f "$entry" ]';
   const check = (args: string): string => `TAGMA_SERVER_URL=${quoted(cli.server)} "$runtime" "$entry" check${args}`;
+  const judged = `verdict="$(${check(' --gate')})"; status=$?\ncase "$status:$verdict" in 0:clean|2:unjudged) exit 0 ;; 1:refused) exit 1 ;; *) echo "tagma: the check exited $status without a recognised verdict" >&2; exit 1 ;; esac`;
   const person = (hook: CommitHook) =>
     [
       chaining(hook, ' || exit $?'),
@@ -47,7 +48,7 @@ const bodies = (cli: HookCli): Readonly<Record<CommitHook, string>> => {
       `[ -n "$${GRANT_VARIABLE}" ] && exit 0`,
       tagma,
       `${standing} || { echo "tagma: no Tagma stands at $entry, so nothing judged this commit" >&2; exit 0; }`,
-      `[ "$(${check(' --gate')})" != refused ]`,
+      judged,
     ].join('\n');
   const landed = (hook: CommitHook, merged: boolean) =>
     [
@@ -68,7 +69,7 @@ const bodies = (cli: HookCli): Readonly<Record<CommitHook, string>> => {
       `[ -z "$${GRANT_VARIABLE}" ] && exit 0`,
       tagma,
       `${standing} || { echo "tagma: no Tagma stands at $entry, and an agent's commit is judged or refused" >&2; exit 1; }`,
-      `[ "$(${check(' --gate')})" != refused ]`,
+      judged,
     ].join('\n'),
     'post-commit': landed('post-commit', false),
     'post-merge': landed('post-merge', true),

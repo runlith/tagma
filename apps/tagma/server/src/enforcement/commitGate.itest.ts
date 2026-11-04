@@ -212,13 +212,14 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
         const gate = yield* commitCase;
         yield* gate.put(
           'crash.js',
-          "export default { crash: async ({ tree }) => {\n  for (const path of tree.paths) if (((await tree.read(path)) ?? '').includes('CRASH')) process.exit(3);\n  return { tree: { findings: [] } };\n} };\n",
+          "export default { crash: async ({ tree }) => {\n  for (const path of tree.paths) if (((await tree.read(path)) ?? '').includes('CRASH')) throw new Error('checker key failed');\n  return { tree: { findings: [] } };\n}, guard: async ({ tree }) => {\n  const findings = [];\n  for (const path of tree.paths) if (((await tree.read(path)) ?? '').includes('WRONG')) findings.push({ fingerprint: 'wrong', path, message: 'wrong value' });\n  return { tree: { findings } };\n} };\n",
         );
         yield* gate.put('crashing.ts', 'export const ready = 1;\n');
         const crash = { program: 'crash.js', name: 'crash', concern: 'code', params: {}, files: ['crashing.ts'] };
+        const guard = { ...crash, name: 'guard' };
         const config = (yield* gate.ran(gate.repo, ['show', 'HEAD:tagma.config.ts'])).out.replace(
           '{"reexports":',
-          `{"crash":${JSON.stringify(crash)},"reexports":`,
+          `{"crash":${JSON.stringify(crash)},"guard":${JSON.stringify(guard)},"reexports":`,
         );
         yield* gate.put('tagma.config.ts', `${config}\n`);
         yield* gate.ran(gate.repo, ['add', '-A']);
@@ -238,12 +239,38 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
           code: 0,
         });
 
+        const guarded = yield* op(gate, gate.repo, 'create_block', {
+          title: 'No wrong value lands',
+          parentId: (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name,
+          tags: ['rule'],
+          sources: [{ kind: 'file', ref: 'crashing.ts' }],
+        });
+        const guardRule = (JSON.parse(guarded.out) as { block: { name: string } }).block.name;
+        expect(
+          yield* op(gate, gate.repo, 'enforce_rule', {
+            blockId: guardRule,
+            base: null,
+            strictness: 'gate',
+            on,
+            inspection: 'guard',
+          }),
+        ).toMatchObject({ code: 0 });
+
         yield* gate.put('crashing.ts', 'export const CRASH = 1;\n');
         yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
         const unjudged = yield* gate.world.tagma(['check', '--gate', '--json'], { cwd: gate.repo, env: SESSION });
         expect(unjudged.code).toBe(2);
         expect(JSON.parse(unjudged.out)).toMatchObject({ unjudged: [{ rule, cause: 'program', failed: expect.any(String) }] });
         expect(yield* gate.ran(gate.repo, ['commit', '-qm', 'past an unavailable inspection'], SESSION)).toMatchObject({ code: 0 });
+        const anonymous = yield* op(gate, gate.repo, 'check_rules', { over: 'all', inspection: 'crash' });
+        expect(anonymous.code).toBe(0);
+        expect(JSON.parse(anonymous.out)).toMatchObject({ unjudged: [{ rule: '', cause: 'program', failed: expect.any(String) }] });
+        yield* gate.put('crashing.ts', 'export const CRASH = 1; export const WRONG = 1;\n');
+        yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
+        const sibling = yield* gate.world.tagma(['check', '--gate', '--json'], { cwd: gate.repo, env: SESSION });
+        expect(sibling.code).toBe(1);
+        expect(JSON.parse(sibling.out)).toMatchObject({ violations: [expect.objectContaining({ rule: guardRule })] });
+        expect(yield* gate.ran(gate.repo, ['commit', '-qm', 'healthy sibling key refuses'], SESSION)).toMatchObject({ code: 1 });
 
         yield* gate.put('crashing.ts', `${FORWARD}export const CRASH = 1;\n`);
         yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
@@ -254,7 +281,9 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
           JSON.parse((yield* op(gate, gate.repo, 'read_checkout', { root: gate.repo })).out) as { checkout: { rootId: string } }
         ).checkout.rootId;
         const before = yield* gate.head();
-        expect(yield* op(gate, gate.repo, 'commit_checkout', { rootId, message: 'past a crashing checker' })).toMatchObject({ code: 0 });
+        const operatorCommit = yield* op(gate, gate.repo, 'commit_checkout', { rootId, message: 'past a crashing checker' });
+        expect(operatorCommit.code).toBe(0);
+        expect(JSON.parse(operatorCommit.out)).toMatchObject({ unjudged: [{ rule, cause: 'program', failed: expect.any(String) }] });
         const landed = yield* gate.head();
         expect(landed).not.toBe(before);
         expect(yield* calls()).toEqual([]);
@@ -264,6 +293,25 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
         expect(recorded.escaped.filter((one) => one.commit === landed).map((one) => [one.path, one.holder])).toEqual([
           ['crashing.ts', 'operator'],
         ]);
+        yield* gate.put('tagma.config.ts', `${config.replace(`"crash":${JSON.stringify(crash)},`, '')}\n`);
+        yield* gate.put('later.ts', FORWARD);
+        yield* gate.ran(gate.repo, ['add', 'tagma.config.ts', 'later.ts']);
+        expect(yield* gate.ran(gate.repo, ['commit', '-qm', 'past an unavailable key'], { TAGMA_ALLOW: '1' })).toMatchObject({ code: 0 });
+        const later = yield* gate.head();
+        const escaped = yield* gate.documentWhen((document) =>
+          document.escaped.some((one) => one.commit === later && one.path === 'later.ts'),
+        );
+        expect(escaped.escaped.filter((one) => one.commit === later).map((one) => [one.path, one.holder])).toEqual([
+          ['later.ts', 'operator'],
+        ]);
+        const history = JSON.parse((yield* op(gate, gate.repo, 'read_events', { limit: 100 })).out) as {
+          events: { op: string; blockName: string; payload: string }[];
+        };
+        expect(
+          history.events
+            .filter((entry) => entry.op === 'unjudged' && entry.blockName === rule)
+            .map((entry) => JSON.parse(entry.payload).cause),
+        ).toContain('unsupported');
       }),
   );
 

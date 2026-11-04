@@ -134,7 +134,7 @@ export default defineProgram({
         checker.id,
       )!.answer;
       const answer = yield* Effect.fromResult(answered);
-      expect(answer.map((one) => [one.rule, one.verdict.violations.length])).toEqual([
+      expect(answer.map((one) => [one.rule, one.verdict.violations.length]).sort()).toEqual([
         ['first', 1],
         ['second', 1],
         ['third', 1],
@@ -150,7 +150,7 @@ export default defineProgram({
     }),
   );
 
-  it.effect('a thrown key beside unprepared ones refuses once, naming every key that gave no reading', () =>
+  it.effect('a thrown key beside unprepared ones preserves the healthy reading and names each failed rule separately', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
       const root = yield* files.makeTempDirectoryScoped({ prefix: 'checker-unprepared-' });
@@ -174,14 +174,13 @@ export default defineProgram({
       const checker = checkerFor(root, checks[0]!);
       const bindings: ProgramBinding[] = checks.map((check) => ({ rule: check.key, check, places: ['src'], debt: [], checker }));
       const judged: GroupSubject = { ...subject(root), tree: head, base: null, sides: [subject(root).sides[0]] };
-      const refused = (yield* judgePrograms(judged, bindings).pipe(Effect.provideService(ProgramRoad, localRoad([])))).get(
-        checker.id,
-      )!.answer;
-      if (Result.isSuccess(refused)) return yield* Effect.die('a group with unprepared keys was judged');
-      expect(refused.failure.reason).toContain('first is unprepared: first holds no index');
-      expect(refused.failure.reason).toContain('third is unprepared: third holds no index');
-      expect(refused.failure.reason).toContain('fourth threw: Error: boom');
-      expect(refused.failure.reason).not.toContain('second');
+      const run = (yield* judgePrograms(judged, bindings).pipe(Effect.provideService(ProgramRoad, localRoad([])))).get(checker.id)!;
+      const readings = yield* Effect.fromResult(run.answer);
+      expect(readings.map((one) => [one.rule, one.verdict.violations.length])).toEqual([['second', 1]]);
+      expect([...run.failures.keys()].sort()).toEqual(['first', 'fourth', 'third']);
+      expect(run.failures.get('first')?.reason).toContain('first is unprepared: first holds no index');
+      expect(run.failures.get('third')?.reason).toContain('third is unprepared: third holds no index');
+      expect(run.failures.get('fourth')?.reason).toContain('fourth threw: Error: boom');
     }),
   );
 

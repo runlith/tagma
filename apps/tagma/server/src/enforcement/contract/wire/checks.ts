@@ -53,6 +53,7 @@ export type TreeSubject = {
   readonly job?: string;
   readonly branch?: string | null;
   readonly workdir?: string;
+  readonly advisory?: true;
 };
 
 export type FileSubject = {

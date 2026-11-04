@@ -9,6 +9,7 @@ import type { WorktreeRecord } from '../../worktrees/contract/service/worktrees.
 import type { ActChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import type { ActProgress } from '../../worktrees/contract/service/progress.js';
 import type { MergeChecks } from '../../worktrees/contract/service/mergeChecks.js';
+import type { GraphHeld } from '../contract/service/graphSyncing.js';
 import { MergeGit } from '../contract/service/mergeGit.js';
 import { Merges } from '../contract/service/merges.js';
 import type { MergeReceipt } from '../contract/wire/merge.js';
@@ -27,7 +28,13 @@ export const SIDE_ROOT = RootId.make('side');
 const empty = (): CheckoutArea => ({ entries: [], added: 0, removed: 0 });
 const unused = () => Effect.die('the merge fixture reached an unrelated operation');
 
-export const mergeFixture = Effect.fnUntraced(function* (options: { readonly rules?: ActChecks; readonly carried?: boolean } = {}) {
+export const mergeFixture = Effect.fnUntraced(function* (
+  options: {
+    readonly rules?: ActChecks;
+    readonly carried?: boolean;
+    readonly held?: GraphHeld;
+  } = {},
+) {
   const memory = memoryMerges();
   const journal = memoryMergeJournal();
   const baseTree = memory.tree({ 'seed.txt': 'seed\n' });
@@ -189,6 +196,7 @@ export const mergeFixture = Effect.fnUntraced(function* (options: { readonly rul
   const merge = integrate(memory.git, guards, gate, checkouts, holdings, checks, publications, tail, progress, commits, {
     sync: () => Effect.succeed('ordinary'),
     rules: options.rules,
+    held: options.held,
     carried: () => Effect.succeed(options.carried ?? false),
     coAuthored: () => Effect.succeed(true),
   });

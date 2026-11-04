@@ -356,12 +356,11 @@ export const ruleChecks = (options: {
           reason: landing.failure.message,
         });
       }
-      const { judged, tree } = yield* recorded(op, projectId, root, Effect.succeed(landing.success), 'landed', caller);
-      const unresolved = judged.unjudged.flatMap((one) =>
-        'failed' in one && (one.cause === 'unsupported' || one.cause === 'module-map') ? [`${one.rule}: ${one.failed}`] : [],
-      );
-      if (tree === null || judged.refused !== null || judged.unjudged.some((one) => 'gate' in one) || unresolved.length > 0)
-        return yield* new CommitRecordFailed({ reason: [whyUnjudged(judged), ...unresolved].filter((line) => line !== '').join('; ') });
+      const evaluated = yield* recorded(op, projectId, root, Effect.succeed(landing.success), 'landed', caller);
+      const { tree } = evaluated;
+      if (tree === null || evaluated.judged.refused !== null || evaluated.judged.unjudged.some((one) => 'gate' in one))
+        return yield* new CommitRecordFailed({ reason: whyUnjudged(evaluated.judged) });
+      const judged = yield* kept(options.graphOf, undefined, op, tree, caller, evaluated.judged);
       const failed = judged.unjudged.flatMap((one) => ('failed' in one ? [`${one.rule}: ${one.failed}`] : []));
       if (failed.length > 0)
         yield* Effect.logWarning('a landed commit is recorded without the rules that could not judge it; their re-measure judges them', {
@@ -456,7 +455,11 @@ export const ruleChecks = (options: {
               ),
             )
           : subject.kind === 'tree'
-            ? afterStart(subject.projectId, subject.rulesAt ?? subject.root, judging(op, subject)).pipe(
+            ? afterStart(
+                subject.projectId,
+                subject.rulesAt ?? subject.root,
+                judging(op, subject, subject.advisory === true ? 'landed' : 'before'),
+              ).pipe(
                 Effect.flatMap((judged) => kept(standing, options.refusals, op, subject, subject.caller, judged)),
                 Effect.withSpan(`${op}.before`),
               )

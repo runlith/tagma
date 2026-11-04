@@ -9,7 +9,6 @@ import { principalOf } from '../../executions/terminals/principals.js';
 import type { Checked } from '../../enforcement/contract/wire/checks.js';
 import type { ActChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
-import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { type FinishFailure, WorktreeFinishRefused, WorktreeUnavailable } from '../../worktrees/contract/wire/failures.js';
 import type { FinishingGate } from '../../worktrees/contract/service/retirement.js';
 import type { MergeChecks } from '../../worktrees/contract/service/mergeChecks.js';
@@ -384,12 +383,16 @@ export const integrate = (
                 caller: request.caller,
                 workdir: record.path,
               };
-              if (absorbed) return judged(rules, { ...subject, rulesAt: record.path, parted: false });
-              if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
+              const at = (rulesAt: string, parted: boolean): Effect.Effect<Checked, WorktreeFinishRefused> => {
+                const failure = unreadGraphs.get(rulesAt);
+                return failure === undefined
+                  ? judged(rules, { ...subject, rulesAt, parted })
+                  : Effect.succeed({ refused: null, watched: [], unjudged: [{ gate: 'unread', cause: failure }] });
+              };
+              if (absorbed) return at(record.path, false);
+              if (!carries || !paths.some(inGraphTree)) return at(base.root.path, false);
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>
-                behind.some(inGraphTree)
-                  ? judged(rules, { ...subject, rulesAt: base.root.path, parted: true })
-                  : judged(rules, { ...subject, rulesAt: record.path, parted: false }),
+                behind.some(inGraphTree) ? at(base.root.path, true) : at(record.path, false),
               );
             };
             const first = yield* judging(checked.tree, [...touched]);
@@ -469,19 +472,24 @@ export const integrate = (
           let unread: string | null = null;
           let took: string | null = null;
           let tookYielded: readonly string[] = [];
+          const unreadGraphs = new Map<string, string>();
           const ahead = Effect.fnUntraced(function* () {
             const held = options.held;
-            const unopened = (failure: GateRefusal) =>
-              new WorktreeUnavailable({
-                reason: 'storage',
-                message: `the graph this merge is judged by could not be opened: ${failure.reason}`,
-              });
-            if (held !== undefined && options.rules !== undefined) yield* Effect.mapError(held(projectId, base.root.path), unopened);
+            const holding = (root: string) =>
+              held === undefined
+                ? Effect.void
+                : Effect.match(held(projectId, root), {
+                    onSuccess: () => undefined,
+                    onFailure: (failure) => {
+                      unreadGraphs.set(root, `the graph this merge is judged by could not be opened: ${failure.reason}`);
+                    },
+                  });
+            if (options.rules !== undefined) yield* holding(base.root.path);
             if (held !== undefined && carries) {
               const tip = (yield* git.head(record.path)).commit;
               const baseTip = (yield* git.head(base.root.path)).commit;
               const parted = tip === null || baseTip === null ? [] : yield* git.changed(base.root.path, baseTip, tip, true);
-              if (parted.some(inGraphTree)) yield* Effect.mapError(held(projectId, record.path), unopened);
+              if (parted.some(inGraphTree)) yield* holding(record.path);
             }
             if (options.ready !== undefined) yield* Effect.mapError(options.ready(projectId, record.path), undelivered);
           });

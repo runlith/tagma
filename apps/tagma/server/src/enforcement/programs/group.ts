@@ -10,7 +10,7 @@ import {
 } from '@tagma/inspection/program';
 import { newViolations } from '@tagma/inspection/verdict';
 import { canonicalJson } from '@runlith/utils/object';
-import { Clock, Data, Effect, Option, Result, Schema } from 'effect';
+import { Clock, Effect, Option, Result, Schema } from 'effect';
 import { ProgramRoad } from '../../executions/contract/service/programs.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import type { Checker } from './checker.js';
@@ -65,10 +65,13 @@ export type ProgramRun<A> = {
 
 const rejected = (reason: string) => new InspectionFailed({ cause: 'program', reason });
 
-class Unprepared extends Data.TaggedError('Unprepared')<{
-  readonly reason: string;
-  readonly bindings: readonly [ProgramBinding, ...ProgramBinding[]];
-}> {}
+type GroupReading = {
+  readonly readings: readonly BindingReading[];
+  readonly failures: ReadonlyMap<string, InspectionFailed>;
+  readonly unprepared: readonly ProgramBinding[];
+};
+
+type GroupRun = ProgramRun<readonly BindingReading[]> & { readonly failures: ReadonlyMap<string, InspectionFailed> };
 
 const preparing = (subject: GroupSubject): GroupSubject => ({
   ...subject,
@@ -200,24 +203,22 @@ const execute = Effect.fn('enforcement.program.group')(function* (
         });
   const answer = readProgramAnswer(input, json);
   if (Result.isFailure(answer)) return yield* rejected(answer.failure);
-  const unanswered = answer.success.unanswered ?? [];
-  if (unanswered.length > 0) {
-    const named = (key: string): string =>
-      [...new Set(routes.filter((route) => route.key.key === key).map((route) => route.binding.check.key))].join(', ');
-    const reason = `${unanswered.length} of ${keys.size} program keys of ${checker.id} gave no reading: ${unanswered
-      .map((one) => `${named(one.key)} ${one.why === 'unprepared' ? 'is unprepared' : 'threw'}: ${one.reason}`)
-      .join('; ')}`;
-    if (unanswered.every((one) => one.why === 'unprepared')) {
-      const needing = new Set(unanswered.map((one) => one.key));
-      return yield* new Unprepared({
-        reason,
-        bindings: [...new Set(routes.filter((route) => needing.has(route.key.key)).map((route) => route.binding))] as [
-          ProgramBinding,
-          ...ProgramBinding[],
-        ],
-      });
-    }
-    return yield* new InspectionFailed({ cause: 'program', reason });
+  const unanswered = new Map((answer.success.unanswered ?? []).map((one) => [one.key, one]));
+  const failures = new Map<string, InspectionFailed>();
+  const unprepared = new Set<ProgramBinding>();
+  for (const { binding, key } of routes) {
+    const missed = unanswered.get(key.key);
+    if (missed === undefined) continue;
+    const preparing = missed.why === 'unprepared';
+    failures.set(
+      binding.rule,
+      new InspectionFailed({
+        cause: 'program',
+        unprepared: preparing,
+        reason: `${binding.check.key} ${preparing ? 'is unprepared' : 'threw'}: ${missed.reason}`,
+      }),
+    );
+    if (preparing) unprepared.add(binding);
   }
   const readings = new Map(answer.success.readings.map((one) => [`${one.key}/${one.side}`, one]));
   const sides = new Map(subject.sides.map((one) => [one.side, one]));
@@ -232,14 +233,17 @@ const execute = Effect.fn('enforcement.program.group')(function* (
     }
   >();
   for (const { binding, key, signature } of routes) {
-    if (measured.has(signature)) continue;
+    if (measured.has(signature) || unanswered.has(key.key)) continue;
     const prefix = binding.check.key;
     const values = new Map<string, readonly RuleViolation[]>();
     let covered: ReadonlySet<string> = new Set();
     for (const side of subject.sides) {
       const reading = readings.get(`${key.key}/${side.side}`)!;
       const found = scoped(key, side, reading);
-      if (Result.isFailure(found)) return yield* rejected(found.failure);
+      if (Result.isFailure(found)) {
+        failures.set(binding.rule, rejected(found.failure));
+        break;
+      }
       values.set(
         side.side,
         found.success.map((one): RuleViolation => ({
@@ -261,6 +265,7 @@ const execute = Effect.fn('enforcement.program.group')(function* (
         );
       }
     }
+    if (failures.has(binding.rule)) continue;
     const coverage = readings.get(`${key.key}/tree`)!.covered;
     measured.set(signature, {
       tree: values.get('tree')!,
@@ -275,41 +280,48 @@ const execute = Effect.fn('enforcement.program.group')(function* (
       },
     });
   }
-  return routes.map(({ binding, signature }): BindingReading => {
-    const reading = measured.get(signature)!;
-    const counted =
-      subject.mode === 'measure' || subject.base === null
-        ? { violations: reading.tree, occurrences: [], standing: [] }
-        : newViolations(reading.tree, reading.base, judgedDebt(binding.debt), { covers: (path) => reading.covered.has(path) });
-    return {
-      rule: binding.rule,
-      remeasure: reading.remeasure,
-      coverage: reading.coverage,
-      verdict: {
-        violations: counted.violations,
-        unjudged: [],
-        occurrences: counted.occurrences,
-        baseOccurrences: counted.standing,
-      },
-      found: [...new Set(reading.tree.map((one) => one.fingerprint))],
-    };
-  });
+  const answered = routes
+    .filter(({ binding }) => !failures.has(binding.rule))
+    .map(({ binding, signature }): BindingReading => {
+      const reading = measured.get(signature)!;
+      const counted =
+        subject.mode === 'measure' || subject.base === null
+          ? { violations: reading.tree, occurrences: [], standing: [] }
+          : newViolations(reading.tree, reading.base, judgedDebt(binding.debt), { covers: (path) => reading.covered.has(path) });
+      return {
+        rule: binding.rule,
+        remeasure: reading.remeasure,
+        coverage: reading.coverage,
+        verdict: {
+          violations: counted.violations,
+          unjudged: [],
+          occurrences: counted.occurrences,
+          baseOccurrences: counted.standing,
+        },
+        found: [...new Set(reading.tree.map((one) => one.fingerprint))],
+      };
+    });
+  return { readings: answered, failures, unprepared: [...unprepared] } satisfies GroupReading;
 });
 
-const stillUnprepared = (needing: Unprepared): InspectionFailed =>
-  new InspectionFailed({ cause: 'program', reason: needing.reason, unprepared: true });
-
-const read = (subject: GroupSubject, group: readonly [ProgramBinding, ...ProgramBinding[]], checker: Checker) =>
-  execute(subject, group, checker).pipe(
-    Effect.catchTag('Unprepared', (needing) =>
-      subject.mode === 'measure'
-        ? Effect.fail(stillUnprepared(needing))
-        : execute(preparing(subject), needing.bindings, checker).pipe(
-            Effect.andThen(execute(subject, group, checker)),
-            Effect.catchTag('Unprepared', (still) => Effect.fail(stillUnprepared(still))),
-          ),
-    ),
-  );
+const read = Effect.fnUntraced(function* (subject: GroupSubject, group: readonly [ProgramBinding, ...ProgramBinding[]], checker: Checker) {
+  const first = yield* execute(subject, group, checker);
+  const [head, ...tail] = first.unprepared;
+  if (subject.mode === 'measure' || head === undefined) return first;
+  const needing: [ProgramBinding, ...ProgramBinding[]] = [head, ...tail];
+  const prepared = yield* Effect.result(execute(preparing(subject), needing, checker));
+  const next = Result.isFailure(prepared) ? prepared : yield* Effect.result(execute(subject, needing, checker));
+  const failures = new Map(first.failures);
+  const retried = new Set(needing.map((binding) => binding.rule));
+  for (const rule of retried) failures.delete(rule);
+  if (Result.isFailure(next)) for (const rule of retried) failures.set(rule, next.failure);
+  else for (const [rule, failure] of next.success.failures) failures.set(rule, failure);
+  return {
+    readings: [...first.readings, ...(Result.isSuccess(next) ? next.success.readings : [])],
+    failures,
+    unprepared: [],
+  } satisfies GroupReading;
+});
 
 export const judgePrograms = Effect.fn('enforcement.programs.judge')(function* (
   subject: GroupSubject,
@@ -321,28 +333,32 @@ export const judgePrograms = Effect.fn('enforcement.programs.judge')(function* (
     if (group === undefined) groups.set(binding.checker.id, [binding]);
     else group.push(binding);
   }
-  const answers = new Map<string, ProgramRun<readonly BindingReading[]>>();
+  const answers = new Map<string, GroupRun>();
   for (const [identity, group] of groups) {
     const started = yield* Clock.monotonicTimeNanos;
     const checker = group[0].checker;
-    const answer = yield* read(subject, group, checker).pipe(
-      Effect.mapError((failure) => {
-        if ((failure.cause !== 'program' && failure.cause !== 'host') || failure.unprepared === true) return failure;
-        return new InspectionFailed({
-          cause: failure.cause,
-          split: failure.split,
-          worker: failure.worker,
-          reason: `${failure.reason}; checker ${checker.descriptor.adapter} environment: ${JSON.stringify(checker.cwd)}${checker.launch === null ? '' : `; argv: ${JSON.stringify(checker.launch)}`}`,
-          ways: [
-            ...(failure.ways ?? []),
-            `if a tool or dependency is missing, run the repository's documented setup command in ${JSON.stringify(checker.cwd)} now, then run the inspection again`,
-            `if new worktrees need that setup, write_setting with project ${subject.projectId}, key "worktrees.setupRun", and value set to the same command; it runs before a new checkout's first turn, not for this existing checkout`,
-          ],
-        });
-      }),
-      Effect.result,
-    );
-    answers.set(identity, { answer, ms: Math.round(Number((yield* Clock.monotonicTimeNanos) - started) / 1e6) });
+    const diagnosed = (failure: InspectionFailed): InspectionFailed => {
+      if ((failure.cause !== 'program' && failure.cause !== 'host') || failure.unprepared === true) return failure;
+      return new InspectionFailed({
+        cause: failure.cause,
+        split: failure.split,
+        worker: failure.worker,
+        reason: `${failure.reason}; checker ${checker.descriptor.adapter} environment: ${JSON.stringify(checker.cwd)}${checker.launch === null ? '' : `; argv: ${JSON.stringify(checker.launch)}`}`,
+        ways: [
+          ...(failure.ways ?? []),
+          `if a tool or dependency is missing, run the repository's documented setup command in ${JSON.stringify(checker.cwd)} now, then run the inspection again`,
+          `if new worktrees need that setup, write_setting with project ${subject.projectId}, key "worktrees.setupRun", and value set to the same command; it runs before a new checkout's first turn, not for this existing checkout`,
+        ],
+      });
+    };
+    const result = yield* Effect.result(read(subject, group, checker));
+    answers.set(identity, {
+      answer: Result.isFailure(result) ? Result.fail(diagnosed(result.failure)) : Result.succeed(result.success.readings),
+      failures: Result.isFailure(result)
+        ? new Map()
+        : new Map([...result.success.failures].map(([rule, failure]) => [rule, diagnosed(failure)])),
+      ms: Math.round(Number((yield* Clock.monotonicTimeNanos) - started) / 1e6),
+    });
   }
   return answers;
 });

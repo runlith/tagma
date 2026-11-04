@@ -66,7 +66,11 @@ const run = (alter: (answer: ProgramAnswer) => unknown, debt: ProgramBinding['de
         },
       }),
     ),
-    (answers) => answers.get(checker.id)!.answer,
+    (answers) => {
+      const run = answers.get(checker.id)!;
+      const failure = run.failures.get(binding.rule);
+      return failure === undefined ? run.answer : Result.fail(failure);
+    },
   );
 
 const mutations: readonly [string, (answer: ProgramAnswer) => unknown][] = [

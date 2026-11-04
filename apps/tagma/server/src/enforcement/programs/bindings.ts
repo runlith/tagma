@@ -81,6 +81,11 @@ export const judgeBindings = Effect.fn('enforcement.bindings.judge')(function* (
       answers.set(program.rule, { answer: Result.fail(run.answer.failure), ms });
       continue;
     }
+    const failure = run.failures.get(program.rule);
+    if (failure !== undefined) {
+      answers.set(program.rule, { answer: Result.fail(failure), ms });
+      continue;
+    }
     const readings = run.answer.success.filter((reading) => reading.rule === program.rule);
     answers.set(program.rule, {
       answer: Result.succeed({
