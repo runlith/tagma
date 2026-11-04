@@ -1,13 +1,14 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Context, Effect, FileSystem, Layer, Result } from 'effect';
+import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Result } from 'effect';
 import { arrive, enterTrial } from '../installation/process/trial.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { passAttempt, readAttempt, writeAttempt, writeReturn } from '../installation/closure/attempt.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { releaseAt } from '../installation/closure/manifests.js';
+import { verifyInstallation } from '../installation/closure/read.js';
 import { swapCurrent } from '../platform/lock/versionedDirectories.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import { type InstallPlace, installRelease, type Weigh } from './install.js';
@@ -168,18 +169,28 @@ describe('install-from', () => {
       }).pipe(Effect.provide(world)),
   );
 
-  it.live('two installs at once land one after the other, both moving from the release that served, and leave no copy half made', () =>
+  it.live('an install refuses if another becomes current while the host is asked, leaving both published releases whole', () =>
     Effect.gen(function* () {
-      const { root } = yield* World;
+      const { root, place } = yield* World;
       const { version } = yield* landed(yield* built('six', '0.6.0'));
       passAttempt(root, version);
       const [seven, eight] = [yield* built('seven', 'a7a7a7a 20261015T070000Z'), yield* built('eight', 'b8b8b8b 20261015T080000Z')];
-      const both = yield* Effect.all([landed(seven), landed(eight)], { concurrency: 2 });
-      const current = yield* standing();
-      const last = both.find((one) => one.version === current)!;
-      const first = both.find((one) => one !== last)!;
-      expect([first.previous, last.previous, attemptAt(root)?.from]).toEqual([version, version, version]);
-      expect((yield* versions()).toSorted()).toEqual([version, last.version].toSorted());
+      const asked = yield* Deferred.make<string>();
+      const resume = yield* Deferred.make<void>();
+      const weigh: Weigh = (candidate) =>
+        Deferred.succeed(asked, candidate).pipe(Effect.andThen(Deferred.await(resume)), Effect.andThen(serverless(candidate)));
+      const first = yield* Effect.forkScoped(
+        Effect.result(installRelease(carriedIn(seven), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), false, weigh)),
+      );
+      const candidate = yield* Deferred.await(asked);
+      const last = yield* landed(eight);
+      expect((yield* versions()).toSorted()).toEqual([version, last.version, basename(candidate)].toSorted());
+      expect((yield* verifyInstallation(candidate)).identity.build).toBe('a7a7a7a 20261015T070000Z');
+      expect((yield* verifyInstallation(last.root)).identity.build).toBe('b8b8b8b 20261015T080000Z');
+      yield* Deferred.succeed(resume, undefined);
+      const refused = yield* Fiber.join(first);
+      expect(refused._tag === 'Failure' ? [refused.failure.step, refused.failure.code] : 'landed').toEqual(['current', 'current-moved']);
+      expect([yield* standing(), last.previous, attemptAt(root)?.from]).toEqual([last.version, version, version]);
       expect(readdirSync(root).filter((name) => name.endsWith('.incoming'))).toEqual([]);
     }).pipe(Effect.provide(world)),
   );
