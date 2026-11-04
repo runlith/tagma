@@ -1,12 +1,29 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { cameUp } from './came.js';
 import type { BuildServer, HealthAnswer } from './port.js';
 import { CurrentInvocation } from '../platform/cli/verb.js';
 import type { StartupState } from '../installation/contract/wire/restart.js';
-import { testProcesses as processes } from '../installation/testing/processes.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
+
+const unread = (): never => {
+  throw new Error('a remote server is read through its door, never the process table');
+};
+const processes = Layer.succeed(
+  Processes,
+  Processes.of({
+    scan: () => Effect.die('a remote server is read through its door'),
+    table: Effect.die('a remote server is read through its door'),
+    members: () => Effect.die('a remote server is read through its door'),
+    facts: () => Effect.die('a remote server is read through its door'),
+    identity: unread,
+    resolve: unread,
+    compareBirth: unread,
+    bornBetween: unread,
+  }),
+);
 
 const channel: Channel = {
   id: 'dev',
