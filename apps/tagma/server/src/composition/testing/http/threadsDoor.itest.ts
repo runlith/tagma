@@ -11,11 +11,11 @@ import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { modelDefaults } from '../claudeLogin.js';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { DefaultAccounts } from '../../../providers/contract/service/accounts.js';
-import { makeDoorWorld } from '../doorFixture.js';
+import { ProtocolWorld, protocolWorld } from '../threads/protocolWorld.js';
 
 const setup = Effect.gen(function* () {
-  const world = yield* makeDoorWorld();
-  return { world, projectId: yield* world.stealthProject(), elsewhere: yield* world.stealthProject() };
+  const { world, projectId } = yield* ProtocolWorld;
+  return { world, projectId, elsewhere: yield* world.stealthProject() };
 });
 class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('testing/ThreadsDoor') {}
 
@@ -68,7 +68,9 @@ type ThreadBody = {
 };
 const thread = (answer: { body: unknown }) => (answer.body as ThreadBody).snapshot.thread;
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true })('threads HTTP door', (it) => {
+layer(Layer.effect(Place, setup).pipe(Layer.provide(protocolWorld({ name: 'threads-door', own: 'harness executables on PATH' }))), {
+  excludeTestServices: true,
+})('threads HTTP door', (it) => {
   it.effect('token ingress adds one catalog subscription account and refuses anything else', () =>
     Effect.gen(function* () {
       const { world } = yield* Place;
@@ -354,7 +356,7 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('threads HTTP d
       yield* units.write('threadsDoor', (tx) =>
         tx.run(
           store.db.run(
-            sql`insert into thread_run (id, thread_id, status, owner_id, finished_at, started_at, heartbeat_at, created_at, updated_at) values (${earlierRunId}, ${threadId}, 'completed', ${ownerId}, ${earlierAt}, ${earlierAt}, ${earlierAt}, ${earlierAt}, ${earlierAt}), (${latestRunId}, ${threadId}, 'completed', ${ownerId}, ${latestAt}, ${latestAt}, ${latestAt}, ${latestAt}, ${latestAt})`,
+            sql`insert into thread_run (id, thread_id, status, owner_id, finished_at, started_at, heartbeat_at, created_at, updated_at, settled_notified_at) values (${earlierRunId}, ${threadId}, 'completed', ${ownerId}, ${earlierAt}, ${earlierAt}, ${earlierAt}, ${earlierAt}, ${earlierAt}, ${earlierAt}), (${latestRunId}, ${threadId}, 'completed', ${ownerId}, ${latestAt}, ${latestAt}, ${latestAt}, ${latestAt}, ${latestAt}, ${latestAt})`,
           ),
         ),
       );
