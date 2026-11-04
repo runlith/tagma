@@ -1,9 +1,7 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { Effect, Layer } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { bornThread } from '../native-harness/testing/born.js';
 import { fixtureMigrations } from '../composition/testing/migrations.js';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { MachineUnits } from '../platform/contract/service/units.js';
@@ -22,21 +20,20 @@ layer(threadRecordsLayer.pipe(Layer.provideMerge(base)))('detachment', (it) => {
     'a detached subtree preserves its lineage, refuses a blocked return and rejoins its parent with its pin before an archived child detaches',
     () =>
       Effect.gen(function* () {
-        const store = yield* MachineStore;
         const units = yield* MachineUnits;
         const records = yield* ThreadRecords;
-        const birth = (id: string, parent: string | null, root: string, name: string | null = null) =>
-          bornThread(store.db, {
-            id,
-            ownerId: 'owner',
-            agentId: 'tagma',
-            parentThreadId: parent,
-            spawnRootId: root,
-            cacheGroup: root,
-            name,
-            authority: THREAD_AUTHORITY_DEFAULT,
-          });
         const write = <A, E>(work: Parameters<typeof units.write<A, E>>[1]) => units.write(records.writes, work);
+        const birth = (id: string, parent: string | null, root: string, name: string | null = null) =>
+          write((unit) =>
+            records.insert(unit, {
+              id,
+              principalId: 'owner',
+              agentId: 'tagma',
+              parentId: parent,
+              spawnRootId: root,
+              name,
+            }),
+          );
         const archive = (id: string, at: Date | null) => write((unit) => records.setArchived(unit, [id], at));
         yield* birth('x', null, 'x');
         yield* birth('y', 'x', 'x', 'y');

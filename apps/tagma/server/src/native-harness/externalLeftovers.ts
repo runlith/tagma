@@ -5,7 +5,7 @@ import { MachineStore, type StoreDb } from '../platform/contract/service/store.j
 import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { threadCompactionCheckpoint, threadHistoryItem, threadLog, threadPrunedToolCall } from './store/thread.js';
-import { thread, threadEntry, threadRun } from '../threads/store/kernel.js';
+import { runRows, thread, threadEntry, threadRun } from '../threads/store/kernel.js';
 import { threadRecord } from '../thread-record/store/table.js';
 import { threadBase, threadEvent } from '../threads/store/journal.js';
 import { payloadField } from '../threads/store/fields.js';
@@ -57,7 +57,7 @@ export const clearExternalLeftovers = Effect.gen(function* () {
     ),
   );
   for (const { id } of pending) {
-    yield* units.write(writes('threads.clearExternalLeftovers', [threadEvent, ...CHILDREN]), (unit) => clearOne(db, unit, id));
+    yield* units.write(writes('threads.clearExternalLeftovers', [threadEvent, ...CHILDREN, runRows]), (unit) => clearOne(db, unit, id));
   }
   return pending.length;
 });
