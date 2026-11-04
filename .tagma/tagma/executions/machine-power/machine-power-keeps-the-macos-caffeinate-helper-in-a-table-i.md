@@ -14,9 +14,9 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: apps/tagma/server/src/power/sleepAssertion.ts
-  - kind: file
     ref: apps/tagma/server/src/power/power.ts
+  - kind: file
+    ref: apps/tagma/server/src/power/sleepAssertion.ts
 ---
 The idle-sleep assertion is a per-OS table in the module's shared file: `darwin` holds the `/usr/bin/caffeinate` helper and its user-facing limit text, and every other platform answers that none is held. The manifest passes `process.platform` in.
 

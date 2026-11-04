@@ -14,11 +14,11 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: packages/agent-tools/src/world/machine.ts
-  - kind: file
     ref: packages/agent-tools/src/removal/patterns.ts
   - kind: file
     ref: packages/agent-tools/src/removal/selection.ts
+  - kind: file
+    ref: packages/agent-tools/src/world/machine.ts
 ---
 The machine world of the tools chooses the shell program and the child-process spawner by OS, and the removal tool reads the platform fact out of the world to switch path and glob semantics. The world carries `platform` as a fact, so the tools learn the OS and branch on it themselves.
 

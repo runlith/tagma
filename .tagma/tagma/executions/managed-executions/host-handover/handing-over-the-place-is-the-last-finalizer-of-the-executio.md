@@ -7,11 +7,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/executions/host/departure.ts
   - kind: symbol
-    ref: apps/tagma/server/src/executions/host/custody.ts
-    symbol: makeTerminalHostCustody
-  - kind: symbol
     ref: apps/tagma/server/src/executions/assembly.ts
     symbol: executionsLayer
+  - kind: symbol
+    ref: apps/tagma/server/src/executions/host/custody.ts
+    symbol: makeTerminalHostCustody
 ---
 - **Arming.** `SuccessionSteps.prepare` after `STANDING_BY` asks the host to prepare the candidate only if a candidate stands and the host answers. No candidate — nothing to hand over; the host isn't running — the successor itself puts the candidate in place and raises the holder. A candidate whose manifest this build can't read (a part role it doesn't know) also stands: the host judges it, and a host refusal cancels the restart. Read as absent, it would pass preparation silently: the predecessor leaves, the logic rejects the candidate at handover on signal, and the new server stays with no host.
 - **Order.** The departure finalizer registers after the host client in the executions scope, so floor consumers close before departure and the client closes afterward. Without a prepared handover, this finalizer establishes the current client session before choosing the floor's remembered custody to release, then awaits the host's answer before closing the client: reconnect can re-take custody under another connection, and socket close alone does not prove the host has settled the disconnect, so the next server can arrive while custody still names its predecessor. An unreachable or refused release is reported and left for disconnect settlement. The client owns a separate scope for its lazily opened connections: attaching them directly to the executions scope would register their closes after departure, closing the wire before quiesce and making its reconnect fork an already-closed scope. After Yield nobody in the predecessor talks to the host, and the client is bound to the predecessor's digest and won't connect to the new logic.

@@ -13,11 +13,11 @@ edges:
     to: 01a14c05-9e8f-7c75-a633-b2a43cf80c5f
 sources:
   - kind: file
+    ref: apps/tagma/app/src/lib/app/chrome/RailPins.svelte.ts
+  - kind: file
     ref: apps/tagma/app/src/lib/features/projects/Strip.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/Visits.svelte.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/app/chrome/RailPins.svelte.ts
 ---
 The dock's set and order, the remembered place in each project and the rail's pinned places are the operator's own arrangement, yet they live in the window's `localStorage` (`tagma.strip`, `tagma.visits`, `tagma.rail`). `localStorage` is split by origin, so a window on another host or port — the dev front beside the built one, a browser on `127.0.0.1` or a LAN address, another device — shows another dock, a reset profile loses it silently, and project ids stored there live apart from the registry that issues them. The operator decided: the arrangement looks the same wherever he opens Tagma.
 

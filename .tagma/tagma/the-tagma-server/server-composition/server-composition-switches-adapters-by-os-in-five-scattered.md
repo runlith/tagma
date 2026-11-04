@@ -14,15 +14,15 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: apps/tagma/server/src/composition/server.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/editors.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/speech.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/browser.ts
   - kind: file
     ref: apps/tagma/server/src/composition/children.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/editors.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/server.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/speech.ts
 ---
 Composition is where an adapter may be chosen by OS, but here five files each make their own `process.platform` choice instead of one platform switch, and two carry behaviour beyond the choice.
 

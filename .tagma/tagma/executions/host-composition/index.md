@@ -115,8 +115,6 @@ sources:
   - kind: file
     ref: packages/execution-host/src/MachineLoad.itest.ts
   - kind: file
-    ref: packages/execution-host/src/readings.darwin.itest.ts
-  - kind: file
     ref: packages/execution-host/src/main.ts
   - kind: file
     ref: packages/execution-host/src/managedShell.itest.ts
@@ -130,6 +128,8 @@ sources:
     ref: packages/execution-host/src/ProvenSet.itest.ts
   - kind: file
     ref: packages/execution-host/src/readerRelease.itest.ts
+  - kind: file
+    ref: packages/execution-host/src/readings.darwin.itest.ts
   - kind: file
     ref: packages/execution-host/src/recovery.itest.ts
   - kind: file

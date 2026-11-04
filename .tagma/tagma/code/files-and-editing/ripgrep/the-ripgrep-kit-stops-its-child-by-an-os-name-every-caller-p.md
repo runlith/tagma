@@ -14,15 +14,15 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: packages/ripgrep/src/run.ts
-  - kind: file
-    ref: packages/navigation/src/navigation.ts
-  - kind: file
     ref: apps/tagma/server/src/checkout-files/search/content.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/navigation.ts
   - kind: file
     ref: apps/tagma/server/src/executions/commands/search.ts
   - kind: file
-    ref: apps/tagma/server/src/composition/navigation.ts
+    ref: packages/navigation/src/navigation.ts
+  - kind: file
+    ref: packages/ripgrep/src/run.ts
 ---
 A search run carries a `platform` string and the kit picks its stop ladder from it: the Windows kill-with-escalation or the POSIX INT, TERM, KILL ladder. Every caller fills the field with `process.platform`, so the OS name travels through four shared modules to one branch.
 

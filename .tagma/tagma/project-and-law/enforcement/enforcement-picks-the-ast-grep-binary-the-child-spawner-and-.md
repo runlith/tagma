@@ -14,11 +14,11 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
+    ref: apps/tagma/server/src/enforcement/commits/journal.ts
+  - kind: file
     ref: apps/tagma/server/src/enforcement/programs/ast-grep.ts
   - kind: file
     ref: apps/tagma/server/src/enforcement/workers/inspecting.ts
-  - kind: file
-    ref: apps/tagma/server/src/enforcement/commits/journal.ts
 ---
 Three shared enforcement files branch on the OS.
 

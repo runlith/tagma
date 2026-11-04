@@ -15,9 +15,9 @@ edges:
     to: 01a14f4a-f4a6-7342-a011-3a1876fcb7d4
 sources:
   - kind: file
-    ref: packages/chat-ui/src/TranscriptVirtualizer.svelte.ts
-  - kind: file
     ref: packages/chat-ui/src/TranscriptViewport.svelte.ts
+  - kind: file
+    ref: packages/chat-ui/src/TranscriptVirtualizer.svelte.ts
   - kind: file
     ref: packages/virtual-list/src/FollowingViewport.svelte.ts
 ---
