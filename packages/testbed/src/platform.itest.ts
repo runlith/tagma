@@ -22,7 +22,7 @@ test('platform files are selected before importing them in discovered and explic
     const child = Bun.spawn([process.execPath, CLI, ...args], { cwd: root, env: process.env, stdout: 'pipe', stderr: 'pipe' });
     const [out, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect(code, out + error).toBe(0);
-    return out
+    return `${out}\n${error}`
       .split('\n')
       .filter((line) => line.startsWith('selected:'))
       .map((line) => line.slice('selected:'.length))
