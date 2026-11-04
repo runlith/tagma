@@ -25,7 +25,7 @@ export class ServerAppState implements AppStateStorage {
   private readonly lanes = new Map<string, Lane>();
   private readonly held = new Map<string, Remote>();
   private readonly listeners = new Map<string, Set<(value: string | null) => void>>();
-  private readonly waiting: (() => void)[] = [];
+  private waiting: { readonly act: () => void; readonly refused: ((error: unknown) => void) | undefined }[] = [];
   private top = -1;
   private standing = -1;
   private reading = false;
@@ -55,9 +55,9 @@ export class ServerAppState implements AppStateStorage {
     return this.loaded;
   }
 
-  whenReady(act: () => void): void {
+  whenReady(act: () => void, refused?: (error: unknown) => void): void {
     if (this.loaded) act();
-    else this.waiting.push(act);
+    else this.waiting.push({ act, refused });
   }
 
   getItem(key: string): string | null {
@@ -163,6 +163,9 @@ export class ServerAppState implements AppStateStorage {
       (error: unknown) => {
         this.reading = false;
         this.failure.report(error);
+        const told = this.waiting.filter((waiter) => waiter.refused !== undefined);
+        this.waiting = this.waiting.filter((waiter) => waiter.refused === undefined);
+        for (const { refused } of told) refused?.(error);
       },
     );
   }
@@ -176,7 +179,7 @@ export class ServerAppState implements AppStateStorage {
     }
     this.loaded = true;
     for (const key of this.listeners.keys()) this.tell(key);
-    for (const act of this.waiting.splice(0)) act();
+    for (const { act } of this.waiting.splice(0)) act();
   }
 
   private tell(key: string): void {

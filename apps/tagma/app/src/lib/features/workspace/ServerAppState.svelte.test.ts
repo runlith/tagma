@@ -21,6 +21,7 @@ function server(documents: Record<string, string> = {}) {
   const feeds = new Set<(event: AppStateEvent) => void>();
   let opened: Promise<void> = Promise.resolve();
   let refusing = false;
+  let unread = false;
   const publish = (event: AppStateEvent) => {
     for (const feed of feeds) feed(event);
   };
@@ -32,6 +33,7 @@ function server(documents: Record<string, string> = {}) {
         );
         const at = revision;
         await opened;
+        if (unread) throw new Error('the read was refused');
         return { status: 'read', documents: standing, revision: at };
       }
       if (refusing) throw new Error('the write was refused');
@@ -51,6 +53,7 @@ function server(documents: Record<string, string> = {}) {
     kept,
     publish,
     refuse: (refuses: boolean) => void (refusing = refuses),
+    refuseReads: (refuses: boolean) => void (unread = refuses),
     missed: (key: string, value: string) => {
       kept.set(key, { value, revision: ++revision });
       return revision;
@@ -82,6 +85,26 @@ test('a window reads nothing and refuses a write until the documents arrive, the
   await drained();
   expect([window.state.ready, window.state.getItem(KEY), window.heard]).toEqual([true, '{"members":[1]}', ['{"members":[1]}']]);
   expect(window.failures).toEqual([]);
+});
+
+test('a refused first read settles an awaited readiness with the refusal, and an act made earlier waits for the read that succeeds', async () => {
+  const at = server({ [KEY]: '{"members":[1]}' });
+  at.refuseReads(true);
+  const window = at.window();
+  const refusals: unknown[] = [];
+  let acted = false;
+  window.state.whenReady(
+    () => undefined,
+    (error) => refusals.push(error),
+  );
+  window.state.whenReady(() => (acted = true));
+  await drained();
+  expect([refusals.length, acted, window.state.ready]).toEqual([1, false, false]);
+
+  at.refuseReads(false);
+  at.publish({ kind: 'current', revision: 1 });
+  await drained();
+  expect([acted, window.state.ready, window.state.getItem(KEY)]).toEqual([true, true, '{"members":[1]}']);
 });
 
 test('one window’s write reaches the other at once, its own echo tells it nothing, and an older change from elsewhere never overwrites it', async () => {

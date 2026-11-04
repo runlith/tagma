@@ -3,7 +3,7 @@ import { Service } from '@runlith/layer/key';
 
 export interface AppStateStorage extends PlatformStorage {
   readonly ready: boolean;
-  whenReady(act: () => void): void;
+  whenReady(act: () => void, refused?: (error: unknown) => void): void;
 }
 
 export class AppState extends Service<AppStateStorage>()('AppState', { tier: 'app' }) {}

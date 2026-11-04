@@ -11,7 +11,7 @@ export const load = App.load(runtime, function* () {
   const workspace = yield* Workspace;
   const visits = yield* Visits;
   const state = yield* AppState;
-  const documents = new Promise<void>((done) => state.whenReady(done));
+  const documents = new Promise<void>((done, refused) => state.whenReady(done, refused));
   return Promise.all([workspace.ready, documents]).then(async () => {
     const entry = workspace.resumed();
     if (entry !== null) redirect(307, visits.resume(entry));
