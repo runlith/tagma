@@ -43,7 +43,8 @@ jobs:
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
     steps:
-      - uses: actions/cache/restore@v6
+      - if: inputs.test-pattern == ''
+        uses: actions/cache/restore@v6
         with:
           path: timings
           key: timings-${{ inputs.name }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -134,10 +135,10 @@ jobs:
             display=(xvfb-run -a)
           fi
           "${display[@]}" bun run test:all --stream --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} ${TEST_PATTERN:+--test-name-pattern "$TEST_PATTERN"} --report "$RUNNER_TEMP/report/report.json"
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && inputs.test-pattern == '' }}
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"
-      - if: ${{ !cancelled() }}
+      - if: ${{ !cancelled() && inputs.test-pattern == '' }}
         uses: actions/upload-artifact@v7
         with:
           name: timings-${{ inputs.name }}-${{ matrix.shard }}
@@ -155,7 +156,7 @@ jobs:
 
   timings:
     needs: run
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.test-pattern == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
