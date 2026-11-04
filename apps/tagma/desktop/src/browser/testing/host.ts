@@ -11,6 +11,7 @@ import { Profiles } from '../profiles.js';
 
 const SERVER_ENV = 'TAGMA_TEST_BROWSER_SERVER';
 const DATA_ENV = 'TAGMA_TEST_BROWSER_DATA';
+const SURFACE = 'data:text/html,<title>surface</title>';
 
 type Command = { readonly id: number; readonly show?: string; readonly reload?: true };
 
@@ -34,7 +35,7 @@ void app.whenReady().then(() => {
   const served = new BrowserHost(profiles, 'cleaned', { newWindow: () => undefined, reveal: () => undefined });
   host = served;
   const surface = new BrowserWindow({ show: false, width: 1000, height: 800, webPreferences: { sandbox: true, contextIsolation: true } });
-  void surface.loadURL('data:text/html,<title>surface</title>');
+  void surface.loadURL(SURFACE);
   createInterface({ input: process.stdin }).on('line', (line) => {
     const command = JSON.parse(line) as Command;
     const page = command.show === undefined ? undefined : served.page(command.show);
@@ -42,7 +43,7 @@ void app.whenReady().then(() => {
     if (command.reload === true) surface.webContents.reload();
     process.stdout.write(`${JSON.stringify({ done: command.id })}\n`);
   });
-  const declarer = new Declaring(served, (url) => url === surface.webContents.getURL());
+  const declarer = new Declaring(served, (url) => url === SURFACE);
   declarer.install();
   Effect.runFork(serveHost({ surface: new URL(server), ours: async () => true, host: hostIdIn(data), executor: served, declarer }));
 });
