@@ -13770,10 +13770,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/cdp/src/session.ts#SendArgs",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/cdp/src/session.ts#EventName",
           "owner": "5a3bed29"
         },
