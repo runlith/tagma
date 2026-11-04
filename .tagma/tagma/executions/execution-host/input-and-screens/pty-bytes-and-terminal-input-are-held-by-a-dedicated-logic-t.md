@@ -1,6 +1,6 @@
 ---
 id: 01a17b1b-8016-7f44-ab6d-f7b000f3fe53
-title: Pty bytes and terminal input are held by a dedicated logic thread with the OS interactive class, while the main loop receives output as a copy
+title: Pty bytes and terminal input are held by a dedicated logic thread, while the main loop receives output as a copy
 ord: 7
 tags: ["explanation"]
 edges:
@@ -16,7 +16,7 @@ sources:
   - kind: file
     ref: packages/execution-host/src/TerminalInputs.ts
 ---
-The logic main loop serves all executions at once — process traversal, writes, the screen mirror — and on a saturated machine gets no CPU for seconds; a press waited on its queue ([[dc3c916a]]). The terminals thread only moves pty bytes, admits input, and serves the endpoint through which the window prints and reads live output past the main loops ([[19621016]]). It raises its QoS class before opening its reactor: a kqueue thread inherits its creator thread's class.
+The logic main loop serves all executions at once — process traversal, writes, the screen mirror — and on a saturated machine gets no CPU for seconds; a press waited on its queue ([[dc3c916a]]). The terminals thread only moves pty bytes, admits input, and serves the endpoint through which the window prints and reads live output past the main loops ([[19621016]]). On macOS it raises its QoS class before opening its reactor: a kqueue thread inherits its creator thread's class. Linux grants an unprivileged thread no interactive class, so there the thread keeps the default class and logs that it did.
 
 - **Reading ahead.** The thread reads pty without waiting on the main loop, into a buffer up to `READ_AHEAD_BYTES` per terminal; a full buffer stops reading, and the child blocks as on a slow write medium — the write loses not a byte.
 - **Logic change.** `stopReading` answers when reading has stalled. The buffer the main loop never read goes to the successor as the first `pendingEchoes` element with `after` 0, ahead of the synthetic echo; so `Owe` is accepted only before the first read. That element is marked as output (`output`): an interrupt without NOFLSH resets only the synthetic echo at the successor. Bytes pty already gave away, the kernel does not take back with its flush, and the host loses none either.
