@@ -26,7 +26,7 @@ import { type HostEvent, type LivePage, type Navigation, type PageChange } from 
 import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
 import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
-import { type BuildId, MANAGED, ManagedDocument } from './contract/wire/document.js';
+import { type BuildId, MANAGED, ManagedDocument, type WindowMode } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
 import { makeInstalledChrome } from './builds/installedChrome.js';
@@ -79,9 +79,12 @@ type Running = {
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
   readonly dir: string;
+  readonly window: WindowMode;
   users: number;
   idleSince: number | null;
 };
+
+const pageTarget = (state: Running) => ({ url: 'about:blank', newWindow: state.window === 'shown' });
 
 export const makeManagedHost = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
@@ -330,7 +333,7 @@ export const makeManagedHost = Effect.gen(function* () {
     const held = yield* Scope.fork(scope);
     const opened = yield* Effect.gen(function* () {
       const handle = yield* Scope.provide(
-        ChildProcess.make(build.executable, [...build.args(dir)], {
+        ChildProcess.make(build.executable, [...build.args(dir, document.window)], {
           stdin: 'ignore',
           stdout: 'ignore',
           stderr: 'ignore',
@@ -358,6 +361,7 @@ export const makeManagedHost = Effect.gen(function* () {
         permissions,
         navigation,
         dir,
+        window: document.window,
         users: 0,
         idleSince: null,
       };
@@ -432,7 +436,7 @@ export const makeManagedHost = Effect.gen(function* () {
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
     const url = tab.url || 'about:blank';
-    const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' });
+    const { targetId } = yield* state.connection.root.send('Target.createTarget', pageTarget(state));
     yield* state.navigation.swap(tab.target, targetId);
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
@@ -503,7 +507,7 @@ export const makeManagedHost = Effect.gen(function* () {
       open: Effect.fn('ManagedHost.open')(function* (opening) {
         const state = yield* ensure(opening.profile);
         const url = opening.history?.entries[opening.history.at]?.url ?? opening.url;
-        const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' }).pipe(Effect.mapError(lost));
+        const { targetId } = yield* state.connection.root.send('Target.createTarget', pageTarget(state)).pipe(Effect.mapError(lost));
         yield* Effect.gen(function* () {
           const service = yield* bind(state, targetId, opening.page);
           yield* state.navigation.open(targetId, opening.policy);

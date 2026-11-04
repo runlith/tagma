@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { Effect, FileSystem, Path, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
-import { type Build, BuildUnavailable } from './build.js';
+import { type Build, BuildUnavailable, type Launch } from './build.js';
 import { chromeArgs, RELEASE } from './chrome.js';
 
 const candidates = (path: Path.Path): readonly string[] => {
@@ -60,7 +60,7 @@ export const makeInstalledChrome = Effect.gen(function* () {
       if (!(yield* files.exists(executable).pipe(Effect.mapError((failure) => unavailable(failure.message))))) continue;
       const release = yield* releaseOf(executable);
       if (release === undefined) return yield* unavailable(`${executable} reports no release`);
-      return { executable, args: (profileDir: string) => chromeArgs(release, profileDir) };
+      return { executable, args: (profileDir, window) => chromeArgs(release, profileDir, window) } satisfies Launch;
     }
     return yield* unavailable(`it is in none of ${candidates(path).join(', ')}`);
   }).pipe(Effect.withSpan('installedChrome.launch'));

@@ -3,13 +3,14 @@ import { it, layer } from '@runlith/effect-test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { headed, notRun } from '@runlith/testbed/fixture';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { Pages } from '../browser/contract/service/pages.js';
 import { type PageId } from '../browser/contract/wire/ids.js';
 import { agentIn, browserWorld, calling, OPERATOR, PAGE, refIn, refusalOf, Seeded, type Served } from '../browser/testing/world.js';
 import { MANAGED_AGENT } from './adapter.js';
-import { chromeInstalled, INSTALLED, managedFixture, managedTestHost, testAdapter as adapter } from './testing/host.js';
+import { chromeInstalled, INSTALLED, managedFixture, managedTestHost, SHOWN, testAdapter as adapter } from './testing/host.js';
 
 const heard: { readonly path: string; readonly agent: string | null; readonly hints: string | null }[] = [];
 
@@ -78,43 +79,44 @@ const evaluate = (page: PageId, expression: string) =>
     Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : undefined)),
   );
 
-const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED] : [MANAGED_AGENT];
+const IDENTITY = 'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation';
+if (chromeInstalled && !headed()) notRun(IDENTITY.replace('%s', SHOWN), 'headed');
+const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED, ...(headed() ? [SHOWN] : [])] : [MANAGED_AGENT];
 const fixture = managedFixture();
 
 layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
-  it.effect.each(PROFILES)(
-    'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation',
-    (profile) =>
-      Effect.gen(function* () {
-        heard.length = 0;
-        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/who'), profile }, undefined, agent));
-        const told = (yield* evaluate(opened.page.id, 'window.told')) as {
-          readonly page: readonly [string, readonly string[]];
-          readonly worker: readonly [string, readonly string[]];
-          readonly shared: readonly [string, readonly string[]];
-        };
-        const seen = [
-          ...[told.page, told.worker, told.shared].flatMap(([agent, brands]) => [agent, ...brands]),
-          ...heard.flatMap((one) => [one.agent ?? '', one.hints ?? '']),
-        ];
-        expect(heard.map((one) => one.path)).toContain('/from-worker');
-        expect(seen.filter((said) => said.includes('HeadlessChrome'))).toEqual([]);
-        expect(told.page[0]).toContain('Chrome/');
-        expect([told.worker[0], told.shared[0]]).toEqual([told.page[0], told.page[0]]);
-        if (profile === INSTALLED) expect(told.page[1]).toContain('Google Chrome');
-        const shot = yield* calling(PAGE.snapshot_page.body.execute({ page: opened.page.id }, undefined, agent));
-        yield* calling(
-          PAGE.act_on_page.body.execute(
-            { page: opened.page.id, steps: [{ action: 'click', ref: refIn(shot.text, /button "Add"/) }] },
-            undefined,
-            agent,
-          ),
-        );
-        expect(yield* evaluate(opened.page.id, 'document.querySelectorAll("li").length')).toBe(1);
-        const navigated = yield* calling(PAGE.navigate_page.body.execute({ page: opened.page.id, url: at('/second') }, undefined, agent));
-        expect(navigated.page.url).toBe(at('/second'));
-        expect(yield* evaluate(opened.page.id, 'document.title')).toBe('Second');
-      }),
+  it.effect.each(PROFILES)(IDENTITY, (profile) =>
+    Effect.gen(function* () {
+      heard.length = 0;
+      const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/who'), profile }, undefined, agent));
+      const told = (yield* evaluate(opened.page.id, 'window.told')) as {
+        readonly page: readonly [string, readonly string[]];
+        readonly worker: readonly [string, readonly string[]];
+        readonly shared: readonly [string, readonly string[]];
+      };
+      const seen = [
+        ...[told.page, told.worker, told.shared].flatMap(([agent, brands]) => [agent, ...brands]),
+        ...heard.flatMap((one) => [one.agent ?? '', one.hints ?? '']),
+      ];
+      expect(heard.map((one) => one.path)).toContain('/from-worker');
+      expect(seen.filter((said) => said.includes('HeadlessChrome'))).toEqual([]);
+      expect(told.page[0]).toContain('Chrome/');
+      expect([told.worker[0], told.shared[0]]).toEqual([told.page[0], told.page[0]]);
+      expect(yield* evaluate(opened.page.id, 'navigator.webdriver')).toBe(false);
+      if (profile !== MANAGED_AGENT) expect(told.page[1]).toContain('Google Chrome');
+      const shot = yield* calling(PAGE.snapshot_page.body.execute({ page: opened.page.id }, undefined, agent));
+      yield* calling(
+        PAGE.act_on_page.body.execute(
+          { page: opened.page.id, steps: [{ action: 'click', ref: refIn(shot.text, /button "Add"/) }] },
+          undefined,
+          agent,
+        ),
+      );
+      expect(yield* evaluate(opened.page.id, 'document.querySelectorAll("li").length')).toBe(1);
+      const navigated = yield* calling(PAGE.navigate_page.body.execute({ page: opened.page.id, url: at('/second') }, undefined, agent));
+      expect(navigated.page.url).toBe(at('/second'));
+      expect(yield* evaluate(opened.page.id, 'document.title')).toBe('Second');
+    }),
   );
 
   it.effect('an alert on a page nobody drives becomes the dialog in its state', () =>

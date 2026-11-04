@@ -43,12 +43,14 @@ export const chromeInstalled: boolean = Exit.isSuccess(
 );
 
 export const INSTALLED = ProfileId.make('installed-agent');
+export const SHOWN = ProfileId.make('shown-agent');
 export const OTHER = ProfileId.make('managed-other');
 export const testAdapter = {
   ...managedAdapter,
   seeds: [
     ...managedAdapter.seeds,
     { id: INSTALLED, name: 'Agent (installed Chrome)', document: { build: 'installed-chrome' } },
+    { id: SHOWN, name: 'Agent (installed Chrome, windowed)', document: { build: 'installed-chrome', window: 'shown' } },
     { id: OTHER, name: 'Other', document: { build: 'chrome-for-testing' } },
   ],
 };

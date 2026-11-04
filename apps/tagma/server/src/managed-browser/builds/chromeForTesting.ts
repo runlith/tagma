@@ -4,7 +4,7 @@ import { HttpClient, HttpClientRequest } from 'effect/http';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { Background } from '../../platform/contract/service/background.js';
 import { ManagedPlace } from '../contract/service/place.js';
-import { type Build, BuildUnavailable } from './build.js';
+import { type Build, BuildUnavailable, type Launch } from './build.js';
 import { chromeArgs } from './chrome.js';
 
 const releaseUrl = (release: string) => `https://googlechromelabs.github.io/chrome-for-testing/${release}.json`;
@@ -135,6 +135,9 @@ export const makeChromeForTesting = Effect.gen(function* () {
 
   return {
     id: 'chrome-for-testing',
-    launch: Effect.map(executable, (path) => ({ executable: path, args: (profileDir: string) => chromeArgs(CHROME_RELEASE, profileDir) })),
+    launch: Effect.map(executable, (path): Launch => ({
+      executable: path,
+      args: (profileDir, window) => chromeArgs(CHROME_RELEASE, profileDir, window),
+    })),
   } satisfies Build;
 });
