@@ -10,7 +10,7 @@ sources:
   - kind: file
     ref: packages/execution-host/src/posix/macos/processes.ts
   - kind: file
-    ref: packages/execution-host/src/posix/processes.worker.ts
+    ref: packages/execution-host/src/posix/ProcessServer.ts
   - kind: file
     ref: packages/execution-host/src/posix/ProcessWorker.ts
 ---

@@ -20,7 +20,7 @@ sources:
   - kind: file
     ref: packages/execution-host/src/Pacing.ts
   - kind: file
-    ref: packages/execution-host/src/posix/macos/Tempo.ts
+    ref: packages/execution-host/src/posix/Tempo.ts
   - kind: symbol
     ref: apps/tagma/server/src/power/keys.ts
     symbol: agentWork

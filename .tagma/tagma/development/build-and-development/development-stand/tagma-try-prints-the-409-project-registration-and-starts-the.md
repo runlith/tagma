@@ -21,7 +21,7 @@ sources:
   - kind: file
     ref: packages/sqlite-process/src/child.ts
   - kind: file
-    ref: packages/sqlite-process/src/lifetime.itest.ts
+    ref: packages/sqlite-process/src/lifetime.darwin.linux.itest.ts
   - kind: file
     ref: packages/sqlite-process/src/ProcessPool.ts
 ---

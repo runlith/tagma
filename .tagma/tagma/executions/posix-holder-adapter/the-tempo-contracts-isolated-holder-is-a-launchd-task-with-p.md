@@ -5,7 +5,7 @@ ord: 10
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/execution-host/src/posix/testing/isolated.ts
+    ref: packages/execution-host/src/posix/macos/testing/isolated.ts
 ---
 The tempo contracts' holder launches outside the process tree where the test runs: the outer host that launched the test command would otherwise move its children's tempo. Outside that tree launchd gives birth to it. launchd puts light resource limits on a task with no `ProcessType`, including one filed via `launchctl submit`. Then the holder's children on `full` run no higher than on `low` (QoS utility), and the "`full` does not demote the child" contract stops differing from `low`. launchd promises `ProcessType` Interactive with no background throttling. Measurement on macOS 2026-10-26, `ps -o pri`: a `submit` task — 20, like `low`; Interactive — 31, like an ordinary process.
 

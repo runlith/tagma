@@ -115,7 +115,7 @@ sources:
   - kind: file
     ref: packages/execution-host/src/MachineLoad.itest.ts
   - kind: file
-    ref: packages/execution-host/src/macosReadings.itest.ts
+    ref: packages/execution-host/src/readings.darwin.itest.ts
   - kind: file
     ref: packages/execution-host/src/main.ts
   - kind: file
