@@ -18,7 +18,8 @@ const serverUrl = new URL(`http://127.0.0.1:${port}`);
 const viteUrl = new URL(`http://localhost:${surfaceDevPort(port)}/`);
 const surfaceUrl = process.env.TAGMA_SURFACE_URL?.trim() || viteUrl.toString();
 
-const launchPreparation = await currentPlatform().prepare(true);
+const launchPlatform = currentPlatform();
+const launchPreparation = await launchPlatform.prepare(true);
 if (launchPreparation._tag === 'LaunchRefused') {
   console.error(JSON.stringify(launchPreparation));
   process.exit(1);
@@ -58,6 +59,10 @@ await runDev({
       name: 'window',
       command: electronCommand(),
       env: launchPreparation.environment,
+      explainFailure: (failure) =>
+        JSON.stringify(
+          launchPlatform.failed(`${failure.error?.message ?? `Electron exited with ${failure.signal ?? failure.code}`}\n${failure.stderr}`),
+        ),
       args: [join(distDir, 'app', 'main.mjs'), `--tagma-surface-url=${surfaceUrl}`],
       cwd: packageRoot,
       restartOn: { dir: join(distDir, 'app'), suffix: '.mjs' },

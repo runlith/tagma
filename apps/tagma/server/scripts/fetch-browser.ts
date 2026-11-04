@@ -2,6 +2,8 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { join } from 'node:path';
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
+import { LaunchPlatform } from '../src/managed-browser/contract/service/launch.ts';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { makeChromeForTesting } from '../src/managed-browser/builds/chromeForTesting.ts';
@@ -23,6 +25,7 @@ await Effect.runPromise(
     Effect.provide(
       Layer.mergeAll(
         host,
+        Layer.sync(LaunchPlatform, currentPlatform),
         FetchHttpClient.layer,
         BunChildProcessSpawner.layer.pipe(Layer.provide(host)),
         Layer.effect(Background, makeBackground),

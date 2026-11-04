@@ -12,6 +12,7 @@ const sandbox = (message: string): Failure => ({
   message,
   unblock: [
     'permit user namespaces for this executable in the Linux security policy, or install a root-owned mode-4755 Chromium sandbox helper and set CHROME_DEVEL_SANDBOX to its path',
+    'correct or unset CHROME_DEVEL_SANDBOX if it names an unsuitable helper',
     'Chromium sandbox setup: https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md',
   ],
 });
@@ -39,14 +40,14 @@ export const makePlatform = (environment: NodeJS.ProcessEnv): Platform => ({
     for (const helper of candidates) {
       try {
         const file = await stat(helper);
-        if (file.isFile() && file.uid === 0 && (file.mode & 0o4777) === 0o4755)
+        if (file.isFile() && file.uid === 0 && (file.mode & 0o7777) === 0o4755)
           return { _tag: 'Ready', environment: { ...environment, CHROME_DEVEL_SANDBOX: helper } };
         if (explicit !== undefined)
           return sandbox(`the configured Chromium sandbox helper ${helper} is not a root-owned regular file with mode 4755`);
       } catch (failure) {
-        if (failure instanceof Error && 'code' in failure && failure.code === 'ENOENT') {
-          if (explicit === undefined) continue;
-          return sandbox(`the configured Chromium sandbox helper ${helper} does not exist`);
+        if (failure instanceof Error && 'code' in failure) {
+          if (explicit === undefined && (failure.code === 'ENOENT' || failure.code === 'EACCES' || failure.code === 'EPERM')) continue;
+          if (failure.code === 'ENOENT') return sandbox(`the configured Chromium sandbox helper ${helper} does not exist`);
         }
         return sandbox(`the Chromium sandbox helper ${helper} could not be inspected: ${String(failure)}`);
       }
@@ -54,6 +55,14 @@ export const makePlatform = (environment: NodeJS.ProcessEnv): Platform => ({
     return { _tag: 'Ready', environment: { ...environment } };
   },
   failed: (diagnostic) => {
+    if (/SUID sandbox helper/u.test(diagnostic))
+      return {
+        ...sandbox(`the Linux browser sandbox is unavailable:\n${diagnostic}`),
+        unblock: [
+          'configure the executable-adjacent chrome-sandbox named above as root-owned with mode 4755, or permit user namespaces for this executable; CHROME_DEVEL_SANDBOX does not override an adjacent helper',
+          'Chromium sandbox setup: https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md',
+        ],
+      };
     if (SANDBOX.test(diagnostic)) return sandbox(`the Linux browser sandbox is unavailable:\n${diagnostic}`);
     if (DISPLAY.test(diagnostic)) return display(`the browser could not reach the Linux display:\n${diagnostic}`);
     const library = LIBRARY.exec(diagnostic)?.[1];

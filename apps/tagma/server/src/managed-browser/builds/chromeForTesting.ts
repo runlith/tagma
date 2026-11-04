@@ -4,6 +4,7 @@ import { HttpClient, HttpClientRequest } from 'effect/http';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { Background } from '../../platform/contract/service/background.js';
 import { ManagedPlace } from '../contract/service/place.js';
+import { LaunchPlatform } from '../contract/service/launch.js';
 import { type Build, BuildUnavailable, type Launch } from './build.js';
 import { chromeArgs } from './chrome.js';
 
@@ -19,6 +20,7 @@ export const makeChromeForTesting = Effect.gen(function* () {
   const path = yield* Path.Path;
   const client = HttpClient.withScope(yield* HttpClient.HttpClient);
   const place = yield* ManagedPlace;
+  const launchPlatform = yield* LaunchPlatform;
   const background = yield* Background;
   const spawner = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
   const platform = platformOf(process.platform, process.arch);
@@ -91,9 +93,10 @@ export const makeChromeForTesting = Effect.gen(function* () {
     if (unpacked.code !== 0) return yield* unavailable(`the archive did not unpack: ${unpacked.said.trim()}`);
     const executable = executableIn(partial, target);
     const reported = yield* run(executable, ['--version']);
-    if (reported.code !== 0 || !reported.said.includes(CHROME_RELEASE)) {
+    if (reported.code !== 0)
+      return yield* BuildUnavailable.startup(`Chrome for Testing ${CHROME_RELEASE}`, launchPlatform.failed(reported.said.trim()));
+    if (!reported.said.includes(CHROME_RELEASE))
       return yield* unavailable(`the unpacked browser reports ${JSON.stringify(reported.said.trim())}`);
-    }
     yield* files.remove(zip).pipe(Effect.mapError((failure) => unavailable(failure.message)));
     yield* files.rename(partial, dir).pipe(Effect.mapError((failure) => unavailable(failure.message)));
     return executableIn(dir, target);
@@ -106,6 +109,9 @@ export const makeChromeForTesting = Effect.gen(function* () {
         Effect.catchTag('BuildUnavailable', () => Effect.succeed({ code: -1, said: '' })),
       );
       if (reported.code === 0 && reported.said.includes(CHROME_RELEASE)) return standing;
+      const requirement = launchPlatform.failed(reported.said.trim());
+      if (requirement.problem !== 'launch-failed')
+        return yield* BuildUnavailable.startup(`Chrome for Testing ${CHROME_RELEASE}`, requirement);
       yield* Effect.logWarning(
         `managed browser: the cached Chrome for Testing reports ${JSON.stringify(reported.said.trim())}; installing it again`,
       );
@@ -122,10 +128,10 @@ export const makeChromeForTesting = Effect.gen(function* () {
     yield* verified(platform).pipe(
       Effect.onExit((exit) =>
         Effect.andThen(
-          Deferred.done(done, exit),
           Effect.sync(() => {
             if (Exit.isFailure(exit)) installing = null;
           }),
+          Deferred.done(done, exit),
         ),
       ),
       Effect.forkIn(scope),

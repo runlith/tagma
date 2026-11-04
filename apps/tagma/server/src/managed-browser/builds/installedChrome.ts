@@ -3,6 +3,7 @@ import { Effect, FileSystem, Path, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { type Build, BuildUnavailable, type Launch } from './build.js';
 import { chromeArgs, RELEASE } from './chrome.js';
+import { LaunchPlatform } from '../contract/service/launch.js';
 
 const candidates = (path: Path.Path): readonly string[] => {
   switch (process.platform) {
@@ -25,6 +26,7 @@ const candidates = (path: Path.Path): readonly string[] => {
 export const makeInstalledChrome = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const launchPlatform = yield* LaunchPlatform;
   const spawner = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
 
   const unavailable = (reason: string) =>
@@ -38,12 +40,15 @@ export const makeInstalledChrome = Effect.gen(function* () {
       Effect.gen(function* () {
         const handle = yield* ChildProcess.make(executable, ['--version'], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
         const said = yield* handle.all.pipe(Stream.decodeText(), Stream.mkString);
-        yield* handle.exitCode;
+        const code = yield* handle.exitCode;
+        if (Number(code) !== 0) return yield* BuildUnavailable.startup('Google Chrome', launchPlatform.failed(said.trim()));
         return said;
       }),
     ).pipe(
       Effect.provide(spawner),
-      Effect.mapError((failure) => unavailable(`${executable} did not report its release: ${failure.message}`)),
+      Effect.catchTag('PlatformError', (failure) =>
+        Effect.fail(unavailable(`${executable} did not report its release: ${failure.message}`)),
+      ),
     );
 
   const releaseOf = Effect.fnUntraced(function* (executable: string) {

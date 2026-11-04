@@ -40,6 +40,7 @@ export const chromeInstalled: boolean = Exit.isSuccess(
   await Effect.runPromise(
     Effect.exit(Effect.flatMap(makeInstalledChrome, (build) => build.launch)).pipe(
       Effect.provide(Layer.provideMerge(BunChildProcessSpawner.layer, platform)),
+      Effect.provide(Layer.sync(LaunchPlatform, currentPlatform)),
     ),
   ),
 );

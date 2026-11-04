@@ -20,6 +20,6 @@ export type Platform = {
 export const failed = (diagnostic: string): Failure => ({
   _tag: 'LaunchRefused',
   problem: 'launch-failed',
-  message: `the browser did not become ready:\n${diagnostic}`,
+  message: `the browser process is unavailable:\n${diagnostic}`,
   unblock: ['correct the browser startup error above, then start the browser again'],
 });
