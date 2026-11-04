@@ -27,6 +27,7 @@ import { runGit } from '../../../platform/git/ownGit.js';
 import type { Caller } from '../../../platform/contract/wire/caller.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
+import { CopyKeeping } from '../../../graph/serving/copies.js';
 
 const signed = signedBy({ harness: 'test', key: 'copied-blocks' });
 
@@ -98,13 +99,13 @@ layer(
         Effect.gen(function* () {
           const files = yield* FileSystem.FileSystem;
           const law = project('law');
-          const machine = machineGraphOf(context);
+          const machine = machineGraphOf(Context.add(context, CopyKeeping, { idle: 2, ms: 60_000 }));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
             (held) => held.dispose(),
           );
           const routed = routedContext(machine, pool);
-          const servedLaw = yield* pool.resolve({ projectId: law.id });
+          const servedLaw = yield* pool.hold({ projectId: law.id });
           const rule = yield* Effect.provide(
             onGraph(servedLaw)(
               signed(
@@ -125,8 +126,8 @@ layer(
           });
           const copy = yield* landed(routed, 'law-copy', clone);
           yield* pool.birth(copy.id);
-          const servedCopy = yield* pool.resolve({ projectId: copy.id });
-          const call = yield* toolsAt(routed, yield* pool.resolve({ projectId }), { id: projectId, name: 'home' });
+          const servedCopy = yield* pool.hold({ projectId: copy.id });
+          const call = yield* toolsAt(routed, yield* pool.hold({ projectId }), { id: projectId, name: 'home' });
           const addressIn = (refused: Record<string, unknown>, projectId: number) => {
             expect(refused).toMatchObject({ code: 'ambiguous-name' });
             const ways = (refused.unblock as readonly string[]).filter((way) => way.startsWith(`${projectId}/`));
@@ -175,16 +176,16 @@ layer(
       Effect.scoped(
         Effect.gen(function* () {
           const law = project('law');
-          const machine = machineGraphOf(context);
+          const machine = machineGraphOf(Context.add(context, CopyKeeping, { idle: 2, ms: 60_000 }));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
             (held) => held.dispose(),
           );
           const routed = routedContext(machine, pool);
-          const served = yield* pool.resolve({ projectId });
-          const source = yield* pool.resolve({ projectId: law.id });
+          const served = yield* pool.hold({ projectId });
+          const source = yield* pool.hold({ projectId: law.id });
           const brand = yield* graph.projects.byId(project('brand').id);
-          const destination = yield* pool.resolve({ projectId: brand.id });
+          const destination = yield* pool.hold({ projectId: brand.id });
           const records = yield* Effect.provide(makeThreadRecords, context);
           yield* Context.get(context, MachineUnits).write(records.writes, (unit) =>
             records.insert(unit, {
@@ -224,7 +225,7 @@ layer(
             cwd: law.root,
           });
           yield* runGit(graph.git, 'before-move', ['worktree', 'add', '-b', 'before-move', branchRoot], { cwd: law.root });
-          yield* pool.resolve({ projectId: law.id, cwd: branchRoot });
+          yield* pool.hold({ projectId: law.id, cwd: branchRoot });
           expect(yield* call('update_block', { project: law.id, blockId: born.block.name, parentId: destinationRoot })).toMatchObject({
             status: 'ok',
             moved: { blocks: 1 },
@@ -270,7 +271,7 @@ layer(
           yield* runGit(graph.git, 'destination-live', ['worktree', 'add', '-b', 'destination-live', destinationBranch], {
             cwd: brand.rootPath,
           });
-          yield* pool.resolve({ projectId: brand.id, cwd: destinationBranch });
+          yield* pool.hold({ projectId: brand.id, cwd: destinationBranch });
           expect(yield* call('delete_block', { project: brand.id, blockId: address })).toMatchObject({ status: 'ok' });
           const branchOnly = yield* call('update_block', { ...input, blockId: reflection.block.name });
           expect(branchOnly).toMatchObject({ code: 'not-found', reason: expect.stringContaining(branchRoot) });
@@ -288,13 +289,13 @@ layer(
         Effect.gen(function* () {
           const files = yield* FileSystem.FileSystem;
           const law = project('law');
-          const machine = machineGraphOf(context);
+          const machine = machineGraphOf(Context.add(context, CopyKeeping, { idle: 2, ms: 60_000 }));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
             (held) => held.dispose(),
           );
           const routed = routedContext(machine, pool);
-          const servedLaw = yield* pool.resolve({ projectId: law.id });
+          const servedLaw = yield* pool.hold({ projectId: law.id });
           const idea = yield* Effect.provide(
             onGraph(servedLaw)(
               signed(
@@ -326,7 +327,7 @@ layer(
           yield* committed(landing, 'seed');
           const moved = yield* landed(routed, 'law-landing', landing);
           yield* pool.birth(moved.id);
-          const servedLanding = yield* pool.resolve({ projectId: moved.id });
+          const servedLanding = yield* pool.hold({ projectId: moved.id });
           yield* Effect.provide(
             onGraph(servedLanding)(
               signed(
@@ -359,7 +360,7 @@ layer(
 
           const name = blockName(idea.uuid);
           const fromLaw = yield* toolsAt(routed, servedLaw, { id: law.id, name: 'law' });
-          const fromHome = yield* toolsAt(routed, yield* pool.resolve({ projectId }), { id: projectId, name: 'home' });
+          const fromHome = yield* toolsAt(routed, yield* pool.hold({ projectId }), { id: projectId, name: 'home' });
           for (const call of [fromLaw, fromHome]) {
             expect(yield* call('read_block', { blockIds: [name] })).toMatchObject({ reads: [{ name, projectId: moved.id }] });
           }

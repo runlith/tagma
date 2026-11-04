@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Effect, Layer } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { unthreadedCaller } from '../../callers.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
@@ -16,6 +16,7 @@ import type { ServedGraph } from '../../../../graph/contract/service/serving.js'
 import { blockName } from '../../../../graph/contract/wire/references.js';
 import { graphPool, machineGraphOf } from '../../../../graph/testing/doubles.js';
 import { routedContext } from '../../../../graph/serving/routing.js';
+import { CopyKeeping } from '../../../../graph/serving/copies.js';
 
 const signed = signedBy({ harness: 'test', key: 'ending-spec-far' });
 
@@ -30,14 +31,14 @@ layer(demoGraphLayer({ repos: ['front', 'back'] }).pipe(Layer.provideMerge(BunFi
           const back = project('back');
           yield* graph.projectPolicy.setStorage({ id: front.id, mode: 'team' });
           yield* graph.projectPolicy.setStorage({ id: back.id, mode: 'team' });
-          const machine = machineGraphOf(context);
+          const machine = machineGraphOf(Context.add(context, CopyKeeping, { idle: 2, ms: 60_000 }));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
             (held) => held.dispose(),
           );
           const routed = routedContext(machine, pool);
-          const servedFront = yield* pool.resolve({ projectId: front.id });
-          const servedBack = yield* pool.resolve({ projectId: back.id });
+          const servedFront = yield* pool.hold({ projectId: front.id });
+          const servedBack = yield* pool.hold({ projectId: back.id });
           const within = <A, E>(served: ServedGraph, work: Effect.Effect<A, E, Blocks>) =>
             Effect.provide(onGraph(served)(signed(work)), routed) as Effect.Effect<A, E>;
           const tools = Effect.fnUntraced(function* (served: ServedGraph, projectId: number, name: string) {

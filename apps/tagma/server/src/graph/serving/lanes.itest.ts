@@ -18,6 +18,7 @@ import { capacity } from '@runlith/held/Capacity';
 import { StallRecords } from '@runlith/held/holding';
 import { machineGraphOf } from './machine.js';
 import { graphPool } from '../testing/doubles.js';
+import { CopyKeeping } from './copies.js';
 
 const STEP = 'held-open';
 
@@ -97,13 +98,13 @@ layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem
             { name: HEAVY, units: 3, limits: { call: 2, background: 1 } },
             { name: OPENS, units: 2, limits: { call: 2, background: 1 } },
           ]);
-          const machine = machineGraphOf(Context.add(context, Capacity, capacity));
+          const machine = machineGraphOf(Context.add(context, Capacity, capacity).pipe(Context.add(CopyKeeping, { idle: 2, ms: 60_000 })));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot, steps }),
             (held) => held.dispose(),
           );
-          main.mirror = (yield* pool.resolve({ projectId: alpha.id })).layout.mirrorPath;
-          const opens = yield* Effect.forEach(trees, (tree) => Effect.forkChild(pool.resolve({ projectId: alpha.id, cwd: tree })));
+          main.mirror = (yield* pool.hold({ projectId: alpha.id })).layout.mirrorPath;
+          const opens = yield* Effect.forEach(trees, (tree) => Effect.forkChild(pool.hold({ projectId: alpha.id, cwd: tree })));
           const first = yield* Queue.take(entered);
           const second = yield* Queue.take(entered);
           expect(first).not.toBe(second);

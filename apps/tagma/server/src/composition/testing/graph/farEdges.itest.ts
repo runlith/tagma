@@ -29,6 +29,7 @@ import { graphPool, machineGraphOf } from '../../../graph/testing/doubles.js';
 import { routedContext } from '../../../graph/serving/routing.js';
 import { Capacity, HEAVY, serverCapacity } from '../../../platform/contract/service/capacity.js';
 import { OPENS, OPEN_IN_BACKGROUND } from '../../../graph/contract/service/lanes.js';
+import { CopyKeeping } from '../../../graph/serving/copies.js';
 
 const signed = signedBy({ harness: 'test', key: 'far-edges' });
 
@@ -51,14 +52,14 @@ layer(
           const files = yield* FileSystem.FileSystem;
           const front = project('front');
           const back = project('back');
-          const machine = machineGraphOf(context);
+          const machine = machineGraphOf(Context.add(context, CopyKeeping, { idle: 2, ms: 60_000 }));
           const pool = yield* Effect.acquireRelease(
             graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
             (held) => held.dispose(),
           );
           const routed = routedContext(machine, pool);
-          const servedFront = yield* pool.resolve({ projectId: front.id });
-          const servedBack = yield* pool.resolve({ projectId: back.id });
+          const servedFront = yield* pool.hold({ projectId: front.id });
+          const servedBack = yield* pool.hold({ projectId: back.id });
           const within = <A, E>(served: ServedGraph, work: Effect.Effect<A, E, Blocks>) =>
             Effect.provide(onGraph(served)(signed(work)), routed) as Effect.Effect<A, E>;
           const tools = Effect.fnUntraced(function* (served: ServedGraph, projectId: number, name: string) {
@@ -299,16 +300,16 @@ layer(
             const lanes = serverCapacity([HEAVY, OPENS].map((name) => ({ name, units: 2, limits: { call: 2, background: 1 } })));
             const background = yield* Scope.fork(yield* Effect.scope);
             yield* lanes.lease(OPEN_IN_BACKGROUND).pipe(Scope.provide(background));
-            const machine = machineGraphOf(Context.add(context, Capacity, lanes));
+            const machine = machineGraphOf(Context.add(context, Capacity, lanes).pipe(Context.add(CopyKeeping, { idle: 2, ms: 60_000 })));
             const pool = yield* Effect.acquireRelease(
               graphPool({ migrations: fixtureGraphMigrations, identity: testSessionIdentity, machine, sourcePath: demoRoot }),
               (held) => held.dispose(),
             );
             const routed = routedContext(machine, pool);
-            const servedFront = yield* pool.resolve({ projectId: front.id });
-            const servedBack = yield* pool.resolve({ projectId: back.id });
-            yield* pool.resolve({ projectId });
-            yield* pool.resolve({ projectId: (yield* graph.projects.global())!.id });
+            const servedFront = yield* pool.hold({ projectId: front.id });
+            const servedBack = yield* pool.hold({ projectId: back.id });
+            yield* pool.hold({ projectId });
+            yield* pool.hold({ projectId: (yield* graph.projects.global())!.id });
             const within = <A, E>(served: ServedGraph, work: Effect.Effect<A, E, Blocks>) =>
               Effect.provide(onGraph(served)(signed(work)), routed) as Effect.Effect<A, E>;
             const operator = { actor: { kind: 'operator' as const }, files: null };
@@ -413,7 +414,7 @@ layer(
             ]);
 
             yield* pool.releaseProject(front.id);
-            const servedClone = yield* pool.resolve({ projectId: again.id });
+            const servedClone = yield* pool.hold({ projectId: again.id });
             const cloned = yield* Context.get(servedClone.context, GraphStore)
               .db.select({ id: block.id })
               .from(block)
@@ -448,7 +449,7 @@ layer(
             const unjudged = yield* registry(REGISTRY_PAIRS.read_project.body.execute({ ref: String(again.id) }, undefined, operator));
             expect(unjudged).toMatchObject({ pointing: { edges: 2, holding: 0, unread: ['front'] } });
             yield* Scope.close(background, Exit.void);
-            const reopened = yield* pool.resolve({ projectId: front.id });
+            const reopened = yield* pool.hold({ projectId: front.id });
             yield* reopened.fresh();
             const judged = yield* registry(REGISTRY_PAIRS.read_project.body.execute({ ref: String(again.id) }, undefined, operator));
             expect(judged).toMatchObject({ pointing: { edges: 2, holding: 1, unread: [] } });
