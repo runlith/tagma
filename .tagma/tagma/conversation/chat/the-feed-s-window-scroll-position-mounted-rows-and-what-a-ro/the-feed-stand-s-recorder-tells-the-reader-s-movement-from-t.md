@@ -1,7 +1,7 @@
 ---
 id: 01a185bb-ac95-7973-8556-874d3e447d8b
 title: The feed stand's recorder tells the reader's movement from the feed's own by a write log, settle points and contact-target touch
-ord: 86
+ord: 9
 tags: ["explanation"]
 sources:
   - kind: file
