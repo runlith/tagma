@@ -50,7 +50,7 @@ type Tab = {
   page: PageId | null;
   service: Session | null;
   scope: Scope.Closeable | null;
-  dialog: boolean;
+  dialog: Deferred.Deferred<void> | null;
   responsive: boolean;
   crashed: boolean;
   url: string;
@@ -65,7 +65,7 @@ const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab
   page: null,
   service: null,
   scope: null,
-  dialog: false,
+  dialog: null,
   responsive: true,
   crashed: false,
   url,
@@ -205,7 +205,7 @@ export const makeManagedHost = Effect.gen(function* () {
       }
       case 'Page.javascriptDialogOpening': {
         const opened = yield* eventParams('Page.javascriptDialogOpening', event);
-        tab.dialog = true;
+        tab.dialog ??= yield* Deferred.make<void>();
         yield* emit({
           kind: 'dialog',
           page,
@@ -218,10 +218,13 @@ export const makeManagedHost = Effect.gen(function* () {
         });
         return;
       }
-      case 'Page.javascriptDialogClosed':
-        tab.dialog = false;
+      case 'Page.javascriptDialogClosed': {
+        const closed = tab.dialog;
+        tab.dialog = null;
         yield* emit({ kind: 'dialog', page, dialog: null });
+        if (closed !== null) yield* Deferred.succeed(closed, undefined);
         return;
+      }
     }
   });
 
@@ -251,7 +254,7 @@ export const makeManagedHost = Effect.gen(function* () {
       {
         every: PROBE_EVERY,
         threshold: UNRESPONSIVE_AFTER,
-        paused: () => tab.dialog || state.strain.paused,
+        paused: () => tab.dialog !== null || state.strain.paused,
         factor: () => state.strain.factor,
       },
       (responsive) => {
@@ -575,7 +578,7 @@ export const makeManagedHost = Effect.gen(function* () {
         if (at === undefined) return;
         const tab = at.state.tabs.get(at.target);
         const service = tab?.service ?? null;
-        if (ask && tab?.dialog === true) {
+        if (ask && tab !== undefined && tab.dialog !== null) {
           return yield* new HostRefused({
             message: `a dialog is open on page ${page}, and closing it would bypass the answer`,
             unblock: ['answer_page_dialog — accept or dismiss it first, then close_page'],
@@ -667,8 +670,10 @@ export const makeManagedHost = Effect.gen(function* () {
         Effect.scoped,
       ),
       answer: Effect.fn('ManagedHost.answer')(function* (page, accept, text) {
-        const { service } = yield* serviceOf(page);
+        const { tab, service } = yield* serviceOf(page);
+        const open = tab.dialog;
         yield* service.send('Page.handleJavaScriptDialog', { accept, promptText: text }).pipe(Effect.mapError(lost));
+        if (open !== null) yield* Effect.raceFirst(Deferred.await(open), Effect.asVoid(service.ended));
       }),
       events: Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)),
       paint: (page) => Effect.asVoid(tabOf(page)),
