@@ -8,6 +8,7 @@ import { Blocks } from '../../../graph/contract/service/blocks.js';
 import { blockName } from '../../../graph/contract/wire/references.js';
 import type { ThreadWork } from '../../../graph/contract/wire/threadWork.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
+import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { nativeLeads, subscriptionLogin } from '../claudeLogin.js';
 import { holdThreads } from '../threadScope.js';
@@ -162,6 +163,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       expect(own.did.map((row) => [row.name, own.copies[row.copy]?.branch])).toEqual([[after, 'mortar']]);
 
       yield* suiteGit(checkout, 'worktree', 'remove', '--force', destination);
+      yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
       const left = yield* workOf(thread, home);
       expect(left.unread).toEqual([]);
       expect(left.did.map((row) => row.name)).toEqual([before]);
