@@ -14,7 +14,7 @@ it('a silent request spends only cumulative CPU, excluding paused samples', () =
 
 it('an unattributed, replaced or reset process cannot support the current request verdict', () => {
   const probe = new Probe(5_000);
-  probe.start(null);
+  expect(probe.sample(null, false)).toBe(false);
   expect(probe.sample({ process: 'first', millis: 50_000 }, false)).toBe(false);
   probe.start({ process: 'first', millis: 0 });
   expect(probe.sample({ process: 'replacement', millis: 50_000 }, false)).toBe(false);

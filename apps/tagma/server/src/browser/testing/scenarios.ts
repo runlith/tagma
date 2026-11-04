@@ -289,7 +289,7 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('a silent frame without CPU attribution keeps attachment cancellable and closes without holding another page', () =>
+    it.effect('a page whose frame is silent without CPU attribution closes without holding another page', () =>
       Effect.gen(function* () {
         const own = yield* open('/second');
         const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/hung-frame'), profile: input.profile }, undefined, OPERATOR));
@@ -297,11 +297,6 @@ export const engineScenarios = (input: EngineHost): void => {
         const pages = yield* Pages;
         yield* Effect.addFinalizer(() => (pages.live(page) === undefined ? Effect.void : pages.close(page).pipe(Effect.orDie)));
         yield* Deferred.await(childSpinning);
-        const attaching = yield* Effect.forkChild(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)), {
-          startImmediately: true,
-        });
-        yield* Fiber.interrupt(attaching);
-        expect(Exit.hasInterrupts(yield* Fiber.await(attaching))).toBe(true);
         expect(refIn(yield* snapshot(own), /heading "Second page"/)).toMatch(/^e\d+$/);
         yield* calling(PAGE.close_page.body.execute({ page }, undefined, OPERATOR));
         const remaining = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));

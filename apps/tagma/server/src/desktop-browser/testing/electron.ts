@@ -33,7 +33,7 @@ const ENTRY = fileURLToPath(new URL('../../../../desktop/src/browser/testing/hos
 const SERVER_ENV = 'TAGMA_TEST_BROWSER_SERVER';
 const DATA_ENV = 'TAGMA_TEST_BROWSER_DATA';
 
-export type Command = { readonly show: string } | { readonly reload: true };
+export type Command = { readonly show: string } | { readonly reload: true } | { readonly nativeProbe: string };
 
 export type Electron = {
   readonly control: (command: Command) => Effect.Effect<void>;

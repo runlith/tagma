@@ -7,10 +7,10 @@ export class Probe {
 
   constructor(private readonly threshold: number) {}
 
-  start(cpu: RendererCpu | null): void {
+  start(cpu: RendererCpu): void {
     this.previous = cpu;
     this.spent = 0;
-    this.attributed = cpu !== null;
+    this.attributed = true;
   }
 
   suspend(): void {

@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { it } from '@runlith/effect-test';
+import { it, layer } from '@runlith/effect-test';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { Automation } from '../browser/contract/service/automation.js';
@@ -12,8 +12,10 @@ import type { PageId } from '../browser/contract/wire/ids.js';
 import { browserWorld, refIn, Seeded, type Served } from '../browser/testing/world.js';
 import { desktopAdapter } from './adapter.js';
 import { DESKTOP } from './contract/wire/channel.js';
-import { launchElectron } from './testing/electron.js';
-import { servedChannelOn } from './testing/served.js';
+import { type Electron, launchElectron } from './testing/electron.js';
+import { scopedHome } from './testing/home.js';
+import { servedChannel, ServedChannel, servedChannelOn } from './testing/served.js';
+import { desktopWorld } from './testing/world.js';
 
 const SITE = `<!doctype html><title>Form</title><button id="add" onclick="const li = document.createElement('li'); li.textContent = 'Item'; document.getElementById('list').append(li)">Add</button><ul id="list"></ul>`;
 
@@ -30,6 +32,70 @@ const restartWorld = kind(Restart, ({ home, port }: { readonly home: string; rea
     }),
   ).pipe(Effect.orDie),
 );
+
+class NativeHost extends Context.Service<NativeHost, Electron>()('testing/NativeHost') {}
+
+const nativeHost = Layer.effect(
+  NativeHost,
+  Effect.gen(function* () {
+    const home = yield* scopedHome('desktop-native-probe-');
+    const { url } = yield* ServedChannel;
+    const hosts = yield* Hosts;
+    const attached = yield* Deferred.make<void>();
+    yield* hosts.watch({
+      attached: (host) => (host.adapter === DESKTOP ? Effect.asVoid(Deferred.succeed(attached, undefined)) : Effect.void),
+      detached: () => Effect.void,
+    });
+    const electron = yield* launchElectron(home, url);
+    if (hosts.connected(DESKTOP) === undefined) yield* Deferred.await(attached);
+    return electron;
+  }),
+).pipe(Layer.provideMerge(servedChannel), Layer.provideMerge(desktopWorld('desktop-native-probe-world-')));
+
+layer(nativeHost, { excludeTestServices: true })('native renderer verdicts', (it) => {
+  it.effect('an unattributed child hang cannot spend the healthy root renderer CPU', () =>
+    Effect.gen(function* () {
+      const child = yield* Deferred.make<void>();
+      const site = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const server: Bun.Server<undefined> = Bun.serve({
+            hostname: '127.0.0.1',
+            port: 0,
+            fetch: (request): Response => {
+              const path = new URL(request.url).pathname;
+              if (path === '/ready') {
+                Deferred.doneUnsafe(child, Exit.void);
+                return new Response('ready');
+              }
+              return new Response(
+                path === '/child'
+                  ? '<!doctype html><script>fetch("/ready"); for (;;) {}</script>'
+                  : `<!doctype html><title>Root</title><iframe src="http://localhost:${server.port}/child"></iframe>`,
+                { headers: { 'content-type': 'text/html' } },
+              );
+            },
+          });
+          return server;
+        }),
+        (server) => Effect.promise(() => server.stop(true)),
+      );
+      const pages = yield* Pages;
+      const seeded = yield* Seeded;
+      const page = yield* pages.open(
+        { projectId: seeded.id, thread: null, human: true },
+        { url: `http://127.0.0.1:${site.port}/root`, profile: undefined },
+      );
+      yield* Effect.addFinalizer(() => pages.close(page.id).pipe(Effect.orDie));
+      yield* Deferred.await(child);
+      const changes = yield* pages.changes(seeded.id);
+      yield* (yield* NativeHost).control({ nativeProbe: page.id });
+      const fenced = yield* Stream.runHead(
+        Stream.filter(changes, (event) => event.type === 'put' && event.page.id === page.id && event.page.title === 'native-probe-fenced'),
+      );
+      expect(fenced._tag === 'Some' && fenced.value.type === 'put' ? fenced.value.page.live.responsive : null).toBe(true);
+    }),
+  );
+});
 
 const freePort = Effect.promise(async () => {
   const probe = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });

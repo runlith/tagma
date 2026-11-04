@@ -138,6 +138,10 @@ export class Driven {
     if (!this.contents.isDestroyed() && this.contents.debugger.isAttached()) this.contents.debugger.detach();
   }
 
+  get needsCpu(): boolean {
+    return !this.ended && (!this.asking || !this.silent);
+  }
+
   suspend(): void {
     this.budget.suspend();
   }
@@ -152,12 +156,21 @@ export class Driven {
       }
       return;
     }
-    if (probed.paused()) return;
+    if (probed.paused() || cpu === null) return;
     this.asking = true;
+    this.silent = false;
     this.budget.start(cpu);
+    const process = this.contents.mainFrame.processId;
+    const pid = this.contents.getOSProcessId();
     const answered = () => {
       this.asking = false;
-      if (!this.silent || this.ended) return;
+      if (
+        this.ended ||
+        this.contents.isDestroyed() ||
+        this.contents.mainFrame.processId !== process ||
+        this.contents.getOSProcessId() !== pid
+      )
+        return;
       this.silent = false;
       probed.report(true);
     };

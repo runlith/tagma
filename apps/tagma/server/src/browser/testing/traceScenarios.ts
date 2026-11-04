@@ -3,18 +3,38 @@ import { dirname } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Stream } from 'effect';
+import { Clock, Context, Duration, Effect, FileSystem, Fiber, Layer, Queue, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { Pages } from '../contract/service/pages.js';
 import { Hosts } from '../contract/service/hosts.js';
 import { Profiles } from '../contract/service/profiles.js';
 import type { PageId } from '../contract/wire/ids.js';
+import { QUIET_MS } from '../contract/wire/trace.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { TRACE_PAIRS as TRACE } from '../traces.js';
 import { RunEnds } from './runs.js';
 import type { EngineHost } from './scenarios.js';
-import { agentIn, calling, refusalOf } from './world.js';
+import { agentIn, calling, loaded, refusalOf } from './world.js';
 
 const BLOCKED_MS = 300;
+
+const GATE = Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'), (char) => char.charCodeAt(0));
+
+type LateDocument = { readonly seen: PromiseWithResolvers<void>; readonly release: PromiseWithResolvers<void> | undefined };
+
+const quietWatched = Effect.gen(function* () {
+  const clock = yield* TestClock.make();
+  yield* clock.setTime(yield* Clock.currentTimeMillis);
+  const windows = yield* Queue.unbounded<void>();
+  const watched: TestClock.TestClock = {
+    ...clock,
+    sleep: (duration) =>
+      Duration.toMillis(duration) === QUIET_MS
+        ? Effect.andThen(Queue.offer(windows, undefined), clock.sleep(duration))
+        : clock.sleep(duration),
+  };
+  return { clock: watched, windows };
+});
 
 const noise = (width: number, height: number): Uint8Array => {
   const row = Math.ceil((width * 3) / 4) * 4;
@@ -36,14 +56,23 @@ const noise = (width: number, height: number): Uint8Array => {
 const PICTURE = noise(480, 320);
 
 const PAGES: Readonly<Record<string, string>> = {
-  '/late': `<!doctype html><title>Late</title><link rel="stylesheet" href="/slow.css"><p style="font-size:12px">A short line.</p>
-    <script>addEventListener('DOMContentLoaded', () => { const img = new Image(480, 320); img.src = '/picture.bmp'; document.body.append(img); });</script>`,
+  '/late': `<!doctype html><title>Late</title><link rel="stylesheet" href="/slow.css"><p style="font-size:12px">A short line.</p><img src="/gate.gif" width="1" height="1">
+    <script>
+      const observer = new PerformanceObserver((list) => {
+        if (!list.getEntries().some((entry) => entry.url.endsWith('/picture.bmp'))) return;
+        observer.disconnect();
+        fetch('/lcp-seen');
+      });
+      observer.observe({ type: 'largest-contentful-paint', buffered: true });
+      addEventListener('DOMContentLoaded', () => { const img = new Image(480, 320); img.src = '/picture.bmp'; document.body.append(img); });
+    </script>`,
   '/block': `<!doctype html><title>Block</title><button id="block" style="width:200px;height:60px" onclick="const end = performance.now() + ${BLOCKED_MS}; while (performance.now() < end) {} this.textContent = 'Blocked'">Block</button>`,
 };
 
 class TracePage extends Context.Service<TracePage, { current: PageId | undefined }>()('testing/TracePage') {}
 
 export const traceScenarios = (input: EngineHost): void => {
+  let late: LateDocument = { seen: Promise.withResolvers<void>(), release: undefined };
   const server: Bun.Server<undefined> = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
@@ -52,6 +81,14 @@ export const traceScenarios = (input: EngineHost): void => {
       if (path === '/slow.css') {
         await new Promise((resolve) => setTimeout(resolve, 400));
         return new Response('p { color: #333 }', { headers: { 'content-type': 'text/css' } });
+      }
+      if (path === '/gate.gif') {
+        await late.release?.promise;
+        return new Response(GATE, { headers: { 'content-type': 'image/gif', 'cache-control': 'no-store' } });
+      }
+      if (path === '/lcp-seen') {
+        late.seen.resolve();
+        return new Response(null, { status: 204 });
       }
       if (path === '/picture.bmp') return new Response(PICTURE, { headers: { 'content-type': 'image/bmp' } });
       const html = PAGES[path];
@@ -82,12 +119,12 @@ export const traceScenarios = (input: EngineHost): void => {
     const pages = yield* Pages;
     if (held.current !== undefined && pages.live(held.current) !== undefined) {
       yield* calling(PAGE.navigate_page.body.execute({ page: held.current, url: at(path) }, undefined, agent));
-      yield* calling(PAGE.wait_for_page.body.execute({ page: held.current, until: 'load', timeoutMs: 10_000 }, undefined, agent));
+      yield* loaded(held.current);
       return held.current;
     }
     const opened = yield* calling(PAGE.open_page.body.execute({ url: at(path), profile: input.profile }, undefined, agent));
     held.current = opened.page.id;
-    yield* calling(PAGE.wait_for_page.body.execute({ page: opened.page.id, until: 'load', timeoutMs: 10_000 }, undefined, agent));
+    yield* loaded(opened.page.id);
     return opened.page.id;
   });
   const trace = (page: PageId, action: 'load' | 'start' | 'stop', extra: { readonly cold?: boolean } = {}) =>
@@ -134,7 +171,20 @@ export const traceScenarios = (input: EngineHost): void => {
     it.effect('a load names the late image as LCP and the delayed stylesheet as render-blocking, in a gzip trace', () =>
       Effect.gen(function* () {
         const page = yield* open('/late');
-        const answer = yield* traced(page, 'load');
+        yield* Effect.promise(() => late.seen.promise);
+        const reloaded: LateDocument = { seen: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+        late = reloaded;
+        const { clock, windows } = yield* quietWatched;
+        const answer = yield* Effect.gen(function* () {
+          const tracing = yield* Effect.forkChild(traced(page, 'load'));
+          const reachedLcp = Effect.andThen(
+            Effect.promise(() => reloaded.seen.promise),
+            Effect.sync(() => reloaded.release?.resolve()),
+          );
+          const quiet = Effect.forever(Effect.andThen(Queue.take(windows), clock.adjust(QUIET_MS)));
+          yield* Effect.raceFirst(Effect.andThen(reachedLcp, quiet), Fiber.await(tracing));
+          return yield* Fiber.join(tracing);
+        }).pipe(Effect.provideService(Clock.Clock, clock));
         expect(answer.settled).toBe(true);
         const set = answer.sets.find((held) => held.lcp !== null);
         expect(set?.lcp?.url).toBe(at('/picture.bmp'));

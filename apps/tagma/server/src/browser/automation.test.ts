@@ -3,7 +3,7 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import { connect } from '@runlith/cdp/session';
 import { it } from '@runlith/effect-test';
 import * as Memory from '@runlith/testbed/memory';
-import { Deferred, Effect, Fiber, PubSub, Queue, Stream } from 'effect';
+import { Deferred, Effect, Exit, Fiber, PubSub, Queue, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { forProject } from '../invocation/testing/call.js';
 import type { Refused } from '../platform/contract/service/body.js';
@@ -63,7 +63,8 @@ const engine = Effect.fnUntraced(function* (
     | 'heap'
     | 'viewport'
     | 'viewport-quantized'
-    | 'screencast',
+    | 'screencast'
+    | 'silent-frame',
 ) {
   const incoming = yield* Queue.unbounded<string>();
   const frameTrees = yield* Queue.unbounded<string>();
@@ -83,6 +84,7 @@ const engine = Effect.fnUntraced(function* (
   const resizing = yield* Deferred.make<void>();
   const changingViewport = yield* Deferred.make<void>();
   const screencasting = yield* Deferred.make<void>();
+  const silent = yield* Deferred.make<void>();
   let castSession = 0;
   let framesInFlight = 0;
   let pictures = 0;
@@ -117,6 +119,15 @@ const engine = Effect.fnUntraced(function* (
       }
       if (command.method === 'Page.screencastFrameAck' && command.params?.sessionId === castSession) framesInFlight -= 1;
       if (command.method === 'Input.dispatchMouseEvent') pointerX = command.params?.x ?? 0;
+      if (
+        mode === 'silent-frame' &&
+        command.method === 'Accessibility.getRootAXNode' &&
+        command.sessionId === 'child' &&
+        !Deferred.isDoneUnsafe(silent)
+      ) {
+        yield* Deferred.succeed(silent, undefined);
+        return;
+      }
       if (command.method === 'Input.dispatchKeyEvent' && command.params?.type === 'keyDown') {
         if (mode === 'dialog' && command.params.key === 'a') {
           yield* Deferred.succeed(started, undefined);
@@ -423,6 +434,7 @@ const engine = Effect.fnUntraced(function* (
     act,
     screencast,
     screencasting: Deferred.await(screencasting),
+    silent: Deferred.await(silent),
     pointerX: () => pointerX,
     capture: (picture: string) =>
       Effect.suspend(() => {
@@ -637,6 +649,19 @@ it.effect('ending a pick releases surviving frames when another frame detaches d
     yield* Fiber.interrupt(picking);
     yield* browser.act([{ action: 'click', x: 200, y: 100 }]);
     expect(yield* browser.evaluate()).toMatchObject({ value: '1' });
+  }),
+);
+
+it.effect('canceling a snapshot pending on a silent frame session releases the page queue to the next snapshot', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('silent-frame');
+    yield* browser.snapshot();
+    yield* browser.frame('child');
+    const reading = yield* Effect.forkChild(browser.snapshot(), { startImmediately: true });
+    yield* browser.silent;
+    yield* Fiber.interrupt(reading);
+    expect(Exit.hasInterrupts(yield* Fiber.await(reading))).toBe(true);
+    expect((yield* browser.snapshot()).text).toContain('button "child"');
   }),
 );
 
