@@ -1,4 +1,4 @@
-import { processReader } from './posix/macos/processes';
+import { processReader } from './composition/testing/native';
 import { Processes } from './ProcessReader';
 // WHAT AN ENDED TERMINAL HOLDS, measured over a real PTY and a real child: nothing. A terminal's two
 // master aliases and the notifier thread behind them are released when its OUTPUT is over, not when
@@ -34,12 +34,12 @@ import { HostLifecycle } from './registry/shutdown';
 import { connectionOf, keyOf, registrationOf, stateDirectories } from './hostFixture';
 import { hostState } from './hostState';
 import { hostSpawner } from './hostSpawner';
-import { testHolder } from './posix/testing/holder';
+import { testHolder, HOLDER_LIBRARY } from './posix/testing/holder';
 import { loadLibrary, type LoadedLibrary } from './posix/Library';
 import { runtimeProfile } from './runtimeFixture';
 
 // The artifact the package's own `build:native` script leaves; the test script runs it first.
-const ARTIFACT = join(import.meta.dir, '..', 'native/target/release/libexecution_platform.dylib');
+const ARTIFACT = HOLDER_LIBRARY;
 
 const directories = stateDirectories('terminal-release-');
 afterAll(() => directories.clear());

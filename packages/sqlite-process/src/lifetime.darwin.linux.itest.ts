@@ -4,11 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-test.skipIf(process.platform === 'win32')(
-  'a SQLite child leaves as soon as its owner dies, without waiting for a parent poll',
-  async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'sqlite-orphan-'));
-    const script = `
+test('a SQLite child leaves as soon as its owner dies, without waiting for a parent poll', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sqlite-orphan-'));
+  const script = `
     import { Effect, Layer } from 'effect';
     import { ProcessPool } from './ProcessPool.ts';
     import { childHosting } from './children.ts';
@@ -22,50 +20,49 @@ test.skipIf(process.platform === 'win32')(
       yield* Effect.promise(() => new Promise(() => process.send?.('ready')));
     })));
   `;
-    const pids: number[] = [];
-    let ready!: () => void;
-    const announced = new Promise<void>((resolve) => {
-      ready = resolve;
-    });
-    const owner = Bun.spawn([process.execPath, '-e', script], {
-      cwd: import.meta.dir,
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore',
-      ipc: (message) => {
-        if (message === 'ready') ready();
-        else if (typeof message === 'object' && message !== null && 'sqlite' in message && typeof message.sqlite === 'number') {
-          pids.push(message.sqlite);
-        }
-      },
-    });
-    try {
-      await announced;
-      expect(pids.length).toBeGreaterThan(0);
-      owner.kill('SIGKILL');
-      await owner.exited;
-      const alive = (pid: number) => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      while (pids.some(alive)) await Bun.sleep(5);
-      expect(pids.filter(alive)).toEqual([]);
-    } finally {
-      for (const pid of pids) {
-        try {
-          process.kill(pid, 'SIGKILL');
-        } catch {}
+  const pids: number[] = [];
+  let ready!: () => void;
+  const announced = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  const owner = Bun.spawn([process.execPath, '-e', script], {
+    cwd: import.meta.dir,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+    ipc: (message) => {
+      if (message === 'ready') ready();
+      else if (typeof message === 'object' && message !== null && 'sqlite' in message && typeof message.sqlite === 'number') {
+        pids.push(message.sqlite);
       }
-      await rm(directory, { recursive: true, force: true });
+    },
+  });
+  try {
+    await announced;
+    expect(pids.length).toBeGreaterThan(0);
+    owner.kill('SIGKILL');
+    await owner.exited;
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    while (pids.some(alive)) await Bun.sleep(5);
+    expect(pids.filter(alive)).toEqual([]);
+  } finally {
+    for (const pid of pids) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {}
     }
-  },
-);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
-test.skipIf(process.platform === 'win32')('a Unix terminal hangup leaves SQLite available until its owner closes the store', async () => {
+test('a Unix terminal hangup leaves SQLite available until its owner closes the store', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'sqlite-lifetime-'));
   const filename = join(directory, 'store.db');
   const script = `

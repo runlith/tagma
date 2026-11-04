@@ -20,13 +20,14 @@ import { launchNative, type NativeSource } from './nativeLaunch';
 import { loadLibrary, type LoadedLibrary } from './posix/Library';
 import { HOLDER_BINARY, HOLDER_LIBRARY, testHolder } from './posix/testing/holder';
 import { principalOf } from './hostFixture';
-import { processReader } from './posix/macos/processes';
+import { processReader } from './composition/testing/native';
 import { processControl } from './posix/control';
 import { makeProcessTables } from './ProvenSet';
 import { terminalFacts } from './posix/testing/terminal';
 import { Descriptors } from './posix/native';
 import { Descriptor } from './posix/Descriptor';
 import { isThreadTerminal, openTerminalThread } from './posix/TerminalThread';
+import { testSystem } from './composition/testing/system';
 
 const ref = ExecutionRef.make({
   installation: InstallationId.make('native-launch'),
@@ -111,8 +112,9 @@ const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnT
   }
 });
 const duplicate = Effect.fnUntraced(function* (fd: number) {
+  const system = yield* testSystem;
   const libc = yield* Effect.acquireRelease(
-    Effect.try({ try: () => dlopen('/usr/lib/libSystem.B.dylib', { dup: { args: [FFIType.i32], returns: FFIType.i32 } }), catch: failed }),
+    Effect.try({ try: () => dlopen(system.libc, { dup: { args: [FFIType.i32], returns: FFIType.i32 } }), catch: failed }),
     (library) => Effect.sync(() => library.close()),
   );
   return libc.symbols.dup(fd);

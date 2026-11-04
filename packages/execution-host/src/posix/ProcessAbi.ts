@@ -1,8 +1,8 @@
 import { CString, dlopen, FFIType, ptr, toArrayBuffer, type Pointer } from 'bun:ffi';
 import { constants } from 'node:os';
 import { birthOf } from './birth';
-import { refusalOf, type NativeStatus, type Refused } from '../refusal';
-import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../../ProcessReader';
+import { refusalOf, type NativeStatus, type Refused } from './refusal';
+import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../ProcessReader';
 
 const unread = (errno: number): { readonly _tag: 'Gone' } | { readonly _tag: 'Unreadable'; readonly detail: string } =>
   errno === constants.errno.ESRCH ? { _tag: 'Gone' } : { _tag: 'Unreadable', detail: `the native process read answered errno ${errno}` };

@@ -2,7 +2,7 @@ import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { constants } from 'node:os';
 import type { MachineMemory, MemoryPressure } from '@runlith/executions/protocol/evidence';
 import type { MachineCounters } from '../../UsageReader';
-import { birthOf } from './birth';
+import { birthOf } from '../birth';
 import type { GpuClient, GpuRead } from './gpu';
 
 const USAGE_SYMBOLS = {

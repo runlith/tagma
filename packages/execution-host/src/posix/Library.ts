@@ -1,6 +1,6 @@
 import { Data, Effect, FileSystem } from 'effect';
 import { createHash } from 'node:crypto';
-import { Abi, type ProcessAbi } from './macos/ProcessAbi';
+import { Abi, type ProcessAbi } from './ProcessAbi';
 
 export type ResolvedPackage = { readonly name: string; readonly version: string; readonly checksum?: string };
 

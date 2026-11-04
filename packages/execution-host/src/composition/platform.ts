@@ -1,14 +1,16 @@
 import { Effect, Layer } from 'effect';
 import { BootRefused } from '../boot';
+import { selected } from './selection';
+import { nativeArtifact } from './artifact';
+import { join } from 'node:path';
 
-const selected = Effect.suspend(() =>
-  process.platform === 'darwin'
-    ? Effect.tryPromise({
-        try: () => import('./macos'),
-        catch: (error) => new BootRefused({ detail: `the macOS adapter could not be loaded: ${String(error)}` }),
-      })
-    : Effect.fail(new BootRefused({ detail: `no host adapter for ${process.platform}/${process.arch}` })),
-);
+export const nativeLibrary = (checkout: string): Effect.Effect<string, BootRefused> =>
+  Effect.suspend(() => {
+    const artifact = nativeArtifact();
+    return artifact === undefined
+      ? Effect.fail(new BootRefused({ detail: `no host adapter for ${process.platform}/${process.arch}` }))
+      : Effect.succeed(join(checkout, 'native', 'target', 'release', artifact.library));
+  });
 
 export const platformLayer = (path: string) => Layer.unwrap(Effect.map(selected, (system) => system.platformLayer(path)));
 export const holderLayer = (path: string) => Layer.unwrap(Effect.map(selected, (system) => system.holderLayer(path)));

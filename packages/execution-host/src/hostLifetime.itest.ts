@@ -11,7 +11,7 @@ import { HostBoot } from '@runlith/executions/protocol/boot';
 import { hostPolicy, hostShare, hostWireLimits, registrationOf, principalOf } from './hostFixture';
 import { HOLDER_BINARY, HOLDER_LIBRARY } from './posix/testing/holder';
 import { Processes, type ProcessIdentity } from './ProcessReader';
-import { processLayer } from './composition/macos';
+import { processLayer } from './composition/platform';
 
 const policy = hostPolicy({ executions: 1, transports: ['pipes'], custodyReceipts: 8 });
 const limits = hostWireLimits(policy, 1, { envelopeBytes: 16384, connections: 2, requests: 4 });

@@ -29,7 +29,7 @@ import { makeProcessWorld, writerClaimAvailable, type ProcessWorld } from './com
 import { bundleWorld } from './composition/testing/artifact';
 import { HOST_ENTRY } from './buildArtifact';
 import { HOLDER_LIBRARY } from './posix/testing/holder';
-import { processLayer } from './composition/macos';
+import { processLayer } from './composition/platform';
 import { processControl } from './posix/control';
 import { background } from './posix/testing/tempo';
 import { Processes } from './ProcessReader';

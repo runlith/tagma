@@ -8,6 +8,7 @@ import type { HeldExecution, NextBundle } from '../../holder/Holder';
 import { readUntil, writeAll } from '../../holder/testing/Adapter';
 import { CONTROL_VARIABLE, openHolder } from '../PosixHolder';
 import { report } from './report';
+import { testSystem } from '../../composition/testing/system';
 
 const [library, state, HOLDER_PART, STANDING_HOLDER] = process.argv.slice(2) as [string, string, string, string];
 const RUNTIME_PART = 'runtime/bun';
@@ -40,9 +41,10 @@ const digest = Effect.fn('posix.succession.digest')(function* (path: string) {
 
 const flags = Effect.fn('posix.succession.flags')(function* () {
   const files = yield* FileSystem.FileSystem;
+  const system = yield* testSystem;
   const libc = yield* Effect.acquireRelease(
     Effect.try({
-      try: () => dlopen('/usr/lib/libSystem.B.dylib', { fcntl: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } }),
+      try: () => dlopen(system.libc, { fcntl: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 } }),
       catch: (cause) => new Cause.UnknownError(cause, String(cause)),
     }),
     (library) => Effect.sync(() => library.close()),

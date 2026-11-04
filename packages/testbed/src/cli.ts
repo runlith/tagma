@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { constants, getPriority, setPriority } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { kindOf, runsAs, type Kind } from './core/files.ts';
+import { kindOf, runsAs, runsOnPlatform, type Kind } from './core/files.ts';
 import type { FileRow, NotRunRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
@@ -43,6 +43,30 @@ const discover = async (kind: Kind, pathspec: string): Promise<string[]> => {
 };
 
 const command = process.argv.slice(2);
+const flagValues = new Set([
+  '-t',
+  '--test-name-pattern',
+  '--timeout',
+  '--rerun-each',
+  '--retry',
+  '--seed',
+  '--coverage-reporter',
+  '--coverage-dir',
+  '--reporter',
+  '--reporter-outfile',
+  '--max-concurrency',
+  '--path-ignore-patterns',
+  '--parallel-delay',
+  '--shard',
+  '--timings',
+  '--preload',
+  '--require',
+  '-r',
+  '--env-file',
+  '--define',
+  '--loader',
+  '--conditions',
+]);
 const selected = KINDS[command[0] ?? ''];
 const program = command[0] === 'e2e' && command[1] === '--program';
 let headed = false;
@@ -55,30 +79,6 @@ if (program) {
   const word = command[0]!;
   const flags: string[] = [];
   const files: string[] = [];
-  const values = new Set([
-    '-t',
-    '--test-name-pattern',
-    '--timeout',
-    '--rerun-each',
-    '--retry',
-    '--seed',
-    '--coverage-reporter',
-    '--coverage-dir',
-    '--reporter',
-    '--reporter-outfile',
-    '--max-concurrency',
-    '--path-ignore-patterns',
-    '--parallel-delay',
-    '--shard',
-    '--timings',
-    '--preload',
-    '--require',
-    '-r',
-    '--env-file',
-    '--define',
-    '--loader',
-    '--conditions',
-  ]);
   let positional = false;
   for (let at = 1; at < command.length; at++) {
     const part = command[at]!;
@@ -92,7 +92,7 @@ if (program) {
     }
     if (!positional && part.startsWith('-')) {
       flags.push(part);
-      if (values.has(part)) {
+      if (flagValues.has(part)) {
         const value = command[++at];
         if (value === undefined) throw new Error(`${part} needs a value`);
         flags.push(value);
@@ -116,7 +116,12 @@ if (program) {
     console.error(`testbed: no ${selected.suffix} files found`);
     process.exit(1);
   }
-  command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(files.sort()));
+  const eligible = files.filter((file) => runsOnPlatform(file));
+  if (eligible.length === 0) {
+    console.error(`testbed: ${files.length} platform-specific files do not run on ${process.platform}`);
+    process.exit(0);
+  }
+  command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(eligible.sort()));
 }
 if (command.length === 0) {
   console.error('usage: testbed <command> [args...]   runs a test runner on its share of the machine and writes the run report');
@@ -124,6 +129,31 @@ if (command.length === 0) {
 }
 const vitest = !program && command.some((part) => ['vitest', 'vitest.mjs'].includes(basename(part)));
 const bunTest = !program && basename(command[0]!) === 'bun' && command.find((part, index) => index > 0 && !part.startsWith('-')) === 'test';
+if (bunTest && selected === undefined) {
+  const named = command.filter((part) => /\.(?:test|itest|e2e|spec)\.[cm]?[jt]sx?$/.test(part));
+  const filters: string[] = [];
+  for (let at = command.indexOf('test') + 1; at < command.length; at++) {
+    const part = command[at]!;
+    if (flagValues.has(part) || ((part === '--bail' || part === '--parallel') && /^\d+$/.test(command[at + 1] ?? ''))) at++;
+    else if (!part.startsWith('-')) filters.push(part.replace(/^\.\//, ''));
+  }
+  const files =
+    named.length === 0
+      ? (await Promise.all([discover('unit', '*.test.*'), discover('unit', '*.spec.*')]))
+          .flat()
+          .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
+      : named;
+  const eligible = files.filter((file) => runsOnPlatform(file));
+  if (files.length > 0 && eligible.length === 0) {
+    console.error(`testbed: ${files.length} platform-specific files do not run on ${process.platform}`);
+    process.exit(0);
+  }
+  if (named.length === 0) command.push(...eligible);
+  else
+    for (let at = command.length - 1; at >= 0; at--) {
+      if (named.includes(command[at]!) && !runsOnPlatform(command[at]!)) command.splice(at, 1);
+    }
+}
 const runner = bunTest ? 'bun' : vitest ? 'vitest' : 'other';
 const budget = machineBudget(process.env);
 const options = (): number => (command.includes('--') ? command.indexOf('--') : command.length);

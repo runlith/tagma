@@ -85,6 +85,14 @@ fields:
           "921755ee",
           "d2a60527"
         ]
+      },
+      {
+        "at": "src/Artifact.ts",
+        "role": "port"
+      },
+      {
+        "at": "src/boot.ts",
+        "role": "port"
       }
     ],
     "id": "@runlith/execution-host",

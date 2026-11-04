@@ -1,7 +1,7 @@
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { resolve } from 'node:path';
 import { arch, cpus, loadavg, platform, totalmem } from 'node:os';
-import { Abi } from './ProcessAbi';
+import { Abi } from '../ProcessAbi';
 import { Sampler } from './Sampler';
 import { NativeUsage } from './UsageAbi';
 import { psUsage, type RefusedUsage } from './ps';

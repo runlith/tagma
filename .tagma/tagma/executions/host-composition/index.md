@@ -16,6 +16,12 @@ fields:
           "13182a9f",
           "6cc306ce"
         ]
+      },
+      {
+        "at": "artifact.ts",
+        "for": [
+          "921755ee"
+        ]
       }
     ],
     "id": "host-composition"

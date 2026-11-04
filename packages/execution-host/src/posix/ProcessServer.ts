@@ -2,11 +2,8 @@
 
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
 import type { UsageDemand, UsageRead } from '../UsageReader';
-import { Abi } from './macos/ProcessAbi';
+import type { ProcessAbi } from './ProcessAbi';
 import type { Refused } from './refusal';
-import { Sampler } from './macos/Sampler';
-import { NativeUsage } from './macos/UsageAbi';
-import { psUsage } from './macos/ps';
 
 export type Question =
   | { readonly _tag: 'Usage'; readonly demand: UsageDemand }
@@ -26,13 +23,19 @@ export type Answer =
   | { readonly _tag: 'Facts'; readonly id: number; readonly reply: ProcessReading | Refused }
   | { readonly _tag: 'Failed'; readonly id: number; readonly detail: string };
 
-type Opened = { readonly processes: Abi; readonly sampler: Sampler };
+type ProcessSource = {
+  readonly processes: ProcessAbi;
+  readonly sampler: {
+    readonly machineName: string;
+    readonly read: (demand: UsageDemand) => UsageRead | string;
+  };
+};
 
 declare const self: Worker;
 
 const send = (answer: Answer): void => self.postMessage(answer);
 
-const answered = (opened: Opened, id: number, question: Question): Answer => {
+const answered = (opened: ProcessSource, id: number, question: Question): Answer => {
   switch (question._tag) {
     case 'Usage': {
       const read = opened.sampler.read(question.demand);
@@ -45,26 +48,27 @@ const answered = (opened: Opened, id: number, question: Question): Answer => {
   }
 };
 
-let opened: Opened | undefined;
+export const serveProcesses = (open: (path: string) => ProcessSource): void => {
+  let opened: ProcessSource | undefined;
 
-self.onmessage = (event: MessageEvent<Request>) => {
-  const request = event.data;
-  if (request._tag === 'Open') {
-    try {
-      const processes = Abi.load(request.path);
-      opened = { processes, sampler: new Sampler(NativeUsage.load(request.path), processes, psUsage) };
-      send({ _tag: 'Opened', machineName: opened.sampler.machineName });
-    } catch (error) {
-      send({ _tag: 'Refused', detail: String(error) });
+  self.onmessage = (event: MessageEvent<Request>) => {
+    const request = event.data;
+    if (request._tag === 'Open') {
+      try {
+        opened = open(request.path);
+        send({ _tag: 'Opened', machineName: opened.sampler.machineName });
+      } catch (error) {
+        send({ _tag: 'Refused', detail: String(error) });
+      }
+      return;
     }
-    return;
-  }
-  if (opened === undefined) return send({ _tag: 'Failed', id: request.id, detail: 'the process worker was not opened' });
-  try {
-    send(answered(opened, request.id, request.question));
-  } catch (error) {
-    send({ _tag: 'Failed', id: request.id, detail: String(error) });
-  }
-};
+    if (opened === undefined) return send({ _tag: 'Failed', id: request.id, detail: 'the process worker was not opened' });
+    try {
+      send(answered(opened, request.id, request.question));
+    } catch (error) {
+      send({ _tag: 'Failed', id: request.id, detail: String(error) });
+    }
+  };
 
-send({ _tag: 'Ready' });
+  send({ _tag: 'Ready' });
+};

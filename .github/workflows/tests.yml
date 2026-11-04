@@ -88,6 +88,7 @@ jobs:
       - if: contains(inputs.lanes, 'webkit')
         name: WebKit and its system libraries
         run: bun x --no-install playwright-core install --with-deps webkit
+        working-directory: packages/e2e
       - if: contains(inputs.lanes, 'electron')
         name: Electron
         run: bun -e "require('electron/install.js')"
@@ -126,7 +127,7 @@ jobs:
           if [ "$RUNNER_OS" = Linux ] && [[ ",$LANES," = *,electron,* ]]; then
             display=(xvfb-run -a)
           fi
-          "${display[@]}" bun run test:all --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/report/report.json"
+          "${display[@]}" bun run test:all --stream --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/report/report.json"
       - if: ${{ !cancelled() }}
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"

@@ -1,25 +1,21 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Effect, Fiber, FileSystem, Layer, Schedule } from 'effect';
+import { Deferred, Effect, Fiber, FileSystem, Layer, Schedule } from 'effect';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { type WireLimits } from '@runlith/executions/protocol/wire';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { host, serve } from './host';
-import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
-import { platformLayer } from './composition/macos';
-import { platformFacts } from './posix/macos/facts';
-import { PS } from './posix/macos/evidence';
-import { loadLibrary } from './posix/Library';
-import { testHolder } from './posix/testing/holder';
+import { platformLayer } from './composition/platform';
+import { testHolder, HOLDER_LIBRARY } from './posix/testing/holder';
 import { credentialsLayer } from './posix/credentials';
 import { fixtureHolder, fixtureFacts, hostPolicy, hostShare, hostTestRoot, hostWireLimits, registrationOf } from './hostFixture';
 import { PlatformFacts } from './PlatformFacts';
-import { processLayer } from './composition/macos';
+import { processLayer } from './composition/platform';
 
-const LIBRARY = resolve(import.meta.dir, '../native/target/release/libexecution_platform.dylib');
+const LIBRARY = HOLDER_LIBRARY;
 const policy = hostPolicy({ executions: 1, transports: ['pipes'] });
 const limits: WireLimits = hostWireLimits(policy, 1, { envelopeBytes: 16384, connections: 2, requests: 4 });
 const share = hostShare(policy, 1);
@@ -33,7 +29,7 @@ const platform = Layer.mergeAll(processLayer(LIBRARY), HostRegistration.layer, f
 
 layer(platform, { excludeTestServices: true })('host boot', (it) => {
   it.effect(
-    'serves its initialized profile when the process census answers after the old boot deadline',
+    'opens admission after its platform census completes',
     Effect.fnUntraced(function* () {
       const state = yield* directory;
       const registration = registrationOf(state);
@@ -45,20 +41,19 @@ layer(platform, { excludeTestServices: true })('host boot', (it) => {
         ),
       );
       yield* Effect.gen(function* () {
-        const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const delayed = ChildProcessSpawner.make((command) =>
-          real.spawn(
-            command._tag === 'StandardCommand' && command.command === PS
-              ? ChildProcess.make('/bin/sh', ['-c', 'sleep 2.1; exec "$@"', 'sh', command.command, ...command.args], command.options)
-              : command,
-          ),
-        );
-        const facts = yield* platformFacts(yield* loadLibrary(LIBRARY)).pipe(
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, delayed),
-        );
+        const entered = yield* Deferred.make<void>();
+        const released = yield* Deferred.make<void>();
+        const real = yield* PlatformFacts;
+        const facts = PlatformFacts.of({
+          ...real,
+          standing: (observe) =>
+            Effect.andThen(Deferred.succeed(entered, undefined), Effect.andThen(Deferred.await(released), real.standing(observe))),
+        });
         const running = yield* Effect.forkScoped(
           serve({ state, registration, library: LIBRARY, policy, share, limits }).pipe(Effect.provideService(PlatformFacts, facts)),
         );
+        yield* Deferred.await(entered);
+        yield* Deferred.succeed(released, undefined);
         const client = yield* ExecutionClient.make({
           address: { state, installation: registration.installation },
           role: 'custodian',
@@ -105,7 +100,7 @@ layer(platform, { excludeTestServices: true })('host boot', (it) => {
         host({
           state,
           registration: registrationOf(state),
-          library: join(state, 'libexecution_platform.dylib'),
+          library: join(state, 'missing-library'),
           policy,
           share,
           limits,

@@ -2,10 +2,10 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Schedule } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { resolve } from 'node:path';
+import { HOLDER_LIBRARY } from './posix/testing/holder';
 import { climb } from '@runlith/executions/stopLadder';
 import { loadLibrary } from './posix/Library';
-import { processReader } from './posix/macos/processes';
+import { processReader } from './composition/testing/native';
 import {
   Processes,
   ProcessesUnreadable,
@@ -20,7 +20,7 @@ import { pidStanding } from './posix/testing/processes';
 import { processControl } from './posix/control';
 import type { ProcessWitness } from '@runlith/executions/protocol/evidence';
 
-const ARTIFACT = resolve(import.meta.dir, '../native/target/release/libexecution_platform.dylib');
+const ARTIFACT = HOLDER_LIBRARY;
 const LEADER = 100;
 const BIRTH = '1000500';
 const LEADER_STARTED = 1_000_500;

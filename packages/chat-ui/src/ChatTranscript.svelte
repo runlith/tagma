@@ -259,6 +259,7 @@
 
     let focused: string | undefined;
     let touched: string | undefined;
+    let tabbed = false;
     let ends: readonly string[] = [];
     const keyOf = (node: Node | null | undefined): string | undefined =>
       (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('[data-timeline-key]')?.dataset.timelineKey;
@@ -277,19 +278,28 @@
     const focusIn = (event: FocusEvent) => {
       focused = keyOf(event.target as Node | null);
       keep();
-      viewport.syncFocus(event.target instanceof Element ? event.target : null);
+      if (tabbed && event.target instanceof Element) viewport.focused(event.target);
+      tabbed = false;
+    };
+    const keyed = (event: KeyboardEvent) => {
+      tabbed = event.key === 'Tab';
+    };
+    const pointed = () => {
+      tabbed = false;
     };
     const focusOut = (event: FocusEvent) => {
       if (element.contains(event.relatedTarget as Node | null)) return;
       focused = undefined;
       keep();
-      viewport.syncFocus(null);
     };
     const pressed = (event: MouseEvent) => {
       const control = (event.target as Element | null)?.closest<HTMLElement>('[aria-expanded], summary');
       if (control && element.contains(control)) virtualizer.press(control);
     };
+    syncSelection();
     document.addEventListener('selectionchange', syncSelection);
+    document.addEventListener('keydown', keyed, true);
+    document.addEventListener('pointerdown', pointed, true);
     element.addEventListener('focusin', focusIn);
     element.addEventListener('focusout', focusOut);
     element.addEventListener('click', pressed, true);
@@ -297,6 +307,8 @@
       element.addEventListener(name, touch, { capture: true, passive: true });
     return () => {
       document.removeEventListener('selectionchange', syncSelection);
+      document.removeEventListener('keydown', keyed, true);
+      document.removeEventListener('pointerdown', pointed, true);
       element.removeEventListener('focusin', focusIn);
       element.removeEventListener('focusout', focusOut);
       element.removeEventListener('click', pressed, true);

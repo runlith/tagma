@@ -86,7 +86,7 @@ export const runtimeProfile = (
 
   return decodeProfile({
     version: 1,
-    platform: { os: 'darwin', arch: process.arch },
+    platform: { os: process.platform, arch: process.arch },
     runtime: { name: 'bun', version: Bun.version },
     native: { crate: 'execution-platform', version: '0.1.0', build: 'runtime-fixture' },
     ...policy,

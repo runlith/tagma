@@ -288,28 +288,39 @@ describe('the tail', () => {
     viewport.dispose();
   });
 
-  test('a return to the tail ends the hold of the selection standing in the feed, and the next selection holds again', async () => {
+  test('a return to the tail ends the hold of the selection standing in the feed, and the reader own next selection holds again', async () => {
     const { browser, viewport, settle } = await opened();
     const text = document.createTextNode('an answer still being written');
     browser.rows.get('row-199')!.inner.append(text);
     const range = document.createRange();
     range.selectNodeContents(text);
-    window.getSelection()!.addRange(range);
+    const select = () => {
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(range);
+    };
+    const synced = () => viewport.syncSelection(window.getSelection(), browser.list);
     viewport.syncSelection(window.getSelection(), browser.list);
+    select();
+    synced();
     expect(viewport.anchored).toBe(false);
 
     viewport.resume();
     text.appendData(' and more of it');
-    viewport.syncSelection(window.getSelection(), browser.list);
+    synced();
     browser.resize('row-199', 400);
     await settle();
     expect(browser.atEnd()).toBe(true);
     expect(viewport.anchored).toBe(true);
 
     window.getSelection()!.removeAllRanges();
-    viewport.syncSelection(window.getSelection(), browser.list);
-    window.getSelection()!.addRange(range);
-    viewport.syncSelection(window.getSelection(), browser.list);
+    synced();
+    select();
+    viewport.resume();
+    synced();
+    expect(viewport.anchored).toBe(true);
+
+    browser.list.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
+    synced();
     expect(viewport.anchored).toBe(false);
     window.getSelection()!.removeAllRanges();
     viewport.dispose();
@@ -328,6 +339,19 @@ describe('the tail', () => {
     await settle();
     expect(browser.atEnd()).toBe(true);
     expect(viewport.following).toBe(true);
+    viewport.dispose();
+  });
+
+  test('a scrollbar drag released before its scroll event arrives stays where the reader left it', async () => {
+    const { browser, viewport, settle } = await opened();
+    const top = browser.root.scrollTop;
+    browser.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
+    browser.root.scrollTop = top - 300;
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top - 300);
+    expect(viewport.following).toBe(false);
     viewport.dispose();
   });
 });
@@ -561,26 +585,6 @@ describe('whose hand moved the feed', () => {
     await settle();
     expect(browser.root.scrollTop).toBe(2000);
     expect(viewport.following).toBe(false);
-    viewport.dispose();
-  });
-
-  test('keyboard focus inside the feed holds it while it stays, and the feed returns to the tail when focus leaves', async () => {
-    const { browser, viewport, settle } = await opened();
-    const top = browser.root.scrollTop;
-    const control = document.createElement('button');
-    browser.rows.get('row-199')!.inner.append(control);
-    control.focus();
-    viewport.syncFocus(control);
-
-    browser.resize('row-199', 400);
-    await settle();
-    expect(browser.root.scrollTop).toBe(top);
-
-    control.blur();
-    viewport.syncFocus(null);
-    await settle();
-    expect(browser.atEnd()).toBe(true);
-    expect(viewport.following).toBe(true);
     viewport.dispose();
   });
 

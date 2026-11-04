@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a1a7ac-e072-7b85-9695-d2b287ff9bb1",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: relates
@@ -25,6 +25,6 @@ Read at 06131e7f0f:
 - `src/buildArtifact.ts` and `src/composition/nativeBuild.ts` import `macos/artifact` (Apple Rust triples only), so the native part builds for no other OS; the server's `test:integration` script runs `build:native` first and therefore stops on Linux before any test.
 - Shared test fixtures take the macOS adapter by path: `src/posix/testing/holder.ts`, `src/composition/testing/posix.ts`, `src/runtimeFixture.ts`, `src/hostFixture.ts` (a `darwin` platform literal), and the itests importing `posix/macos/*` (`host`, `ExecutionRuntime`, `ProvenSet`, `nativeLaunch`, `terminalRelease`, `ExecutionCapacity`, `composition/testing/{foreground,processCapacity,terminalCapacity,gpu}`).
 
-Done when the POSIX layer and the build reach a platform only through the platform ports the host declares, the macOS adapter is the only code naming macOS, its own tests are marked as macOS platform tests, and the host's OS-independent tests run on a Linux runner.
+Done when the POSIX layer and the build reach a platform only through the platform ports the host declares, the macOS adapter is the only implementation naming macOS, and its own tests are marked as macOS platform tests. The Linux implementation and the host's Linux runtime proof belong to [[c642fba6]].
 
 Added by the OS audit: `src/buildArtifact.ts:19,209` also imports `@runlith/codesign` and signs every part, so the shared build calls the macOS signing adapter directly; `:63-65` and `:421` compare `process.platform` with the adapter's declared OS and put it into the manifest.

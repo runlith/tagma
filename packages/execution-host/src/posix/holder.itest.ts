@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { Context, Effect, Exit, FileSystem, Layer, PlatformError } from 'effect';
 import { Holder } from '../holder/Holder';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { testHolder } from './testing/holder';
+import { testHolder, HOLDER_LIBRARY } from './testing/holder';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -12,7 +12,7 @@ import type { NativeExit, ProcessCost } from '@runlith/executions/protocol/execu
 
 const RELEASE = resolve(import.meta.dir, '../../native/target/release');
 const HOLDER = join(RELEASE, 'execution-holder');
-const LIBRARY = join(RELEASE, 'libexecution_platform.dylib');
+const LIBRARY = HOLDER_LIBRARY;
 const LOGIC = join(import.meta.dir, 'testing/logic.ts');
 const state = join(homedir(), '.tagma-tests', `holder-${randomUUID()}`);
 

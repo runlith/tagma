@@ -90,16 +90,49 @@ for (const lane of ['chromium', 'webkit'] as const) {
           window.getSelection()!.addRange(range);
         });
       await page.locator('textarea').evaluate((area: HTMLTextAreaElement) => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
-          area,
-          'Dictated while the answer stands selected.',
-        );
+        area.setRangeText('Dictated while the answer stands selected.', 0, area.value.length, 'end');
         area.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(await page.evaluate(() => (globalThis as ComposerStandGlobal).feedStand!.send())).toBe(true);
       await stream(8);
       expect(await page.evaluate(() => window.getSelection()!.isCollapsed)).toBe(false);
       await tail(page);
+    },
+    { lanes: [lane], context: { viewport: { width: 1100, height: 800 } } },
+  );
+
+  e2e(
+    'keyboard focus moving to a control above the view takes the feed off the tail and keeps the control in view',
+    async ({ page }) => {
+      await page.goto(served.url('/?count=24&loaded=24'));
+      await ready(page);
+      await tail(page);
+      const focusable = '[data-scrollable][role="group"] :is(button, a[href], summary, [tabindex="0"])';
+      await page
+        .locator(focusable)
+        .last()
+        .evaluate((control: HTMLElement) => control.focus({ preventScroll: true }));
+      const shown = () =>
+        page.evaluate(() => {
+          const root = document.querySelector<HTMLElement>('[data-scrollable][role="group"]')!;
+          const active = document.activeElement;
+          if (!(active instanceof HTMLElement) || !root.contains(active)) return null;
+          const box = active.getBoundingClientRect();
+          const view = root.getBoundingClientRect();
+          return box.bottom > view.top && box.top < view.bottom;
+        });
+      let away = false;
+      for (let step = 0; step < 60 && !away; step += 1) {
+        await page.keyboard.press('Shift+Tab');
+        await frames(page);
+        away = (await position(page)).gap > 200;
+      }
+      expect(away).toBe(true);
+      expect(await shown()).toBe(true);
+      await page.evaluate(() => (globalThis as ComposerStandGlobal).feedStand!.stream(3));
+      await frames(page);
+      expect(await shown()).toBe(true);
+      expect((await position(page)).gap).toBeGreaterThan(200);
     },
     { lanes: [lane], context: { viewport: { width: 1100, height: 800 } } },
   );

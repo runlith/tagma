@@ -1,7 +1,7 @@
 import { CString, dlopen, FFIType, ptr, type JSCallback, type Pointer } from 'bun:ffi';
 import type { WorkState } from '../holder/Holder';
 import type { ProcessWitness } from '@runlith/executions/protocol/evidence';
-import { birthOf } from './macos/birth';
+import { birthOf } from './birth';
 export type TerminalFacts = {
   readonly pid: number;
   readonly pgid: number;

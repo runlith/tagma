@@ -7,9 +7,10 @@ import { Adapter } from '../../holder/testing/Adapter';
 import { command } from './commands';
 import { testHolder, HOLDER_LIBRARY } from '../../posix/testing/holder';
 import { loadLibrary } from '../../posix/Library';
-import { processReader } from '../../posix/macos/processes';
+import { processReader } from './native';
 import { background } from '../../posix/testing/tempo';
 import { ProcessesUnreadable } from '../../ProcessReader';
+import { testSystem } from './system';
 
 export const posix = () =>
   Layer.effectContext(
@@ -18,6 +19,7 @@ export const posix = () =>
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const loaded = yield* loadLibrary(HOLDER_LIBRARY);
       const processes = yield* processReader(loaded);
+      const system = yield* testSystem;
       const directory = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'execution-contracts-' }));
       const home = join(directory, 'home');
       yield* files.makeDirectory(home);
@@ -58,7 +60,7 @@ export const posix = () =>
           fixture: command,
           priority,
           background,
-          priorities: (launcher) => Effect.map(priority(launcher), (full) => ({ full, low: '20', lowest: '4' })),
+          priorities: (launcher) => Effect.map(priority(launcher), (full) => ({ full, ...system.priorities })),
           standing: (pid) =>
             Effect.suspend(() => {
               const row = processes.identity(pid);

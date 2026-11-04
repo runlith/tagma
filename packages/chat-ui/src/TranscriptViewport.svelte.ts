@@ -28,6 +28,7 @@ export class TranscriptViewport {
   private readerMoved = false;
   private inputRoot: HTMLElement | undefined;
   private pressing = false;
+  private pressTop = 0;
   private touchY: number | undefined;
   private previousEntryCount = 0;
   private previousActiveRunId: string | null | undefined;
@@ -143,9 +144,19 @@ export class TranscriptViewport {
     this.followingViewport.syncSelection(selection, content);
   }
 
-  syncFocus(focused: Element | null): void {
-    if (focused?.matches(':focus-visible')) this.followingViewport.hold('focus');
-    else this.release('focus');
+  focused(element: Element): void {
+    const root = this.inputRoot;
+    if (!root) return;
+    if (this.followingViewport.unreported()) {
+      this.scrolled(true);
+      return;
+    }
+    const box = element.getBoundingClientRect();
+    const view = root.getBoundingClientRect();
+    const direction = box.bottom <= view.top ? -1 : box.top >= view.bottom - this.clearance ? 1 : 0;
+    if (direction === 0) return;
+    this.window.letGo();
+    this.heard(direction, true);
   }
 
   useMessages(read: () => readonly { readonly id: string }[]): void {
@@ -247,6 +258,7 @@ export class TranscriptViewport {
   };
 
   private readonly onPointer = (event: PointerEvent): void => {
+    this.followingViewport.touched();
     if (event.target !== this.inputRoot || event.buttons !== 1) return;
     this.press();
     this.input(event.target, 0, true);
@@ -256,6 +268,7 @@ export class TranscriptViewport {
     this.followingViewport.hold('press');
     if (this.pressing) return;
     this.pressing = true;
+    this.pressTop = this.inputRoot?.scrollTop ?? 0;
     this.window.holdWrites(true);
     window.addEventListener('pointerup', this.onRelease, true);
     window.addEventListener('pointercancel', this.onRelease, true);
@@ -263,6 +276,7 @@ export class TranscriptViewport {
   }
 
   private readonly onRelease = (): void => {
+    if (this.inputRoot?.scrollTop !== this.pressTop && this.followingViewport.unreported()) this.scrolled(true);
     this.unwatchPress();
     this.release('press');
   };
@@ -281,6 +295,7 @@ export class TranscriptViewport {
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    this.followingViewport.touched();
     if (!SCROLL_KEYS.has(event.key)) return;
     if (event.defaultPrevented || (event.key === ' ' && (event.metaKey || event.ctrlKey || event.altKey))) return;
     const target = event.target;

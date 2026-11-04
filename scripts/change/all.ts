@@ -18,12 +18,13 @@ for (let at = 0; at < args.length; at++) {
   if (values.has(args[at]!)) {
     if (args[at + 1] === undefined || args[at + 1]!.startsWith('--')) throw new Error(`${args[at]} needs a value`);
     at++;
-  } else if (!['--randomize', '--resume', '--plan', '--help'].includes(args[at]!)) throw new Error(`Unknown option: ${args[at]}`);
+  } else if (!['--randomize', '--resume', '--plan', '--stream', '--help'].includes(args[at]!))
+    throw new Error(`Unknown option: ${args[at]}`);
 }
 const value = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 if (args.includes('--help')) {
   console.log(
-    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--shard index/count] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan]`,
+    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--shard index/count] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan] [--stream]`,
   );
   process.exit(0);
 }
@@ -187,7 +188,10 @@ try {
       serial: jobs !== undefined,
       limit,
       started: (job) => prepare(byId.get(job.id)!),
-      output: (job, chunk) => appendFileSync(logs.get(job.id)!, chunk),
+      output: (job, chunk) => {
+        appendFileSync(logs.get(job.id)!, chunk);
+        if (args.includes('--stream')) process.stdout.write(chunk);
+      },
       ended: (job, run) => settle(byId.get(job.id)!, run),
     },
   );
