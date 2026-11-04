@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
 
+const { CI: _ci, GITHUB_ACTIONS: _annotations, ...local } = process.env;
+
 const run = async (files: readonly string[], flags: readonly string[] = [], env: Readonly<Record<string, string>> = {}) => {
   const child = Bun.spawn([process.execPath, 'test', ...files, '--parallel=1', ...flags], {
     cwd: import.meta.dir + '/..',
-    env: { ...process.env, ...env },
+    env: { ...local, ...env },
     stdout: 'pipe',
     stderr: 'pipe',
   });

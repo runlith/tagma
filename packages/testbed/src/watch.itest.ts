@@ -24,10 +24,12 @@ const plant = (files: Readonly<Record<string, string>>): string => {
 
 type Ran = { readonly output: string; readonly code: number | null; readonly pids: Record<string, number> };
 
+const { GITHUB_ACTIONS: _annotations, ...plain } = process.env;
+
 const bunTest = async (cwd: string, args: readonly string[]): Promise<Ran> => {
   const child = Bun.spawn(['bun', 'test', '--no-orphans', ...args], {
     cwd,
-    env: { ...process.env, RUNLITH_TEST_REPORT: join(cwd, 'report.jsonl') },
+    env: { ...plain, RUNLITH_TEST_REPORT: join(cwd, 'report.jsonl') },
     stdout: 'pipe',
     stderr: 'pipe',
   });
