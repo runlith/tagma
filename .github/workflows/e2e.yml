@@ -8,6 +8,10 @@ on:
         description: Workspace directory to run alone; empty runs every package
         required: false
         default: ''
+      test-pattern:
+        description: Test name regex; empty runs every test
+        required: false
+        default: ''
       platform:
         description: Platform to check
         type: choice
@@ -30,6 +34,7 @@ jobs:
       runner: ubuntu-latest
       shards: 4
       package: ${{ inputs.package }}
+      test-pattern: ${{ inputs.test-pattern }}
       lanes: chromium,webkit,electron
 
   ios:
@@ -41,4 +46,5 @@ jobs:
       runner: macos-latest
       shards: 1
       package: ${{ inputs.package }}
+      test-pattern: ${{ inputs.test-pattern }}
       lanes: ios

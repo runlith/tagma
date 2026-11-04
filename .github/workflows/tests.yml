@@ -23,6 +23,11 @@ on:
         required: false
         default: ''
         type: string
+      test-pattern:
+        description: Test name regex; empty runs every test
+        required: false
+        default: ''
+        type: string
       lanes:
         description: Real engines needed by an e2e lane; empty needs no e2e setup
         required: false
@@ -113,6 +118,7 @@ jobs:
         env:
           PACKAGE: ${{ inputs.package }}
           LANES: ${{ inputs.lanes }}
+          TEST_PATTERN: ${{ inputs.test-pattern }}
           E2E_IOS_RUNTIMES: '26'
         run: |
           mkdir -p "$RUNNER_TEMP/report"
@@ -127,7 +133,7 @@ jobs:
           if [ "$RUNNER_OS" = Linux ] && [[ ",$LANES," = *,electron,* ]]; then
             display=(xvfb-run -a)
           fi
-          "${display[@]}" bun run test:all --stream --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/report/report.json"
+          "${display[@]}" bun run test:all --stream --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} ${TEST_PATTERN:+--test-name-pattern "$TEST_PATTERN"} --report "$RUNNER_TEMP/report/report.json"
       - if: ${{ !cancelled() }}
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"

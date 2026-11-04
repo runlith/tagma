@@ -21,6 +21,7 @@ export type SuiteOptions = {
   readonly seed: number | undefined;
   readonly reports: string;
   readonly combineVitest: boolean;
+  readonly testNamePattern?: string | undefined;
   readonly shard?: string | undefined;
 };
 
@@ -37,6 +38,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
   const cli = `${quote(process.execPath)} ${quote(join(options.root, 'packages/testbed/src/cli.ts'))}`;
   const first = options.shard === undefined || shardOf(options.shard).index === 1;
   const sharded = options.shard === undefined ? '' : ` --shard=${options.shard}`;
+  const pattern = options.testNamePattern === undefined ? '' : ` -t ${quote(options.testNamePattern)}`;
   const listed = new Set(paths);
   const owners = [...packages].sort((a, b) => b.dir.length - a.dir.length);
   for (const path of paths) {
@@ -61,7 +63,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
       files: undefined,
       outputs: [output],
       stages: [
-        `${cli} ${quote(process.execPath)} --bun ${quote(VITEST)} run --config ${quote(join(options.root, 'scripts/change/vitest-all.ts'))} --reporter=default --reporter=json --outputFile=${quote(output)}${shuffled}${sharded && `${sharded} --passWithNoTests`}`,
+        `${cli} ${quote(process.execPath)} --bun ${quote(VITEST)} run --config ${quote(join(options.root, 'scripts/change/vitest-all.ts'))} --reporter=default --reporter=json --outputFile=${quote(output)}${shuffled}${pattern}${sharded && `${sharded} --passWithNoTests`}`,
       ],
     });
   }
@@ -82,13 +84,13 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
             named = command.split(/\s+/).filter((part) => !part.startsWith('-') && TEST_FILE.test(part)).length || undefined;
           command = command.replace(/\s+--(?:randomize|seed=\S+)/g, '');
           if (options.randomize) command += ` --randomize${options.seed === undefined ? '' : ` --seed=${options.seed}`}`;
-          command += sharded;
+          command += pattern + sharded;
         } else if (/\bvitest\s+run\b/.test(command)) {
           shardable = true;
           command = command.replace(/\s+--sequence.seed(?:=\S+|\s+\d+)/g, '').replace(/\s+--(?:randomize|sequence.shuffle)/g, '');
           const output = join(options.reports, `${encodeURIComponent(id)}-${index}.vitest.json`);
           outputs.push(output);
-          command += ` --reporter=default --reporter=json --outputFile=${quote(output)}`;
+          command += ` --reporter=default --reporter=json --outputFile=${quote(output)}${pattern}`;
           if (options.randomize) command += ` --randomize${options.seed === undefined ? '' : ` --sequence.seed=${options.seed}`}`;
           if (sharded !== '') command += `${sharded} --passWithNoTests`;
         } else if (options.jobs !== undefined && /\bswift\s+test\b/.test(command)) {

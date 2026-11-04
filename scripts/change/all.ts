@@ -13,7 +13,18 @@ import { SCRIPTS, suitesOf, type Suite } from './suites.ts';
 const started = performance.now();
 const own = process.cpuUsage();
 const args = process.argv.slice(2);
-const values = new Set(['--root', '--jobs', '--seed', '--package', '--script', '--report', '--history', '--max-suites', '--shard']);
+const values = new Set([
+  '--root',
+  '--jobs',
+  '--seed',
+  '--package',
+  '--script',
+  '--report',
+  '--history',
+  '--max-suites',
+  '--shard',
+  '--test-name-pattern',
+]);
 for (let at = 0; at < args.length; at++) {
   if (values.has(args[at]!)) {
     if (args[at + 1] === undefined || args[at + 1]!.startsWith('--')) throw new Error(`${args[at]} needs a value`);
@@ -24,7 +35,7 @@ for (let at = 0; at < args.length; at++) {
 const value = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 if (args.includes('--help')) {
   console.log(
-    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--shard index/count] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan] [--stream]`,
+    `bun run test:all [--jobs cap] [--randomize] [--seed uint32] [--package path] [--script ${SCRIPTS.join('|')}] [--shard index/count] [--report file] [--resume] [--history earlier-report] [--max-suites count] [--plan] [--stream] [--test-name-pattern regex]`,
   );
   process.exit(0);
 }
@@ -54,6 +65,7 @@ let suites = suitesOf(packages, paths, {
   randomize: args.includes('--randomize'),
   reports: artifacts,
   combineVitest: value('--package') === undefined,
+  testNamePattern: value('--test-name-pattern'),
   shard,
 })
   .filter((suite) => value('--package') === undefined || (suite.directory || '.') === value('--package'))
