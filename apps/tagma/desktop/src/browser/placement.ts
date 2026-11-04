@@ -110,6 +110,7 @@ export class Placement {
     if (placed.contents.isDestroyed()) return;
     const shown = placed.shown;
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
+    if (placed.home !== null && placed.home.window.isDestroyed()) return;
     const wanted = awake(placed);
     const window =
       placed.shown === null || placed.shown.frozen || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
@@ -133,7 +134,7 @@ export class Placement {
   }
 
   private park(placed: Placed, awake: boolean): void {
-    const home = placed.home !== null && !placed.home.window.isDestroyed() ? placed.home : null;
+    const home = placed.home;
     if (home !== null && (HIDDEN_PAINTS || !awake || visible(home.window))) {
       this.move(placed, home.window);
       placed.view.setBounds(home.bounds());
