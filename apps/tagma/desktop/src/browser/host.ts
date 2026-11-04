@@ -369,11 +369,11 @@ export class BrowserHost implements Executor {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
         page.driven?.detach();
-        const driven = Driven.attach(page.contents, call.session, reporter, (gone) => {
+        const driven = Driven.attach(page.contents, call.session, reporter, (gone, end) => {
           this.sessions.delete(gone.session);
           if (page.driven !== gone) return;
           page.driving(null);
-          this.placement.settle(page.placed);
+          if (end !== 'closed') this.placement.settle(page.placed);
         });
         if (!(driven instanceof Driven)) return fail(driven);
         this.sessions.set(call.session, driven);

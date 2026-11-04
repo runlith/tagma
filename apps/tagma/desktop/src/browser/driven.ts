@@ -64,10 +64,15 @@ export class Driven {
     private readonly contents: WebContents,
     readonly session: number,
     private readonly reporter: Reporter,
-    private readonly gone: (driven: Driven) => void,
+    private readonly gone: (driven: Driven, end: SessionEnd | null) => void,
   ) {}
 
-  static attach(contents: WebContents, session: number, reporter: Reporter, gone: (driven: Driven) => void): Driven | Failure {
+  static attach(
+    contents: WebContents,
+    session: number,
+    reporter: Reporter,
+    gone: (driven: Driven, end: SessionEnd | null) => void,
+  ): Driven | Failure {
     if (contents.isDestroyed()) return { kind: 'missing', message: 'the page closed before the session attached' };
     try {
       contents.debugger.attach('1.3');
@@ -128,7 +133,7 @@ export class Driven {
 
   detach(): void {
     if (this.ended) return;
-    this.stop();
+    this.stop(null);
     if (!this.contents.isDestroyed() && this.contents.debugger.isAttached()) this.contents.debugger.detach();
   }
 
@@ -182,17 +187,17 @@ export class Driven {
 
   private close(end: SessionEnd): void {
     if (this.ended) return;
-    this.stop();
+    this.stop(end);
     this.reporter.ended(this.session, end);
   }
 
-  private stop(): void {
+  private stop(end: SessionEnd | null): void {
     this.ended = true;
     this.probed = null;
     if (!this.contents.isDestroyed()) {
       this.contents.debugger.off('message', this.message);
       this.contents.debugger.off('detach', this.detached);
     }
-    this.gone(this);
+    this.gone(this, end);
   }
 }
