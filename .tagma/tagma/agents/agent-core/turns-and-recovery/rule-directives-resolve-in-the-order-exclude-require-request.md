@@ -15,6 +15,7 @@ This is the rule pipeline's published contract; changing it is the operator's de
 - `exclude` always removes a tool: a requirement or request for an excluded tool yields no `toolChoice`, and `restrict` does not bring it back.
 - `require` beats `request`: the first `require` is taken, `request` only when no `require` exists.
 - A required or requested tool joins the set narrowed by `restrict`.
+- Forced tool use follows the model card's tool-choice modes. A card declaring modes without `tool` cannot be forced: a `request` is dropped to a guide, and a `require` becomes its tool alone under `auto`, so a rule needing one tool as the step's last act works on every model. A card declaring no modes forces.
 - `guide` conflicts with nothing and only adds text.
 
 At `beforeTool`, `deny` and `rewrite` judge the one call instead of the step's tool set: `deny` beats every `rewrite`, and among rewrites the first wins, since each replaces the whole input and two cannot merge. A denied call answers the refusal a `deny` permission verdict gives, unprepared and unasked. `beforeTool` is evaluated once per call, when the step orders its calls, and admission reuses that verdict: a rewrite changes what the call touches, so its claims must come from the rewritten input before any other call queues against them, and a denied call claims nothing. A rewritten input is decoded by the tool's own arguments, so claims, subjects, permission and review judge it; an input the tool does not take fails the call naming the rule. Elsewhere both are ignored.

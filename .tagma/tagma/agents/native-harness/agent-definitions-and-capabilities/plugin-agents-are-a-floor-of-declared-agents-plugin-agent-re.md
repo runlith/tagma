@@ -20,5 +20,5 @@ sources:
 - A plugin author, not the operator, wrote it, so it is offered to the operator alone until `agent.offered` opens it to agents, like a project file or an app agent.
 - Unlike an app agent it is born in the mode its creator or the project sets, not in `trust`: it carries no tools of its own that would make every turn ask.
 - Its id wins over a `.agents` file of the same name, which goes to rejected naming the winner; the library shows it with `plugin` origin, uneditable.
-- Floors are ordered apps first, then plugins, and the earlier floor wins an id both name — `demo-tools.reviewer` can be an app's and a plugin's — the same way in the library and at birth; the later file goes to rejected naming the winner.
+- Floors are ordered built-in first, then apps, then plugins, and the earlier floor wins an id both name — `demo-tools.reviewer` can be an app's and a plugin's — the same way in the library and at birth; the later file goes to rejected naming the winner.
 - A prompt that cannot be read fails the listing with the plugin's reason instead of dropping the agent silently.
