@@ -52,7 +52,7 @@ layer(platform, { excludeTestServices: true })('host boot', (it) => {
         const running = yield* Effect.forkScoped(
           serve({ state, registration, library: LIBRARY, policy, share, limits }).pipe(Effect.provideService(PlatformFacts, facts)),
         );
-        yield* Deferred.await(entered);
+        yield* Effect.raceFirst(Deferred.await(entered), Fiber.join(running));
         yield* Deferred.succeed(released, undefined);
         const client = yield* ExecutionClient.make({
           address: { state, installation: registration.installation },

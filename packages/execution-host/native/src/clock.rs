@@ -1,13 +1,50 @@
-// The kernel's uptime clock, which every process of this machine reads against the same origin and
-// which stands still while the machine sleeps: CLOCK_UPTIME_RAW. A deadline written by one process
-// and read by the next is a number on this clock, so it means the same instant to both.
+#[cfg(target_os = "macos")]
+const UPTIME: libc::clockid_t = libc::CLOCK_UPTIME_RAW;
+#[cfg(target_os = "linux")]
+const UPTIME: libc::clockid_t = libc::CLOCK_MONOTONIC;
 
 pub fn uptime_nanos() -> u64 {
     let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
-    if unsafe { libc::clock_gettime(libc::CLOCK_UPTIME_RAW, &mut now) } != 0 {
+    if unsafe { libc::clock_gettime(UPTIME, &mut now) } != 0 {
         return 0;
     }
     (now.tv_sec as u64) * 1_000_000_000 + now.tv_nsec as u64
+}
+
+pub fn ticks() -> Result<u64, i32> {
+    let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+    if ticks <= 0 { Err(libc::EIO) } else { Ok(ticks as u64) }
+}
+
+pub fn micros(ticks: u64, frequency: u64) -> u64 { (ticks as u128 * 1_000_000 / frequency as u128) as u64 }
+
+#[cfg(target_os = "linux")]
+fn nanos(clock: libc::clockid_t) -> Result<i128, i32> {
+    let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    if unsafe { libc::clock_gettime(clock, &mut now) } != 0 {
+        return Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(libc::EIO));
+    }
+    Ok(now.tv_sec as i128 * 1_000_000_000 + now.tv_nsec as i128)
+}
+
+#[cfg(target_os = "linux")]
+pub fn boot_nanos() -> Result<[u64; 2], i32> {
+    let sample = || -> Result<[u64; 2], i32> {
+        let before = nanos(libc::CLOCK_BOOTTIME)?;
+        let wall = nanos(libc::CLOCK_REALTIME)?;
+        let after = nanos(libc::CLOCK_BOOTTIME)?;
+        if after < before { return Err(libc::EIO); }
+        Ok([
+            u64::try_from(wall - after).map_err(|_| libc::EOVERFLOW)?,
+            u64::try_from(wall - before).map_err(|_| libc::EOVERFLOW)?,
+        ])
+    };
+    let mut best = sample()?;
+    for _ in 1..3 {
+        let next = sample()?;
+        if next[1] - next[0] < best[1] - best[0] { best = next; }
+    }
+    Ok(best)
 }
 
 #[cfg(test)]

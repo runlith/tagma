@@ -1,4 +1,5 @@
-import { Data, Deferred, Effect, type Scope } from 'effect';
+import { Data, Deferred, Effect, Exit, Scope, Semaphore } from 'effect';
+import type { WorkState } from '../holder/Holder';
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
 import type { UsageDemand, UsageRead } from '../UsageReader';
 import type { Refused } from './refusal';
@@ -10,11 +11,12 @@ export class WorkerUnanswered extends Data.TaggedError('WorkerUnanswered')<{ rea
   }
 }
 
-export type ProcessWorker = {
+type ProcessWorker = {
   readonly machineName: string;
   readonly usage: (demand: UsageDemand) => Effect.Effect<UsageRead, WorkerUnanswered>;
   readonly scan: (probe: ProcessProbe) => Effect.Effect<ReadonlyArray<ProcessRow> | Refused, WorkerUnanswered>;
   readonly facts: (pids: ReadonlyArray<number>) => Effect.Effect<ProcessReading | Refused, WorkerUnanswered>;
+  readonly group: (work: number, leader: number, exited: boolean) => Effect.Effect<WorkState | Refused, WorkerUnanswered>;
   readonly lost: () => boolean;
 };
 
@@ -80,6 +82,34 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
     usage: (demand) => asked({ _tag: 'Usage', demand }, (answer) => (answer._tag === 'Usage' ? answer.reply : undefined)),
     scan: (probe) => asked({ _tag: 'Scan', probe }, (answer) => (answer._tag === 'Scan' ? answer.reply : undefined)),
     facts: (pids) => asked({ _tag: 'Facts', pids }, (answer) => (answer._tag === 'Facts' ? answer.reply : undefined)),
+    group: (work, leader, exited) =>
+      asked({ _tag: 'Group', work, leader, exited }, (answer) => (answer._tag === 'Group' ? answer.reply : undefined)),
     lost: () => lost !== undefined,
   };
+});
+
+type HeldWorker = { readonly worker: ProcessWorker; readonly scope: Scope.Closeable };
+
+export const leaseProcessWorker = Effect.fnUntraced(function* (
+  path: string,
+  spawn: () => Worker,
+): Effect.fn.Return<Effect.Effect<ProcessWorker, WorkerUnanswered>, never, Scope.Scope> {
+  const scope = yield* Effect.scope;
+  const opening = yield* Semaphore.make(1);
+  let held: HeldWorker | undefined;
+  const current = () => held;
+  return opening.withPermit(
+    Effect.gen(function* () {
+      const standing = current();
+      if (standing !== undefined && !standing.worker.lost()) return standing.worker;
+      if (standing !== undefined) yield* Scope.close(standing.scope, Exit.void);
+      const own = yield* Scope.fork(scope);
+      const opened = yield* openProcessWorker(path, spawn).pipe(
+        Scope.provide(own),
+        Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(own, exit) : Effect.void)),
+      );
+      held = { worker: opened, scope: own };
+      return opened;
+    }),
+  );
 });

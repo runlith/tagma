@@ -1,4 +1,5 @@
-use super::sys;
+use crate::posix::{backend::Events, sys};
+use std::collections::HashSet;
 use crate::platform::{Event, Timer};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::ptr;
@@ -70,4 +71,15 @@ impl Queue {
         }
         Ok(())
     }
+}
+
+impl Events for Queue {
+    fn new() -> Result<Self, i32> { Queue::new() }
+    fn read(&self, fd: RawFd) -> Result<(), i32> { Queue::read(self, fd) }
+    fn write(&self, fd: RawFd, on: bool) -> Result<(), i32> { Queue::write(self, fd, on) }
+    fn child(&self, _: i32) -> Result<(), i32> { Ok(()) }
+    fn reaped(&self, _: i32) {}
+    fn timer(&self, timer: Timer, ms: u64) -> Result<(), i32> { Queue::timer(self, timer, ms) }
+    fn sweep(&self, _: &HashSet<u64>) -> Result<(), i32> { Ok(()) }
+    fn wait(&self, out: &mut Vec<Event<RawFd>>) -> Result<(), i32> { Queue::wait(self, out) }
 }

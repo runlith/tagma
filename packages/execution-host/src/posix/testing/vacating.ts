@@ -2,11 +2,12 @@ import { Effect } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { CONTROL_VARIABLE, openHolder } from '../PosixHolder';
 import { report } from './report';
+import { testSystem } from '../../composition/testing/system';
 
 const [library, state] = process.argv.slice(2) as [string, string];
 
 const arrive = Effect.gen(function* () {
-  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
   if (holder.held.length > 0) {
     yield* report(state, { relaunched: process.pid });
     return;

@@ -13,9 +13,9 @@ edges:
     to: 01a14bae-6720-7d62-897a-92780a5d8623
 sources:
   - kind: file
-    ref: packages/agent/src/collaboration/CollaborationVoice.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/doctrine/orchestration.ts
+  - kind: file
+    ref: packages/agent/src/collaboration/CollaborationVoice.ts
 ---
 The native collaboration voice and the external harnesses' orchestration doctrine read one norm (`DELEGATION_NORM`): the agent does the work itself and starts a child only for a gain it names before the spawn — sooner, an independent view, a lower price, or the operator's word. The old line was a bare restriction whose "independent result" read as "separable", so an agent delegated large separable work and counted its own growing context as a reason.
 

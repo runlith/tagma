@@ -73,8 +73,9 @@ export type Question = { readonly _tag: 'CloseInput' } | { readonly _tag: 'Resiz
 export type Request =
   | { readonly _tag: 'Open'; readonly path: string }
   | { readonly _tag: 'Shutdown' }
-  | { readonly _tag: 'Adopt'; readonly handle: number; readonly fd: number }
+  | { readonly _tag: 'Adopt'; readonly handle: number; readonly fd: number; readonly input: Int32Array }
   | { readonly _tag: 'Close'; readonly handle: number }
+  | { readonly _tag: 'EndInput'; readonly handle: number }
   | { readonly _tag: 'Ask'; readonly id: number; readonly ask: Ask }
   | { readonly _tag: 'Cancel'; readonly id: number }
   | { readonly _tag: 'Settled'; readonly id: number; readonly failure: Failure | undefined }
@@ -394,9 +395,11 @@ const program = Effect.gen(function* () {
         return yield* held.descriptor.facts(ask.pid);
       case 'Interrupt': {
         let flushed = false;
-        const count = yield* held.descriptor.interrupt(() => {
-          flushed = true;
-        });
+        const count = yield* held.descriptor
+          .interrupt(() => {
+            flushed = true;
+          })
+          .pipe(Effect.mapError((failure) => ({ ...failure, _tag: failure._tag, flushed })));
         return { count, flushed };
       }
       case 'PendingEchoes':
@@ -438,7 +441,7 @@ const program = Effect.gen(function* () {
       case 'Adopt':
         terminals.set(request.handle, {
           handle: request.handle,
-          descriptor: new Descriptor(native, reactor, request.fd),
+          descriptor: new Descriptor(native, reactor, request.fd, request.input),
           chunks: [],
           bytes: 0,
           ended: false,
@@ -450,6 +453,9 @@ const program = Effect.gen(function* () {
         break;
       case 'Close':
         yield* close(request.handle);
+        break;
+      case 'EndInput':
+        terminals.get(request.handle)?.descriptor.endInput();
         break;
       case 'Ask': {
         const id = request.id;

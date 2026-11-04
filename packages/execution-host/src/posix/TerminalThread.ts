@@ -9,6 +9,7 @@ import { ChannelFailed, ForegroundRefused, TerminalInterruptRefused, type Pendin
 import type { HeldTerminal } from '../holder-client/Link';
 import { LaneUnserved, type TerminalEndpoint, type TerminalInput, type TerminalInputOptions, type TerminalInputs } from '../TerminalInputs';
 import type { TerminalFacts } from './native';
+import { closedFailure } from './Descriptor';
 import type { Answer, Ask, Failure, InputAsk, ReplyAnswered, Request } from './terminals.worker';
 
 const OPEN_MS = 10_000;
@@ -222,9 +223,18 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
 
   const adopt = (fd: number): ThreadTerminal => {
     const handle = (adopted += 1);
-    post({ _tag: 'Adopt', handle, fd });
+    const input = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+    post({ _tag: 'Adopt', handle, fd, input });
+    const whileOpen = <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E | ChannelFailed, R> =>
+      Effect.suspend((): Effect.Effect<A, E | ChannelFailed, R> =>
+        Atomics.load(input, 0) === 0 ? operation : Effect.fail(closedFailure()),
+      );
     const terminal: ThreadTerminal = {
       fd,
+      endInput: () => {
+        Atomics.store(input, 0, 1);
+        post({ _tag: 'EndInput', handle });
+      },
       facts: (pid) =>
         ask({ _tag: 'Facts', handle, pid }).pipe(
           Effect.map((value) => value as TerminalFacts),
@@ -241,12 +251,14 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
         }),
       stopReading: steady(ask({ _tag: 'StopReading', handle })),
       write: (bytes) =>
-        ask({ _tag: 'Write', handle, bytes }).pipe(
-          Effect.map((value) => value as number),
-          Effect.mapError(channelFailure),
+        whileOpen(
+          ask({ _tag: 'Write', handle, bytes }).pipe(
+            Effect.map((value) => value as number),
+            Effect.mapError(channelFailure),
+          ),
         ),
       stopWriting: steady(ask({ _tag: 'StopWriting', handle })),
-      resize: (rows, cols) => Effect.asVoid(ask({ _tag: 'Resize', handle, rows, cols })).pipe(Effect.mapError(channelFailure)),
+      resize: (rows, cols) => whileOpen(Effect.asVoid(ask({ _tag: 'Resize', handle, rows, cols })).pipe(Effect.mapError(channelFailure))),
       size: ask({ _tag: 'Size', handle }).pipe(
         Effect.map((value) => value as { readonly rows: number; readonly cols: number }),
         Effect.mapError(channelFailure),
@@ -262,19 +274,26 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
         ),
       ),
       interrupt: (onFlush) =>
-        ask({ _tag: 'Interrupt', handle }).pipe(
-          Effect.map((value) => {
-            const done = value as { readonly count: number; readonly flushed: boolean };
-            if (done.flushed) onFlush?.();
-            return done.count;
-          }),
-          Effect.mapError((failure) =>
-            failure._tag === 'TerminalInterruptRefused'
-              ? new TerminalInterruptRefused({
-                  reason: failure.reason === 'isig-disabled' ? 'isig-disabled' : 'no-character',
-                  detail: detailOf(failure),
-                })
-              : channelFailure(failure),
+        whileOpen(
+          ask({ _tag: 'Interrupt', handle }).pipe(
+            Effect.tapError((failure) =>
+              Effect.sync(() => {
+                if (failure.flushed === true) onFlush?.();
+              }),
+            ),
+            Effect.map((value) => {
+              const done = value as { readonly count: number; readonly flushed: boolean };
+              if (done.flushed) onFlush?.();
+              return done.count;
+            }),
+            Effect.mapError((failure) =>
+              failure._tag === 'TerminalInterruptRefused'
+                ? new TerminalInterruptRefused({
+                    reason: failure.reason === 'isig-disabled' ? 'isig-disabled' : 'no-character',
+                    detail: detailOf(failure),
+                  })
+                : channelFailure(failure),
+            ),
           ),
         ),
       pendingEchoes: ask({ _tag: 'PendingEchoes', handle }).pipe(

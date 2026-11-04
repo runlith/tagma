@@ -5,6 +5,7 @@ import { ACTIVATE_EXIT, type HeldExecution } from '../../holder/Holder';
 import { readUntil, writeAll } from '../../holder/testing/Adapter';
 import { CONTROL_VARIABLE, openHolder } from '../PosixHolder';
 import { report } from './report';
+import { testSystem } from '../../composition/testing/system';
 
 const [library, state, HOLDER_PART] = process.argv.slice(2) as [string, string, string];
 const ENTERED = 'entered';
@@ -45,7 +46,7 @@ const candidate = Effect.gen(function* () {
 
 const visit = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
-  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
   const reported = yield* files
     .readFileString(join(state, 'report.jsonl'))
     .pipe(Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed('')));

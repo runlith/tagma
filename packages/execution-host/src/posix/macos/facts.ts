@@ -20,7 +20,7 @@ export const platformFacts = Effect.fnUntraced(function* (loaded: LoadedLibrary)
   return PlatformFacts.of({
     identity: platformIdentity(loaded),
     descriptors: {
-      pty: { holder: holder.descriptors.expense.pty, logic: holder.descriptors.copies.pty },
+      pty: { holder: holder.descriptors.expense.pty, logic: holder.descriptors.copies.pty + loaded.abi.terminalControlDescriptors() },
       pipes: { holder: holder.descriptors.expense.pipes, logic: holder.descriptors.copies.pipes },
     },
     limits: Effect.suspend(() => {

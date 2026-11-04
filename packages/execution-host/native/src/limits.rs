@@ -6,22 +6,30 @@
 // work its machine cannot carry, so each of the three answers or none of them does.
 
 use crate::refusal::Refusal;
+#[cfg(target_os = "macos")]
 use std::ffi::CString;
 use std::io;
+#[cfg(target_os = "macos")]
 use std::ptr;
 
 // The SOFT limit, because that is what binds this process now: the hard limit is only what it could
 // raise itself to, and a count derived from one it has not taken would overcommit until it did.
-fn soft(resource: libc::c_int, name: &str) -> Result<u64, Refusal> {
+#[cfg(target_os = "macos")]
+type Resource = libc::c_int;
+#[cfg(target_os = "linux")]
+type Resource = libc::__rlimit_resource_t;
+
+fn soft(resource: Resource, name: &str) -> Result<u64, Refusal> {
     let mut limit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     if unsafe { libc::getrlimit(resource, &mut limit) } != 0 {
         return Err(Refusal::Failed(format!("{name}: {}", io::Error::last_os_error())));
     }
-    Ok(limit.rlim_cur)
+    Ok(if limit.rlim_cur == libc::RLIM_INFINITY { u64::MAX } else { limit.rlim_cur })
 }
 
 // `kern.tty.ptmx_max` is an `int`: a kernel answering it in another width is refused rather than read
 // as half a number.
+#[cfg(target_os = "macos")]
 fn ptmx_max() -> Result<u64, Refusal> {
     let name = CString::new("kern.tty.ptmx_max").map_err(|error| Refusal::Failed(error.to_string()))?;
     let mut value: libc::c_int = 0;
@@ -44,6 +52,12 @@ fn ptmx_max() -> Result<u64, Refusal> {
     Ok(value as u64)
 }
 
+#[cfg(target_os = "linux")]
+fn ptmx_max() -> Result<u64, Refusal> {
+    let text = std::fs::read_to_string("/proc/sys/kernel/pty/max")?;
+    text.trim().parse().map_err(|_| Refusal::Failed("kernel.pty.max did not answer a nonnegative integer".into()))
+}
+
 // The three figures in the order the ABI writes them: descriptors, processes, ptys.
 pub fn platform() -> Result<[u64; 3], Refusal> {
     Ok([
@@ -55,17 +69,15 @@ pub fn platform() -> Result<[u64; 3], Refusal> {
 
 #[cfg(test)]
 mod tests {
-    use super::platform;
-
-    // The contract: this kernel answers all three, and each is a figure a count can be derived from —
-    // a process runs under at least one descriptor and one process, and a machine that admits ptys
-    // names how many. A reading that refused would answer no ceiling at all.
     #[test]
-    fn the_platform_answers_three_usable_limits() {
-        let read = platform().unwrap_or_else(|_| panic!("this kernel refused its own limits"));
-        let [files, processes, terminals] = read;
-        assert!(files > 0, "RLIMIT_NOFILE soft answered {files}");
-        assert!(processes > 0, "RLIMIT_NPROC soft answered {processes}");
-        assert!(terminals > 0, "kern.tty.ptmx_max answered {terminals}");
+    fn the_limits_abi_preserves_finite_values_and_canonicalizes_infinity() {
+        let mut read = [0; 3];
+        assert_eq!(unsafe { crate::abi::execution_platform_limits(read.as_mut_ptr()) }, 0);
+        for (index, resource) in [libc::RLIMIT_NOFILE, libc::RLIMIT_NPROC].into_iter().enumerate() {
+            let mut limit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+            assert_eq!(unsafe { libc::getrlimit(resource, &mut limit) }, 0);
+            let expected = if limit.rlim_cur == libc::RLIM_INFINITY { u64::MAX } else { limit.rlim_cur };
+            assert_eq!(read[index], expected);
+        }
     }
 }

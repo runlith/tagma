@@ -14,11 +14,13 @@ export const tempoLayer = Layer.effect(
   Effect.gen(function* () {
     const holder = yield* Holder;
     return ProcessTempo.of({
-      directions: (initial) => {
+      directions: (initial): ReadonlyArray<PaceDirection> => {
+        if (!holder.capabilities.has('pace-raise')) return [];
         const base = initial === 'low' ? 'low' : 'full';
-        const directions: PaceDirection[] = [{ from: base, to: 'lowest' }];
-        if (holder.capabilities.has('pace-raise')) directions.push({ from: 'lowest', to: base });
-        return directions;
+        return [
+          { from: base, to: 'lowest' },
+          { from: 'lowest', to: base },
+        ];
       },
       apply: (processes) =>
         holder.pace(processes.map(({ witness, initial, pace }) => ({ witness, initial, next: pace }))).pipe(

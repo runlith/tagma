@@ -1,7 +1,8 @@
 import { artifactAdapter as macos } from '../posix/macos/artifact';
+import { artifactAdapter as linux } from '../posix/linux/artifact';
 import type { NativeArtifact } from '../Artifact';
 
-const adapters = [macos];
+const adapters = [macos, linux];
 
 export const nativeWorkers = adapters.flatMap((adapter) => adapter.workers);
 

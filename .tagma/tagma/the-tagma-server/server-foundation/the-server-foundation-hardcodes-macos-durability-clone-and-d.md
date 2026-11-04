@@ -14,11 +14,7 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/store/open.ts
-  - kind: file
-    ref: apps/tagma/server/src/platform/store/snapshot.ts
-  - kind: file
-    ref: apps/tagma/server/src/platform/store/snapshotFiles.ts
+    ref: apps/tagma/server/src/platform/durable/clone.ts
   - kind: file
     ref: apps/tagma/server/src/platform/durable/files.ts
   - kind: file
@@ -26,7 +22,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/platform/durable/flush.worker.ts
   - kind: file
-    ref: apps/tagma/server/src/platform/durable/clone.ts
+    ref: apps/tagma/server/src/platform/store/open.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/snapshot.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/snapshotFiles.ts
   - kind: file
     ref: apps/tagma/server/src/platform/watch/limits.ts
 ---

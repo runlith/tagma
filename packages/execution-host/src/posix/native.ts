@@ -1,5 +1,4 @@
 import { CString, dlopen, FFIType, ptr, type JSCallback, type Pointer } from 'bun:ffi';
-import type { WorkState } from '../holder/Holder';
 import type { ProcessWitness } from '@runlith/executions/protocol/evidence';
 import { birthOf } from './birth';
 export type TerminalFacts = {
@@ -31,9 +30,8 @@ const SYMBOLS = {
     returns: FFIType.i32,
   },
   execution_platform_fd_pair: { args: [FFIType.ptr], returns: FFIType.i32 },
-  execution_platform_group_state: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
   execution_platform_fd_resize: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
-  execution_platform_fd_interrupt: { args: [FFIType.i32], returns: FFIType.i32 },
+  execution_platform_fd_interrupt: { args: [FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_fd_terminal: { args: [FFIType.i32, FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_fd_foreground: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_thread_interactive: { args: [], returns: FFIType.i32 },
@@ -47,6 +45,9 @@ const SYMBOLS = {
 export type ReactorHandle = Pointer & { readonly __executionReactor: never };
 
 export type Reception = { readonly count: number; readonly fds: ReadonlyArray<number>; readonly capacity: boolean };
+type Interruption =
+  | { readonly pending: number; readonly synthetic: boolean; readonly flushed: boolean }
+  | (Refused & { readonly flushed: boolean });
 
 export class Descriptors {
   private constructor(private readonly library: ReturnType<typeof dlopen<typeof SYMBOLS>>) {}
@@ -111,18 +112,15 @@ export class Descriptors {
     return code < 0 ? this.refused(code) : { ends: [ends[0]!, ends[1]!] };
   }
 
-  groupState(group: number, leader: number, leaderExited: boolean): WorkState | Refused {
-    const code = this.library.symbols.execution_platform_group_state(group, leader, Number(leaderExited));
-    if (code < 0) return this.refused(code);
-    return code === 0 ? 'ended' : code === 1 ? 'standing' : 'unmeasured';
-  }
-
   resize(fd: number, rows: number, cols: number): NativeStatus {
     return this.status(this.library.symbols.execution_platform_fd_resize(fd, rows, cols));
   }
 
-  interrupt(fd: number): NativeAnswer {
-    return this.answer(this.library.symbols.execution_platform_fd_interrupt(fd));
+  interrupt(fd: number, character: number, noFlush: boolean, external: boolean): Interruption {
+    const values = new BigUint64Array(3);
+    const code = this.library.symbols.execution_platform_fd_interrupt(fd, character, Number(noFlush), Number(external), ptr(values));
+    const flushed = values[2] === 1n;
+    return code < 0 ? { ...this.refused(code), flushed } : { pending: Number(values[0]), synthetic: values[1] === 1n, flushed };
   }
 
   foreground(fd: number): ProcessWitness | Refused {

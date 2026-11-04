@@ -37,7 +37,7 @@ const hosts = Effect.fn('FixtureProcesses.hosts')(function* (root: string) {
       commands.split('\n').flatMap((line) => {
         const [pid, group, program, ...args] = line.trim().split(/\s+/);
         if (program === undefined || !args.some((arg) => arg.includes(root))) return [];
-        const holder = basename(program) === 'execution-holder' && args[0]?.includes(root) === true;
+        const holder = basename(program) === 'execution-holder';
         const logic = args.some((arg) => arg.endsWith('/host/host.js') || arg.endsWith('/src/main.ts'));
         if (!holder && !logic) return [];
         const identity = Number(pid);
@@ -60,10 +60,10 @@ const childGroups = Effect.fn('FixtureProcesses.children')(function* (holders: R
       table.split('\n').flatMap((line) => {
         if (line.trim() === '') return [];
         const [pid, parent, group] = line.trim().split(/\s+/).map(Number);
-        if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent) || !Number.isSafeInteger(group) || group! <= 0) {
-          throw new Error(`ps returned no process group: ${line}`);
-        }
-        return holders.has(parent!) && pid !== process.pid ? [group!] : [];
+        if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent)) throw new Error(`ps returned no process identity: ${line}`);
+        if (!holders.has(parent!) || pid === process.pid) return [];
+        if (!Number.isSafeInteger(group) || group! <= 0) throw new Error(`ps returned no process group: ${line}`);
+        return [group!];
       }),
     catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause), cause }),
   });

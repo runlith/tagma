@@ -1,13 +1,13 @@
+use super::backend::Backend;
 use std::ffi::c_int;
 
-const SIGNALS: [(&str, c_int); 31] = [
+const SIGNALS: &[(&str, c_int)] = &[
     ("SIGHUP", libc::SIGHUP),
     ("SIGINT", libc::SIGINT),
     ("SIGQUIT", libc::SIGQUIT),
     ("SIGILL", libc::SIGILL),
     ("SIGTRAP", libc::SIGTRAP),
     ("SIGABRT", libc::SIGABRT),
-    ("SIGEMT", libc::SIGEMT),
     ("SIGBUS", libc::SIGBUS),
     ("SIGFPE", libc::SIGFPE),
     ("SIGKILL", libc::SIGKILL),
@@ -30,14 +30,13 @@ const SIGNALS: [(&str, c_int); 31] = [
     ("SIGPROF", libc::SIGPROF),
     ("SIGWINCH", libc::SIGWINCH),
     ("SIGIO", libc::SIGIO),
-    ("SIGINFO", libc::SIGINFO),
     ("SIGSYS", libc::SIGSYS),
 ];
 
-pub fn number(name: &str) -> Option<c_int> {
-    SIGNALS.iter().find(|(known, _)| *known == name).map(|(_, number)| *number)
+pub fn number<B: Backend>(name: &str) -> Option<c_int> {
+    SIGNALS.iter().chain(B::EXTRA_SIGNALS.iter()).find(|(known, _)| *known == name).map(|(_, number)| *number)
 }
 
-pub fn name(number: c_int) -> String {
-    SIGNALS.iter().find(|(_, known)| *known == number).map_or_else(|| format!("signal {number}"), |(name, _)| (*name).to_string())
+pub fn name<B: Backend>(number: c_int) -> String {
+    SIGNALS.iter().chain(B::EXTRA_SIGNALS.iter()).find(|(_, known)| *known == number).map_or_else(|| format!("signal {number}"), |(name, _)| (*name).to_string())
 }

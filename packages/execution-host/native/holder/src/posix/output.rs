@@ -1,10 +1,8 @@
-use super::{events::Queue, sys};
-use std::ffi::{CStr, OsStr};
+use super::{backend::{Backend, Events}, sys};
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -47,21 +45,17 @@ impl Sink {
     }
 }
 
-pub fn install() -> Result<(), String> {
+pub fn install<B: Backend>() -> Result<(), String> {
     let Some(limit) = std::env::var_os(LIMIT_VARIABLE) else { return Ok(()); };
     let limit = limit.to_str().and_then(|value| value.parse::<usize>().ok()).filter(|limit| *limit > 0)
         .ok_or_else(|| format!("{LIMIT_VARIABLE} must name a positive byte limit"))?;
-    let mut path = [0 as libc::c_char; libc::PATH_MAX as usize];
-    if unsafe { libc::fcntl(libc::STDERR_FILENO, libc::F_GETPATH, path.as_mut_ptr()) } < 0 {
-        return Err(format!("the diagnostic output file could not be named: {}", io::Error::last_os_error()));
-    }
-    let path = unsafe { CStr::from_ptr(path.as_ptr()) };
-    let file = OpenOptions::new().read(true).append(true).open(Path::new(OsStr::from_bytes(path.to_bytes())))
+    let path = B::output_path().map_err(|detail| format!("the diagnostic output file could not be named: {detail}"))?;
+    let file = OpenOptions::new().read(true).append(true).open(&path)
         .map_err(|error| format!("the diagnostic output file could not be opened: {error}"))?;
     if !file.metadata().map_err(|error| error.to_string())?.is_file() {
         return Err("the diagnostic output is not a regular file".into());
     }
-    let mut writing = OsStr::from_bytes(path.to_bytes()).to_os_string();
+    let mut writing = path.as_os_str().to_os_string();
     writing.push(".writing");
     let writer = OpenOptions::new().read(true).write(true).create(true).truncate(false).mode(0o600).open(Path::new(&writing))
         .map_err(|error| format!("the diagnostic writer could not be held: {error}"))?;
@@ -103,7 +97,7 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub fn open(queue: &Queue) -> Result<Option<Self>, String> {
+    pub fn open(queue: &impl Events) -> Result<Option<Self>, String> {
         if SINK.get().is_none() { return Ok(None); }
         let (reader, writer) = sys::pipe().map_err(|errno| format!("diagnostic pipe: errno {errno}"))?;
         sys::nonblocking(reader.as_raw_fd()).map_err(|errno| format!("diagnostic pipe readiness: errno {errno}"))?;

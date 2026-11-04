@@ -1,23 +1,36 @@
 #![allow(clippy::missing_safety_doc)]
 mod usage;
-#[cfg(target_os = "macos")]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+mod testing;
+#[cfg(any(target_os = "linux", test))]
+#[path = "linux/procfs.rs"]
+mod procfs;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod channel;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod control;
 #[cfg(target_os = "macos")]
+#[path = "macos/terminal.rs"]
+mod terminal;
+#[cfg(target_os = "linux")]
+#[path = "linux/terminal.rs"]
+mod terminal;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod clock;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod identity;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod limits;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod process;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod reactor;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod refusal;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod abi {
-use crate::{channel, clock, identity, limits, process};
+use crate::{channel, clock, control, identity, limits, process, terminal};
 use crate::reactor::Reactor;
 use crate::refusal::Refusal;
 use std::cell::RefCell;
@@ -105,6 +118,29 @@ pub extern "C" fn execution_platform_error() -> *const c_char {
 #[unsafe(no_mangle)]
 pub extern "C" fn execution_platform_uptime_nanos() -> u64 {
     clock::uptime_nanos()
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_clock_ticks() -> u64 {
+    clock::ticks().unwrap_or_else(|errno| { record(&format!("clock ticks: {}", std::io::Error::from_raw_os_error(errno))); 0 })
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn execution_platform_boot_nanos(values: *mut u64) -> i32 {
+    status(|| {
+        if values.is_null() { return Err(Refusal::Invalid("null boot interval buffer".into())); }
+        let bounds = clock::boot_nanos().map_err(|errno| Refusal::Failed(format!("boot interval: {}", std::io::Error::from_raw_os_error(errno))))?;
+        unsafe { ptr::copy_nonoverlapping(bounds.as_ptr(), values, bounds.len()) };
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_thread_interactive() -> i32 {
+    status(|| Err(Refusal::Failed("Linux grants an unprivileged thread no interactive scheduling class".into())))
 }
 
 #[unsafe(no_mangle)]
@@ -298,9 +334,22 @@ pub extern "C" fn execution_platform_fd_resize(fd: i32, rows: i32, cols: i32) ->
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn execution_platform_fd_interrupt(fd: i32) -> i32 {
-    count(|| channel::interrupt(fd))
+pub unsafe extern "C" fn execution_platform_fd_interrupt(fd: i32, character: i32, no_flush: i32, external: i32, values: *mut u64) -> i32 {
+    let mut outcome = control::Interruption::default();
+    let code = status(|| {
+        if values.is_null() { return Err(Refusal::Invalid("null interrupt outcome buffer".into())); }
+        if !(1..=254).contains(&character) { return Err(Refusal::Invalid("the interrupt character must be an active byte".into())); }
+        terminal::interrupt(fd, character as u8, no_flush != 0, external != 0, &mut outcome)
+    });
+    if !values.is_null() {
+        let fields = outcome.fields();
+        unsafe { ptr::copy_nonoverlapping(fields.as_ptr(), values, fields.len()) };
+    }
+    code
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_terminal_control_descriptors() -> i32 { terminal::CONTROL_DESCRIPTORS }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn execution_platform_fd_terminal(fd: i32, pid: i32, values: *mut u64) -> i32 {
@@ -326,13 +375,16 @@ pub unsafe extern "C" fn execution_platform_fd_foreground(fd: i32, values: *mut 
     })
 }
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn pthread_set_qos_class_self_np(class: u32, relative: i32) -> i32;
 }
 
+#[cfg(target_os = "macos")]
 const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
 
 #[unsafe(no_mangle)]
+#[cfg(target_os = "macos")]
 pub extern "C" fn execution_platform_thread_interactive() -> i32 {
     status(|| match unsafe { pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) } {
         0 => Ok(()),

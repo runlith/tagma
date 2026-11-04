@@ -1,107 +1,18 @@
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import * as BunServices from '@effect/platform-bun/BunServices';
-import { Clock, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Clock, Effect, Schedule } from 'effect';
 import { STOP_LADDER } from '@runlith/executions/protocol/call';
 import { byteOffset, offsetValue, sameGeometry, type TerminalGeometry } from '@runlith/executions/protocol/record';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import type { ExecutionId } from '@runlith/executions/protocol/execution';
 import { Bindings } from './Bindings';
-import { Custodian } from './Custodian';
 import { ExecutionCapacity } from './ExecutionCapacity';
-import { ExecutionRegistry } from './registry/ExecutionRegistry';
-import { Executions } from './registry/launch';
-import { InputLanes, PaceControl } from './registry/control';
-import { ExecutionStop } from './registry/stops';
-import { HostLifecycle } from './registry/shutdown';
-import { HostByteRecords, TerminalScreen } from './registry/reads';
+import type { TerminalScreen } from './registry/reads';
 import type { HostClaim } from './registry/state';
-import { connectionOf, keyOf, principalOf, registrationOf } from './hostFixture';
-import { hostState } from './hostState';
-import { hostSpawner } from './hostSpawner';
-import { testHolder } from './posix/testing/holder';
-import { background } from './posix/testing/tempo';
-import { runtimeProfile } from './runtimeFixture';
-import { Processes, type ProcessReader } from './ProcessReader';
-import { ProcessControl } from './ProcessControl';
+import { keyOf, principalOf } from './hostFixture';
 import { ProcessTree } from './processTree';
 
-const launch = (program: string, args: readonly string[]): LaunchRequest => ({
-  command: {
-    program,
-    args,
-    environment: [
-      { name: 'PATH', value: '/usr/bin:/bin' },
-      { name: 'TERM', value: 'xterm-256color' },
-      { name: 'PS1', value: '' },
-    ],
-    cwd: '/tmp',
-  },
-  transport: { _tag: 'pty', geometry: { rows: 24, columns: 80 } },
-  lifetime: 'held',
-  purpose: 'command',
-  target: { environment: 'environment-1', namespace: 'namespace-1', cwd: '/tmp', dependencies: [] },
-  holder: principalOf('principal-operator'),
-  origin: principalOf('principal-operator'),
-  budget: {},
-});
-type TerminalWorld = {
-  readonly hostExecutions: Executions['Service'];
-  readonly lanes: InputLanes['Service'];
-  readonly stops: ExecutionStop['Service'];
-  readonly byteRecords: HostByteRecords['Service'];
-  readonly screens: TerminalScreen['Service'];
-  readonly pacing: PaceControl['Service'];
-  readonly bindings: Bindings['Service'];
-  readonly claim: HostClaim;
-  readonly processes: ProcessReader;
-  readonly control: ProcessControl['Service'];
-};
-type TerminalCase<A, E, R> = { readonly body: (world: TerminalWorld) => Effect.Effect<A, E, R>; readonly executions?: number };
-const withTerminalHost = Effect.fnUntraced(
-  function* <A, E, R>({ body, executions = 1 }: TerminalCase<A, E, R>) {
-    const files = yield* FileSystem.FileSystem;
-    const directory = yield* files.makeTempDirectoryScoped({ prefix: 'execution-terminal-' });
-    const state = hostState(`${directory}/executions.sqlite`, registrationOf(directory), yield* sharedPool).pipe(
-      Layer.provideMerge(ExecutionCapacity.layer(runtimeProfile({ transports: ['pty'], rows: 40, columns: 120, executions }))),
-    );
-    const layer = ExecutionRegistry.layer().pipe(
-      Layer.provideMerge(Bindings.layer),
-      Layer.provideMerge(state),
-      Layer.provideMerge(testHolder(directory)),
-    );
-    return yield* Effect.scoped(
-      Effect.gen(function* () {
-        const custodian = yield* Custodian;
-        const lifecycle = yield* HostLifecycle;
-        const connection = connectionOf('connection-terminal');
-        const taken = yield* custodian.take(keyOf('take-terminal'), 0, connection, 'custodian');
-        const claim: HostClaim = { connection, epoch: taken.standing.epoch, role: 'custodian' };
-        yield* Effect.addFinalizer(() =>
-          Effect.gen(function* () {
-            const ended = yield* lifecycle.shutdown(claim, keyOf('shutdown-terminal'));
-            if (ended._tag !== 'ShutdownComplete') return yield* Effect.die(new Error(`shutdown: ${JSON.stringify(ended)}`));
-          }),
-        );
-        return yield* body({
-          hostExecutions: yield* Executions,
-          lanes: yield* InputLanes,
-          stops: yield* ExecutionStop,
-          byteRecords: yield* HostByteRecords,
-          screens: yield* TerminalScreen,
-          pacing: yield* PaceControl,
-          bindings: yield* Bindings,
-          claim,
-          processes: yield* Processes,
-          control: yield* ProcessControl,
-        });
-      }),
-    ).pipe(Effect.provide(layer));
-  },
-  Effect.provide(hostSpawner),
-  Effect.provide(BunServices.layer),
-);
+import { launch, withTerminalHost } from './composition/testing/terminalCase';
 
 const lane = Effect.fnUntraced(function* (bindings: Bindings['Service'], claim: HostClaim) {
   const principal = principalOf('principal-operator');
@@ -119,12 +30,6 @@ const untilScreen = (screens: TerminalScreen['Service'], execution: ExecutionId,
     }),
     Effect.retry({ while: (failure) => failure === 'not-painted', schedule: Schedule.spaced('20 millis') }),
   );
-const backgrounds = Effect.fnUntraced(function* (leader: number) {
-  const processes = yield* Processes;
-  const child = (yield* processes.table).find((row) => row.parent === leader && !row.zombie);
-  return yield* Effect.forEach(child === undefined ? [leader] : [leader, child.pid], background);
-});
-
 describe('the interactive terminal vertical', () => {
   it.live('carries typed bytes, interrupt and geometry through a real shell, record and interpreter', () =>
     withTerminalHost({
@@ -336,30 +241,6 @@ describe('the interactive terminal vertical', () => {
         });
       }),
     }),
-  );
-
-  (process.platform === 'darwin' ? it.live : it.live.skip)(
-    'backgrounds a paced terminal and its child under lowest, then returns them to full',
-    () =>
-      withTerminalHost({
-        body: Effect.fnUntraced(function* ({ hostExecutions, stops, pacing, claim }) {
-          expect(yield* pacing.set(claim, 'lowest')).toMatchObject({ _tag: 'Applied', pace: 'lowest', failed: 0 });
-          const started = yield* hostExecutions.start(claim, keyOf('terminal-paced'), {
-            ...launch('/bin/sh', ['-c', 'sleep 0.3; sleep 30']),
-            paced: true,
-          });
-          if (started._tag !== 'Started' || started.native.pid === undefined) return yield* Effect.die(new Error(`start: ${started._tag}`));
-          const leader = started.native.pid;
-          const atLowest = yield* backgrounds(leader).pipe(
-            Effect.repeat({ until: (read) => read.length === 2 && read.every(Boolean), schedule: Schedule.spaced('100 millis') }),
-          );
-          expect(atLowest).toEqual([true, true]);
-          expect(yield* pacing.set(claim, 'full')).toEqual({ _tag: 'Applied', pace: 'full', reached: 2, kept: 0, failed: 0 });
-          const atFull = yield* backgrounds(leader);
-          yield* stops.stop(claim, keyOf('terminal-paced-stop'), started.execution.execution, 'explicit-stop', 'destroy');
-          expect(atFull).toEqual([false, false]);
-        }),
-      }),
   );
 
   it.live('stops a terminal flooding beyond retention and returns a contiguous byte-exact retained window', () =>

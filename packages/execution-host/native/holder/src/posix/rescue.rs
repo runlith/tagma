@@ -1,4 +1,5 @@
 use super::succession::{self, Inherited};
+use super::backend::Backend;
 use crate::handover;
 use std::ffi::{CString, c_char, c_int};
 use std::os::fd::RawFd;
@@ -10,6 +11,7 @@ const FATAL: [c_int; 6] = [libc::SIGABRT, libc::SIGSEGV, libc::SIGBUS, libc::SIG
 const SAID: &[u8] = b"execution-holder: the successor crashed before its logic started; the prior holder returns\n";
 
 struct Plan {
+    exchange: unsafe fn(*const c_char, *const c_char) -> i32,
     standing: CString,
     next: CString,
     prior: CString,
@@ -31,7 +33,7 @@ fn pointers(argv: &[CString]) -> Vec<*const c_char> {
     argv.iter().map(|arg| arg.as_ptr()).chain(std::iter::once(std::ptr::null())).collect()
 }
 
-pub fn arm(inherited: &Inherited) {
+pub fn arm<B: Backend>(inherited: &Inherited) {
     let handles = succession::table(inherited.table)
         .ok()
         .and_then(|bytes| handover::decode(&bytes).ok())
@@ -50,7 +52,7 @@ pub fn arm(inherited: &Inherited) {
     };
     let descriptors = [inherited.claim, inherited.table].into_iter().chain(handles.into_iter().map(|value| value as RawFd)).collect();
     let (returning, falling) = (pointers(&returned), pointers(&fallen));
-    let plan = Box::new(Plan { standing, next, prior, descriptors, returned, fallen, returning, falling });
+    let plan = Box::new(Plan { exchange: B::exchange, standing, next, prior, descriptors, returned, fallen, returning, falling });
     PLAN.store(Box::into_raw(plan), Ordering::SeqCst);
     ARMED.store(true, Ordering::SeqCst);
     let previous = std::panic::take_hook();
@@ -83,7 +85,7 @@ fn fire() {
     let plan = unsafe { &*plan };
     unsafe {
         libc::write(2, SAID.as_ptr().cast(), SAID.len());
-        let argv = if libc::renamex_np(plan.prior.as_ptr(), plan.standing.as_ptr(), libc::RENAME_SWAP) == 0 {
+        let argv = if (plan.exchange)(plan.prior.as_ptr(), plan.standing.as_ptr()) == 0 {
             libc::rename(plan.prior.as_ptr(), plan.next.as_ptr());
             (&plan.returned, &plan.returning)
         } else {

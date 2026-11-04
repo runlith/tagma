@@ -103,7 +103,8 @@ export const testHolder = (
           `the holder handed no control descriptor (${JSON.stringify(received)}, exit ${child.exitCode() ?? 'pending'})`,
         );
       }
-      const { holder, inputs } = yield* openPosixHolder(library, control);
+      const system = yield* testSystem;
+      const { holder, inputs } = yield* openPosixHolder(library, control, system.processWorker);
       yield* Effect.addFinalizer(() =>
         Effect.flatMap(Effect.exit(holder.vacate), (vacated) => (Exit.isFailure(vacated) ? child.kill : Effect.void)).pipe(Effect.orDie),
       );

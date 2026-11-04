@@ -12,7 +12,7 @@ const failure = (refused: Refused): ChannelFailed =>
     detail: refused.detail || refused.refusal,
   });
 
-const closedFailure = () => new ChannelFailed({ reason: 'closed', detail: 'the descriptor was closed by this process' });
+export const closedFailure = () => new ChannelFailed({ reason: 'closed', detail: 'the channel is closed for this operation' });
 
 const stoppedFailure = (act: 'reading' | 'writing') =>
   new ChannelFailed({ reason: 'stopped', detail: `${act} was stopped on this descriptor before it took a byte` });
@@ -22,6 +22,7 @@ export class Descriptor {
   private ended = false;
   private reading = true;
   private writing = true;
+  private inputEnded = false;
   private landing: Uint8Array | undefined;
   private readonly echoes: PendingEcho[] = [];
   private echoHead = 0;
@@ -32,6 +33,7 @@ export class Descriptor {
     private readonly native: Descriptors,
     private readonly reactor: Reactor,
     readonly fd: number,
+    private readonly inputState?: Int32Array,
   ) {
     this.token = reactor.token();
   }
@@ -76,7 +78,7 @@ export class Descriptor {
     if (bytes.length === 0) return 0;
     const head = bytes.length > TRANSFER_LIMIT ? bytes.subarray(0, TRANSFER_LIMIT) : bytes;
     for (;;) {
-      if (!this.open) return yield* closedFailure();
+      if (!this.open || this.isInputClosed()) return yield* closedFailure();
       if (!this.writing) return yield* stoppedFailure('writing');
       const answer = this.native.write(this.fd, head);
       if ('count' in answer) return answer.count;
@@ -102,6 +104,15 @@ export class Descriptor {
     });
   }
 
+  private isInputClosed(): boolean {
+    return this.inputEnded || (this.inputState !== undefined && Atomics.load(this.inputState, 0) !== 0);
+  }
+
+  endInput(): void {
+    this.inputEnded = true;
+    this.reactor.wake(this.token, 'write');
+  }
+
   readonly stopWriting: Effect.Effect<void> = Effect.sync(() => {
     this.writing = false;
     this.reactor.wake(this.token, 'write');
@@ -119,7 +130,7 @@ export class Descriptor {
 
   resize(rows: number, cols: number): Effect.Effect<void, ChannelFailed> {
     return Effect.suspend(() => {
-      if (!this.open) return Effect.fail(closedFailure());
+      if (!this.open || this.isInputClosed()) return Effect.fail(closedFailure());
       const refused = this.native.resize(this.fd, rows, cols);
       return refused === undefined ? Effect.void : Effect.fail(failure(refused));
     });
@@ -136,6 +147,7 @@ export class Descriptor {
   });
 
   readonly interrupt = Effect.fnUntraced(function* (this: Descriptor, onFlush?: () => void) {
+    if (this.isInputClosed()) return yield* closedFailure();
     const facts = yield* this.facts(0);
     if (!facts.isig) return yield* new TerminalInterruptRefused({ reason: 'isig-disabled', detail: 'the terminal has ISIG switched off' });
     if (facts.interrupt <= 0 || facts.interrupt >= 0xff)
@@ -143,18 +155,12 @@ export class Descriptor {
         reason: 'no-character',
         detail: `VINTR ${facts.interrupt} names no interrupt character`,
       });
-    const written = facts.external ? { count: 0 } : this.native.write(this.fd, Uint8Array.of(facts.interrupt));
-    if ('count' in written && written.count > 0) {
-      if (!facts.noFlush) this.flushed(onFlush);
-      return written.count;
-    }
-    if ('refusal' in written && written.refusal !== 'would-block') return yield* failure(written);
-    const signalled = this.native.interrupt(this.fd);
+    const signalled = this.native.interrupt(this.fd, facts.interrupt, facts.noFlush, facts.external);
+    if (signalled.flushed) this.flushed(onFlush);
     if ('refusal' in signalled) return yield* failure(signalled);
-    if (!facts.noFlush) this.flushed(onFlush);
-    if (facts.echo && !facts.external) {
+    if (signalled.synthetic && facts.echo && !facts.external) {
       this.echoes.push({
-        after: this.readBytes + (facts.noFlush ? signalled.count : 0),
+        after: this.readBytes + (facts.noFlush ? signalled.pending : 0),
         bytes:
           facts.echoControl && (facts.interrupt < 32 || facts.interrupt === 127)
             ? Uint8Array.of(94, facts.interrupt ^ 64)

@@ -14,7 +14,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/process/lifetime.ts
   - kind: file
-    ref: packages/execution-host/native/holder/src/macos/output.rs
+    ref: packages/execution-host/native/holder/src/posix/output.rs
   - kind: symbol
     ref: apps/tagma/server/src/executions/host/boot.ts
     symbol: raiseHost

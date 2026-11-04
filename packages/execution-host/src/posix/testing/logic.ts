@@ -6,6 +6,7 @@ import { writeAll } from '../../holder/testing/Adapter';
 import { CONTROL_VARIABLE, openHolder } from '../PosixHolder';
 import { terminalFacts } from './terminal';
 import { report } from './report';
+import { testSystem } from '../../composition/testing/system';
 
 const [library, state, holderProgram] = process.argv.slice(2) as [string, string, string];
 const CRASH = join(state, 'crashed');
@@ -70,7 +71,7 @@ const parentage = (pids: ReadonlyArray<number>) =>
 
 const arrive = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
-  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
   if (holder.held.length === 0) {
     if ((yield* holder.generation) !== undefined) return yield* Effect.die(new Error('a new holder already has a generation'));
     yield* holder.bindGeneration(37);

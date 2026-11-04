@@ -1,6 +1,6 @@
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { holderLayer } from './posix/PosixHolder';
+import { holderLayer } from './composition/platform';
 import { HOLDER_BINARY } from './posix/testing/holder';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

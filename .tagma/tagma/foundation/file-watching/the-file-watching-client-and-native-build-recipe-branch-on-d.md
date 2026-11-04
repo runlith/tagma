@@ -14,9 +14,9 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: packages/watch/src/client.ts
-  - kind: file
     ref: packages/watch/src/artifact.ts
+  - kind: file
+    ref: packages/watch/src/client.ts
 ---
 The engine has one Rust backend per OS (`native/src/macos.rs`, `native/src/linux.rs`), which are the adapters. The TypeScript above them still decides by OS: the client chooses how a position is marked, and the build recipe names the macOS library, triples and linker flag.
 

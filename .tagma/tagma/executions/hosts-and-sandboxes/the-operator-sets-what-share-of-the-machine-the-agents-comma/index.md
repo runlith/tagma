@@ -30,9 +30,9 @@ sources:
 **How.** The Agents' share switch in the Load header and the `power.agentWork` setting in Settings → Power; only the operator may change it.
 
 **Behaviour.**
-- Low makes agents' commands yield to user programs and uses every core when they are free; Lowest keeps them almost entirely on efficiency cores with reduced disk activity. The operator's terminals, Tagma work around the command, and the server itself always run at full strength.
+- Low makes agents' commands yield to user programs and uses every core when they are free; Lowest uses the platform's stronger reversible background policy where available. On macOS this also favors efficiency cores and reduces disk activity. The operator's terminals, Tagma work around the command, and the server itself stay outside this policy.
 - The level applies to the whole proven tree of the command, including descendants born later; the switch hint says how many processes it has reached and how many remain on the previous level, and one card under the switch shows the unapplied or unsaved level and the unmoved processes.
-- New commands start on the chosen level at once. A running command the host cannot move to the chosen level it puts as close to it as the platform allows, and counts it as remaining until its end.
+- New commands report the nearest supported starting level. A running command the host cannot move to the chosen level stays as close as the platform allows and is counted as remaining until its end.
 - If the host does not answer, the server repeats the level handover until it goes through.
 
-**Limits.** The host on macOS moves running commands only between their starting level and Lowest: a command started on Low does not rise to Full, and one started on Full or Lowest does not drop to Low — it stays on its level until it ends. Without an execution host or without a process-table read, the level does not apply.
+**Limits.** On macOS, running commands move only between their starting level and Lowest: Low does not rise to Full, and Full or Lowest does not become Low. Linux preserves the holder's inherited priority; Low never raises an already lower-priority launcher. Reversible Lowest on Linux requires `CAP_SYS_NICE`: without it a Lowest launch reports Full and a live unsupported move returns a typed refusal, so lowering cannot trap the command at a priority the host cannot restore. Without an execution host or a process-table read, the level does not apply.

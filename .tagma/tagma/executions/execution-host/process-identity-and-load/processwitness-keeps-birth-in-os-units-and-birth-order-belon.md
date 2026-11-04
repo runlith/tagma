@@ -10,5 +10,7 @@ sources:
     ref: packages/execution-host/src/posix/macos/evidence.ts
   - kind: file
     ref: packages/execution-host/src/ProcessReader.ts
+  - kind: file
+    ref: packages/execution-host/src/posix/linux/clock.ts
 ---
 Birth is opaque outside the adapter: recomputing it under different owners diverges on clock skew and can hand a reused pid to someone else's process. The wire compares the pid/birth pair, while ProcessReader decides birth order, accounting-interval membership and whether a declared epoch creation time resolves to the kernel witness within its precision. An unrecognized birth proves neither kinship, currentness nor birth inside the interval. The server gets the current process already chosen by the host. macOS process and socket lines are taken only between matching native witnesses before and after ps or lsof; both reads are a native batch of the needed population, so someone else's replacement never gets the old process's facts, and a narrow question never re-reads the whole machine.

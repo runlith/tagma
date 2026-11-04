@@ -191,7 +191,7 @@ layer(BunServices.layer, { excludeTestServices: true })('native launch contracts
       const state = yield* files.makeTempDirectoryScoped({ prefix: 'native-image-' });
       const binary = `${state}/holder-source`;
       yield* files.copyFile(HOLDER_BINARY, binary);
-      const expected = { DYLD_PROBE: 'kept exactly', LARGE: 'x'.repeat(131072) };
+      const expected = { DYLD_PROBE: 'kept exactly', LARGE_FIRST: 'x'.repeat(65536), LARGE_LAST: 'y'.repeat(65536) };
       yield* nativeCase({
         state,
         binary,
@@ -331,16 +331,20 @@ layer(BunServices.layer, { excludeTestServices: true })('native launch contracts
           if ('refusal' in held) return failed(held.detail);
           return Effect.succeed({ logic: logic.count, holder: held.count });
         });
-        const before = yield* descriptors;
         const native = yield* launchNative(launch({ _tag: 'pipes', stdin: 'pipe' }, 'read line; printf "%s" "$line"'), ref, holder);
+        const opened = yield* descriptors;
         yield* native.sink.write(new TextEncoder().encode('kept\n'));
         const collected = yield* Effect.forEach(native.sources, textOf, { concurrency: 2 });
         yield* native.exit;
         const after = yield* descriptors;
         expect(collected[0]).toBe('kept');
         expect(native.held.reaped).toBeUndefined();
-        expect(after.holder - before.holder).toBe(1);
-        expect(after.logic - before.logic).toBe(1);
+        expect(opened.holder - after.holder).toBe(2);
+        expect(opened.logic - after.logic).toBe(2);
+        yield* native.held.closeInput;
+        const closed = yield* descriptors;
+        expect(after.holder - closed.holder).toBe(1);
+        expect(after.logic - closed.logic).toBe(1);
       }),
     }),
   );
@@ -571,9 +575,11 @@ a=termios.tcgetattr(0); a[3]=(a[3]&~(termios.ICANON|termios.ECHO))|termios.ISIG|
 def resized(*_):
  os.write(1,b"ABC")
  a=termios.tcgetattr(0); a[3]=(a[3]|termios.ECHO)&~termios.ECHOCTL
- if sys.argv[1]=="external": a[3]|=termios.ECHOCTL
+ if sys.argv[1]=="external":
+  a[3]|=termios.ECHOCTL
+  if sys.platform=="linux": a[3]|=0x10000
  termios.tcsetattr(0,termios.TCSANOW,a)
- if sys.argv[1]=="external": fcntl.ioctl(0,0x80047460,struct.pack("i",1))
+ if sys.argv[1]=="external" and sys.platform=="darwin": fcntl.ioctl(0,0x80047460,struct.pack("i",1))
 signal.signal(signal.SIGWINCH,resized)
 signal.signal(signal.SIGINT,lambda *_:os.write(1,b"DONE\\n"))
 os.write(1,b"ready\\n")

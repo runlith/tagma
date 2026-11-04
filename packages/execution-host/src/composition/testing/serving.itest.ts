@@ -13,7 +13,6 @@ servingContracts(
     'end-process',
     'named-signals',
     'pipe-graceful-stop',
-    'pace-raise',
     'terminal-survives-holder',
     'pipe-survives-holder',
     'holder-replaces-itself',

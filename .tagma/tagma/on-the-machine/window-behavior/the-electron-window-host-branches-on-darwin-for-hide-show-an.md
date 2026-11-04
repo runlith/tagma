@@ -14,11 +14,11 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: packages/window-behavior/src/host-electron/ElectronWindowBehaviorHost.ts
+    ref: packages/window-behavior/src/host-electron/electron-defaults.ts
   - kind: file
     ref: packages/window-behavior/src/host-electron/ElectronNoFocusStealRuntime.ts
   - kind: file
-    ref: packages/window-behavior/src/host-electron/electron-defaults.ts
+    ref: packages/window-behavior/src/host-electron/ElectronWindowBehaviorHost.ts
 ---
 The package's contract is a window behaviour state; its macOS addon is a separate native adapter (`src/native/no-focus-steal.ts` and the Objective-C++ source) and is fine. The Electron host over the contract still knows the OS: it takes `platform` as an option defaulting to `process.platform` and branches behaviour on `darwin`.
 

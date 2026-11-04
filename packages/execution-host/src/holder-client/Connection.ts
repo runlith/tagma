@@ -15,7 +15,7 @@ import {
   type WorkState,
 } from '../holder/Holder';
 import * as frames from './frames';
-import type { HeldPipe, Link, Owned } from './Link';
+import type { HeldPipe, HeldTerminal, Link, Owned } from './Link';
 
 export class HolderUnavailable extends Data.TaggedError('HolderUnavailable')<{
   readonly detail: string;
@@ -43,6 +43,7 @@ type Entry = {
   readonly exit: Deferred.Deferred<NativeExit, HolderRefused>;
   readonly seen: Seen;
   readonly owned: ReadonlyArray<Owned>;
+  readonly terminal: HeldTerminal | undefined;
   readonly execution: HeldExecution;
 };
 type Greeting = {
@@ -226,6 +227,7 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
         const entry = entries.get(message.id);
         if (entry === undefined || entry.seen.exit !== undefined) return;
         entry.seen.exit = message.exit;
+        entry.terminal?.endInput();
         Deferred.doneUnsafe(entry.exit, Effect.succeed(message.exit));
         return;
       }
@@ -324,11 +326,14 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
   function executionOf(row: frames.Row, handles: ReadonlyArray<number>): HeldExecution {
     const exit = Deferred.makeUnsafe<NativeExit, HolderRefused>();
     const seen: Seen = { exit: row.exit };
-    if (seen.exit !== undefined) Deferred.doneUnsafe(exit, Effect.succeed(seen.exit));
     const leader = { reaped: row.usage !== undefined };
     let reaped: HeldReap | undefined =
       row.usage === undefined || row.exit === undefined ? undefined : { exit: row.exit, cost: costOf(row.usage) };
-    const { channels, owned, input, stdout, stderr } = channelsOf(row, handles);
+    const { channels, owned, input, stdout, stderr, terminal } = channelsOf(row, handles);
+    if (seen.exit !== undefined) {
+      terminal?.endInput();
+      Deferred.doneUnsafe(exit, Effect.succeed(seen.exit));
+    }
     let workState: WorkState = 'unmeasured';
     const done = (act: Act) => (message: frames.Message) => (message._tag === 'done' ? Effect.void : Effect.fail(unexpected(act, message)));
     const lifecycle = Semaphore.makeUnsafe(1);
@@ -351,11 +356,16 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
               (message) => Effect.as(done('observe')(message), seen.exit),
             ),
       ),
-      workState: Effect.sync(() => {
-        if (leader.reaped || lostWith !== undefined) return workState === 'ended' ? 'ended' : 'unmeasured';
-        workState = link.workState(row.work, row.pid, seen.exit !== undefined);
-        return workState;
-      }),
+      workState: lifecycle.withPermits(1)(
+        Effect.suspend(() => {
+          if (leader.reaped || lostWith !== undefined) return Effect.succeed(workState === 'ended' ? 'ended' : 'unmeasured');
+          return Effect.map(link.workState(row.work, row.pid, seen.exit !== undefined), (read): WorkState => {
+            if (leader.reaped || lostWith !== undefined) return workState === 'ended' ? 'ended' : 'unmeasured';
+            workState = read;
+            return read;
+          });
+        }),
+      ),
       get reaped() {
         return reaped;
       },
@@ -439,7 +449,7 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
         ),
       ),
     };
-    entries.set(row.id, { exit, seen, owned, execution });
+    entries.set(row.id, { exit, seen, owned, terminal, execution });
     return execution;
   }
 
@@ -464,11 +474,12 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
     readonly input: Owned | undefined;
     readonly stdout: HeldPipe | undefined;
     readonly stderr: HeldPipe | undefined;
+    readonly terminal: HeldTerminal | undefined;
   } {
     if (row.transport === 'pty') {
       const terminal = handles.length === 0 ? undefined : link.terminal(handles);
       const owned = terminal === undefined ? [] : [terminal];
-      return { channels: { _tag: 'pty', terminal }, owned, input: terminal, stdout: undefined, stderr: undefined };
+      return { channels: { _tag: 'pty', terminal }, owned, input: terminal, stdout: undefined, stderr: undefined, terminal };
     }
     let at = 0;
     const stdout = (row.handleMask & 1) === 0 ? undefined : link.pipe(handles[at++]!);
@@ -514,6 +525,7 @@ export const connect = Effect.fn('Holder.connect')(function* (link: Link) {
       input: stdin,
       stdout,
       stderr,
+      terminal: undefined,
     };
   }
 

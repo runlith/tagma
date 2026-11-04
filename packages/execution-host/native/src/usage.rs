@@ -24,6 +24,10 @@ pub unsafe extern "C" fn execution_usage_gpu(values: *mut u64, capacity: i32) ->
     }
 }
 
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn execution_usage_gpu(_: *mut u64, _: i32) -> i32 { -libc::ENOTSUP }
+
 fn errno() -> i32 {
     io::Error::last_os_error().raw_os_error().filter(|&code| code > 0).unwrap_or(5)
 }
@@ -167,37 +171,13 @@ mod platform {
         let read = unsafe { libc::sysctlbyname(c"kern.memorystatus_vm_pressure_level".as_ptr(), (&mut pressure as *mut u32).cast(), &mut size, std::ptr::null_mut(), 0) };
         let pressure_errno = if read != 0 { errno() } else if ![1, 2, 4].contains(&pressure) { libc::EBADMSG } else { 0 };
         let level = if pressure_errno != 0 { 0 } else if pressure == 4 { 3 } else { pressure as u64 };
-        Ok([busy, total, count as u64, memory, memory - available, available, level, pressure as u64, memory_errno as u64, pressure_errno as u64, 1, 1])
+        let frequency = crate::clock::ticks()?;
+        Ok([crate::clock::micros(busy, frequency), crate::clock::micros(total, frequency), count as u64, memory, memory - available, available, level, pressure as u64, memory_errno as u64, pressure_errno as u64, 1, 1])
     }
 }
 
 #[cfg(any(target_os = "linux", test))]
 mod procfs {
-    pub struct Stat {
-        pub parent: u64,
-        pub group: u64,
-        pub started: u64,
-        pub zombie: bool,
-        pub own: u64,
-        pub children: u64,
-        pub resident: u64,
-    }
-
-    pub fn stat(text: &str, ticks: u64, page: u64) -> Result<Stat, i32> {
-        let (_, fields) = text.rsplit_once(')').ok_or(74)?;
-        let fields: Vec<&str> = fields.split_whitespace().collect();
-        let value = |at: usize| fields.get(at).ok_or(74)?.parse::<u64>().map_err(|_| 74);
-        Ok(Stat {
-            parent: value(1)?,
-            group: value(2)?,
-            started: value(19)?,
-            zombie: fields.first() == Some(&"Z"),
-            own: (value(11)? + value(12)?) * 1_000_000 / ticks,
-            children: (value(13)? + value(14)?) * 1_000_000 / ticks,
-            resident: value(21)? * page,
-        })
-    }
-
     pub fn pss(text: &str) -> Result<u64, i32> {
         let row = text.lines().find_map(|line| line.strip_prefix("Pss:")).ok_or(74)?;
         let mut fields = row.split_whitespace();
@@ -250,25 +230,24 @@ mod platform {
     fn clock() -> Result<(u64, u64), i32> {
         static CLOCK: OnceLock<(u64, u64)> = OnceLock::new();
         if let Some(clock) = CLOCK.get() { return Ok(*clock); }
-        let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+        let ticks = crate::clock::ticks()?;
         let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-        if ticks <= 0 || page <= 0 { return Err(errno()); }
-        let read = (ticks as u64, page as u64);
+        if page <= 0 { return Err(errno()); }
+        let read = (ticks, page as u64);
         let _ = CLOCK.set(read);
         Ok(read)
     }
 
     fn process(pid: i32, row: &mut [u64; ROW]) -> Result<(), i32> {
         let (ticks, page) = clock()?;
-        let path = format!("/proc/{pid}/stat");
-        let read = procfs::stat(&fs::read_to_string(&path).map_err(|_| errno())?, ticks, page)?;
-        row[2] = read.parent;
-        row[3] = read.group;
+        let read = crate::procfs::stat(pid)?;
+        row[2] = read.parent as u64;
+        row[3] = read.group as u64;
         row[4] = read.started;
         row[6] = u64::from(read.zombie);
-        row[7] = read.own;
-        row[8] = read.children;
-        row[9] = read.resident;
+        row[7] = crate::clock::micros(read.own, ticks);
+        row[8] = crate::clock::micros(read.children, ticks);
+        row[9] = read.resident.checked_mul(page).ok_or(libc::EOVERFLOW)?;
         row[11] = 2;
         match fs::read_to_string(format!("/proc/{pid}/smaps_rollup")) {
             Ok(text) => match procfs::pss(&text) {
@@ -277,17 +256,14 @@ mod platform {
             },
             Err(error) => { row[11] = 4; row[12] = error.raw_os_error().unwrap_or(5) as u64; }
         }
-        let after = procfs::stat(&fs::read_to_string(path).map_err(|_| errno())?, ticks, page)?;
+        let after = crate::procfs::stat(pid)?;
         if after.started != read.started { return Err(libc::ESRCH); }
         Ok(())
     }
 
     pub fn all() -> Result<Vec<[u64; ROW]>, i32> {
-        let entries = fs::read_dir("/proc").map_err(|_| errno())?;
         let mut rows = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|_| errno())?;
-            let Some(pid) = entry.file_name().to_str().and_then(|name| name.parse::<i32>().ok()).filter(|&pid| pid > 0) else { continue };
+        for pid in crate::procfs::pids()? {
             let mut row = [0u64; ROW];
             row[0] = pid as u64;
             row[13] = pid as u64;
@@ -311,7 +287,8 @@ mod platform {
             Ok(text) => match procfs::pressure(&text) { Ok((level, value)) => (level, value, 0), Err(code) => (0, 0, code as u64) },
             Err(error) => (0, 0, error.raw_os_error().unwrap_or(5) as u64),
         };
-        Ok([busy, total, cores, physical, physical - available, available, level, value, memory_errno, pressure_errno, 2, 1])
+        let ticks = crate::clock::ticks()?;
+        Ok([crate::clock::micros(busy, ticks), crate::clock::micros(total, ticks), cores, physical, physical - available, available, level, value, memory_errno, pressure_errno, 2, 1])
     }
 }
 
@@ -430,10 +407,10 @@ mod tests {
     #[test]
     fn proc_stat_handles_spaces_and_parentheses_in_the_program_and_reads_reaped_children() {
         let row = "12 (a program) (worker)) Z 8 12 12 0 0 0 0 0 0 0 125 25 300 100 0 0 1 0 50 8192 3 0";
-        let read = procfs::stat(row, 100, 4096).unwrap();
+        let read = crate::procfs::parse(row.as_bytes()).unwrap();
         assert_eq!((read.parent, read.group, read.started, read.zombie), (8, 12, 50, true));
-        assert_eq!((read.own, read.children, read.resident), (1_500_000, 4_000_000, 12_288));
-        assert!(procfs::stat("broken", 100, 4096).is_err());
+        assert_eq!((read.own, read.children, read.resident), (150, 400, 3));
+        assert!(crate::procfs::parse(b"broken").is_err());
     }
     #[test]
     fn pss_reads_only_the_proportional_mapping_account() {

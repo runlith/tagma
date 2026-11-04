@@ -1,9 +1,7 @@
 import { Effect } from 'effect';
 import { LSOF } from './evidence';
 
-export type FileHolders =
-  | { readonly _tag: 'Holders'; readonly pids: ReadonlyArray<number> }
-  | { readonly _tag: 'Unread'; readonly detail: string };
+import type { FileHolders } from '../holders';
 
 export const fileHolders = Effect.fn('MacosHolders.of')(function* (file: string): Effect.fn.Return<FileHolders> {
   const read = yield* Effect.result(

@@ -130,7 +130,7 @@ const candidate = Effect.fn('posix.succession.candidate')(function* (
 
 const visit = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
-  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+  const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
   const phase = (yield* reported()).at(-1)?.phase ?? 0;
   const held = Object.fromEntries(holder.held.map((execution) => [execution.id, execution]));
 

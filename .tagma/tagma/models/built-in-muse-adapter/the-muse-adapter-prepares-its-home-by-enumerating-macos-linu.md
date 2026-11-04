@@ -14,11 +14,11 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
+    ref: packages/adapter-muse/src/harness/catalog.ts
+  - kind: file
     ref: packages/adapter-muse/src/runner/home.ts
   - kind: file
     ref: packages/adapter-muse/src/runner/run.ts
-  - kind: file
-    ref: packages/adapter-muse/src/harness/catalog.ts
 ---
 The runner builds the thread's isolated Muse home by OS: it refuses any platform but three, links the macOS `Library/Keychains` only on darwin, and sets `USERPROFILE` only on win32. Callers pass `process.platform` in.
 

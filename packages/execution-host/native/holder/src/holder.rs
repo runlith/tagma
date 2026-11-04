@@ -3,7 +3,7 @@ use crate::frames::{self, Action, Greeting, Reason, Request, Stream, Target};
 use crate::handover;
 use crate::platform::{Event, Failure, Launching, Opened, Part, Platform, Timer};
 use crate::table::{Exit, Prepared, Record, Table, Transport};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 macro_rules! eprintln {
@@ -34,6 +34,11 @@ struct Starting<P: Platform> {
     status: P::Status,
 }
 
+struct Refusal {
+    request: u32,
+    failure: Failure,
+}
+
 struct Preparing<P: Platform> {
     request: u32,
     prepared: Prepared,
@@ -48,6 +53,7 @@ struct Return {
 struct Holder<P: Platform> {
     platform: P,
     starting: HashMap<P::Token, Starting<P>>,
+    refusing: HashMap<u64, Refusal>,
     waiting_start: bool,
     table: Table<P>,
     logic: Option<Logic<P>>,
@@ -113,7 +119,7 @@ impl<P: Platform> Holder<P> {
     }
 
     fn start(&mut self) {
-        if !self.starting.is_empty() { self.waiting_start = true; return; }
+        if !self.starting.is_empty() || !self.refusing.is_empty() { self.waiting_start = true; return; }
         self.waiting_start = false;
         self.vacating = false;
         if std::mem::take(&mut self.activation) {
@@ -303,8 +309,7 @@ impl<P: Platform> Holder<P> {
                 }
                 match self.platform.launch(&launch) {
                     Err((failure, rollback)) => {
-                        if let Some(process) = rollback { self.collect(process); }
-                        self.refuse(request, failure);
+                        self.reject_launch(request, failure, rollback);
                         self.children();
                     }
                     Ok(Launching { spawned, status, token }) => {
@@ -474,22 +479,25 @@ impl<P: Platform> Holder<P> {
 
     fn started(&mut self, token: P::Token) {
         let Some(mut pending) = self.starting.remove(&token) else { return };
-        match self.platform.settle(&mut pending.status) {
+        let settled = match self.platform.settle(&mut pending.status) {
             None => {
                 self.starting.insert(token, pending);
                 return;
             }
-            Some(Ok(())) => self.launched(pending.request, pending.record),
-            Some(Err(failure)) => {
-                let Starting { request, record, .. } = pending;
+            Some(settled) => settled,
+        };
+        let Starting { request, record, status } = pending;
+        drop(status);
+        match settled {
+            Ok(()) => self.launched(request, record),
+            Err(failure) => {
                 let Record { mut process, transport, .. } = record;
                 self.platform.abandon(&mut process);
                 self.platform.release(&mut process, transport);
-                self.collect(process);
-                self.refuse(request, failure);
+                self.reject_launch(request, failure, Some(process));
             }
         }
-        if self.waiting_start && self.logic.is_none() && self.starting.is_empty() { self.start(); }
+        if self.waiting_start && self.logic.is_none() && self.starting.is_empty() && self.refusing.is_empty() { self.start(); }
     }
 
     fn end_held(&mut self) {
@@ -512,9 +520,25 @@ impl<P: Platform> Holder<P> {
         }
     }
 
-    fn collect(&mut self, mut process: P::Process) {
-        if !matches!(self.platform.reap(&mut process), Ok(Some(_))) {
-            self.table.orphans.push(process);
+    fn reject_launch(&mut self, request: u32, failure: Failure, rollback: Option<P::Process>) {
+        if let Some(process) = rollback {
+            let value = P::process_value(&process);
+            if !self.collect(process) {
+                self.refusing.insert(value, Refusal { request, failure });
+                return;
+            }
+        }
+        self.refuse(request, failure);
+    }
+
+    fn collect(&mut self, mut process: P::Process) -> bool {
+        match self.platform.reap(&mut process) {
+            Ok(Some(_)) => true,
+            pending => {
+                if let Err(failure) = pending { eprintln!("execution-holder: a discarded child could not be reaped: {}", failure.detail); }
+                self.table.orphans.push(process);
+                false
+            }
         }
     }
 
@@ -560,9 +584,33 @@ impl<P: Platform> Holder<P> {
     }
 
     fn children(&mut self) {
+        let owned: HashSet<u64> = self
+            .table
+            .records()
+            .filter(|record| record.reaped.is_none())
+            .map(|record| P::process_value(&record.process))
+            .chain(self.table.orphans.iter().map(P::process_value))
+            .chain(self.starting.values().map(|starting| P::process_value(&starting.record.process)))
+            .chain(self.logic.iter().map(|logic| P::process_value(&logic.process)))
+            .chain(self.preparing.iter().map(|preparing| P::process_value(&preparing.process)))
+            .collect();
+        if let Err(detail) = self.platform.sweep(&owned) {
+            eprintln!("execution-holder: descendants this holder inherited could not be reaped: {detail}");
+        }
         self.verdict();
-        let platform = &mut self.platform;
-        self.table.orphans.retain_mut(|process| matches!(platform.reap(process), Ok(None)));
+        for mut process in std::mem::take(&mut self.table.orphans) {
+            match self.platform.reap(&mut process) {
+                Ok(Some(_)) => {
+                    let value = P::process_value(&process);
+                    drop(process);
+                    if let Some(Refusal { request, failure }) = self.refusing.remove(&value) { self.refuse(request, failure); }
+                }
+                pending => {
+                    if let Err(failure) = pending { eprintln!("execution-holder: a discarded child could not be reaped: {}", failure.detail); }
+                    self.table.orphans.push(process);
+                }
+            }
+        }
         let mut announced = Vec::new();
         for record in self.table.records_mut().filter(|record| record.exit.is_none()) {
             if let Some(exit) = self.platform.observe(&record.process) {
@@ -573,7 +621,10 @@ impl<P: Platform> Holder<P> {
         for frame in announced {
             self.reply(frame);
         }
-        let Some(logic) = self.logic.as_mut() else { return };
+        let Some(logic) = self.logic.as_mut() else {
+            if self.leaving.is_none() && self.waiting_start && self.starting.is_empty() && self.refusing.is_empty() { self.start(); }
+            return;
+        };
         let ready = logic.ready;
         let lived = self.platform.now_ms().saturating_sub(logic.since);
         let code = match self.platform.reap(&mut logic.process) {
@@ -610,7 +661,7 @@ impl<P: Platform> Holder<P> {
 
     fn done(&self) -> Option<i32> {
         self.leaving.filter(|_| {
-            self.logic.is_none() && self.table.is_empty() && self.starting.is_empty() && self.table.orphans.is_empty() && self.preparing.is_none()
+            self.logic.is_none() && self.table.is_empty() && self.starting.is_empty() && self.refusing.is_empty() && self.table.orphans.is_empty() && self.preparing.is_none()
         })
     }
 
@@ -678,6 +729,7 @@ pub fn run<P: Platform>() -> Result<i32, String> {
     let mut holder = Holder {
         platform,
         starting: HashMap::new(),
+        refusing: HashMap::new(),
         waiting_start: false,
         table,
         logic: None,

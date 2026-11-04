@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
+import type { WorkState } from '../holder/Holder';
 import type { UsageDemand, UsageRead } from '../UsageReader';
 import type { ProcessAbi } from './ProcessAbi';
 import type { Refused } from './refusal';
@@ -8,7 +9,8 @@ import type { Refused } from './refusal';
 export type Question =
   | { readonly _tag: 'Usage'; readonly demand: UsageDemand }
   | { readonly _tag: 'Scan'; readonly probe: ProcessProbe }
-  | { readonly _tag: 'Facts'; readonly pids: ReadonlyArray<number> };
+  | { readonly _tag: 'Facts'; readonly pids: ReadonlyArray<number> }
+  | { readonly _tag: 'Group'; readonly work: number; readonly leader: number; readonly exited: boolean };
 
 export type Request =
   | { readonly _tag: 'Open'; readonly path: string }
@@ -21,6 +23,7 @@ export type Answer =
   | { readonly _tag: 'Usage'; readonly id: number; readonly reply: UsageRead }
   | { readonly _tag: 'Scan'; readonly id: number; readonly reply: ReadonlyArray<ProcessRow> | Refused }
   | { readonly _tag: 'Facts'; readonly id: number; readonly reply: ProcessReading | Refused }
+  | { readonly _tag: 'Group'; readonly id: number; readonly reply: WorkState | Refused }
   | { readonly _tag: 'Failed'; readonly id: number; readonly detail: string };
 
 type ProcessSource = {
@@ -45,6 +48,8 @@ const answered = (opened: ProcessSource, id: number, question: Question): Answer
       return { _tag: 'Scan', id, reply: opened.processes.processTable(question.probe) };
     case 'Facts':
       return { _tag: 'Facts', id, reply: opened.processes.processFacts(question.pids) };
+    case 'Group':
+      return { _tag: 'Group', id, reply: opened.processes.groupState(question.work, question.leader, question.exited) };
   }
 };
 

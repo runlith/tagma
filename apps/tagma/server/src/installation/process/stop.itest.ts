@@ -74,7 +74,7 @@ it.live('switching during a prepared restart cancels both generations and leaves
     const chosen = takeActive(junction, { channel: 'stable', cli, url: 'http://127.0.0.1:1', pid: process.pid });
     expect(chosen._tag).toBe('Taken');
     if (chosen._tag === 'Taken') chosen.release();
-  }).pipe(Effect.provide(native)),
+  }).pipe(Effect.scoped, Effect.provide(native)),
 );
 
 it.live('an issued predecessor that can return after its candidate dies never yields a proven stop', () =>
@@ -146,5 +146,5 @@ if (process.argv.includes('returned')) {
     writeFileSync(join(home, 'arrive'), 'arrive');
     yield* waitFor(join(home, 'returned'));
     expect(activeHolder(junction)).toMatchObject({ pid: Number(readFileSync(join(home, 'returned'), 'utf8')) });
-  }).pipe(Effect.provide(native)),
+  }).pipe(Effect.scoped, Effect.provide(native)),
 );

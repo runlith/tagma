@@ -14,13 +14,13 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/process/lifetime.ts
-  - kind: file
-    ref: apps/tagma/server/src/installation/setup/launcher.ts
+    ref: apps/tagma/server/src/installation/cli/server.ts
   - kind: file
     ref: apps/tagma/server/src/installation/operations/machine.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cli/server.ts
+    ref: apps/tagma/server/src/installation/process/lifetime.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/setup/launcher.ts
 ---
 `installation/setup/macos.ts` fills the module's `MachinePlatform` port for macOS and is an adapter (composition binds it in `composition/release/bindings.ts`); it is fine. The shared files around it still branch.
 

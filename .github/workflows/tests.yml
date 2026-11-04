@@ -72,18 +72,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - if: inputs.script == 'test:integration' || inputs.script == 'test:e2e'
+      - if: inputs.script == 'test:integration' || inputs.script == 'test:native' || inputs.script == 'test:e2e'
         uses: actions/cache@v6
         with:
           path: packages/execution-host/native/target
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/execution-host/native/Cargo.lock', 'packages/execution-host/native/**/Cargo.toml', 'packages/execution-host/native/**/*.rs') }}
           restore-keys: native-${{ runner.os }}-${{ runner.arch }}-
-      - if: inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')
+      - if: (inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')) && !(runner.os == 'Linux' && runner.arch == 'ARM64')
         uses: actions/cache@v6
         with:
           path: ~/.cache/runlith/browser-builds
           key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/chrome-for-testing/src/build.ts') }}
-      - if: inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')
+      - if: (inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')) && !(runner.os == 'Linux' && runner.arch == 'ARM64')
         name: Chrome for Testing for the engine tests
         run: bun apps/tagma/server/scripts/fetch-browser.ts
       - if: contains(inputs.lanes, 'webkit')

@@ -1,5 +1,7 @@
 import { CString, dlopen, FFIType, ptr, toArrayBuffer, type Pointer } from 'bun:ffi';
 import { constants } from 'node:os';
+import type { KernelLimit } from '@runlith/executions/protocol/capacity';
+import type { WorkState } from '../holder/Holder';
 import { birthOf } from './birth';
 import { refusalOf, type NativeStatus, type Refused } from './refusal';
 import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../ProcessReader';
@@ -12,6 +14,7 @@ const SYMBOLS = {
   execution_platform_error: { args: [], returns: FFIType.ptr },
   execution_platform_uptime_nanos: { args: [], returns: FFIType.u64 },
   execution_platform_limits: { args: [FFIType.ptr], returns: FFIType.i32 },
+  execution_platform_terminal_control_descriptors: { args: [], returns: FFIType.i32 },
   execution_platform_process_table: {
     args: [FFIType.i32, FFIType.ptr, FFIType.i32, FFIType.ptr, FFIType.ptr, FFIType.ptr],
     returns: FFIType.i32,
@@ -20,16 +23,23 @@ const SYMBOLS = {
   execution_platform_processes_release: { args: [FFIType.ptr, FFIType.u64], returns: FFIType.i32 },
   execution_platform_process_identity: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_process_descriptors: { args: [FFIType.i32], returns: FFIType.i32 },
+  execution_platform_group_state: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
 } as const;
 
 type Library = ReturnType<typeof dlopen<typeof SYMBOLS>>;
+type NativeLimits = { readonly openFiles: KernelLimit; readonly processes: KernelLimit; readonly terminals: KernelLimit };
+const limitOf = (value: bigint): KernelLimit => (value === 18_446_744_073_709_551_615n ? 'absent' : Number(value));
+const addressable = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= 0x7fff_ffff;
+const invalidPid: Refused = { refusal: 'invalid', detail: 'a POSIX pid must fit the signed 32-bit native process ABI' };
 
 export interface ProcessAbi {
   unload(): void;
   identity(): string;
   uptimeNanos(): bigint;
-  limits(): { readonly openFiles: number; readonly processes: number; readonly terminals: number } | Refused;
+  limits(): NativeLimits | Refused;
+  terminalControlDescriptors(): number;
   descriptors(pid: number): { readonly count: number } | Refused;
+  groupState(group: number, leader: number, leaderExited: boolean): WorkState | Refused;
   processTable(request: ProcessProbe): ReadonlyArray<ProcessRow> | Refused;
   processFacts(pids: ReadonlyArray<number>): ProcessReading | Refused;
   processIdentity(pid: number): ProcessIdentity | Refused;
@@ -69,20 +79,36 @@ export class Abi implements ProcessAbi {
     return BigInt(this.library.symbols.execution_platform_uptime_nanos());
   }
 
-  limits(): { readonly openFiles: number; readonly processes: number; readonly terminals: number } | Refused {
+  limits(): NativeLimits | Refused {
     const values = new BigUint64Array(3);
     const code = this.library.symbols.execution_platform_limits(ptr(values));
     if (code < 0) return this.refused(code);
-    const [openFiles, processes, terminals] = Array.from(values, Number) as [number, number, number];
+    const openFiles = limitOf(values[0]!);
+    const processes = limitOf(values[1]!);
+    const terminals = limitOf(values[2]!);
+    if ([openFiles, processes, terminals].some((limit) => limit !== 'absent' && !Number.isSafeInteger(limit)))
+      return { refusal: 'failed', detail: 'a finite kernel limit exceeds the exact numeric range of the host protocol' };
     return { openFiles, processes, terminals };
   }
 
+  terminalControlDescriptors(): number {
+    return this.library.symbols.execution_platform_terminal_control_descriptors();
+  }
+
   descriptors(pid: number): { readonly count: number } | Refused {
+    if (!addressable(pid)) return invalidPid;
     const code = this.library.symbols.execution_platform_process_descriptors(pid);
     return code < 0 ? this.refused(code) : { count: code };
   }
 
+  groupState(group: number, leader: number, leaderExited: boolean): WorkState | Refused {
+    if (!addressable(group) || !addressable(leader)) return invalidPid;
+    const code = this.library.symbols.execution_platform_group_state(group, leader, Number(leaderExited));
+    return code < 0 ? this.refused(code) : code === 0 ? 'ended' : code === 1 ? 'standing' : 'unmeasured';
+  }
+
   processTable(request: ProcessProbe): ReadonlyArray<ProcessRow> | Refused {
+    if (request._tag === 'Pids' && request.pids.some((pid) => !addressable(pid))) return invalidPid;
     const pids = request._tag === 'Pids' ? Int32Array.from(request.pids) : new Int32Array(0);
     const terminal =
       request._tag === 'Terminal'
@@ -103,6 +129,7 @@ export class Abi implements ProcessAbi {
   }
 
   processFacts(pids: ReadonlyArray<number>): ProcessReading | Refused {
+    if (pids.some((pid) => !addressable(pid))) return invalidPid;
     const listed = Int32Array.from(pids);
     const slot = new BigUint64Array(1);
     const length = new BigUint64Array(1);
@@ -130,6 +157,7 @@ export class Abi implements ProcessAbi {
   }
 
   processIdentity(pid: number): ProcessIdentity | Refused {
+    if (!addressable(pid)) return invalidPid;
     const values = new BigUint64Array(5);
     const code = this.library.symbols.execution_platform_process_identity(pid, ptr(values));
     if (code < 0) return this.refused(code);

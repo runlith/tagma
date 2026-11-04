@@ -14,7 +14,7 @@ export type Reception = { readonly count: number; readonly handles: ReadonlyArra
 
 export type Owned = { readonly close: () => void };
 
-export type HeldTerminal = Terminal & Owned;
+export type HeldTerminal = Terminal & Owned & { readonly endInput: () => void };
 
 export type HeldPipe = Readable & Writable & Owned;
 
@@ -26,6 +26,6 @@ export type Link = {
   readonly discard: (handle: number) => void;
   readonly terminal: (handles: ReadonlyArray<number>) => HeldTerminal;
   readonly pipe: (handle: number) => HeldPipe;
-  readonly workState: (work: number, leader: number, exited: boolean) => WorkState;
+  readonly workState: (work: number, leader: number, exited: boolean) => Effect.Effect<WorkState>;
   readonly prepare: (launch: HeldLaunch) => Effect.Effect<HeldLaunch, HolderRefused>;
 };

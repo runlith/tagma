@@ -34,7 +34,7 @@ export const posix = () =>
         return text;
       }, Effect.scoped);
       const priority = Effect.fnUntraced(function* (pid: number) {
-        const value = (yield* read('/bin/ps', ['-o', 'pri=', '-p', String(pid)])).trim();
+        const value = (yield* read('/bin/ps', ['-o', system.priorityColumn, '-p', String(pid)])).trim();
         if (value.length === 0) return yield* new ProcessesUnreadable({ detail: `could not read priority of ${pid}` });
         return value;
       });
@@ -60,7 +60,7 @@ export const posix = () =>
           fixture: command,
           priority,
           background,
-          priorities: (launcher) => Effect.map(priority(launcher), (full) => ({ full, ...system.priorities })),
+          priorities: (launcher) => Effect.map(priority(launcher), (full) => ({ full, ...system.priorities(full) })),
           standing: (pid) =>
             Effect.suspend(() => {
               const row = processes.identity(pid);
@@ -78,7 +78,7 @@ export const posix = () =>
               if ('refusal' in held) return Effect.fail(new ProcessesUnreadable({ detail: held.detail }));
               return Effect.succeed({ logic: logic.count, holder: held.count });
             }),
-          softLimits: read('/bin/sh', ['-c', 'ulimit -n; ulimit -u']),
+          softLimits: read('/bin/bash', ['-c', 'ulimit -n; ulimit -u']),
         }),
       );
     }),

@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { openUsage } from './composition/testing/native';
 
 import { HOLDER_LIBRARY as libraryPath } from './posix/testing/holder';
-const workload = 'printf "READY\\n"; read next; /usr/bin/awk \'BEGIN { for (i=0;i<10000;i++) sum+=i }\'; printf "REAPED\\n"; read done';
+const workload = `printf "READY\\n"; read next; /usr/bin/perl -e 'my $before = (times)[0]; my $n = 0; $n++ while (times)[0] == $before;'; printf "REAPED\\n"; read done`;
 const printed = (source: ReadableStream<Uint8Array>, marker: string) =>
   Effect.promise(async () => {
     const reader = source.getReader();
