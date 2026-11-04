@@ -22,9 +22,9 @@
 {#if keys}
   <span data-slot="dropdown-menu-shortcut" class="flex shrink-0 pl-3"><Kbd chord={keys} /></span>
 {:else if current}
-  <FadeText data-slot="dropdown-menu-current" class="max-w-1/2 shrink-0 text-muted-foreground" text={current} />
+  <FadeText data-slot="dropdown-menu-current" data-yield class="ml-auto pl-2 text-muted-foreground" text={current} />
 {:else if hint}
-  <FadeText data-slot="dropdown-menu-hint" class="max-w-1/2 shrink-0 stamp text-muted-foreground" text={hint} />
+  <FadeText data-slot="dropdown-menu-hint" data-yield class="ml-auto pl-2 stamp text-muted-foreground" text={hint} />
 {:else if here}
   <Check class="size-3.5 shrink-0 text-brand" />
 {:else if tail}

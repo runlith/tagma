@@ -6,6 +6,7 @@
   import FadeText from '$lib/shared/FadeText.svelte';
   import { cn } from '$lib/shared/utils.js';
   import RowLead from './dropdown-menu-lead.svelte';
+  import RowTail from './dropdown-menu-tail.svelte';
   import { type Lead, ROW } from './row.js';
 
   let {
@@ -47,9 +48,13 @@
     {@render children?.()}
   {:else}
     <RowLead {icon} {lead} />
-    <FadeText class="flex-1">{@render children?.()}</FadeText>
     {#if current}
-      <FadeText data-slot="dropdown-menu-current" class="max-w-1/2 shrink-0 text-muted-foreground" text={current} />
+      <span data-line class="flex-1">
+        <FadeText>{@render children?.()}</FadeText>
+        <RowTail {current} />
+      </span>
+    {:else}
+      <FadeText class="flex-1">{@render children?.()}</FadeText>
     {/if}
     <ChevronRightIcon class="size-3.5 shrink-0 text-muted-foreground" />
   {/if}

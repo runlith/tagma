@@ -385,36 +385,55 @@
 )}
   {@const said = preview(entry, open)}
   {@const named = chips.length === 0 ? line.subject : null}
-  {#if hold === 'marked' && entry.kind === 'tool' && status}
-    {@render status.mark(entry)}
-    <span class={['min-w-0', tone(entry)]} data-fade {@attach clipFade}>{line.subject ?? line.lead}</span>
-  {:else}
-    {@const toolName = context.verbose && entry.kind === 'tool' ? entry.toolName : null}
-    {#if line.lead !== null}
-      <span class={['shrink-0', tone(entry)]} {@attach toolName === null ? undefined : rendering.tip(() => ({ text: toolName }))}
-        >{line.lead}</span
+  <span data-line class="items-baseline gap-x-1.5">
+    {#if hold === 'marked' && entry.kind === 'tool' && status}
+      <span class="flex min-w-0 items-baseline gap-x-1.5"
+        >{@render status.mark(entry)}<span class={['min-w-0', tone(entry)]} data-fade {@attach clipFade}>{line.subject ?? line.lead}</span
+        ></span
       >
+    {:else}
+      {@const toolName = context.verbose && entry.kind === 'tool' ? entry.toolName : null}
+      {#snippet lead()}
+        {#if line.lead !== null}
+          <span class={['shrink-0', tone(entry)]} {@attach toolName === null ? undefined : rendering.tip(() => ({ text: toolName }))}
+            >{line.lead}</span
+          >
+        {/if}
+      {/snippet}
+      {#snippet gist(yields: boolean)}
+        {#if named || line.detail || said}
+          <span class="min-w-0" data-yield={yields ? '' : undefined} data-fade {@attach clipFade}
+            >{#if named}<span class={line.join === 'apart' ? 'ml-1.5 text-muted-foreground/45' : tone(entry)}>{@render inline(named)}</span
+              >{/if}{#if line.detail}<span class="text-muted-foreground/70">{named ? ' ' : ''}{@render inline(line.detail)}</span
+              >{/if}{#if said}<span class="text-muted-foreground/55">{line.detail ? ' — ' : named ? ' ' : ''}{@render inline(said)}</span
+              >{/if}</span
+          >
+        {/if}
+      {/snippet}
+      {#if chips.length === 0}
+        <span class="flex min-w-0 items-baseline gap-x-1.5">{@render lead()}{@render gist(false)}</span>
+      {:else}
+        {@render lead()}
+        {#each chips.slice(0, CHIPS_SHOWN) as thread (thread.id)}
+          <ThreadChip {thread} />
+        {/each}
+        {#if chips.length > CHIPS_SHOWN}
+          <span class="text-small text-muted-foreground/60">+{chips.length - CHIPS_SHOWN}</span>
+        {/if}
+        {@render gist(true)}
+      {/if}
     {/if}
-    {#each chips.slice(0, CHIPS_SHOWN) as thread (thread.id)}
-      <ThreadChip {thread} />
-    {/each}
-    {#if chips.length > CHIPS_SHOWN}
-      <span class="shrink-0 text-small text-muted-foreground/60">+{chips.length - CHIPS_SHOWN}</span>
-    {/if}
-    {#if named || line.detail || said}
-      <span class={['min-w-0', chips.length > 0 && 'max-w-max flex-1']} data-fade {@attach clipFade}
-        >{#if named}<span class={line.join === 'apart' ? 'ml-1.5 text-muted-foreground/45' : tone(entry)}>{@render inline(named)}</span
-          >{/if}{#if line.detail}<span class="text-muted-foreground/70">{named ? ' ' : ''}{@render inline(line.detail)}</span
-          >{/if}{#if said}<span class="text-muted-foreground/55">{line.detail ? ' — ' : named ? ' ' : ''}{@render inline(said)}</span
-          >{/if}</span
-      >
-    {/if}
-  {/if}
-  {#if entry.kind === 'signal'}
-    {#if entry.signalType === KEEP_WARM_SIGNAL_TYPE}
+    {#if entry.kind === 'signal' && entry.signalType === KEEP_WARM_SIGNAL_TYPE}
       {@render facts([...chatKeepWarmFacts(entry, strings), ...rendering.kinds.facts(entry)])}
+    {:else if entry.kind === 'tool' && hold === null}
+      {@render facts(entry.display?.facts ?? [])}
+    {:else if entry.kind === 'compaction'}
+      {@render facts([...chatCompactionFacts(entry, strings), ...rendering.kinds.facts(entry)])}
+    {:else if entry.kind === 'retry'}
+      {@render facts(retryFacts(entry))}
     {/if}
-  {:else if entry.kind === 'tool'}
+  </span>
+  {#if entry.kind === 'tool'}
     {#if entry.display?.form === 'binary'}
       <span class="ml-1.5 shrink-0 font-mono text-meta text-muted-foreground/60">{entry.display.byteLength} B</span>
       <span class="ml-1.5 shrink-0 font-mono text-meta text-muted-foreground/60">binary</span>
@@ -428,7 +447,6 @@
     {#if hold !== null && status}
       {@render status.status(entry)}
     {:else}
-      {@render facts(entry.display?.facts ?? [])}
       {@const took = entry.display?.durationMs}
       {#if took !== undefined && !chatToolStanding(entry) && (context.verbose || took >= CALL_CLOCK_MIN_MS)}
         <span class="ml-1.5 shrink-0 font-mono text-meta tabular-nums text-muted-foreground/90">{callDuration(took)}</span>
@@ -440,7 +458,7 @@
     {:else if toolQueued(entry)}
       <span class="ml-1.5 shrink-0 text-small text-muted-foreground/60">{strings.queued()}</span>
       {#if entry.execution?.state === 'queued' && entry.execution.reason}
-        <span class="min-w-0 shrink-[1000] text-small text-muted-foreground/50" data-fade {@attach clipFade}
+        <span class="max-w-max min-w-0 flex-1 text-small text-muted-foreground/50" data-fade {@attach clipFade}
           >— {entry.execution.reason}</span
         >
       {/if}
@@ -461,10 +479,6 @@
     {:else if toolFailed(entry) && !failureTold(entry, hold)}
       <span class="ml-1.5 shrink-0 text-small text-chat-failure/90">{strings.failed()}</span>
     {/if}
-  {:else if entry.kind === 'compaction'}
-    {@render facts([...chatCompactionFacts(entry, strings), ...rendering.kinds.facts(entry)])}
-  {:else if entry.kind === 'retry'}
-    {@render facts(retryFacts(entry))}
   {/if}
   {#if live && phaseClock && clock && entry.kind !== 'tool' && entry.kind !== 'retry'}<PhaseClock status={clock} />{/if}
 {/snippet}
@@ -480,9 +494,9 @@
 {#snippet facts(list: readonly ChatStepFact[])}
   {#each shownFacts(list, context.verbose) as fact, index (index)}
     {#if fact.value === undefined}
-      <span class="ml-1.5 shrink-0 font-mono text-meta text-muted-foreground/60">{fact.label}</span>
+      <span class="ml-1.5 font-mono text-meta text-muted-foreground/60">{fact.label}</span>
     {:else}
-      <span class="ml-1.5 min-w-0 shrink-[1000] font-mono text-meta text-muted-foreground/60" data-fade {@attach clipFade}
+      <span class="ml-1.5 font-mono text-meta text-muted-foreground/60" data-yield data-fade {@attach clipFade}
         >{fact.label}&nbsp;<span class="text-muted-foreground/90">{fact.value}</span></span
       >
     {/if}

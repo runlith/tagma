@@ -51,7 +51,14 @@
     {@render children?.()}
   {:else}
     <RowLead {icon} {lead} />
-    <FadeText class="flex-1">{@render children?.()}</FadeText>
-    <RowTail {keys} {current} {hint} {here} {tail} />
+    {#if current || hint}
+      <span data-line class="flex-1">
+        <FadeText>{@render children?.()}</FadeText>
+        <RowTail {current} {hint} />
+      </span>
+    {:else}
+      <FadeText class="flex-1">{@render children?.()}</FadeText>
+      <RowTail {keys} {here} {tail} />
+    {/if}
   {/if}
 </div>

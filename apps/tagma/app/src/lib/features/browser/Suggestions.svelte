@@ -47,29 +47,34 @@
         {#if row.kind === 'search'}<Search class="size-3.5" />{:else}<PageIcon icon={row.icon} />{/if}
       {/snippet}
     </RowLead>
-    <FadeText class="flex-1">
+    {#snippet words(classes: string)}
+      <FadeText class={classes}>
+        {#if row.kind === 'search'}
+          <span>{row.query}</span>
+        {:else if row.kind === 'go' || row.kind === 'served'}
+          {@const shown = shownOf(row.url)}
+          <span><MatchText text={shown} positions={spotted(shown, query)} /></span>{#if row.kind === 'go' && row.title !== null}<span
+              class="pl-2 text-muted-foreground">{row.title}</span
+            >{/if}
+        {:else}
+          {@const shown = shownOf(row.url)}
+          <span><MatchText text={row.title} positions={spotted(row.title, query)} /></span><span class="pl-2 text-muted-foreground"
+            ><MatchText text={shown} positions={spotted(shown, query)} /></span
+          >
+        {/if}
+      </FadeText>
+    {/snippet}
+    {#if row.kind !== 'search' && row.kind !== 'open' && label !== undefined}
+      <span data-line class="flex-1">{@render words('')}<RowTail hint={label} /></span>
+    {:else}
+      {@render words('flex-1')}
       {#if row.kind === 'search'}
-        <span>{row.query}</span>
-      {:else if row.kind === 'go' || row.kind === 'served'}
-        {@const shown = shownOf(row.url)}
-        <span><MatchText text={shown} positions={spotted(shown, query)} /></span>{#if row.kind === 'go' && row.title !== null}<span
-            class="pl-2 text-muted-foreground">{row.title}</span
-          >{/if}
-      {:else}
-        {@const shown = shownOf(row.url)}
-        <span><MatchText text={row.title} positions={spotted(row.title, query)} /></span><span class="pl-2 text-muted-foreground"
-          ><MatchText text={shown} positions={spotted(shown, query)} /></span
-        >
+        <RowTail tail={searching} />
+      {:else if row.kind === 'open'}
+        <RowTail tail={switching} />
+      {:else if chosen}
+        <RowTail keys={enter} />
       {/if}
-    </FadeText>
-    {#if row.kind === 'search'}
-      <RowTail tail={searching} />
-    {:else if row.kind === 'open'}
-      <RowTail tail={switching} />
-    {:else if label !== undefined}
-      <RowTail hint={label} />
-    {:else if chosen}
-      <RowTail keys={enter} />
     {/if}
   </div>
 {/each}

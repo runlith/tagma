@@ -74,13 +74,19 @@
 </script>
 
 {#snippet line()}
-  {#each threads as thread (thread.id)}
-    <ThreadChip {thread} />
-  {/each}
-  <span class={['min-w-0', step ? 'text-muted-foreground' : 'text-foreground']} data-fade {@attach clipFade}
-    >{words(notice)}{#if subject !== null}<span class={['ml-2', step ? 'text-foreground/80' : 'text-muted-foreground']}>{subject}</span
-      >{/if}</span
-  >
+  <span data-line class="items-baseline gap-x-2">
+    {#if threads.length > 0}
+      <span data-yield="start" data-fade="start" {@attach clipFade}
+        ><span dir="ltr" class="inline-flex gap-x-2"
+          >{#each threads as thread (thread.id)}<ThreadChip {thread} />{/each}</span
+        ></span
+      >
+    {/if}
+    <span class={step ? 'text-muted-foreground' : 'text-foreground'} data-fade {@attach clipFade}
+      >{words(notice)}{#if subject !== null}<span class={['ml-2', step ? 'text-foreground/80' : 'text-muted-foreground']}>{subject}</span
+        >{/if}</span
+    >
+  </span>
   {#if (notice.kind === 'child-update' || notice.kind === 'thread-event') && notice.forOperator}
     <span class="shrink-0 rounded-sm bg-selected px-1.5 text-meta text-foreground">{strings.yourWords()}</span>
   {/if}
