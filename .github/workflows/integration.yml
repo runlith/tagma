@@ -8,6 +8,10 @@ on:
         description: Workspace directory to run alone, `.` for the root; empty runs every package
         required: false
         default: ''
+      budget:
+        description: Test processes testbed may run at once; empty takes every core
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -33,8 +37,14 @@ jobs:
       - name: integration tests
         env:
           PACKAGE: ${{ inputs.package }}
+          BUDGET: ${{ inputs.budget }}
         run: |
-          export TESTBED_BUDGET="$(getconf _NPROCESSORS_ONLN)"
+          export TESTBED_BUDGET="${BUDGET:-$(getconf _NPROCESSORS_ONLN)}"
+          mkdir -p "$RUNNER_TEMP/integration"
+          while :; do
+            echo "$(date -u +%T) $(memory_pressure -Q | tail -1) | $(sysctl -n vm.swapusage) | $(vm_stat | awk '/Pageouts|Swapouts|Pages free/ {printf "%s %s ", $1, $NF}')"
+            sleep 30
+          done > "$RUNNER_TEMP/integration/machine.log" &
           bun run test:all --script test:integration ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/integration/report.json"
       - uses: actions/upload-artifact@v7
         if: always()
