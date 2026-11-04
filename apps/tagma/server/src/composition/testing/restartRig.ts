@@ -17,7 +17,7 @@ import { machineStateSchema } from '../../installation/contract/wire/machine.js'
 import { liveSerialization, RESTARTING_CLOSE } from '../../platform/contract/wire/live.js';
 import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
 import { LiveRpc } from './composed.js';
-import { rolloutReadSchema } from '../../threads/contract/service/rolloutReads.js';
+import { rolloutReadSchema, type RolloutRead } from '../../threads/contract/service/rolloutReads.js';
 import { restartDataset, type RestartDataset, type RestartPlace } from './restartDataset.js';
 import { RESTART_STEP_ENV } from './restartStep.js';
 import type { WireSnapshot } from '../../threads/contract/wire/snapshot.js';
@@ -53,6 +53,8 @@ export type RestartSample = {
   readonly acceptedMs: number;
   readonly frameMs: number;
   readonly transcript: WireSnapshot['transcript'];
+  readonly before: WireSnapshot['before'];
+  readonly frameReads: readonly RolloutRead[];
   readonly serverMs: number | null;
   readonly recoveryStartedAt: number | null;
   readonly recoveryDelayMs: number | null;
@@ -60,7 +62,7 @@ export type RestartSample = {
   readonly restored: RestartPlace;
   readonly buildBefore: string | null;
   readonly buildAfter: string | null;
-  readonly rolloutReads: readonly string[];
+  readonly rolloutReads: readonly RolloutRead[];
 };
 const storedRestart = Schema.decodeUnknownEffect(Schema.fromJsonString(restartRecordSchema));
 
@@ -216,7 +218,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
         TAGMA_ARTIFACT_PORT: String(artifact),
         TAGMA_SANDBOX_PORT: String(sandbox),
         TAGMA_REMOTE_PORT: String(remote),
-        TAGMA_SQLITE_READERS: '0',
+        TAGMA_SQLITE_READERS: '1',
         TAGMA_OBSERVE_ROLLOUT: '1',
       },
       join(root, 'data/serve.log'),
@@ -255,6 +257,16 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
     );
     return Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(RpcClient.make(LiveRpc), context));
   };
+  const reads = Effect.fn('restart.reads')(function* (pid: number) {
+    const reads: RolloutRead[] = [];
+    for (const line of (yield* files.readFileString(join(root, 'data/serve.log'))).split('\n')) {
+      const at = line.indexOf('{"_tag":"RolloutRead"');
+      if (at < 0) continue;
+      const observed = yield* observedRead(line.slice(at));
+      if (observed.pid === pid) reads.push(observed.read);
+    }
+    return reads;
+  });
   const sample = Effect.fn('restart.sample')(function* (location: RestartPlace, successor: { readonly step?: boolean } = {}) {
     if (dataset === null || launch === null) return yield* Effect.die('the rig has not prepared a dataset');
     const heldDataset = dataset;
@@ -276,7 +288,15 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
     yield* files.writeFileString(saved, JSON.stringify({ ...location, startedAt }));
     const after = yield* ready(before.pid);
     const restored = yield* checkpoint(yield* files.readFileString(saved));
-    const { record, windowMs, acceptedMs, frameMs, transcript } = yield* Effect.scoped(
+    const {
+      record,
+      windowMs,
+      acceptedMs,
+      frameMs,
+      transcript,
+      before: beforeEntry,
+      frameReads,
+    } = yield* Effect.scoped(
       Effect.flatMap(connect(), (client) =>
         Effect.gen(function* () {
           const requestedAt = yield* clock;
@@ -289,6 +309,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
           const framedAt = yield* clock;
           const windowMs = framedAt - restored.startedAt;
           const frameMs = framedAt - requestedAt;
+          const frameReads = yield* reads(after.pid);
           yield* op('set_thread_title', { threadId: restored.threadId, title: 'returned place' }, restored.projectId);
           const acceptedMs = (yield* clock) - restored.startedAt;
           const state = yield* machine(yield* op('read_machine_state', {}));
@@ -312,19 +333,14 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
             acceptedMs,
             frameMs,
             transcript: first.payload.snapshot.transcript,
+            before: first.payload.snapshot.before,
+            frameReads,
           };
         }),
       ),
     );
     const recoveryStartedAt = record.phases.find((phase) => phase.name === 'run recovery triggered')?.startedAt ?? null;
     const doorClosedAt = record.points.find((point) => point.name === 'door-closed' && point.door === 'local')?.at ?? null;
-    const reads: string[] = [];
-    for (const line of (yield* files.readFileString(join(root, 'data/serve.log'))).split('\n')) {
-      const at = line.indexOf('{"_tag":"RolloutRead"');
-      if (at < 0) continue;
-      const observed = yield* observedRead(line.slice(at));
-      if (observed.pid === record.successor?.pid) reads.push(observed.read.path);
-    }
     return {
       dataset: heldDataset,
       place: location,
@@ -333,13 +349,15 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
       acceptedMs,
       frameMs,
       transcript,
+      before: beforeEntry,
+      frameReads,
       record,
       serverMs: record.frames.find((frame) => frame.door === 'local')?.intervalMs ?? null,
       recoveryStartedAt,
       recoveryDelayMs: recoveryStartedAt === null || doorClosedAt === null ? null : recoveryStartedAt - doorClosedAt,
       buildBefore: before.builds.surface.served?.build ?? null,
       buildAfter: after.builds.surface.served?.build ?? null,
-      rolloutReads: [...new Set(reads)],
+      rolloutReads: yield* reads(after.pid),
     } satisfies RestartSample;
   });
   return { root, origin, place, prepare, sample, op, stop };

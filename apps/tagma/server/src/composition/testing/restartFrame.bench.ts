@@ -1,7 +1,7 @@
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Effect } from 'effect';
-import { LAG_LENGTHS, standInRestartedPlace } from './restartProbe.js';
+import { standInRestartedPlace } from './restartProbe.js';
 
 const lengthsArgument = Bun.argv.find((argument) => argument.startsWith('--messages='));
 const lengths = lengthsArgument
@@ -9,7 +9,7 @@ const lengths = lengthsArgument
       .slice('--messages='.length)
       .split(',')
       .map((part) => Number.parseInt(part, 10))
-  : [LAG_LENGTHS.small, LAG_LENGTHS.big];
+  : [50, 20_000];
 if (lengths.some((length) => !Number.isSafeInteger(length) || length <= 0)) throw new Error('--messages must list positive integers');
 
 const main = Effect.gen(function* () {
@@ -23,6 +23,8 @@ const main = Effect.gen(function* () {
       acceptedMs: Math.round(sample.acceptedMs),
       serverMs: sample.serverMs === null ? null : Math.round(sample.serverMs),
       frameEntries: sample.transcript.length,
+      frameRolloutBytes: sample.frameReads.reduce((sum, read) => sum + read.bytes, 0),
+      frameTranscriptBytes: sample.frameReads.filter((read) => read.path.endsWith('.entries')).reduce((sum, read) => sum + read.bytes, 0),
     });
   }
   console.log(
@@ -36,7 +38,7 @@ const main = Effect.gen(function* () {
           cores: cpus().length,
           memoryGb: Math.round(totalmem() / 2 ** 30),
         },
-        dataset: 'offloaded threads, message entries of about 230 bytes, 4 threads in 2 projects, only the first thread differs in length',
+        dataset: 'offloaded threads, message entries of about 230 bytes, 2 threads in 1 project, only the first thread differs in length',
         readings,
       },
       null,

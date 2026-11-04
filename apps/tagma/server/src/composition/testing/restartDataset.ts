@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { desc, eq } from 'drizzle-orm';
+import { WIRE_PAGE_MAX_ENTRIES } from '@runlith/agent/protocol/cap';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { nativeOnlyParts } from '../../native-harness/testing/rollout.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
@@ -25,6 +27,9 @@ export type RestartDataset = {
   readonly projects: number;
   readonly threads: number;
   readonly rested: boolean;
+  readonly transcriptBytes: number | null;
+  readonly windowBytes: number;
+  readonly windowEntries: number;
 };
 
 export const restartDataset = Effect.fn('restart.dataset')(
@@ -50,20 +55,18 @@ export const restartDataset = Effect.fn('restart.dataset')(
     yield* chosenModel(runtime);
     const places: RestartPlace[] = previous === undefined ? [] : [...previous.places];
     if (previous === undefined) {
-      for (let project = 0; project < 2; project++) {
-        const checkout = join(root, `project-${project}`);
-        yield* files.makeDirectory(checkout, { recursive: true });
-        const born = yield* Context.get(runtime.graph, ProjectLifecycle)
-          .create({ name: `history-${project}`, rootPath: checkout })
-          .pipe(Effect.provide(runtime.graph));
-        for (let thread = 0; thread < (project === 0 ? 2 : 1); thread++) {
-          const child = yield* birthsOf(runtime.owners).create({
-            projectId: born.id,
-            createdBySessionId: null,
-            title: `conversation-${thread}`,
-          });
-          places.push({ projectId: born.id, threadId: child.thread.id, draft: 'Keep the proposed change until its result is checked.' });
-        }
+      const checkout = join(root, 'project');
+      yield* files.makeDirectory(checkout, { recursive: true });
+      const born = yield* Context.get(runtime.graph, ProjectLifecycle)
+        .create({ name: 'history', rootPath: checkout })
+        .pipe(Effect.provide(runtime.graph));
+      for (let thread = 0; thread < 2; thread++) {
+        const child = yield* birthsOf(runtime.owners).create({
+          projectId: born.id,
+          createdBySessionId: null,
+          title: `conversation-${thread}`,
+        });
+        places.push({ projectId: born.id, threadId: child.thread.id, draft: 'Keep the proposed change until its result is checked.' });
       }
     }
     const store = Context.get(runtime.graph, MachineStore);
@@ -97,8 +100,22 @@ export const restartDataset = Effect.fn('restart.dataset')(
         );
       }
     }
+    const target = places[0];
+    if (target === undefined) return yield* Effect.die('the restart dataset has no requested thread');
+    const window = yield* units.read((tx) =>
+      tx.run(
+        store.db
+          .select({ entry: threadEntry().entry })
+          .from(threadEntry())
+          .where(eq(threadEntry().threadId, target.threadId))
+          .orderBy(desc(threadEntry().ord))
+          .limit(WIRE_PAGE_MAX_ENTRIES),
+      ),
+    );
+    const windowBytes = window.reduce((sum, { entry }) => sum + Buffer.byteLength(`${JSON.stringify(entry)}\n`, 'utf8'), 0);
     const rollouts = Context.get(runtime.owners, ThreadRollouts);
     yield* rollouts.exportStanding();
+    let transcriptBytes: number | null = null;
     if (rested) {
       const projection = yield* threadProjection(ENTRY_KINDS).pipe(Effect.provide(runtime.graph));
       for (const place of places) {
@@ -111,9 +128,19 @@ export const restartDataset = Effect.fn('restart.dataset')(
         yield* projection.run({ threadId: place.threadId, path }).pipe(Effect.provide(runtime.graph));
         const verdict = yield* rollouts.evict(place.projectId, place.threadId);
         if (verdict.outcome !== 'evicted') return yield* Effect.die(`thread ${place.threadId} stayed in the database: ${verdict.reason}`);
+        if (place === places[0]) transcriptBytes = Number((yield* files.stat(`${path}.entries`)).size);
       }
     }
-    return { places, historyMessages: messages, projects: 2, threads: places.length, rested } satisfies RestartDataset;
+    return {
+      places,
+      historyMessages: messages,
+      projects: 1,
+      threads: places.length,
+      rested,
+      transcriptBytes,
+      windowBytes,
+      windowEntries: window.length,
+    } satisfies RestartDataset;
   },
   Effect.provide(BunFileSystem.layer),
   Effect.scoped,

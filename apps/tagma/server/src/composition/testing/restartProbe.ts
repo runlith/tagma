@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { Effect } from 'effect';
+import { WIRE_PAGE_MAX_ENTRIES } from '@runlith/agent/protocol/cap';
 import { makeRestartRig, type RestartSample } from './restartRig.js';
-
-export const LAG_LENGTHS = { small: 50, big: 20_000 } as const;
-export const LAG_TOLERANCE = { ratio: 1.5, slackMs: 3_000 } as const;
+import { TRANSCRIPT_FOOTER_BYTES, TRANSCRIPT_SLOT_BYTES } from '../../native-harness/transcript/restedWork.js';
 
 export const standInRestartedPlace = (messages: number) =>
   Effect.scoped(
@@ -17,28 +16,38 @@ export const standInRestartedPlace = (messages: number) =>
 const messageTimes = (sample: RestartSample) =>
   sample.transcript.flatMap((entry) => (entry.type === 'message' && entry.occurredAt !== undefined ? [entry.occurredAt] : []));
 
-export const lagProbe = Effect.gen(function* () {
-  const small = yield* standInRestartedPlace(LAG_LENGTHS.small);
-  const big = yield* standInRestartedPlace(LAG_LENGTHS.big);
-  for (const sample of [small, big]) {
-    const times = messageTimes(sample);
-    assert(times.length > 0, 'the first frame carried no message');
-    assert(
-      times.every((time) => !time.endsWith('.000Z')),
-      'the first frame of a lagging thread was not in the current shape',
-    );
-  }
-  assert(
-    big.acceptedMs <= small.acceptedMs * LAG_TOLERANCE.ratio + LAG_TOLERANCE.slackMs,
-    `the window in the big thread (${big.acceptedMs} ms) outgrew the window in the small thread (${small.acceptedMs} ms)`,
-  );
-  return { small, big };
-});
-
 export const restartProbe = Effect.gen(function* () {
   const rig = yield* makeRestartRig();
-  yield* rig.prepare(1);
-  const sample = yield* rig.sample(rig.place(0));
+  const messages = 4 * WIRE_PAGE_MAX_ENTRIES + 2;
+  yield* rig.prepare(messages, true);
+  const sample = yield* rig.sample(rig.place(0), { step: true });
+  const frameBytes = sample.frameReads.reduce((sum, read) => sum + read.bytes, 0);
+  const transcriptBytes = sample.frameReads.filter((read) => read.path.endsWith('.entries')).reduce((sum, read) => sum + read.bytes, 0);
+  const compressedBytes = sample.frameReads.filter((read) => read.path.endsWith('.zst')).reduce((sum, read) => sum + read.bytes, 0);
+  const frameBudget = sample.dataset.windowBytes + TRANSCRIPT_FOOTER_BYTES + sample.dataset.windowEntries * TRANSCRIPT_SLOT_BYTES;
+  yield* Effect.logInfo('restart work', {
+    messages: messages + sample.dataset.threads - 1,
+    projects: sample.dataset.projects,
+    threads: sample.dataset.threads,
+    frameEntries: sample.transcript.length,
+    transcriptBytes: sample.dataset.transcriptBytes,
+    reads: sample.frameReads.length,
+    frameBytes,
+    frameBudget,
+    bytesByKind: { transcript: transcriptBytes, compressed: compressedBytes, journal: frameBytes - transcriptBytes - compressedBytes },
+  });
+  assert.equal(sample.transcript.length, WIRE_PAGE_MAX_ENTRIES);
+  assert.equal(sample.before, messages - WIRE_PAGE_MAX_ENTRIES);
+  assert.equal(sample.transcript[0]?.id, `${sample.place.threadId}:message:${messages - WIRE_PAGE_MAX_ENTRIES}`);
+  assert.equal(sample.transcript.at(-1)?.id, `${sample.place.threadId}:message:${messages - 1}`);
+  const times = messageTimes(sample);
+  assert.equal(times.length, WIRE_PAGE_MAX_ENTRIES);
+  assert(
+    times.every((time) => !time.endsWith('.000Z')),
+    'the first frame of a lagging thread was not in the current shape',
+  );
+  assert(transcriptBytes > 0, 'the successor read no persisted transcript page');
+  assert(frameBytes <= frameBudget, `the first frame read ${frameBytes} rollout bytes for a ${frameBudget}-byte window budget`);
   assert.equal(sample.restored.projectId, sample.place.projectId);
   assert.equal(sample.restored.threadId, sample.place.threadId);
   assert.equal(sample.restored.draft, sample.place.draft);
@@ -62,6 +71,6 @@ export const restartProbe = Effect.gen(function* () {
     ),
   );
   assert(sample.rolloutReads.length > 0, 'the successor read no requested rollout');
-  for (const path of sample.rolloutReads) assert(path.includes(sample.place.threadId), `unrequested rollout read: ${path}`);
+  for (const read of sample.rolloutReads) assert(read.path.includes(sample.place.threadId), `unrequested rollout read: ${read.path}`);
   return sample;
 });
