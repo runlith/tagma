@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Router, type RouterSource } from '@runlith/layer/Router';
-import { makePoint, makeStorage } from '@runlith/layer/testing';
+import { makePoint } from '@runlith/layer/testing';
 import { Effect } from 'effect';
 import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
@@ -28,6 +28,7 @@ import { MainWindowShell } from '$lib/features/tagma-apps/windows/MainWindowShel
 import { THREAD_PANE } from '$lib/features/threads/seats/pane.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { testArea, testKind } from '../panes/testing.js';
+import { readyState } from '../testing.js';
 import { DesktopShell } from './DesktopShell.js';
 import { MobileShell } from './MobileShell.js';
 
@@ -72,7 +73,7 @@ function world(standing: readonly string[] = ['t1', 't9'], goto: (href: string) 
     contextProject: { id: 1, name: 'runlith' },
     tileIdOf: (id: number) => id,
   } as unknown as Workspace;
-  const visits = new Visits(makeStorage(), surfaces);
+  const visits = new Visits(readyState(), surfaces);
   const prepared: string[] = [];
   const prepare = (async (rung: { name: string }, input: object) => {
     prepared.push(`${rung.name} ${JSON.stringify(input)}`);

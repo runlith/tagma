@@ -4,6 +4,7 @@ import { makeSharedStorage, makeStorage } from '@runlith/layer/testing';
 import { makeReactivePoint } from '@runlith/layer/testing/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
+import { readyState } from '$lib/app/testing.js';
 import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
 import { RailPins } from './RailPins.svelte.js';
 
@@ -41,7 +42,7 @@ function rail(storage: PlatformStorage): RailPins {
   let pins!: RailPins;
   stops.push(
     $effect.root(() => {
-      pins = new RailPins(storage, SURFACES);
+      pins = new RailPins(readyState(storage), SURFACES);
     }),
   );
   flushSync();

@@ -1,9 +1,9 @@
-import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
+import { AppState, type AppStateStorage } from '$lib/features/workspace/AppState.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { launchNamed } from './place.js';
 
-const STORAGE_KEY = 'tagma.rail';
+export const RAIL_KEY = 'tagma.rail';
 
 type Stored = {
   readonly pinned: readonly string[];
@@ -14,20 +14,19 @@ const NOTHING: Stored = { pinned: [], unpinned: [] };
 
 export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   static *make() {
-    const platform = yield* Platform;
-    return new RailPins(platform.storage.local, yield* SurfaceRegistry);
+    return new RailPins(yield* AppState, yield* SurfaceRegistry);
   }
 
   private stored = $state.raw<Stored>(NOTHING);
   private readonly arranged = $derived(this.arrange(this.stored));
 
   constructor(
-    private readonly storage: PlatformStorage,
+    private readonly storage: AppStateStorage,
     private readonly surfaces: SurfaceRegistry,
   ) {
     super();
     this.stored = this.read();
-    $effect(() => storage.watch(STORAGE_KEY, () => (this.stored = this.read())));
+    $effect(() => storage.watch(RAIL_KEY, () => (this.stored = this.read())));
   }
 
   private get daily(): readonly string[] {
@@ -39,17 +38,21 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   }
 
   pin(id: string, before: string | null): void {
-    const stored = this.read();
-    const pinned = this.arrange(stored).filter((one) => one !== id);
-    const at = before === null ? -1 : pinned.indexOf(before);
-    pinned.splice(at === -1 ? pinned.length : at, 0, id);
-    this.write({ pinned, unpinned: stored.unpinned.filter((one) => one !== id) });
+    this.storage.whenReady(() => {
+      const stored = this.read();
+      const pinned = this.arrange(stored).filter((one) => one !== id);
+      const at = before === null ? -1 : pinned.indexOf(before);
+      pinned.splice(at === -1 ? pinned.length : at, 0, id);
+      this.write({ pinned, unpinned: stored.unpinned.filter((one) => one !== id) });
+    });
   }
 
   unpin(id: string): void {
-    const stored = this.read();
-    const unpinned = this.daily.includes(id) && !stored.unpinned.includes(id) ? [...stored.unpinned, id] : stored.unpinned;
-    this.write({ pinned: this.arrange(stored).filter((one) => one !== id), unpinned });
+    this.storage.whenReady(() => {
+      const stored = this.read();
+      const unpinned = this.daily.includes(id) && !stored.unpinned.includes(id) ? [...stored.unpinned, id] : stored.unpinned;
+      this.write({ pinned: this.arrange(stored).filter((one) => one !== id), unpinned });
+    });
   }
 
   private arrange(stored: Stored): string[] {
@@ -58,7 +61,7 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   }
 
   private read(): Stored {
-    const raw = this.storage.getItem(STORAGE_KEY);
+    const raw = this.storage.getItem(RAIL_KEY);
     if (raw === null) return NOTHING;
     let parsed: unknown;
     try {
@@ -78,7 +81,7 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   }
 
   private write(next: Stored): void {
-    this.storage.setItem(STORAGE_KEY, JSON.stringify(next));
+    this.storage.setItem(RAIL_KEY, JSON.stringify(next));
     this.stored = next;
   }
 }

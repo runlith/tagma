@@ -1,35 +1,40 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
+import { AppState, type AppStateStorage } from './AppState.js';
 import { type Entry, EntryProject } from './EntryProject.js';
 import type { GraphAim } from './GraphRung.js';
 import { type Surface, SurfaceRegistry, withBranch } from './surface.js';
 
-const STORAGE_KEY = 'tagma.visits';
+export const VISITS_KEY = 'tagma.visits';
 
 type Visit = Record<string, string | null | undefined>;
 
 export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
   static *make() {
-    const platform = yield* Platform;
-    return new Visits(platform.storage.local, yield* SurfaceRegistry, yield* EntryProject.optional());
+    return new Visits(yield* AppState, yield* SurfaceRegistry, yield* EntryProject.optional());
   }
 
   private readonly held = new SvelteMap<string, Visit>();
 
   constructor(
-    private readonly storage: PlatformStorage,
+    private readonly storage: AppStateStorage,
     private readonly registry: SurfaceRegistry,
     private readonly entry?: Entry,
   ) {
     super();
+    this.fill();
+    storage.watch(VISITS_KEY, () => this.fill());
+  }
+
+  private fill(): void {
+    this.held.clear();
     for (const [project, visit] of Object.entries(this.stored())) this.held.set(project, visit);
   }
 
   private stored(): Record<string, Visit> {
     try {
-      return (JSON.parse(this.storage.getItem(STORAGE_KEY) ?? 'null') as Record<string, Visit> | null) ?? {};
+      return (JSON.parse(this.storage.getItem(VISITS_KEY) ?? 'null') as Record<string, Visit> | null) ?? {};
     } catch {
       return {};
     }
@@ -52,16 +57,15 @@ export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
   }
 
   remember(project: Project, surface: Surface, place: string | null, branch: string | null): void {
-    if (!this.registry.portable(surface)) return;
+    if (!this.storage.ready || !this.registry.portable(surface)) return;
     const key = String(project.id);
     const remembers = this.registry.get(surface).remembers;
     const stored = this.stored();
-    const visit = stored[key] ?? this.held.get(key) ?? {};
+    const visit = stored[key] ?? {};
     if (visit.surface === surface && (visit.branch ?? null) === branch && (!remembers || (visit[surface] ?? null) === place)) return;
     const next = remembers ? { ...visit, [surface]: place, surface, branch } : { ...visit, surface, branch };
     this.held.set(key, next);
-    const document = { ...Object.fromEntries(this.held), ...stored, [key]: next };
-    this.storage.setItem(STORAGE_KEY, JSON.stringify(document));
+    this.storage.setItem(VISITS_KEY, JSON.stringify({ ...stored, [key]: next }));
   }
 
   href(project: Project, surface: Surface): string {

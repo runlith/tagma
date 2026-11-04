@@ -1366,6 +1366,16 @@
       "bun": "./src/activity/contract/wire/*.ts",
       "default": null
     },
+    "./app-state/app-state": {
+      "types": "./src/app-state/app-state.ts",
+      "bun": "./src/app-state/app-state.ts",
+      "default": null
+    },
+    "./app-state/contract/*": {
+      "types": "./src/app-state/contract/*.ts",
+      "bun": "./src/app-state/contract/*.ts",
+      "default": null
+    },
     "./artifacts/*": {
       "types": "./src/artifacts/*.ts",
       "bun": "./src/artifacts/*.ts",

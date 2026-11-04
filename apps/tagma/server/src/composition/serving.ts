@@ -46,6 +46,7 @@ import { notify } from '../notify/notify.js';
 import { outcomes } from './outcomes.js';
 import { push } from '../push/push.js';
 import { schedule } from '../schedule/schedule.js';
+import { appState } from '../app-state/app-state.js';
 import { translations } from '../translations/translations.js';
 import { ticks } from './ticks.js';
 import { buildSteps } from './buildSteps.js';
@@ -278,7 +279,8 @@ const translatedOf = (assembly: Assembly) => {
   const waited = mcp.lifetimes.serving.pipe(Layer.provideMerge(notified));
   const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(waited));
   const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(buildSteps), Layer.provideMerge(pushed));
-  return translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
+  const translated = translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
+  return appState.lifetimes.serving.pipe(Layer.provideMerge(translated));
 };
 
 const renames = Layer.effect(

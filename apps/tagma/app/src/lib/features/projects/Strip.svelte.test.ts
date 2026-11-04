@@ -6,7 +6,7 @@ import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import type { Workspace } from '../workspace/Selection.svelte.js';
 import { Visits } from '../workspace/Visits.svelte.js';
-import { testSurfaces } from '$lib/app/testing.js';
+import { readyState, testSurfaces } from '$lib/app/testing.js';
 import { ProjectStrip } from './Strip.svelte.js';
 
 const project = (id: number, name: string): Project => ({
@@ -31,7 +31,7 @@ afterEach(() => {
   for (const stop of stops.splice(0)) stop();
 });
 
-function window(storage: PlatformStorage, active: number | null, visits = new Visits(makeStorage(), surfaces)) {
+function window(storage: PlatformStorage, active: number | null, visits = new Visits(readyState(), surfaces)) {
   const at = $state<{ active: number | null; projects: readonly Project[]; groups: readonly Group[] }>({
     active,
     projects: REGISTRY,
@@ -57,7 +57,7 @@ function window(storage: PlatformStorage, active: number | null, visits = new Vi
   let strip!: ProjectStrip;
   stops.push(
     $effect.root(() => {
-      strip = new ProjectStrip(workspace, visits, storage);
+      strip = new ProjectStrip(workspace, visits, readyState(storage));
     }),
   );
   flushSync();
@@ -124,7 +124,7 @@ test('the strip comes back from storage, and a write keeps what another window c
   expect(names(second.strip.recent)).toEqual(['gamma', 'beta', 'alpha']);
 });
 
-test('what another window changes in the strip shows in this one at once, and this window keeps its own recent', () => {
+test('what another window changes in the strip and its recent shows in this one at once', () => {
   const shared = makeSharedStorage();
   const first = window(shared(), 1);
   first.go(2);
@@ -137,7 +137,7 @@ test('what another window changes in the strip shows in this one at once, and th
 
   expect(names(first.strip.projects)).toEqual(['gamma', 'alpha']);
   expect(first.strip.view).toBe('tabs');
-  expect(names(first.strip.recent)).toEqual(['beta', 'alpha']);
+  expect(names(first.strip.recent)).toEqual(['gamma', 'beta', 'alpha']);
 });
 
 test('a group stands as one tile where its first member stood, opens into the member last entered, moves and leaves whole, and its members come back as tiles once it dissolves', () => {
@@ -168,7 +168,7 @@ test('a group stands as one tile where its first member stood, opens into the me
 });
 
 test('the first strip holds the projects that have a remembered place, in registry order, and the current one', () => {
-  const visits = new Visits(makeStorage(), surfaces);
+  const visits = new Visits(readyState(), surfaces);
   visits.remember(REGISTRY[2]!, surfaces.home, null, null);
   visits.remember(REGISTRY[0]!, surfaces.home, null, null);
 

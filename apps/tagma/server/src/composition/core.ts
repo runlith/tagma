@@ -30,6 +30,7 @@ import { remote } from '../remote/remote.js';
 import { notify } from '../notify/notify.js';
 import { push } from '../push/push.js';
 import { schedule } from '../schedule/schedule.js';
+import { appState } from '../app-state/app-state.js';
 import { speech } from '../speech/speech.js';
 import { browser } from '../browser/browser.js';
 import { images } from '../images/images.js';
@@ -90,6 +91,7 @@ export const CORE_MODULES = [
   notify,
   push,
   schedule,
+  appState,
   invocation,
   cli,
 ] as const;

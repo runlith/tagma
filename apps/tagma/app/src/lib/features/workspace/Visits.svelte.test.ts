@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { makeStorage } from '@runlith/layer/testing';
+import { makeSharedStorage } from '@runlith/layer/testing';
+import { flushSync } from 'svelte';
 import { expect, test } from 'vitest';
-import { testSurfaces } from '$lib/app/testing.js';
+import { readyState, testSurfaces } from '$lib/app/testing.js';
 import { Visits } from './Visits.svelte.js';
 
 const surfaces = testSurfaces();
@@ -20,7 +22,7 @@ const project = (id: number, name: string): Project => ({
 });
 
 test('two tabs reading different projects both find their places after a reload', () => {
-  const storage = makeStorage();
+  const storage = readyState();
   const first = new Visits(storage, surfaces);
   const second = new Visits(storage, surfaces);
 
@@ -34,8 +36,24 @@ test('two tabs reading different projects both find their places after a reload'
   expect(reloaded.branchOf(project(7, 'seven'))).toBe('main');
 });
 
+test('two windows standing on different surfaces of one project each record their arrival without trading writes', () => {
+  const shared = makeSharedStorage();
+  const here = new Visits(readyState(shared()), surfaces);
+  const there = new Visits(readyState(shared()), surfaces);
+  const at = $state({ here: 'graph', there: 'journal' });
+  const stop = $effect.root(() => {
+    $effect(() => here.remember(project(5, 'five'), at.here, 'alpha', null));
+    $effect(() => there.remember(project(5, 'five'), at.there, 'beta', null));
+  });
+  flushSync();
+  at.here = 'chat';
+  flushSync();
+  expect([there.placeOf(project(5, 'five'), 'chat'), there.placeOf(project(5, 'five'), 'journal')]).toEqual(['alpha', 'beta']);
+  stop();
+});
+
 test('a project resumes on the surface it was left on, with that surface’s place, under the name it has now', () => {
-  const storage = makeStorage();
+  const storage = readyState();
   const visits = new Visits(storage, surfaces);
   expect(visits.resume(project(5, 'five'))).toBe(surfaces.pathOf('five', surfaces.home));
 
@@ -51,7 +69,7 @@ test('a project resumes on the surface it was left on, with that surface’s pla
 });
 
 test('the entry project opens at the place its root names until the window has a visit of its own', () => {
-  const storage = makeStorage();
+  const storage = readyState();
   const visits = new Visits(storage, surfaces, { project: 'five', at: { surface: 'chat', place: 'thread-1' } });
   expect(visits.resume(project(5, 'five'))).toBe('/five/chat/thread-1');
   expect(visits.resume(project(7, 'seven'))).toBe(surfaces.pathOf('seven', surfaces.home));
@@ -61,10 +79,10 @@ test('the entry project opens at the place its root names until the window has a
 });
 
 test('a visit or entry naming a surface this build lacks resumes at home', () => {
-  const storage = makeStorage();
+  const storage = readyState();
   storage.setItem('tagma.visits', JSON.stringify({ 5: { surface: 'elsewhere', elsewhere: 'x', branch: null } }));
   const home = (name: string) => surfaces.pathOf(name, surfaces.home);
   expect(new Visits(storage, surfaces).resume(project(5, 'five'))).toBe(home('five'));
-  const entered = new Visits(makeStorage(), surfaces, { project: 'seven', at: { surface: 'elsewhere', place: 'x' } });
+  const entered = new Visits(readyState(), surfaces, { project: 'seven', at: { surface: 'elsewhere', place: 'x' } });
   expect(entered.resume(project(7, 'seven'))).toBe(home('seven'));
 });

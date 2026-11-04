@@ -33,6 +33,7 @@ import { externalHarnesses } from '../external-harnesses/contract/wire/module.js
 import { notify } from '../notify/contract/wire/module.js';
 import { push } from '../push/contract/wire/module.js';
 import { schedule } from '../schedule/contract/wire/module.js';
+import { appState } from '../app-state/contract/wire/module.js';
 import { invocation } from '../invocation/contract/wire/module.js';
 import { projects } from '../projects/contract/wire/module.js';
 import { power } from '../power/contract/wire/module.js';
@@ -74,6 +75,7 @@ export const CORE_CATALOG: readonly [
   typeof notify,
   typeof push,
   typeof schedule,
+  typeof appState,
   typeof invocation,
   typeof projects,
   typeof power,
@@ -114,6 +116,7 @@ export const CORE_CATALOG: readonly [
   notify,
   push,
   schedule,
+  appState,
   invocation,
   projects,
   power,

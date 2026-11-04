@@ -32,6 +32,7 @@ import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
 import { FileSaver } from '$lib/shared/FileSaver.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
+import { AppState, type AppStateStorage } from '$lib/features/workspace/AppState.js';
 import { Surfaces, SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import type { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { surfaces as browserSurfaces } from '$lib/features/browser/surfaces.js';
@@ -51,6 +52,12 @@ import { LinkRegistry } from '$lib/features/opening/LinkRegistry.js';
 import TestHost from './TestHost.svelte';
 
 export const testAim: GraphAim = { projectId: 1, branch: null };
+
+export const readyState = (storage: PlatformStorage = makeStorage()): AppStateStorage => ({
+  ...storage,
+  ready: true,
+  whenReady: (act) => act(),
+});
 
 const coreSurfaces = [
   ...browserSurfaces,
@@ -106,6 +113,7 @@ export function mountShell(
   const opened: string[] = [];
   const world = Layer.mergeAll(
     Layer.of(Platform, makePlatform({ local: storage })),
+    Layer.of(AppState, readyState(storage)),
     Layer.of(Router, options.router ?? makeRouter()),
     Host.tab(),
     ServerOrigin.of(TEST_ORIGIN),

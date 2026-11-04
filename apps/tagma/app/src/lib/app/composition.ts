@@ -64,7 +64,16 @@ import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { ThreadsRepo } from '$lib/features/threads/Repo.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
-import { Visits } from '$lib/features/workspace/Visits.svelte.js';
+import { Visits, VISITS_KEY } from '$lib/features/workspace/Visits.svelte.js';
+import { AppState } from '$lib/features/workspace/AppState.js';
+import { ServerAppState } from '$lib/features/workspace/ServerAppState.svelte.js';
+import { STRIP_KEY } from '$lib/features/projects/Strip.svelte.js';
+import { RAIL_KEY } from '$lib/app/chrome/RailPins.svelte.js';
+import { Door } from '$lib/wire/Door.js';
+import { Live } from '$lib/wire/Live.js';
+import { Failure } from '@runlith/layer/Failure';
+import { Platform } from '@runlith/layer/Platform';
+import { Scope } from '@runlith/layer/Scope';
 import { SystemSettings } from '$lib/shared/SystemSettings.js';
 import { Theme } from '$lib/shared/Theme.svelte.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
@@ -215,6 +224,10 @@ export function appLayers(desktop: DesktopApi | undefined) {
     }),
     Layer.provide(ThreadPlaces, function* () {
       return yield* ThreadSeats;
+    }),
+    Layer.provide(AppState, function* () {
+      const local = (yield* Platform).storage.local;
+      return new ServerAppState(yield* Door, yield* Live, yield* Scope, yield* Failure, local, [STRIP_KEY, VISITS_KEY, RAIL_KEY]);
     }),
     Layer.provide(ShellOps, function* () {
       const router = yield* Router;

@@ -1,8 +1,9 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { RegistryRefusal } from '@runlith/roster/RegistryClash';
-import { makePoint, makeStorage } from '@runlith/layer/testing';
+import { makePoint } from '@runlith/layer/testing';
 import type { Component } from 'svelte';
 import { expect, test } from 'vitest';
+import { readyState } from '$lib/app/testing.js';
 import { type SurfaceDeclaration, type SurfaceProps, SurfaceRegistry, Surfaces } from './surface.js';
 import { Visits } from './Visits.svelte.js';
 
@@ -139,7 +140,7 @@ test('an address under a former route of a surface carrying its page moves to it
 
 test('a visit remembers a place only on the surfaces that declared it', () => {
   const surfaces = of(declared('home', { route: '', remembers: false, home: true, rail: 1 }), declared('mail'));
-  const visits = new Visits(makeStorage(), surfaces);
+  const visits = new Visits(readyState(), surfaces);
   const five = { ...project, id: 5, name: '5' };
 
   visits.remember(five, 'home', 'ignored', null);

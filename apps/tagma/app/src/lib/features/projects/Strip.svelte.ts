@@ -1,11 +1,11 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
 import { untrack } from 'svelte';
+import { AppState, type AppStateStorage } from '../workspace/AppState.js';
 import { Workspace } from '../workspace/Selection.svelte.js';
 import { Visits } from '../workspace/Visits.svelte.js';
 
-const STORAGE_KEY = 'tagma.strip';
+export const STRIP_KEY = 'tagma.strip';
 
 export const STRIP_VIEWS = ['dock', 'tabs'] as const;
 export type StripView = (typeof STRIP_VIEWS)[number];
@@ -21,8 +21,7 @@ const ids = (value: unknown): readonly number[] | null =>
 
 export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier: 'app' }) {
   static *make() {
-    const platform = yield* Platform;
-    return new ProjectStrip(yield* Workspace, yield* Visits, platform.storage.local);
+    return new ProjectStrip(yield* Workspace, yield* Visits, yield* AppState);
   }
 
   private members = $state.raw<readonly number[] | null>(null);
@@ -41,24 +40,24 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   constructor(
     private readonly workspace: Workspace,
     private readonly visits: Visits,
-    private readonly storage: PlatformStorage,
+    private readonly storage: AppStateStorage,
   ) {
     super();
     const stored = this.read();
     this.members = stored?.members ?? null;
     this.order = stored?.recent ?? [];
     this.shown = stored?.view ?? 'dock';
-    $effect(() => storage.watch(STORAGE_KEY, () => this.adopt()));
+    $effect(() => storage.watch(STRIP_KEY, () => this.adopt()));
     $effect(() => {
       const current = workspace.activeId;
-      if (current === this.entered) return;
+      if (!storage.ready || current === this.entered) return;
       this.entered = current;
       if (current !== null) untrack(() => this.enter(current));
     });
     $effect(() => {
       const back = (): void => {
         const current = workspace.activeId;
-        if (current !== null) this.enter(current);
+        if (current !== null && storage.ready) this.enter(current);
       };
       window.addEventListener('focus', back);
       return () => window.removeEventListener('focus', back);
@@ -83,10 +82,12 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   include(projectIds: readonly number[]): void {
-    const stored = this.read();
-    const held = stored?.members ?? this.seed();
-    const missing = projectIds.filter((id) => !held.includes(id));
-    if (missing.length > 0) this.write({ ...this.base(stored), members: [...held, ...missing] });
+    this.storage.whenReady(() => {
+      const stored = this.read();
+      const held = stored?.members ?? this.seed();
+      const missing = projectIds.filter((id) => !held.includes(id));
+      if (missing.length > 0) this.write({ ...this.base(stored), members: [...held, ...missing] });
+    });
   }
 
   get projects(): readonly Project[] {
@@ -111,32 +112,35 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   remove(tileId: number): void {
-    const stored = this.read();
-    const members = (stored?.members ?? this.seed()).filter((id) => this.workspace.tileIdOf(id) !== tileId && id !== tileId);
-    this.write({ ...this.base(stored), members });
+    this.storage.whenReady(() => {
+      const stored = this.read();
+      const members = (stored?.members ?? this.seed()).filter((id) => this.workspace.tileIdOf(id) !== tileId && id !== tileId);
+      this.write({ ...this.base(stored), members });
+    });
   }
 
   move(tileId: number, before: number | null): void {
-    const stored = this.read();
-    const held = stored?.members ?? this.seed();
-    const blocks = new Map<number, number[]>();
-    for (const id of held) {
-      const tile = this.workspace.tileIdOf(id);
-      const block = blocks.get(tile);
-      if (block === undefined) blocks.set(tile, [id]);
-      else block.push(id);
-    }
-    const moving = blocks.get(tileId);
-    if (moving === undefined || tileId === before) return;
-    const order = [...blocks.keys()].filter((tile) => tile !== tileId);
-    const at = before === null ? -1 : order.indexOf(before);
-    order.splice(at === -1 ? order.length : at, 0, tileId);
-    this.write({ ...this.base(stored), members: order.flatMap((tile) => blocks.get(tile) ?? []) });
+    this.storage.whenReady(() => {
+      const stored = this.read();
+      const held = stored?.members ?? this.seed();
+      const blocks = new Map<number, number[]>();
+      for (const id of held) {
+        const tile = this.workspace.tileIdOf(id);
+        const block = blocks.get(tile);
+        if (block === undefined) blocks.set(tile, [id]);
+        else block.push(id);
+      }
+      const moving = blocks.get(tileId);
+      if (moving === undefined || tileId === before) return;
+      const order = [...blocks.keys()].filter((tile) => tile !== tileId);
+      const at = before === null ? -1 : order.indexOf(before);
+      order.splice(at === -1 ? order.length : at, 0, tileId);
+      this.write({ ...this.base(stored), members: order.flatMap((tile) => blocks.get(tile) ?? []) });
+    });
   }
 
   show(view: StripView): void {
-    const stored = this.read();
-    this.write({ ...this.base(stored), view });
+    this.storage.whenReady(() => this.write({ ...this.base(this.read()), view }));
   }
 
   private enter(projectId: number): void {
@@ -151,6 +155,8 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
     const stored = this.read();
     const members = stored?.members ?? null;
     if ((members?.join() ?? null) !== (this.members?.join() ?? null)) this.members = members;
+    const recent = stored?.recent ?? [];
+    if (recent.join() !== this.order.join()) this.order = recent;
     this.shown = stored?.view ?? 'dock';
   }
 
@@ -177,7 +183,7 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   private read(): Stored | null {
-    const raw = this.storage.getItem(STORAGE_KEY);
+    const raw = this.storage.getItem(STRIP_KEY);
     if (raw === null) return null;
     let parsed: unknown;
     try {
@@ -198,7 +204,7 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   private write(next: Stored): void {
-    this.storage.setItem(STORAGE_KEY, JSON.stringify(next));
+    this.storage.setItem(STRIP_KEY, JSON.stringify(next));
     this.members = next.members;
     this.shown = next.view;
   }
