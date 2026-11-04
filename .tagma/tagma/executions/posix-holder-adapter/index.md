@@ -44,6 +44,8 @@ edges:
   - kind: imports
     to: 01a12893-cecf-7798-9b3d-e2ed4a42e855
   - kind: imports-tests
+    to: 01a127e3-cc5c-73fa-99ff-b228d2a60527
+  - kind: imports-tests
     to: 01a13b4d-7a3d-7729-955f-a344b43ff1ba
 sources:
   - kind: dir
