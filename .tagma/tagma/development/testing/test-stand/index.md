@@ -57,6 +57,12 @@ fields:
           "96b75e80",
           "48c1dabd"
         ]
+      },
+      {
+        "at": "src/timings.ts",
+        "for": [
+          "48c1dabd"
+        ]
       }
     ],
     "id": "@runlith/testbed",
