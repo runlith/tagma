@@ -115,19 +115,17 @@ export const threadSettlementOutboxLayer = Layer.effect(
             phase = next;
             subscriber = name;
             if (current) current = { ...current, phase, subscriber };
-            return note<SettlementNote>({ type: 'settlement-phase', phase, subscriber }).pipe(
-              Effect.andThen(record()),
-              Effect.flatMap((written) => (written === false ? Effect.fail(lost()) : Effect.void)),
-            );
+            const noted = note<SettlementNote>({ type: 'settlement-phase', phase, subscriber });
+            return next === 'publication'
+              ? noted
+              : noted.pipe(
+                  Effect.andThen(record()),
+                  Effect.flatMap((written) => (written === false ? Effect.fail(lost()) : Effect.void)),
+                );
           });
-        const done = (name: string): Effect.Effect<void, SettlementClaimLost | ThreadPortFailure> =>
-          Effect.suspend(() => {
-            if (current === null) return Effect.void;
-            const delivered = { ...current, delivered: [...current.delivered, name] };
-            current = delivered;
-            return Effect.flatMap(runs.writeSettledNotification(event.runId, delivered, expectedId), (written) =>
-              written ? Effect.void : Effect.fail(lost()),
-            );
+        const done = (name: string): Effect.Effect<void> =>
+          Effect.sync(() => {
+            if (current !== null) current = { ...current, delivered: [...current.delivered, name] };
           });
         const publishing = activity(
           SETTLEMENT,

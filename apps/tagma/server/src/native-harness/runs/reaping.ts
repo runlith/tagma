@@ -384,15 +384,24 @@ export const makeReaping = Effect.gen(function* () {
       writeSettledNotification: (runId: string, record: ThreadNotificationRecord, expectedId: string | null) =>
         record.id !== expectedId
           ? Effect.succeed(false)
-          : notified('writeSettledNotification', (unit) =>
-              unit.run(
-                db
-                  .update(threadRun)
-                  .set({ settledNotification: record, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
-                  .where(notificationClaim(runId, expectedId))
-                  .returning({ id: threadRun.id })
-                  .all(),
-              ),
+          : stored('writeSettledNotification')(
+              units
+                .program(
+                  writes('ThreadRunStore.writeSettledNotification', [runRows]),
+                  `settled-notification:${runId}:${record.id}`,
+                  (program) =>
+                    program.write(
+                      db
+                        .update(threadRun)
+                        .set({ settledNotification: record, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
+                        .where(notificationClaim(runId, expectedId)),
+                      1,
+                    ),
+                )
+                .pipe(
+                  Effect.as(true),
+                  Effect.catchTag('ProgramConflict', () => Effect.succeed(false)),
+                ),
             ),
       markSettledNotified: (runId: string, notifiedAt: Date, record: ThreadNotificationRecord | null) =>
         notified('markSettledNotified', (unit) =>
