@@ -85,7 +85,8 @@ export const endHosts = Effect.fn('FixtureProcesses.end')(function* (root: strin
         try {
           process.kill(-group, 'SIGKILL');
         } catch (cause) {
-          if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause;
+          //! Darwin answers EPERM for a group whose every member is already a zombie.
+          if (!(cause instanceof Error && 'code' in cause && (cause.code === 'ESRCH' || cause.code === 'EPERM'))) throw cause;
         }
       },
       catch: (cause) => new ProcessesUnmeasured({ command: ['kill', '-KILL', String(-group)], detail: String(cause), cause }),
