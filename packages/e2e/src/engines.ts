@@ -54,7 +54,7 @@ const launch = async (lane: Exclude<Lane, 'electron'>, home: string): Promise<Br
     ignoreDefaultArgs: lane === 'chromium' ? ['--hide-scrollbars'] : undefined,
     timeout: 0,
     args: lane === 'chromium' ? ['--use-mock-keychain', '--password-store=basic'] : [],
-    env: { ...process.env, BREAKPAD_DUMP_LOCATION: join(home, 'crashes') },
+    env: { ...process.env, TMPDIR: join(home, 'tmp'), BREAKPAD_DUMP_LOCATION: join(home, 'crashes') },
   });
   const browser = context.browser();
   if (browser === null) throw new Error(`${lane} did not expose its browser`);
@@ -78,6 +78,7 @@ const makeEngines = Effect.fn('e2e.engines')(function* (home: string) {
       if (active !== undefined) yield* attempted('the previous lane did not close', () => active!.browser.close());
       active = undefined;
       const profile = yield* files.makeTempDirectory({ directory: home, prefix: `${lane}-` });
+      yield* files.makeDirectory(join(profile, 'tmp'));
       const stop = holding();
       const browser = yield* attempted(
         `${lane} is unavailable; fill the Chrome for Testing cache or run playwright-core install webkit`,
