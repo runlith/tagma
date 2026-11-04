@@ -35,9 +35,13 @@ another version lands the hunk one line off.
 
 The `sql-parent-span` hunk is generated from Bun's pristine 4.0.1 package. Its trap is `packages/sqlite-process/src/telemetry.itest.ts`: successful and failed SQL statements must carry their own normalized identity and queue/engine timing. Run `bun run patches:prove sql-parent-span`.
 
+`RpcClient.makeProtocolSocket` pings every five seconds and ends the connection when no pong came back by the next ping, failing every call in flight. A client of a server on the same machine has a fact for the server's loss — the socket closes when its process ends — and a server whose event loop stalls for ten seconds under load is alive, so the deadline only turns load into lost calls: the desktop browser host's calls became `outcome-unknown`. The `rpc-socket-heartbeat` hunk adds `heartbeat: false` to `makeProtocolSocket` and `layerProtocolSocket` (shipped source, runtime and declarations): no ping is sent and no missed pong ends the connection. Its trap is `apps/tagma/desktop/src/browser/heartbeat.test.ts`: an attach feed over a socket that answers no ping still delivers after a minute of `TestClock`. Run `bun run patches:prove rpc-socket-heartbeat`.
+
 ### When upgrading effect
 
 Read `Statement.SpanPropagationEnabled` and `Statement.withConnectionSpan` in the candidate release and run the trap without this hunk. Remove the patch and its manifest when upstream parents execution on the SQL span by default and the trap passes; otherwise regenerate against the new pristine package.
+
+Read `makeProtocolSocket` and its pinger in the candidate release and run the `rpc-socket-heartbeat` trap without the hunk; drop the hunk when upstream lets a caller switch the heartbeat off, moving `connection.ts` to that option.
 
 ---
 

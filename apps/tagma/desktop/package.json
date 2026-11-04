@@ -35,6 +35,7 @@
     "@runlith/codesign": "workspace:*",
     "@runlith/dev-runner": "workspace:*",
     "@runlith/e2e": "workspace:*",
+    "@runlith/effect-test": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:",

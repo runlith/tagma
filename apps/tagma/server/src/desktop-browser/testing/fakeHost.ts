@@ -1,4 +1,4 @@
-import { Effect, Layer, Queue, Stream } from 'effect';
+import { Duration, Effect, Layer, Queue, Stream } from 'effect';
 import { RpcClient, RpcGroup } from 'effect/rpc';
 import * as Socket from 'effect/socket/Socket';
 import { liveSerialization, rpcOf } from '../../platform/contract/wire/live.js';
@@ -19,8 +19,8 @@ const wsAt = (url: URL, path: string): URL => {
 
 export const fakeHost = Effect.fnUntraced(function* (url: URL) {
   const protocol = yield* Layer.build(
-    RpcClient.layerProtocolSocket().pipe(
-      Layer.provide(Socket.layerWebSocket(wsAt(url, TAGMA_SOCKET_PATH).toString())),
+    RpcClient.layerProtocolSocket({ heartbeat: false }).pipe(
+      Layer.provide(Socket.layerWebSocket(wsAt(url, TAGMA_SOCKET_PATH).toString(), { openTimeout: Duration.infinity })),
       Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
     ),
   );

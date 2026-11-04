@@ -4,6 +4,10 @@
     "sql-parent-span": {
       "markers": ["defaultValue: () => true"],
       "tests": [{ "package": "packages/sqlite-process", "file": "./src/telemetry.itest.ts" }]
+    },
+    "rpc-socket-heartbeat": {
+      "markers": ["options?.heartbeat === false", "const unwatched", "readonly heartbeat?: boolean | undefined"],
+      "tests": [{ "package": "apps/tagma/desktop", "file": "./src/browser/heartbeat.test.ts" }]
     }
   }
 }
