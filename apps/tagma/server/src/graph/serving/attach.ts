@@ -20,7 +20,7 @@ import { block, blockField, blockTag, edge, event, meta, ref, searchIndex, sourc
 import { project } from '../../projects/store/table.js';
 import { projectPolicy, writePolicy } from '../store/policy.js';
 import { Projects } from '../../projects/contract/service/registry.js';
-import { blocksRetiredKey, FORMAT_FILE, rowsStepKey } from '../contract/wire/storage.js';
+import { blocksRetiredKey, FORMAT_FILE, mirrorStepKey, rowsStepKey } from '../contract/wire/storage.js';
 import { readMarker, writeMarker } from '../tree/marker.js';
 import type { GraphServices } from '../contract/service/services.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -240,6 +240,7 @@ const moveProject = Effect.fn('MirrorBuilder.moveProject')(function* (
   store: GraphStore['Service'],
   projectId: number,
   head: string | null,
+  passed: readonly string[],
 ) {
   const { db } = store;
   yield* db.run(sql`PRAGMA foreign_keys = OFF`);
@@ -284,12 +285,21 @@ const moveProject = Effect.fn('MirrorBuilder.moveProject')(function* (
             `the serving switch left ${dangling.length} dangling references: ${JSON.stringify(dangling.slice(0, 5))}`,
           );
         }
-        yield* db.insert(meta).values({ key: MOVED_KEY, value: String(projectId) });
+        yield* db
+          .insert(meta)
+          .values([{ key: MOVED_KEY, value: String(projectId) }, ...passed.map((step) => ({ key: mirrorStepKey(step), value: step }))]);
       }),
   );
   yield* db.run(sql`detach database machine`);
   yield* db.run(sql`PRAGMA foreign_keys = ON`);
 });
+
+const passedMirrorSteps = (steps: GraphSteps['Service'], reached: string | null): readonly string[] => {
+  const standing = steps.standing(reached);
+  if (standing !== 'current' && standing !== 'behind') return [];
+  const pending = new Set(steps.after(reached).map((step) => step.id));
+  return steps.mirror.filter((step) => !pending.has(step));
+};
 
 export const switchIfDue = Effect.fnUntraced(function* (
   machine: Machine,
@@ -299,6 +309,7 @@ export const switchIfDue = Effect.fnUntraced(function* (
   layout: StorageLayout,
   shadow: ShadowGit | null,
   rowsStep: string | null,
+  steps: GraphSteps['Service'],
   openMirror: Effect.Effect<GraphStore['Service'], StoreOpenFailure>,
   treeHasBlocks?: boolean,
 ): Effect.fn.Return<
@@ -372,7 +383,13 @@ export const switchIfDue = Effect.fnUntraced(function* (
         reason: read.failure.message,
       });
     }
-    yield* moveProject(machineStore, yield* openMirror, row.id, committed ?? (read?._tag === 'Success' ? read.success : null));
+    yield* moveProject(
+      machineStore,
+      yield* openMirror,
+      row.id,
+      committed ?? (read?._tag === 'Success' ? read.success : null),
+      passedMirrorSteps(steps, rowsAt),
+    );
     if (shadow === null) yield* marking;
   }
   yield* retire;

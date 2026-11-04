@@ -9,7 +9,7 @@ import { unmergedPaths } from '../../platform/git/unmerged.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import type { FormatHold } from '../contract/service/serving.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
-import { FORMAT_FILE } from '../contract/wire/storage.js';
+import { FORMAT_FILE, mirrorStepKey } from '../contract/wire/storage.js';
 import { treeBranch } from '../tree/batch.js';
 import { TreeCommits } from '../tree/commits.js';
 import { absorbMirror, indexMirror } from '../tree/mirror.js';
@@ -19,7 +19,6 @@ import { scanTree, type TreeScan } from '../tree/scan.js';
 import type { ShadowGit } from '../tree/shadow.js';
 import type { GraphSteps } from '../contract/service/steps.js';
 
-const mirrorStep = (id: string): string => `graph-step:${id}`;
 const steppingMirror = writes('Graph.advanceTree.mirrorStep', [meta]);
 
 const midOperation = Effect.fnUntraced(function* (git: Git['Service'], treeRoot: string) {
@@ -49,7 +48,7 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
       : yield* store.db
           .select({ id: meta.value })
           .from(meta)
-          .where(inArray(meta.key, input.steps.mirror.map(mirrorStep)));
+          .where(inArray(meta.key, input.steps.mirror.map(mirrorStepKey)));
   const pending = input.steps.after(
     input.format.reached(),
     mirrored.map((row) => row.id),
@@ -76,7 +75,7 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
             yield* store.transaction(steppingMirror, () =>
               store.db
                 .insert(meta)
-                .values({ key: mirrorStep(step.id), value: step.id })
+                .values({ key: mirrorStepKey(step.id), value: step.id })
                 .onConflictDoUpdate({ target: meta.key, set: { value: step.id } }),
             );
           yield* progress.advance();

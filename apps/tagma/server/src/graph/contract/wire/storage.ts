@@ -68,6 +68,10 @@ export function rowsStepKey(projectId: number): string {
   return `rows-step:${projectId}`;
 }
 
+export function mirrorStepKey(stepId: string): string {
+  return `graph-step:${stepId}`;
+}
+
 export function vocabularyRevisionKey(projectId: number): string {
   return `vocabulary-revision:${projectId}`;
 }

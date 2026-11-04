@@ -28,6 +28,7 @@ import { projecting } from '../store/actWrites.js';
 
 const rooting = writes('Projects.open', [block], projecting);
 const retiring = writes('Projects.open.retireRows', [meta]);
+const steppingBorn = writes('Projects.open.mirrorSteps', [meta]);
 import { adoptCatalogs, ensureVocabulary } from './birth.js';
 import { advanceTree } from './advance.js';
 import { syncTopology, type TopologySync } from '../tree/topology.js';
@@ -52,7 +53,7 @@ import { treeConflicts } from '../tree/conflicts.js';
 import { TreeCommits } from '../tree/commits.js';
 import { treeCommits } from '../tree/commits.js';
 import { commitJournal, startCommitJournals, type TreeScope } from '../tree/message.js';
-import { blocksRetiredKey, CHECKOUT_DIRECTORY, FORMAT_FILE } from '../contract/wire/storage.js';
+import { blocksRetiredKey, CHECKOUT_DIRECTORY, FORMAT_FILE, mirrorStepKey } from '../contract/wire/storage.js';
 import { graphCommit } from '../settings.js';
 import { type StealthLayout, type StorageLayout, stealthBeside, storageHomes } from '../storage/layout.js';
 import { scanTree, type TreeScan } from '../tree/scan.js';
@@ -167,6 +168,13 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
         projectId: row.id,
         treeRoot: layout.treeRoot,
       }).pipe(Effect.provide(context));
+      if (steps.mirror.length > 0)
+        yield* store.transaction(steppingBorn, () =>
+          db
+            .insert(meta)
+            .values(steps.mirror.map((step) => ({ key: mirrorStepKey(step), value: step })))
+            .onConflictDoNothing(),
+        );
       const committed = shadow === null ? null : yield* shadow.commitAct(layout.treeRoot, 'project born');
       const machineStore = Context.get(machine, MachineStore);
       yield* machineStore.transaction(retiring, () =>
@@ -236,6 +244,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
                         layout,
                         attached.shadow,
                         input.rowsStep,
+                        steps,
                         openMirror,
                         input.scan === undefined ? undefined : input.scan.blocks.length > 0,
                       ).pipe(overMirror(gates, layout.mirrorPath)),
