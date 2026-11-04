@@ -3,6 +3,7 @@ import type { WindowMode } from '../contract/wire/document.js';
 const ARGS = [
   '--remote-debugging-pipe',
   '--disable-blink-features=AutomationControlled',
+  '--test-type',
   '--no-first-run',
   '--no-default-browser-check',
   '--window-size=1280,800',
