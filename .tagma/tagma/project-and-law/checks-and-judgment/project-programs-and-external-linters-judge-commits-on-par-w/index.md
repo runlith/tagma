@@ -21,7 +21,7 @@ sources:
 
 **Behaviour.**
 - The program is run by the server's runner on Tagma's Bun; `@runlith/tagma/*` comes from the server, so the project doesn't need to install the package.
-- All keys of one module are judged by one process: the function is called once per key with both sides of the change.
+- All keys of one module are judged by one process: the function is called once per key with both sides of the change. A key that throws leaves only its own rules unjudged; successful keys keep their findings.
 - A program may ask for code facts — imports, declarations — which the server computes itself.
 - Findings outside the reach are discarded. An incremental program can explicitly cover unchanged paths in its affected frontier, comparing them against the same base paths without replacing unrelated debt.
 - A linter qualifies from the minimal version with the API or output format the driver needs; a newer version alone doesn't hinder judgement.

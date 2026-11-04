@@ -29,7 +29,7 @@ sources:
 
 **Behaviour.**
 - The message leaves whole, as written: the server appends nothing — no trailers, no tasks.
-- Commit steps run over the index version; hooks run in the commit tree. The operator's commit lands without judgement: after landing it's judged against the parents, and every missed violation is recorded as the operator's escape. A rule whose inspection failed on the commit doesn't hold up the other rules' records: the next measurement of that rule will record its violations, without a holder. The same `commit_checkout` from a thread is judged like a landing (A4): a gated-rule violation refuses.
+- Commit steps run over the index version; hooks run in the commit tree. The operator's commit is measured without refusal: its receipt and rule history show failed inspections, and every crossing a successful inspection finds is recorded as the operator's escape. A rule whose inspection failed on the commit doesn't hold up the other rules' records: the next measurement of that rule will record its violations, without a holder. The same `commit_checkout` from a thread is judged like a landing (A4): a gated-rule violation refuses.
 - Amend replaces the commit under HEAD, keeping its author and date, after confirmation: already pushed will diverge.
 - The commit finishes a running merge, cherry-pick, or revert like `git commit`; during rebase it adds a commit.
 - The branch moves only from the HEAD the commit was built on; index writes rearranged meanwhile stay and are named.
