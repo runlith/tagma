@@ -14510,10 +14510,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/execution-host/src/EvidenceScans.ts#EvidenceProbe",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/execution-host/src/EvidenceScans.ts#ScanLimits",
           "owner": "5a3bed29"
         },
@@ -15192,10 +15188,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/Library.ts#LibraryUnavailable",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/PosixHolder.ts#CONTROL_VARIABLE",
           "owner": "5a3bed29"
         },
@@ -15237,10 +15229,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/lanes.ts#Lanes",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/macos/holders.ts#FileHolders",
           "owner": "5a3bed29"
         },
         {
