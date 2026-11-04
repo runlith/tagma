@@ -18,7 +18,7 @@
     "dev": "bun ./scripts/dev.ts",
     "icon": "bun ./scripts/icon.ts",
     "test": "testbed bun test --no-isolate --pass-with-no-tests src",
-    "test:integration": "bun -e \"require('electron')\" && testbed itest --no-isolate",
+    "test:integration": "bun -e \"require('electron')\" && bun run --cwd ../../../packages/execution-host build:native && testbed itest --no-isolate",
     "test:e2e": "testbed e2e",
     "typecheck": "runlith-typecheck"
   },

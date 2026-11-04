@@ -2641,7 +2641,7 @@
     "db:generate": "bun --bun drizzle-kit generate",
     "start": "bun src/composition/developer/server.ts",
     "test": "testbed bun test src --no-isolate",
-    "test:integration": "testbed itest --no-isolate",
+    "test:integration": "bun run --cwd ../../../packages/execution-host build:native && testbed itest --no-isolate",
     "test:e2e": "testbed e2e --no-isolate",
     "typecheck": "runlith-typecheck"
   },
