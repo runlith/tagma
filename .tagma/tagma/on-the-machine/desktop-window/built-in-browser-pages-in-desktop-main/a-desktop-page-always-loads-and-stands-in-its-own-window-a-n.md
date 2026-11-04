@@ -1,6 +1,6 @@
 ---
 id: 01a1489c-3fa7-70a5-a41b-0a88761cf71f
-title: "A desktop page always loads and stands in a hidden window: a never-loaded webContents does not answer the debugger, and an invisible one does not paint"
+title: "A desktop page always loads and stands in its own window: a never-loaded webContents does not answer the debugger, and an unwindowed one does not paint"
 ord: 3
 tags: ["explanation"]
 sources:
@@ -15,6 +15,8 @@ A webContents into which no document was ever loaded does not answer `Page.enabl
 A page keeps its webContents from creation: a destroyed `WebContentsView`, which closing a popup's window makes, hands out no webContents, and placement still settles the page after that.
 
 A page shown in no panel stands in a hidden `BrowserWindow` rather than hanging without a window: a `WebContentsView` without a window does not paint, and an agent's screenshot or stream would get an empty frame. A hold counts as ready only after a non-empty `capturePage`: the first screenshot after waking may outrun the surface.
+
+Only on macOS does a never-shown window paint. On Linux (Electron 44.8 under Xvfb, measured in CI) a page parked in it draws its first frame and then none — 0 animation frames in 2 s against 101 once the window is mapped — so a reveal's paint request, a scrolled click and an LCP wait never answer; a restart scenario whose two ref clicks once both went missing is, by inference, the same stall leaving the browser stale hit-test data. Elsewhere than macOS the stand is therefore created beyond the right and bottom edges of every display and mapped with `showInactive` while its page is awake, and hidden again when the page rests or leaves it. Windows was not measured; a third-party report of hidden Electron windows not painting there is why it takes the mapped stand too. A window manager that forces windows onto the screen would show the stand; none was tried.
 
 A page is awake only while it stands in a panel of a visible window (frozen under an overlay included: its still is what the operator sees), its popup window is visible, an engine session drives it, or someone holds `paint`. Otherwise `Placement.settle` hides its view and restores its background throttling, and Chromium runs it as a background tab: no painting, no animation frames, timers at the background rate. Waking does the opposite, and both go through `settle` alone. Throttling is part of waking because on the hidden stand a shown view with throttling on still reads as hidden. Without rest, every page the operator left behind, including tabs no panel shows, drew 60–120 frames a second through the GPU process that also draws Tagma's own window. Measured on Electron 44.8, macOS arm64, one sample: at rest a page draws 0 frames and stays at rest across a renderer restart; a hold wakes it with capture ready at once and full frame rate within 3 s.
 
