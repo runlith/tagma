@@ -419,6 +419,7 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
         current = decode(Schema.String, await evaluatePage(debugger_, 'globalThis.__runlithChannel'));
         return;
       }
+      current = undefined;
       const loaded = new Promise<void>((resolve, reject) => {
         const disconnect = () => {
           debugger_.removeClientEventListener('Page.loadEventFired');
