@@ -37,6 +37,7 @@ sections:                  # optional edits of the inherited prompt, applied in 
 Body.
 \`\`\`
 
+- A name in \`tools\` that no held capability offers refuses \`agent-invalid\`, naming the capability that offers it. \`files\` offers read, write, edit, delete, rename, ls; \`shell\` bash, grep, glob; \`web\` webfetch, websearch; \`graph\` the graph tools; \`read_agent_library\` lists every capability's tools. A held capability with runtime sources (\`mcp\`) can still bring names at birth, so with one held nothing is refused.
 - With \`extends\` the body is appended after the inherited prompt as the section \`overlay\`, and may be empty. Without it the body is the agent's identity and must not be empty.
 - Section ids are those \`read_agent\` prints under \`prompt.sections[].id\`, except \`overlay\` and \`collaboration-source\`, which are added after the edits. \`find\` must stand exactly once in its section. An edit whose section or passage is gone refuses \`agent-invalid\` at \`read_agent\` and fails the thread's first run; sections differ by project and capabilities, so preview in the project that will run it.
 

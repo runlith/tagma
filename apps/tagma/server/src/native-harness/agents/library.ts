@@ -294,6 +294,7 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
     const edited = agentPrompt(
       base.id,
       effective,
+      capabilities.list(),
       (capability) => !disabled.has(capability.id),
       capabilityOffers,
       definitionFacts(yield* settings.value(commentPolicy, projectId)),

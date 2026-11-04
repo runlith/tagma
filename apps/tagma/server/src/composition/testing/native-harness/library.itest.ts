@@ -338,6 +338,22 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     ),
   );
+  it.effect('a tools whitelist naming a tool no held capability can offer refuses and names the capability that offers it', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { library } = yield* world(demo);
+          const definition = (capabilities: string) =>
+            `---\ncapabilities: ${capabilities}\ntools: [read, grep, glob, search_blocks]\n---\nSearch.\n`;
+          const refused = yield* demo.refusal(library.preview(demo.projectId, { source: definition('[files, graph]') }));
+          expect(refused.code).toBe('agent-invalid');
+          expect(refused.reason).toContain('grep, glob: add shell');
+          const held = yield* library.preview(demo.projectId, { source: definition('[files, shell, graph]') });
+          expect(held.toolCatalog?.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['grep', 'glob', 'search_blocks']));
+        }),
+      ),
+    ),
+  );
   it.effect('a native file source is read in the bound world while the declaration is saved by its library owner', () =>
     withDemo((demo) =>
       Effect.scoped(

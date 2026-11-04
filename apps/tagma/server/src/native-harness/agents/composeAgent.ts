@@ -153,6 +153,7 @@ function composed(
       const document = agentPrompt(
         declaration.id,
         definitions.effective(declaration, overlay),
+        definitions.list(),
         (capability) => capabilityEnabled(capability, ctx),
         ctx.offers,
         { world: ctx.world.facts, comments: ctx.comments(), images: ctx.images },
