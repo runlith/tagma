@@ -15,6 +15,7 @@ export const tagma: AgentDeclaration = {
     'web',
     'mcp',
     'apps',
+    'plugins',
     'skills',
     'threads',
     'peers',
