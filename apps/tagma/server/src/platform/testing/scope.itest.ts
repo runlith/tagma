@@ -317,14 +317,10 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
         Effect.gen(function* () {
           const acquiring = yield* Effect.forkChild(fixture.directory('late'));
           yield* Deferred.await(issued);
-          const cancelling = yield* Effect.forkChild(Fiber.interrupt(acquiring));
-          const closing = yield* Effect.forkChild(fixture.close());
-          yield* Effect.yieldNow;
-          yield* Effect.yieldNow;
-          yield* Effect.yieldNow;
+          yield* Effect.sync(() => acquiring.interruptUnsafe());
+          const closing = yield* Effect.forkChild(fixture.close(), { startImmediately: true });
           yield* Deferred.succeed(lands, undefined);
           yield* Fiber.await(acquiring);
-          yield* Fiber.join(cancelling);
           return yield* Fiber.join(closing);
         }),
       ).pipe(
@@ -437,10 +433,9 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
         ),
       );
       yield* Deferred.await(issued);
-      const cancelling = yield* Effect.forkChild(Fiber.interrupt(acquiring));
+      yield* Effect.sync(() => acquiring.interruptUnsafe());
       yield* Deferred.succeed(lands, undefined);
       const ended = yield* Fiber.await(acquiring);
-      yield* Fiber.join(cancelling);
 
       expect(Exit.hasInterrupts(ended)).toBe(true);
       expect(yield* standing(root)).toBe(false);
