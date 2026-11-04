@@ -30,4 +30,6 @@ Read at ee24295b8e:
 - `operations/machine.ts:67` passes `process.platform` to `launcherStands`.
 - `cli/server.ts:161` `OPENER` is `open` on darwin and `xdg-open` elsewhere.
 
-Done when the lifetime pipe, the profile files and the opener come from ports the module declares, filled per OS by composition, and the module's tests pass on a Linux runner.
+`setup/launcher.ts:51-55` also embeds `uname`, `sysctl hw.optional.arm64`, x86 spelling and Rosetta acceptance in the generated launcher. The launcher contract needs a platform-owned executable compatibility check along with the profile choice. Linux CI run 41895806886 at dcd1721ea exposed separate fixture assumptions: `closure/read.itest.ts` installed a darwin/arm64 launcher on Linux, and `setup/launcher.itest.ts` required the macOS shell's failure code and absolute `command -v` spelling. Correcting those fixtures does not remove this production boundary debt.
+
+Done when the lifetime pipe, launcher compatibility, the profile files and the opener come from ports the module declares, filled per OS by composition, and the module's tests pass on a Linux runner.

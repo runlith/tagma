@@ -17,6 +17,7 @@ sources:
 
 **Behaviour.**
 - Each profile is its own windowless Chromium process, which the server talks to over a pipe, with no listening port. The user agent carries no `HeadlessChrome`.
+- A browser that fails before becoming ready refuses the opening with its own startup diagnostic; no page action has reached a ready host.
 - By default agent pages go to the desktop profile; with no application running, `open_page` refuses with `host-away`, and the agent names the managed profile itself.
 - The profile process exits 5 minutes after the last page; a page without an engine session unloads after 15 minutes.
 - The managed host has no exact target-to-renderer CPU attribution. Silence therefore produces no automatic hang verdict or forced renderer crash: work waits for its own answer or session end and remains cancellable. A persistently busy renderer may survive target closure and be reused by a same-site target; recovery waits for the profile browser to end or uses another profile.

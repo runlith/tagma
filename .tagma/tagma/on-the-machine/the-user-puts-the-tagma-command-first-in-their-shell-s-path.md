@@ -24,6 +24,6 @@ sources:
 
 **How.** An Install command in the installation chip, `place_command`, `tagma release path`.
 
-**Behaviour.** The launcher uses the selected installation and its runtime; the explicit action prepends its directory to the used shell's profile and reports that a previous command was shadowed. A repeat does not add another such line. A release installation creates the launcher separately, without changing the profile on its own. Replacement prepares the launcher and its world link before publishing either name, so a failed preparation leaves the standing command intact.
+**Behaviour.** The launcher uses the selected installation and its runtime, matching the machine's architecture spelling to the installation's; the explicit action prepends its directory to the used shell's profile and reports that a previous command was shadowed. A repeat does not add another such line. A release installation creates the launcher separately, without changing the profile on its own. Replacement prepares the launcher and its world link before publishing either name, so a failed preparation leaves the standing command intact.
 
 **Limits.** An already open shell does not get the new PATH automatically. An unavailable profile may leave the launcher created but unreachable by name — the result directly offers to add the path by hand. Connecting Tagma to a repository and installing hooks is a different capability, not `release path`.
