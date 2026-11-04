@@ -33,12 +33,10 @@ export const machineBudget = (
   const override = env['TESTBED_CORES'];
   const cores = override === undefined ? availableParallelism() : countOf('TESTBED_CORES', override);
   const ci = env['CI'];
+  const withChildren = Math.floor((cores * 2) / 3);
   if (ci !== undefined && ci !== '' && ci !== 'false' && ci !== '0')
-    return Math.max(1, Math.min(cores, Math.floor(memory / WORKER_MEMORY)));
-  return Math.max(
-    1,
-    Math.min(cores - Math.max(2, Math.floor(cores / 8)), Math.floor((cores * 2) / 3), Math.floor(memory / 2 / WORKER_MEMORY)),
-  );
+    return Math.max(1, Math.min(withChildren, Math.floor(memory / WORKER_MEMORY)));
+  return Math.max(1, Math.min(cores - Math.max(2, Math.floor(cores / 8)), withChildren, Math.floor(memory / 2 / WORKER_MEMORY)));
 };
 
 export const budgetRoot = (): string => process.env['TESTBED_BUDGET_ROOT'] ?? join(BASE, 'budget');
