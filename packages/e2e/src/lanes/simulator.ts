@@ -263,3 +263,12 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     },
   };
 });
+
+export const warm = Effect.fn('e2e.iosLaneWarm')((held: Lane) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const session = yield* simulator(held);
+      yield* attempted('MobileSafari did not become ready on the booted lane device', () => session.launchSafari());
+    }),
+  ),
+);

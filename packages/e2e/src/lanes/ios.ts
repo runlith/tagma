@@ -7,7 +7,7 @@ import { fixtureHooks, onFailure, recordedFixture, type RecordedFixture } from '
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
 import { makeTouch, type Touch } from '../touch.ts';
-import { borrowing, holdLane, lane as provision, simulator, type Lane } from './simulator.ts';
+import { borrowing, holdLane, lane as provision, simulator, warm, type Lane } from './simulator.ts';
 
 export type Point = { readonly x: number; readonly y: number };
 export type Swipe = { readonly from: Point; readonly to: Point; readonly duration?: number; readonly delta?: number };
@@ -544,11 +544,17 @@ export const iosLane = (options: SimulatorOptions): (() => Lane) => {
     ),
   );
   const hooks = fixtureHooks(fixture);
+  const warmed = fixtureHooks(
+    recordedFixture(`iOS ${key.trim()} lane first launch`, () =>
+      borrowing() ? Effect.void : warm(device()).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause }))),
+    ),
+  );
   const close = () =>
     hooks.close().finally(() => {
       lanes.delete(key);
     });
   beforeAll(hooks.setup, Infinity);
+  beforeAll(warmed.setup, Infinity);
   if (lock === undefined) afterAll(close, Infinity);
   else closing.push(close);
   const device = (): Lane => {
