@@ -296,5 +296,33 @@ export const gitCheckoutPaths = (checkout: string, projectId = 1): CheckoutPaths
   };
 };
 
-export const checkoutPaths = (coverage: Coverage['Service'], projects: Projects['Service']) =>
-  makeCheckoutPathService.pipe(Effect.provideService(Coverage, coverage), Effect.provideService(Projects, projects));
+const unusedRoot = () => Effect.die('a fixed path fixture only answers root removal');
+
+const fixedRoots = FileRoots.of({
+  namespaceId: NamespaceId.make('fixed-paths'),
+  register: unusedRoot,
+  resolve: unusedRoot,
+  publish: unusedRoot,
+  publishAll: unusedRoot,
+  read: unusedRoot,
+  checked: unusedRoot,
+  checkedAll: unusedRoot,
+  live: unusedRoot,
+  active: unusedRoot,
+  scope: () => ({ resolve: unusedRoot }),
+  resolveFootprint: unusedRoot,
+  recheck: unusedRoot,
+  retireMissing: unusedRoot,
+  removed: () => Effect.succeed(false),
+  locate: unusedRoot,
+  probe: unusedRoot,
+  matching: unusedRoot,
+  relocate: unusedRoot,
+});
+
+export const checkoutPaths = (coverage: Coverage['Service'], projects: Projects['Service'], roots: FileRoots['Service'] = fixedRoots) =>
+  makeCheckoutPathService.pipe(
+    Effect.provideService(Coverage, coverage),
+    Effect.provideService(Projects, projects),
+    Effect.provideService(FileRoots, roots),
+  );

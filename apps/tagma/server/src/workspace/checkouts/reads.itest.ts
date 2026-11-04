@@ -5,9 +5,12 @@ import { NamespaceId } from '@runlith/files/namespace';
 import { commitOf } from '@runlith/git/repository';
 import { Git } from '@runlith/git/Git';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { type DemoState, demoGraphLayer, tempRepoEffect, withDemo } from '../../composition/testing/graphFixture.js';
+import { type DemoState, demoGraphLayer, gitEffect, tempRepoEffect, withDemo } from '../../composition/testing/graphFixture.js';
 import { checkoutPaths, coveredWorkspace, gitCheckoutReads } from '../testing/doubles.js';
 import { CommitOverlay } from '../contract/service/checkouts.js';
+import { makeCheckoutPathService } from './paths.js';
+import { Coverage, FileRoots } from '../contract/service/roots.js';
+import { Projects } from '../../projects/contract/service/registry.js';
 
 const composed = Effect.fnUntraced(function* (demo: DemoState) {
   const git = yield* Git;
@@ -77,6 +80,46 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, 
           expect(placed?.path).toBe('src/a.ts');
           expect(yield* files.realPath(placed?.root ?? '')).toBe(yield* files.realPath(later));
           expect((yield* paths.placeAcross(file))?.projectId).toBe(project);
+        }),
+      ),
+    );
+
+    it.effect('membership rejects a removed worktree immediately but retains a missing root that git still administers', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const git = yield* Git;
+          const checkout = yield* files.realPath(yield* tempRepoEffect(demo.fixture, 'membership-'));
+          const project = (yield* demo.graph.projectLifecycle.create({ name: 'membership', rootPath: checkout })).id;
+          const gone = `${checkout}/nested`;
+          const moved = `${checkout}-moved`;
+          yield* gitEffect(checkout, ['worktree', 'add', '-q', '-b', 'gone', gone]);
+          yield* gitEffect(checkout, ['worktree', 'add', '-q', '-b', 'moved', moved]);
+          const { roots, coverage } = yield* coveredWorkspace({
+            namespaceId: NamespaceId.make('membership'),
+            projects: demo.graph.projects,
+            git,
+          });
+          const covered = yield* coverage.cover(project);
+          const main = covered.roots.find((root) => root.origin === 'canonical')!;
+          const removed = covered.roots.find((root) => root.path === gone)!;
+          const paths = yield* makeCheckoutPathService.pipe(
+            Effect.provideService(Coverage, coverage),
+            Effect.provideService(FileRoots, roots),
+            Effect.provideService(Projects, demo.graph.projects),
+          );
+          expect((yield* paths.placeAcross(`${gone}/file.ts`))?.checkout).toBe(removed.rootId);
+          expect((yield* paths.placeOf(project, `${gone}/file.ts`))?.checkout).toBe(removed.rootId);
+          yield* gitEffect(checkout, ['worktree', 'move', moved, `${moved}-next`]);
+          yield* gitEffect(checkout, ['worktree', 'remove', '--force', gone]);
+          expect((yield* paths.placeAcross(`${gone}/file.ts`))?.checkout).toBe(main.rootId);
+          expect((yield* paths.resourceAcross(`${gone}/file.ts`))?.checkout).toBe(main.rootId);
+          expect((yield* paths.placeOf(project, `${gone}/file.ts`))?.checkout).toBe(main.rootId);
+          expect(yield* paths.rootAcross(removed.rootId, project)).toBeNull();
+          expect(yield* paths.rootAcross(removed.rootId, null)).toBeNull();
+          expect((yield* paths.rootAcross(gone, project))?.rootId).toBe(main.rootId);
+          expect(yield* paths.rootsWithin(checkout)).toEqual([]);
+          expect((yield* paths.placeAcross(`${moved}/file.ts`))?.root).toBe(moved);
         }),
       ),
     );

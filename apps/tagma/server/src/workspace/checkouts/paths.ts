@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { confineToTree } from '../roots/proof.js';
 import { CheckoutPaths, type CheckoutPlace, type PathWithinRefusal, PlaceUnread } from '../contract/service/checkoutPaths.js';
-import { Coverage } from '../contract/service/roots.js';
+import { Coverage, FileRoots } from '../contract/service/roots.js';
 import type { ProjectRoot } from '../contract/wire/coverage.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 
@@ -83,11 +83,6 @@ const placeIn = (root: ProjectRoot, path: string): CheckoutPlace => ({
   path: path === root.path ? '' : path.slice(root.path.length + 1),
 });
 
-const deepest = (roots: readonly ProjectRoot[], path: string): CheckoutPlace | null => {
-  const found = deepestRoot(roots, path);
-  return found === null ? null : placeIn(found, path);
-};
-
 const ofOneProject = (
   matches: readonly ProjectRoot[],
   preferred: number | null,
@@ -98,18 +93,6 @@ const ofOneProject = (
   if (projects.length <= 1) return Effect.succeed(matches);
   if (preferred !== null && projects.includes(preferred)) return Effect.succeed(matches.filter((root) => root.projectId === preferred));
   return Effect.fail(new PlaceUnread({ path, reason: `checkout ${checkout} belongs to projects ${projects.join(', ')}` }));
-};
-
-const indexedRoot = (
-  roots: ReadonlyMap<string, readonly ProjectRoot[]>,
-  path: string,
-  preferred: number | null,
-): Effect.Effect<ProjectRoot | null, PlaceUnread> => {
-  for (let directory = path; ; directory = dirname(directory)) {
-    const matches = roots.get(directory);
-    if (matches !== undefined) return Effect.map(ofOneProject(matches, preferred, path, directory), (one) => deepestRoot(one, path));
-    if (directory === dirname(directory)) return Effect.succeed(null);
-  }
 };
 
 const OUTSIDE_KEPT = 1024;
@@ -134,6 +117,31 @@ export type CheckoutPathService = CheckoutPaths['Service'];
 export const makeCheckoutPathService = Effect.gen(function* () {
   const coverage = yield* Coverage;
   const projects = yield* Projects;
+  const fileRoots = yield* FileRoots;
+
+  const removed = (root: ProjectRoot, path: string) =>
+    fileRoots.removed(root.rootId).pipe(Effect.mapError((failure) => unreadPlace(path, failure)));
+
+  const retained = (roots: readonly ProjectRoot[], path: string) =>
+    Effect.filter(roots, (root) => Effect.map(removed(root, path), (gone) => !gone));
+
+  const deepest = Effect.fnUntraced(function* (roots: readonly ProjectRoot[], path: string) {
+    const candidates = roots.filter((root) => under(path, root.path)).sort((a, b) => b.path.length - a.path.length);
+    for (const root of candidates) if (!(yield* removed(root, path))) return placeIn(root, path);
+    return null;
+  });
+
+  const indexedRoot = Effect.fnUntraced(function* (
+    roots: ReadonlyMap<string, readonly ProjectRoot[]>,
+    path: string,
+    preferred: number | null,
+  ) {
+    for (let directory = path; ; directory = dirname(directory)) {
+      const matches = yield* retained(roots.get(directory) ?? [], path);
+      if (matches.length > 0) return deepestRoot(yield* ofOneProject(matches, preferred, path, directory), path);
+      if (directory === dirname(directory)) return null;
+    }
+  });
 
   const known = new Map<number, readonly ProjectRoot[]>();
 
@@ -336,7 +344,7 @@ export const makeCheckoutPathService = Effect.gen(function* () {
               if (!known.has(preferred)) yield* rootsOf(preferred, named, true);
               if ((revisions.get(preferred) ?? 0) !== revision || (yield* projects.registryVersion) !== registry) continue;
               const matches = absolute ? byPath.get(spelling) : byId.get(named);
-              return matches?.find((root) => root.projectId === preferred) ?? null;
+              return (yield* retained(matches?.filter((root) => root.projectId === preferred) ?? [], named))[0] ?? null;
             }
           }),
         );
@@ -344,7 +352,7 @@ export const makeCheckoutPathService = Effect.gen(function* () {
       }
       if (!absolute) {
         yield* machineRoots(named);
-        return (yield* ofOneProject(byId.get(named) ?? [], preferred, named, named))[0] ?? null;
+        return (yield* ofOneProject(yield* retained(byId.get(named) ?? [], named), preferred, named, named))[0] ?? null;
       }
       return yield* atSpelling(named, spelling, preferred);
     }),
@@ -359,7 +367,7 @@ export const makeCheckoutPathService = Effect.gen(function* () {
       const within: CheckoutPlace[] = [];
       for (const [path, group] of roots) {
         if (!path.startsWith(prefix)) continue;
-        for (const root of group) within.push(placeIn(root, path));
+        for (const root of yield* retained(group, directory)) within.push(placeIn(root, path));
       }
       return within;
     }),
@@ -367,16 +375,16 @@ export const makeCheckoutPathService = Effect.gen(function* () {
     placeOf: Effect.fn('CheckoutPaths.placeOf')(function* (projectId, path) {
       const spelling = yield* Effect.mapError(spelled(path), (failure) => unreadPlace(path, failure.cause));
       const held = known.get(projectId);
-      const placed = held === undefined ? null : deepest(held, spelling);
+      const placed = held === undefined ? null : yield* deepest(held, spelling);
       if (placed !== null) return placed;
       if (held !== undefined && directlyIn(outsideOf.get(projectId), spelling)) return null;
-      const found = deepest(yield* rootsOf(projectId, path), spelling);
+      const found = yield* deepest(yield* rootsOf(projectId, path), spelling);
       if (found !== null) return found;
       const followed = yield* Effect.mapError(
         coverage.follow(projectId, spelling),
         (failure) => new PlaceUnread({ path, reason: failure.message }),
       );
-      const after = followed ? deepest(yield* rootsOf(projectId, path), spelling) : null;
+      const after = followed ? yield* deepest(yield* rootsOf(projectId, path), spelling) : null;
       if (after === null) missed(projectId, dirname(spelling));
       return after;
     }),
