@@ -90,9 +90,7 @@ export const stage = Effect.fnUntraced(function* (session: Session, body: string
     session.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }).pipe(Effect.mapError(lostPage));
 
   const ready = Effect.gen(function* () {
-    yield* Effect.logInfo('capture-stage awaiting load');
     yield* Deferred.await(loaded);
-    yield* Effect.logInfo('capture-stage load fired');
     const present = yield* evaluate(PRESENT);
     if (present.result.value !== true) {
       const first = thrownFirst();
@@ -102,32 +100,23 @@ export const stage = Effect.fnUntraced(function* (session: Session, body: string
           : `the page threw before it was ready: ${first}`,
       );
     }
-    yield* Effect.logInfo('capture-stage awaiting prepared');
     const prepared = yield* evaluate('window.tagmaTimeline.prepared.then(() => true)');
-    yield* Effect.logInfo('capture-stage prepared resolved');
     if (prepared.exceptionDetails !== undefined)
       return yield* pageFailed(`the page failed to get ready: ${thrownText(prepared.exceptionDetails)}`);
   });
 
-  yield* Effect.logInfo('capture-stage navigating');
   yield* navigated(session);
-  yield* Effect.logInfo('capture-stage navigate returned');
   yield* Effect.raceFirst(ready, Deferred.await(failed));
 
   const shot = image.format === 'png' ? ({ format: 'png' } as const) : ({ format: 'jpeg', quality: image.quality } as const);
 
   return {
     draw: Effect.fnUntraced(function* (t: number) {
-      yield* Effect.logInfo('capture-stage awaiting seek');
       const sought = yield* evaluate(`window.tagmaTimeline.seek(${t})`);
-      yield* Effect.logInfo('capture-stage seek resolved');
       if (sought.exceptionDetails !== undefined)
         return yield* pageFailed(`the frame at ${t} s threw: ${thrownText(sought.exceptionDetails)}`);
-      yield* Effect.logInfo('capture-stage awaiting paint');
       yield* evaluate(PAINTED);
-      yield* Effect.logInfo('capture-stage paint resolved');
       const text = yield* session.reply('Page.captureScreenshot', shot).pipe(Effect.mapError(lostPage));
-      yield* Effect.logInfo('capture-stage screenshot returned');
       return yield* bytesOf(text).pipe(Effect.mapError((failure) => pageFailed(`the frame could not be read: ${failure.message}`)));
     }),
   } satisfies Stage;

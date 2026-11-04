@@ -69,11 +69,8 @@ export const captureHost = (ensure: (record: ProfileRecord) => Effect.Effect<Bro
   );
   return {
     target: Effect.fn('ManagedHost.captureTarget')(function* (canvas) {
-      yield* Effect.logInfo('capture-target acquiring browser');
-      const running = yield* browser;
-      yield* Effect.logInfo('capture-target acquiring session');
-      const session = yield* hiddenTarget(running);
-      yield* Effect.logInfo('capture-target session acquired');
+      const session = yield* hiddenTarget(yield* browser);
+      yield* session.send('Emulation.setFocusEmulationEnabled', { enabled: true }).pipe(Effect.mapError(lost));
       yield* session
         .send('Emulation.setDeviceMetricsOverride', {
           width: canvas.width,
