@@ -72,7 +72,7 @@ layer(servingLayer, { excludeTestServices: true })('mirror moves', (it) => {
     ),
   );
 
-  it.effect('project birth stamps the switch commit once, and the global baseline opens without graph steps', () =>
+  it.effect('project birth stamps the switch commit once, and a current global mirror reopens without graph steps', () =>
     withDemo((demo) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -103,6 +103,8 @@ layer(servingLayer, { excludeTestServices: true })('mirror moves', (it) => {
           );
           const global = yield* (yield* Projects).global();
           if (global === undefined) return yield* Effect.die('the fixture has no global project');
+          const servedGlobal = yield* pool.resolve({ projectId: global.id });
+          yield* pool.release({ projectId: global.id, checkout: servedGlobal.checkout });
           const advances: Tracer.NativeSpan[] = [];
           const tracer = Tracer.make({
             span: (options) => {

@@ -51,7 +51,8 @@ const mirror = Effect.fn('baselineFixture.mirror')(function* (demo: EffectDemo) 
         .all()
         .map((column) => column.name)
         .join(', ');
-    db.exec(`insert into project (${columns('project')}) select ${columns('project')} from machine.project`);
+    db.exec(`insert into project (id, name, repo_key, root_path, created_at, global)
+      select id, name, repo_key, root_path, created_at, kind = 'global' from machine.project`);
     db.query(`insert into block (${columns('block')}) select ${columns('block')} from machine.block where project_id = ?`).run(id);
     db.exec('detach database machine');
     db.query('insert into meta (key, value) values (?, ?)').run('moved-project', String(id));

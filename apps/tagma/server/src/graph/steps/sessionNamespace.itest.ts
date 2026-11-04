@@ -144,7 +144,7 @@ layer(demoGraphLayer({ repos: ['namespace'] }).pipe(Layer.provideMerge(BunFileSy
                     target: [farEdge.fromId, farEdge.kind, farEdge.graph, farEdge.uuid],
                     set: { createdBySessionId: holder.id },
                   });
-                yield* store.db.delete(meta).where(eq(meta.key, `graph-step:${shippedSteps.last}`));
+                yield* store.db.delete(meta).where(eq(meta.key, 'graph-step:20261028120000_session_namespace'));
               }),
             );
           });
