@@ -207,6 +207,7 @@ export const installCatalogs = Effect.fn('installCatalogs')(function* (
           id: write.catalog,
           tags: members,
           release: write.release,
+          profile: at?.fields.profile,
           layer: write.layer ?? undefined,
           fork: write.fork ?? undefined,
         },

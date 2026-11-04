@@ -29,6 +29,7 @@ const stored = (rows: readonly Stored[]) => rows.map(({ id, title, body, tags, f
 const WAS = 'software-development';
 const WORK = 'work';
 const EARLIER = 'An earlier task.';
+const OWN_PROFILE = { checks: { code: true }, batch: [] };
 
 const olderText = (text: string): string =>
   text
@@ -56,10 +57,28 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
         yield* graph.blocks.update({ id: ruleType.id, body: `${ruleType.body}${SECTION_JOIN}Ours.` });
         const rule = yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'Name files by meaning' });
         const task = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'open work' });
+        const held = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'work in hand' });
+        yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['tag'],
+          title: '#memo',
+          fields: { id: 'memo', fields: { about: 'string' } },
+        });
+        const memo = yield* graph.blocks.create({ projectId, parentId: root, tags: ['memo'], title: 'an id written as text' });
+        const enforcement = { inspection: 'size', strictness: 'gate', on: [{ op: 'submit_work', phase: 'before' }], debt: [] };
         yield* db
           .update(block)
-          .set({ fields: { enabled: false, delivery: 'prompt' } })
+          .set({ fields: { enabled: false, delivery: 'prompt', enforcement } })
           .where(eq(block.id, rule.id));
+        yield* db
+          .update(block)
+          .set({ fields: { status: 'in_work', holder: 7 } })
+          .where(eq(block.id, held.id));
+        yield* db
+          .update(block)
+          .set({ fields: { about: shippedTypeId(WAS, 'task') } })
+          .where(eq(block.id, memo.id));
         const status = fieldIdOf(shippedTypeId(WORK, 'task'), 'status');
         const sort = { by: 'created', order: 'asc' } as const;
         const view = yield* graph.blocks.create({
@@ -69,7 +88,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
           title: 'open work',
           fields: { query: { tags: [shippedTypeId(WORK, 'task')], fields: { [status]: 'open' }, sort } },
         });
-        const carriers = [rule.id, task.id, view.id];
+        const carriers = [rule.id, task.id, held.id, view.id, memo.id];
         const carried = Effect.map(db.select().from(block).where(inArray(block.id, carriers)).orderBy(block.id), stored);
         const before = yield* carried;
 
@@ -103,6 +122,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
           if (row.id === was.id) {
             fields = {
               ...fields,
+              profile: OWN_PROFILE,
               tags: [...listOf(fields.tags), ...listOf(work.fields.tags), ruleMember],
               release: older({
                 ...releaseOf(row),
@@ -141,7 +161,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
         expect(earlier.identities.typeOf('task')?.id).toBe(shippedTypeId(WAS, 'task'));
         expect(earlier.identities.typeOf('rule')?.id).toBe(shippedTypeId(WAS, 'rule'));
         const selected = () => Effect.map(graph.reading.show(view.id, 0), (page) => (page.results?.items ?? []).map((row) => row.name));
-        expect(yield* selected()).toEqual([yield* demo.nameOf(task.id)]);
+        const open = [yield* demo.nameOf(task.id), yield* demo.nameOf(held.id)];
+        expect(yield* selected()).toEqual(open);
 
         const project = yield* graph.projects.byId(projectId);
         yield* workCatalog(project);
@@ -154,7 +175,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
         expect(moved.identities.typeOf('task')?.id).toBe(shippedTypeId(WORK, 'task'));
         expect(moved.identities.typeOf('rule')?.id).toBe(shippedTypeId(CORE_LIBRARY, 'rule'));
         expect(yield* carried).toEqual(before);
-        expect(yield* selected()).toEqual([yield* demo.nameOf(task.id)]);
+        expect(yield* selected()).toEqual(open);
         expect(
           yield* db.select({ tag: blockTag.tag, typeId: blockTag.typeId }).from(blockTag).where(eq(blockTag.blockId, task.id)),
         ).toEqual([{ tag: 'task', typeId: shippedTypeId(WORK, 'task') }]);
@@ -171,6 +192,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work catalog', (it) => {
           ],
         );
         expect(yield* carried).toEqual(before);
+        expect((yield* graph.blocks.blockById(was.id)).fields.profile).toEqual(OWN_PROFILE);
         const ruleRow = yield* graph.blocks.blockById(rule.id);
         expect(isEnabled(installed.lawProjection(ruleRow), ruleRow)).toBe(false);
       }),

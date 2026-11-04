@@ -12,7 +12,7 @@ import { CATALOG_DECLARATION, TAG_DECLARATION } from '../contract/wire/tags/decl
 import { CORE_LIBRARY, shippedTypeId } from '../contract/wire/tags/identity.js';
 import { projecting, referencing } from '../store/actWrites.js';
 import { block, blockTag } from '../store/tables.js';
-import { object, type Raw } from './documents.js';
+import { type Change, each, keys, object, openChildren, properties, type Raw, refFields, storedFields } from './documents.js';
 
 const stepping = writes('Tree.step.workCatalog', [block, blockTag], projecting, referencing);
 
@@ -27,24 +27,47 @@ const MOVED: ReadonlyMap<string, string> = new Map([
 ]);
 const PREFIX = shippedTypeId(WAS, '');
 
-const successor = (word: string): string | null => {
-  if (!word.startsWith(PREFIX)) return null;
-  const rest = word.slice(PREFIX.length);
+const successor = (id: string): string | null => {
+  if (!id.startsWith(PREFIX)) return null;
+  const rest = id.slice(PREFIX.length);
   const at = rest.indexOf('#');
   const exported = at === -1 ? rest : rest.slice(0, at);
   const library = MOVED.get(exported);
   return library === undefined ? null : `${shippedTypeId(library, exported)}${at === -1 ? '' : rest.slice(at)}`;
 };
 
-const repointed = (value: unknown): unknown => {
-  if (typeof value === 'string') return successor(value) ?? value;
-  if (Array.isArray(value)) return value.map(repointed);
-  if (!object(value)) return value;
-  const out: Raw = {};
-  for (const [key, one] of Object.entries(value)) out[successor(key) ?? key] = repointed(one);
-  const library = typeof out.export === 'string' && out.library === WAS ? MOVED.get(out.export) : undefined;
-  if (library !== undefined) out.library = library;
-  return out;
+const word: Change = (value) => (typeof value === 'string' ? (successor(value) ?? value) : value);
+
+const shipped: Change = (value) => {
+  if (!object(value) || value.library !== WAS || typeof value.export !== 'string') return value;
+  const library = MOVED.get(value.export);
+  return library === undefined ? value : { ...value, library };
+};
+
+const declared = properties({
+  extends: word,
+  fields: refFields(word),
+  gates: each(openChildren(word)),
+  edges: each(properties({ to: each(word) })),
+  identity: properties({ shipped }),
+  layer: properties({ type: word }),
+  fork: shipped,
+});
+const profile = properties({ defaults: each(properties({ type: word })), batch: each(properties({ type: word })) });
+const release = properties({ tags: each(declared), profile, forks: each(properties({ type: word })) });
+const listed = properties({ release, profile });
+const query = properties({ tags: each(word), selector: properties({ types: each(word) }), fields: keys((key) => word(key) as string) });
+const documents: Readonly<Record<string, Change>> = {
+  tagExtends: word,
+  tagFields: refFields(word),
+  tagGates: each(openChildren(word)),
+  tagEdges: each(properties({ to: each(word) })),
+  tagIdentity: properties({ shipped }),
+  keyedLayer: properties({ type: word }),
+  typeFork: shipped,
+  catalogRelease: release,
+  catalogProfile: profile,
+  blockQuery: query,
 };
 
 const compact = (name: string): string => name.replaceAll('-', '').toLowerCase();
@@ -68,10 +91,16 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
     .where(
       and(
         eq(block.projectId, project.id),
-        or(like(block.fields, `%${WAS}%`), like(block.tags, `%${PREFIX}%`), like(block.tags, `%"${TAG_DECLARATION.id}"%`)),
+        or(
+          like(block.fields, `%${WAS}%`),
+          like(block.tags, `%${PREFIX}%`),
+          like(block.tags, `%"${TAG_DECLARATION.id}"%`),
+          like(block.tags, `%"${CATALOG_DECLARATION.id}"%`),
+        ),
       ),
     );
   if (!rows.some((row) => JSON.stringify(row.fields).includes(WAS) || row.tags.some((tag) => tag.startsWith(PREFIX)))) return;
+  const vocabularyRow = (row: BlockRow): boolean => row.tags.includes(TAG_DECLARATION.id) || row.tags.includes(CATALOG_DECLARATION.id);
   const before = yield* vocabulary.of(project.id);
   const exportOf = (row: BlockRow): string | null => {
     if (!row.tags.includes(TAG_DECLARATION.id) || row.deletedAt !== null) return null;
@@ -85,26 +114,25 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
     const library = exported === null ? undefined : MOVED.get(exported);
     return exported === null || library === undefined ? [] : [{ row, exported, library }];
   });
-  const listing = (rowsOf: readonly BlockRow[], id: string) =>
-    rowsOf.find((row) => row.tags.includes(CATALOG_DECLARATION.id) && row.deletedAt === null && row.fields.id === id);
-  const was = listing(rows, WAS);
+  const listing = (id: string) =>
+    rows.find((row) => row.tags.includes(CATALOG_DECLARATION.id) && row.deletedAt === null && row.fields.id === id);
+  const was = listing(WAS);
   const wasRelease = object(was?.fields.release) ? was.fields.release : null;
   const wasBases = Array.isArray(wasRelease?.tags) ? wasRelease.tags : [];
-  const receivers = was === undefined ? [] : [CORE_LIBRARY, WORK];
-  const standing =
-    receivers.length === 0
-      ? []
-      : yield* db
-          .select()
-          .from(block)
-          .where(and(eq(block.projectId, project.id), like(block.tags, `%"${CATALOG_DECLARATION.id}"%`)));
 
   yield* act.unit(
     stepping,
     Effect.gen(function* () {
       const now = new Date(yield* Clock.currentTimeMillis);
-      const changed = new Set<number>();
-      const fieldsOf = new Map<number, Raw>(rows.map((row) => [row.id, row.fields]));
+      const save = Effect.fnUntraced(function* (row: BlockRow, fields: Raw, tags: readonly string[], changed: Set<number>) {
+        if (same(fields, row.fields) && same(tags, row.tags)) return;
+        yield* db
+          .update(block)
+          .set({ fields, tags: [...tags], updatedAt: now })
+          .where(eq(block.id, row.id));
+        changed.add(row.id);
+      });
+      const fieldsOf = new Map<number, Raw>();
       for (const { row, exported, library } of moving) {
         if (row.fields.fork !== undefined) continue;
         const identity = object(row.fields.identity) ? row.fields.identity : {};
@@ -112,33 +140,31 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
       }
       if (was !== undefined) {
         const members = Array.isArray(was.fields.tags) ? was.fields.tags : [];
-        const fields: Raw = {
-          ...fieldsOf.get(was.id)!,
-          tags: members.filter((member) => !moving.some(({ row }) => names(member, row.uuid))),
-        };
+        const fields: Raw = { ...was.fields, tags: members.filter((member) => !moving.some(({ row }) => names(member, row.uuid))) };
         if (wasRelease !== null) fields.release = { ...wasRelease, tags: wasBases.filter((tag) => !MOVED.has(idOf(tag) ?? '')) };
         fieldsOf.set(was.id, fields);
       }
-      for (const library of receivers) {
-        const joining = moving.filter((one) => one.library === library && one.row.deletedAt === null).map(({ row }) => row);
+      for (const library of was === undefined ? [] : [CORE_LIBRARY, WORK]) {
+        const joining = moving.filter((one) => one.library === library).map(({ row }) => row);
         const bases = wasBases.filter((tag) => MOVED.get(idOf(tag) ?? '') === library);
         if (joining.length === 0 && bases.length === 0) continue;
-        const held = listing(standing, library);
-        const fields: Raw = held === undefined ? { id: library, tags: [] } : { ...(fieldsOf.get(held.id) ?? held.fields) };
+        const held = listing(library);
+        const fields: Raw = held === undefined ? { id: library, tags: [] } : { ...held.fields };
         const members: readonly unknown[] = Array.isArray(fields.tags) ? fields.tags : [];
         fields.tags = [
           ...members,
           ...joining.filter((row) => !members.some((member) => names(member, row.uuid))).map((row) => blockName(row.uuid)),
         ];
-        const release = object(fields.release) ? fields.release : { revision: wasRelease?.revision ?? WAS, guidance: '', tags: [] };
-        const releaseTags: readonly unknown[] = Array.isArray(release.tags) ? release.tags : [];
-        fields.release = {
-          ...release,
-          tags: [...releaseTags, ...bases.filter((tag) => !releaseTags.some((one) => idOf(one) === idOf(tag)))],
-        };
+        if (held === undefined) fields.release = { revision: wasRelease?.revision ?? WAS, guidance: '', tags: bases };
+        else if (object(held.fields.release)) {
+          const releaseTags: readonly unknown[] = Array.isArray(held.fields.release.tags) ? held.fields.release.tags : [];
+          fields.release = {
+            ...held.fields.release,
+            tags: [...releaseTags, ...bases.filter((tag) => !releaseTags.some((one) => idOf(one) === idOf(tag)))],
+          };
+        }
         if (held !== undefined) {
           fieldsOf.set(held.id, fields);
-          if (!rows.some((row) => row.id === held.id)) rows.push(held);
           continue;
         }
         const parentId = was!.parentId;
@@ -152,7 +178,7 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
             title: library,
             body: '',
             tags: [CATALOG_DECLARATION.id],
-            fields: repointed(fields) as Raw,
+            fields: listed(fields) as Raw,
             createdAt: now,
             updatedAt: now,
           })
@@ -163,12 +189,19 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
         yield* projection.syncBorn(born, true);
         yield* act.record('create', born, { catalog: true }, now);
       }
-      for (const row of rows) {
-        const fields = repointed(fieldsOf.get(row.id) ?? row.fields) as Raw;
-        const tags = row.tags.map((tag) => successor(tag) ?? tag);
-        if (same(fields, row.fields) && same(tags, row.tags)) continue;
-        yield* db.update(block).set({ fields, tags, updatedAt: now }).where(eq(block.id, row.id));
-        changed.add(row.id);
+      const declarations = new Set<number>();
+      for (const row of rows.filter(vocabularyRow)) {
+        const fields = fieldsOf.get(row.id) ?? row.fields;
+        yield* save(row, (row.tags.includes(TAG_DECLARATION.id) ? declared(fields) : listed(fields)) as Raw, row.tags, declarations);
+      }
+      yield* projection.derive([...declarations], ['tags', 'search']);
+      yield* vocabulary.forget(project.id);
+      const after = yield* vocabulary.of(project.id);
+      const carriedFields = storedFields(after, documents, (key) => word(key) as string);
+      const carried = new Set<number>();
+      for (const row of rows.filter((one) => !vocabularyRow(one))) {
+        const tags = row.tags.map((tag) => word(tag) as string);
+        yield* save(row, carriedFields(after.tagsOf({ tags }), row.fields), tags, carried);
       }
       const mine = db.select({ id: block.id }).from(block).where(eq(block.projectId, project.id));
       for (const [exported, library] of MOVED) {
@@ -177,8 +210,7 @@ export const workCatalog = Effect.fn('GraphStep.workCatalog')(function* (project
           .set({ typeId: shippedTypeId(library, exported) })
           .where(and(eq(blockTag.typeId, shippedTypeId(WAS, exported)), inArray(blockTag.blockId, mine)));
       }
-      yield* projection.derive([...changed], ['tags', 'search']);
-      yield* vocabulary.forget(project.id);
+      yield* projection.derive([...carried], ['tags']);
     }),
   );
 });

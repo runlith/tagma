@@ -153,6 +153,18 @@ test('an old-form copy that only appended to its base becomes an append layer ov
   expect(candidate.compiled.get('note')?.tag.prompt).toBe(`${CONTRACT}${SECTION_JOIN}Cite the file.`);
 });
 
+test("a copy extending both its base and the shipped text keeps only what follows the longer of them as the project's part", () => {
+  const old = (prompt: string): Tag => ({ id: 'note', fields: {}, edges: [], gates: [], roles: {}, body: { shape: 'content' }, prompt });
+  const grown = `${CONTRACT}${SECTION_JOIN}Added.`;
+  const added = prepared([row(1, old(`${grown}${SECTION_JOIN}Cite the file.`))], [old(CONTRACT)], [note(grown)]);
+  expect(added.types[0]?.layer).toEqual(appendLayer('Cite the file.'));
+  expect(added.compiled.get('note')?.tag.prompt).toBe(`${grown}${SECTION_JOIN}Cite the file.`);
+  const leaving = `${CONTRACT}${SECTION_JOIN}Leaving.`;
+  const left = prepared([row(1, old(`${leaving}${SECTION_JOIN}Cite the file.`))], [old(leaving)], [note(CONTRACT)]);
+  expect(left.types[0]?.layer).toEqual(appendLayer('Cite the file.'));
+  expect(left.compiled.get('note')?.tag.prompt).toBe(`${CONTRACT}${SECTION_JOIN}Cite the file.`);
+});
+
 test('a structural shipped change marks the type and its local descendants as the closure whose carriers are read', () => {
   const v1 = note(CONTRACT);
   const memo: Declaration = { id: 'memo', extends: 'note', prompt: 'A memo.' };
