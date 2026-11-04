@@ -100,6 +100,7 @@ impl Inotify {
         if wd < 0 {
             return Err(io::Error::last_os_error().raw_os_error().unwrap_or(libc::EIO));
         }
+        let displaced = table.paths.get(&sink.id()).and_then(|paths| paths.get(path)).copied().filter(|old| *old != wd);
         let entries = table.watched.entry(wd).or_default();
         let paths = table.paths.entry(sink.id()).or_default();
         match entries.iter_mut().find(|entry| entry.sink.id() == sink.id()) {
@@ -113,6 +114,11 @@ impl Inotify {
             None => entries.push(Entry { path: path.to_owned(), sink: sink.clone(), guards: guards.map(str::to_owned) }),
         }
         paths.insert(path.to_owned(), wd);
+        if let Some(old) = displaced
+            && table.detach(old, sink.id())
+        {
+            unsafe { libc::inotify_rm_watch(self.fd.as_raw_fd(), old) };
+        }
         Ok(())
     }
 
