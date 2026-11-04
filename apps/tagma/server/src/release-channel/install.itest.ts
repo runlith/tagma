@@ -192,6 +192,9 @@ describe('install-from', () => {
       expect(refused._tag === 'Failure' ? [refused.failure.step, refused.failure.code] : 'landed').toEqual(['current', 'current-moved']);
       expect([yield* standing(), last.previous, attemptAt(root)?.from]).toEqual([last.version, version, version]);
       expect(readdirSync(root).filter((name) => name.endsWith('.incoming'))).toEqual([]);
+      expect((yield* versions()).toSorted()).toEqual([version, last.version, basename(candidate)].toSorted());
+      expect((yield* verifyInstallation(candidate)).identity.build).toBe('a7a7a7a 20261015T070000Z');
+      expect((yield* verifyInstallation(last.root)).identity.build).toBe('b8b8b8b 20261015T080000Z');
     }).pipe(Effect.provide(world)),
   );
 

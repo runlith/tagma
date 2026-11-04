@@ -149,7 +149,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         for (const [ruleName, project] of labelled) expect(lines[at(ruleName)]).toContain(project);
         const unrelated = yield* start(gamma);
         expect((yield* world.op('read_group', { ref: String(gamma) })).body).toMatchObject({ group: null });
-        for (const name of [groupRoot, groupRule, betaRule, alphaRule]) {
+        for (const name of [groupRoot, 'Alpha core region', 'Beta core region', groupRule, betaRule, alphaRule]) {
           expect(before).not.toContain(name);
           expect(unrelated).not.toContain(name);
         }
