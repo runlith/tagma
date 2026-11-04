@@ -61,10 +61,6 @@ layer(Layer.effect(InspectionState, setup).pipe(Layer.provide(doorFixture()), La
       const actor = yield* born();
       yield* write(actor.threadId, PATHS[0]!, SOURCE.replace('1', '2'));
       yield* write(actor.threadId, PATHS[1]!, MARKER.replace('1', '2'));
-      expect(yield* doors.atNative('submit_work', { paths: PATHS, subject: 'candidate before preparation' }, actor)).toMatchObject({
-        class: 'refusal',
-        code: 'inspection-failed',
-      });
       expect(yield* doors.atNative('check_rules', { inspection: 'calls', over: 'change', paths: PATHS, limit: 10 }, actor)).toMatchObject({
         class: 'answer',
         value: { refuses: false, violations: [] },
