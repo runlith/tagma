@@ -2520,10 +2520,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/browser/engine/drive.ts#StrainState",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/browser/engine/drive.ts#DriveOptions",
           "owner": "5a3bed29"
         },
@@ -13759,10 +13755,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/cdp/src/pipe.ts#frames",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/cdp/src/probe.ts#ProbeOptions",
           "owner": "5a3bed29"
         },
         {
