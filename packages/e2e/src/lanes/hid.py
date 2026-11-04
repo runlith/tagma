@@ -4,7 +4,7 @@ import logging
 import math
 import sys
 
-from idb.common.types import HIDDirection, HIDPress, HIDTouch, Point, TCPAddress
+from idb.common.types import HIDDelay, HIDDirection, HIDPress, HIDTouch, Point, TCPAddress
 from idb.grpc.client import Client
 
 STEP = 5.0
@@ -35,19 +35,19 @@ async def events():
         if phase == "swipe":
             start, end = command["from"], command["to"]
             origin, target = (start["x"], start["y"]), (end["x"], end["y"])
-            steps = max(2, math.ceil(math.dist(origin, target) / command["delta"]))
-            loop = asyncio.get_running_loop()
-            began = loop.time()
+            resolution = math.ceil(math.dist(origin, target) / command["delta"])
+            cadence = math.floor(command["duration"] / INTERVAL)
+            steps = max(2, min(resolution, cadence))
+            interval = command["duration"] / steps
             yield sample(*origin)
             for index in range(1, steps + 1):
+                yield HIDDelay(duration=interval)
                 fraction = index / steps
-                remaining = began + command["duration"] * fraction - loop.time()
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
                 yield sample(
                     origin[0] + (target[0] - origin[0]) * fraction,
                     origin[1] + (target[1] - origin[1]) * fraction,
                 )
+            yield HIDDelay(duration=interval)
             yield sample(*target, HIDDirection.UP)
             print(json.dumps({"id": command["id"]}), flush=True)
             return
