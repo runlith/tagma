@@ -6,7 +6,6 @@ import sys
 from contextlib import aclosing
 
 from idb.common.types import (
-    HIDDelay,
     HIDDirection,
     HIDPress,
     HIDTouch,
@@ -59,7 +58,9 @@ async def events(reader, command, terminal):
                     origin[0] + (target[0] - origin[0]) * fraction,
                     origin[1] + (target[1] - origin[1]) * fraction,
                 )
-            yield HIDDelay(duration=interval)
+            remaining = began + interval * (steps + 1) - loop.time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
             yield sample(*target, HIDDirection.UP)
             terminal.update(command)
             return
