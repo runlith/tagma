@@ -399,12 +399,11 @@ it.live('the first byte of output moves the inventory, and its reading answers w
     const directory = yield* files.makeTempDirectoryScoped({ prefix: 'inventory-printed-' });
     const host = yield* openHost({ directory, registration: registrationOf(directory), key: 'take-printed', expected: 0 });
     const gate = `${directory}/gate`;
+    yield* Effect.sync(() => Bun.spawnSync(['mkfifo', gate]));
     const held = yield* Deferred.make<void>();
     host.faults.running = held;
     yield* Effect.addFinalizer(() => Deferred.succeed(held, undefined));
-    const started = yield* Effect.forkChild(
-      accept(host, 'op-printed', `while [ ! -e '${gate}' ]; do sleep 0.01; done; printf x; exec sleep 30`),
-    );
+    const started = yield* Effect.forkChild(accept(host, 'op-printed', `read -r _ < '${gate}'; printf x; exec sleep 30`));
     const silent = yield* until(pageOf(host), (page) => page.commands.some((entry) => entry.state.phase === 'running'));
     const launched = yield* host.hostExecutions.inventoryChanged();
     yield* Deferred.succeed(held, undefined);

@@ -6,8 +6,9 @@ import type { Facts, Processes, Row } from './processes.ts';
 
 const GRACE_MS = 8_000;
 const POLL_MS = 50;
-const REAPER =
-  'set -f; list=" "; while read -r op p; do case "$op" in +) list="$list$p " ;; -) case "$list" in *" $p "*) list="${list%% $p *} ${list#* $p }" ;; esac ;; esac; done; [ "$list" = " " ] || kill -9 -- $list 2>/dev/null; exit 0';
+const BELOW =
+  'BEGIN { n = split(roots, r, " "); for (i = 1; i <= n; i++) if (r[i] + 0 > 0) mark[r[i] + 0] = 1 } { up[$1 + 0] = $2 + 0 } END { for (c in up) { x = up[c]; for (s = 0; s < 64; s++) { if (x in mark) { print c; break } if (!(x in up)) break; x = up[x] } } }';
+const REAPER = `set -f; PATH=/bin:/usr/bin; list=" "; while read -r op p; do case "$op" in +) list="$list$p " ;; -) case "$list" in *" $p "*) list="\${list%% $p *} \${list#* $p }" ;; esac ;; esac; done; [ "$list" = " " ] && exit 0; below=$(ps -axo pid=,ppid= | awk -v roots="$list" '${BELOW}'); kill -9 -- $list $below 2>/dev/null; exit 0`;
 
 type ChildProcess = typeof import('node:child_process');
 
@@ -59,6 +60,32 @@ const kill = (pid: number): void => {
 };
 
 const within = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
+
+const realOf = (root: string): string => {
+  try {
+    return pristine((createRequire(import.meta.url)('node:fs') as typeof import('node:fs')).realpathSync)(root);
+  } catch {
+    return root;
+  }
+};
+
+const insideAny = (path: string, roots: readonly string[]): boolean => roots.some((root) => within(path, root));
+
+const aliasesOf = (root: string): string[] => [...new Set([root, realOf(root)])];
+
+const below = (table: readonly Row[], roots: ReadonlySet<number>): Set<number> => {
+  const children = new Map<number, number[]>();
+  for (const row of table) if (!row.zombie) children.set(row.ppid, [...(children.get(row.ppid) ?? []), row.pid]);
+  const reached = new Set<number>();
+  for (const queue = [...roots]; queue.length > 0;) {
+    for (const child of children.get(queue.pop()!) ?? []) {
+      if (child === process.pid || reached.has(child) || roots.has(child)) continue;
+      reached.add(child);
+      queue.push(child);
+    }
+  }
+  return reached;
+};
 
 export const ownerOf = (mark: string): number => Number(mark.slice(0, mark.indexOf('.')));
 
@@ -275,9 +302,14 @@ export const makeWatch = (options: WatchOptions) => {
     const candidates = unheld.filter((row) => !under(row, owned));
     const orphans = candidates.filter((row) => row.marks.length === 0 && orphaned(row)).map((row) => row.pid);
     const where = orphans.length === 0 ? new Map<number, string>() : processes.cwds(orphans);
+    const roots = aliasesOf(root);
     return candidates.filter(
       (row) =>
-        mine.has(row.pid) || mine.has(row.pgid) || row.marks.includes(token) || under(row, self) || within(where.get(row.pid) ?? '', root),
+        mine.has(row.pid) ||
+        mine.has(row.pgid) ||
+        row.marks.includes(token) ||
+        under(row, self) ||
+        insideAny(where.get(row.pid) ?? '', roots),
     );
   };
 
@@ -353,10 +385,12 @@ export const makeWatch = (options: WatchOptions) => {
       found = suspects(processes, token, root, mine);
       if (found.length === 0) return undefined;
       const lines = describe(processes, found, file);
+      const dependents = below(processes.rows('all'), new Set(found.map((row) => row.pid)));
       for (const row of found) kill(row.pid);
+      for (const pid of dependents) kill(pid);
       return {
         count: found.length,
-        message: `${found.length} process(es) outlived the tests that started them and were killed:\n${lines.join('\n')}`,
+        message: `${found.length} process(es) outlived the tests that started them and were killed${dependents.size === 0 ? '' : `, with ${dependents.size} of their descendants`}:\n${lines.join('\n')}`,
       };
     },
   };
@@ -424,11 +458,13 @@ export const sweep = (
     table.filter((row) => row.pid !== process.pid && !row.zombie && row.marks.some((mark) => !living(ownerOf(mark)))).map((row) => row.pid),
   );
   if (deadRoots.length > 0) {
+    const aliases = deadRoots.flatMap(aliasesOf);
     const where = processes.cwds(
       table.filter((row) => row.pid !== process.pid && !row.zombie && !stranded.has(row.pid)).map((row) => row.pid),
     );
-    for (const [pid, cwd] of where) if (deadRoots.some((root) => within(cwd, root))) stranded.add(pid);
+    for (const [pid, cwd] of where) if (insideAny(cwd, aliases)) stranded.add(pid);
   }
+  for (const pid of below(table, stranded)) stranded.add(pid);
   for (const pid of stranded) kill(pid);
   return { stranded: stranded.size, roots: deadRoots };
 };

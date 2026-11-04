@@ -1,11 +1,14 @@
 import { beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { BASE } from './core/run.ts';
 
 const PRELOAD = join(import.meta.dir, 'bun.ts');
 const FIXTURE = join(import.meta.dir, 'fixture.ts');
 const DAEMON =
   "const c = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e9)'], { detached: true, stdio: 'ignore' }); c.unref(); console.log(c.pid)";
+const TREE =
+  "const c = require('node:child_process').spawn('/bin/sleep', ['313'], { detached: true, stdio: 'ignore' }); c.unref(); console.log(c.pid); setInterval(() => {}, 1e9)";
 
 const alive = (pid: number): boolean => {
   const state = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
@@ -47,6 +50,7 @@ const blamed = (output: string): string[] =>
 
 let shared: Ran;
 let serial: Ran;
+let tree: Ran;
 let hooked: Ran;
 
 const ownWorld = `import { afterAll, beforeAll, describe, test } from 'bun:test';
@@ -107,10 +111,26 @@ test('a detached shell leaves a sleeper in its group and exits', async () => {
 });
 `,
   });
+  const treeRoot = plant({
+    'c-tree.itest.ts': `import { test } from 'bun:test';
+import { spawn } from 'node:child_process';
+test('a leftover keeps a sleeper in a session of its own', async () => {
+  const leftover = spawn(process.execPath, ['-e', ${JSON.stringify(TREE)}], { stdio: ['ignore', 'pipe', 'ignore'] });
+  leftover.unref();
+  let text = '';
+  for await (const chunk of leftover.stdout) {
+    text += chunk;
+    if (text.includes('\\n')) break;
+  }
+  console.log(JSON.stringify({ pidLeftover: leftover.pid, pidTree: Number(text.trim()) }));
+});
+`,
+  });
   const hookedRoot = plant({ 'c-world.itest.ts': ownWorld, 'd-world.itest.ts': ownWorld });
-  [shared, serial, hooked] = await Promise.all([
+  [shared, serial, tree, hooked] = await Promise.all([
     bunTest(sharedRoot, ['--parallel=2', '--no-isolate', './leaves.itest.ts', './daemon.itest.ts', './world.itest.ts']),
     bunTest(serialRoot, ['./a-loads.itest.ts', './b-group.itest.ts']),
+    bunTest(treeRoot, ['./c-tree.itest.ts']),
     bunTest(hookedRoot, ['./c-world.itest.ts', './d-world.itest.ts']),
   ]);
 });
@@ -135,6 +155,14 @@ test('a daemon left while the file loads, and a sleeper left in a recorded group
   });
 });
 
+test('a leftover is killed with the descendants it keeps in sessions of their own', () => {
+  expect(tree.code).toBe(1);
+  expect({ blamed: blamed(tree.output), alive: [tree.pids['pidLeftover']!, tree.pids['pidTree']!].map(alive) }, tree.output).toEqual({
+    blamed: ['c-tree.itest.ts'],
+    alive: [false, false],
+  });
+});
+
 test('a world process is not residue at file end and dies with the worker, and what outlives it is swept by the next run', async () => {
   expect(shared.output).toContain('(pass) a world holds a process');
   expect(alive(shared.pids['pidWorld']!)).toBe(false);
@@ -143,4 +171,18 @@ test('a world process is not residue at file end and dies with the worker, and w
   ]);
   expect(next.code, next.output).toBe(0);
   expect(alive(shared.pids['pidChild']!)).toBe(false);
+});
+
+test('a process left in the root of a dead worker is swept by the next run, however its cwd is spelled', async () => {
+  const owner = Bun.spawnSync(['true']).pid;
+  const root = join(BASE, `${owner}.w1`);
+  const cwd = join(root, 'home', 'state');
+  mkdirSync(cwd, { recursive: true });
+  const sleeper = Bun.spawn(['/bin/sleep', '323'], { cwd, stdout: 'ignore', stderr: 'ignore' });
+  sleeper.unref();
+  const next = await bunTest(plant({ 'next.itest.ts': "import { test } from 'bun:test';\ntest('next run', () => {});\n" }), [
+    './next.itest.ts',
+  ]);
+  expect(next.code, next.output).toBe(0);
+  expect(alive(sleeper.pid)).toBe(false);
 });
