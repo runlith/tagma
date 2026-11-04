@@ -1,6 +1,6 @@
 ---
 id: 01a1700e-a5f3-7365-a21e-ec244549aa33
-title: The managed host's capture target is a hidden target of a separate capture browser, present in neither profiles nor pages
+title: The managed host captures in a windowed target of a separate capture browser, present in neither profiles nor pages
 ord: 7
 tags: ["explanation"]
 sources:
@@ -14,7 +14,9 @@ sources:
     ref: apps/tagma/server/src/managed-browser/targets.ts
     symbol: captureHost
 ---
-`CaptureHost.target` on the `managed` host opens a hidden target (`Target.createTarget` with `hidden: true`) in a separate capture browser — its own Chromium process with its own data directory, not any profile's browser. So capture sees no profile cookies or storage, lands in neither page records nor the host's `live`, and its targets don't disturb agent tabs. The target keeps a focus-emulation capturer hold for its lifetime: loading and seeking a hidden document alone does not ensure animation-frame delivery, so a paint wait can otherwise remain unresolved. [Chromium's focus-emulation owner](https://github.com/chromium/chromium/blob/151.0.7922.71/content/browser/devtools/protocol/emulation_handler.cc#L931-L944) takes that rendering hold without needing a visible browser window.
+`CaptureHost.target` on the `managed` host opens a target in a new window (`Target.createTarget` with `newWindow: true`) of a separate headless capture browser — its own Chromium process with its own data directory, not any profile's browser. So capture sees no profile cookies or storage, lands in neither page records nor the host's `live` (the host adopts only targets with an opener), and its targets don't disturb agent tabs.
+
+Capture never uses a `hidden: true` target: Chromium's [hidden target manager](https://github.com/chromium/chromium/blob/151.0.7922.71/content/browser/devtools/protocol/hidden_target_manager.cc) creates a bare WebContents parented to no window. On Aura platforms — Linux among them — a view draws through its window's compositor, so such a document loads and seeks but never receives an animation frame, and the paint wait hangs. That this differs on macOS, where capture into a hidden target passed, is inference from per-view compositors there. A profile session (`profiles.session`) still opens a hidden target: it reads storage and never paints.
 
 At startup the host keeps its own ordinary `about:blank` target until the process ends: Chromium allows `hidden: true` only while `RemoteDebuggingTargets(kFrame)` is non-empty, even with `--remote-debugging-pipe` running. After the starter tabs close the list can empty; built-in extension workers accidentally hide this defect while alive. The service target enters neither page records nor `live`, does not count as occupancy and closes with the browser. The condition is verified against [Chromium 151 TargetHandler](https://github.com/chromium/chromium/blob/151.0.7922.71/content/browser/devtools/protocol/target_handler.cc).
 
