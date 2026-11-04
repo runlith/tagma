@@ -401,15 +401,51 @@ layer(fixture, { excludeTestServices: true })('a bounded command', (it) => {
         const execution = yield* accepted(open, 'command-refusing-store', commandOf({ witness }));
         yield* Deferred.await(gate.entered);
         open.faults.unrecordable = true;
-        expect((yield* Effect.flip(stop(open, 'stop-unwritten', execution, 'signal')))._tag).toBe('ExecutionUnrecorded');
+        expect(yield* Effect.flip(stop(open, 'stop-unwritten', execution, 'signal'))).toMatchObject({
+          _tag: 'StopUnadmitted',
+          execution,
+          reason: 'StoreLost',
+        });
+        expect((yield* open.hostCommands.command(execution))?.state.phase).toBe('queued');
         open.faults.unrecordable = false;
         open.faults.unreadableEnding = true;
-        expect((yield* Effect.flip(stop(open, 'stop-unread', execution, 'signal')))._tag).toBe('ExecutionUnreadable');
-        expect((yield* Effect.flip(open.stops.ending(execution)))._tag).toBe('ExecutionUnreadable');
+        expect(yield* stop(open, 'stop-unread', execution, 'signal')).toMatchObject({
+          execution: { execution },
+          operation: keyOf('stop-unread'),
+          requested: 'signal',
+          cause: 'explicit-stop',
+          relation: 'covered',
+          coverage: [],
+          confirmed: [],
+          residual: [],
+          unverifiable: [],
+          cleanup: 'complete',
+          steps: [],
+        });
+        expect(yield* Effect.flip(stop(open, 'stop-unread', execution, 'signal'))).toMatchObject({
+          _tag: 'ExecutionUnreadable',
+          execution,
+          reason: 'StoreUnreadable',
+        });
+        expect(yield* Effect.flip(open.stops.ending(execution))).toMatchObject({
+          _tag: 'ExecutionUnreadable',
+          execution,
+          reason: 'StoreUnreadable',
+        });
         open.faults.unreadableEnding = false;
-        expect((yield* stop(open, 'stop-unread', execution, 'signal')).cleanup).toBe('complete');
+        expect(yield* stop(open, 'stop-unread', execution, 'signal')).toMatchObject({
+          execution: { execution },
+          operation: keyOf('stop-unread'),
+          requested: 'signal',
+          cause: 'explicit-stop',
+          cleanup: 'complete',
+        });
         open.faults.unrecordable = true;
-        expect((yield* Effect.flip(stop(open, 'stop-unjoined', execution, 'signal')))._tag).toBe('ExecutionUnrecorded');
+        expect(yield* Effect.flip(stop(open, 'stop-unjoined', execution, 'signal'))).toMatchObject({
+          _tag: 'StopUnadmitted',
+          execution,
+          reason: 'StoreLost',
+        });
         open.faults.unrecordable = false;
         yield* Deferred.succeed(gate.held, undefined);
         expect(yield* witnessed(witness)).toBe('');
