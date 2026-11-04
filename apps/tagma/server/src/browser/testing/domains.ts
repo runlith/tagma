@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { Deferred, Effect, Exit, Fiber, Stream } from 'effect';
+import { Deferred, Effect, Exit, Result, Stream } from 'effect';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Settings } from '../../settings/contract/service/values.js';
@@ -11,18 +11,22 @@ import { allowedDomains, blockedDomains } from '../contract/wire/settings.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { calling, OPERATOR, refIn, refusalOf, Seeded } from './world.js';
 
-const denied = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>, blocked: Effect.Effect<unknown>) {
-  const action = yield* Effect.forkChild(
-    Effect.result(work).pipe(
-      Effect.flatMap((outcome) =>
-        outcome._tag === 'Failure' && (!(outcome.failure instanceof GateRefusal) || outcome.failure.code !== 'domain-blocked')
-          ? Effect.fail(outcome.failure)
-          : Effect.succeed(outcome),
-      ),
-    ),
+const denied = Effect.fnUntraced(function* <A, E, R, W, RW>(
+  work: Effect.Effect<A, E, R>,
+  watch: Effect.Effect<Effect.Effect<unknown>, W, RW>,
+  reached: Deferred.Deferred<void>,
+) {
+  const waiting = Effect.gen(function* () {
+    const blocked = yield* watch;
+    return yield* Effect.matchEffect(work, {
+      onFailure: (failure) =>
+        failure instanceof GateRefusal && failure.code === 'domain-blocked' ? Effect.succeed(Result.fail(failure)) : Effect.fail(failure),
+      onSuccess: (answer) => Effect.as(blocked, Result.succeed(answer)),
+    });
+  });
+  return yield* Effect.scoped(
+    Effect.raceFirst(waiting, Deferred.await(reached).pipe(Effect.andThen(Effect.die('a forbidden document reached the fixture')))),
   );
-  const [, outcome] = yield* Effect.all([blocked, Fiber.join(action)], { concurrency: 'unbounded' });
-  return outcome;
 });
 
 export const domainFixture = () => {
@@ -122,8 +126,15 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   expect(visits.length).toBe(before);
   const record = yield* (yield* Profiles).record(profile);
   const host = yield* (yield* Hosts).reach(record.adapter);
-  const reusedEvents = yield* host.pages.events;
-  const reusedBlock = Stream.runHead(Stream.filter(reusedEvents, (event) => event.kind === 'navigation-blocked' && event.page === page));
+  const watch = Effect.fnUntraced(function* (target: PageId) {
+    yield* calling(PAGE.evaluate_in_page.body.execute({ page: target, expression: '0' }, undefined, caller));
+    const events = yield* host.pages.events;
+    return Stream.runHead(Stream.filter(events, (event) => event.kind === 'navigation-blocked' && event.page === target)).pipe(
+      Effect.flatMap((event) =>
+        event._tag === 'Some' ? Effect.void : Effect.die('the host event stream ended before a navigation block'),
+      ),
+    );
+  });
   const reuseOutcome = yield* denied(
     calling(
       PAGE.evaluate_in_page.body.execute(
@@ -135,9 +146,8 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
         caller,
       ),
     ),
-    Effect.raceFirst(Effect.as(reusedBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded')).pipe(
-      Effect.tap((reused) => Effect.sync(() => expect(reused).toBe('blocked'))),
-    ),
+    watch(page),
+    input.reached,
   );
   const reuseFailure =
     reuseOutcome._tag === 'Failure'
@@ -149,10 +159,6 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   const operatorTarget = forbidden.replace('/domain-forbidden', '/domain-operator');
   const operated = yield* calling(PAGE.navigate_page.body.execute({ page: retained.value.id, url: operatorTarget }, undefined, OPERATOR));
   expect(operated.page.url).toBe(operatorTarget);
-  const ancestorEvents = yield* host.pages.events;
-  const ancestorBlock = Stream.runHead(
-    Stream.filter(ancestorEvents, (event) => event.kind === 'navigation-blocked' && event.page === retained.value.id),
-  );
   const ancestorCall = yield* denied(
     calling(
       PAGE.evaluate_in_page.body.execute(
@@ -164,9 +170,8 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
         caller,
       ),
     ),
-    Effect.raceFirst(Effect.as(ancestorBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded')).pipe(
-      Effect.tap((outcome) => Effect.sync(() => expect(outcome).toBe('blocked'))),
-    ),
+    watch(retained.value.id),
+    input.reached,
   );
   const ancestorFailure =
     ancestorCall._tag === 'Failure'
@@ -183,10 +188,8 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   yield* navigate(url, OPERATOR);
   yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'load', timeoutMs: 120_000 }, undefined, caller));
   for (const label of ['Blocked frame', 'Blocked popup', 'Blocked link']) {
-    const events = yield* host.pages.events;
-    const blocked = Stream.runHead(Stream.filter(events, (event) => event.kind === 'navigation-blocked' && event.page === page));
     const shot = yield* snapshot;
-    const outcome = yield* denied(click(refIn(shot, new RegExp(`(?:button|link) "${label}"`))), blocked);
+    const outcome = yield* denied(click(refIn(shot, new RegExp(`(?:button|link) "${label}"`))), watch(page), input.reached);
     const failure =
       outcome._tag === 'Failure'
         ? outcome.failure
