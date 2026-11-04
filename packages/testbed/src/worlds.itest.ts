@@ -349,3 +349,28 @@ test('each worker builds a shared world once for every file that takes it, an ow
   const worlds = [...shared, of('own'), of('early'), of('late')].map((row) => row.world);
   expect(await Promise.all(worlds.map(ended))).toEqual(worlds);
 });
+
+test('a worker releases a held process group on exit even when the group is not its descendant', async () => {
+  const root = join(process.env['TMPDIR']!, `group-${crypto.randomUUID()}`);
+  mkdirSync(root);
+  writeFileSync(join(root, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(PRELOAD)}]\n`);
+  writeFileSync(
+    join(root, 'group.itest.ts'),
+    `import { test } from 'bun:test';
+import { hold } from ${JSON.stringify(join(import.meta.dir, 'fixture.ts'))};
+test('holds a process group', () => hold(Number(process.env.HELD_PID), { group: true }));
+`,
+  );
+  const group = Bun.spawn(['sleep', '317'], { detached: true, stdout: 'ignore', stderr: 'ignore' });
+  const worker = Bun.spawn(['bun', 'test', './group.itest.ts'], {
+    cwd: root,
+    env: { ...process.env, HELD_PID: String(group.pid) },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(worker.stdout).text(), new Response(worker.stderr).text(), worker.exited]);
+  expect(code, stdout + stderr).toBe(0);
+  await group.exited;
+  expect(group.signalCode).toBe('SIGKILL');
+  expect(alive(group.pid)).toBe(false);
+});

@@ -8,7 +8,7 @@ const GRACE_MS = 8_000;
 const POLL_MS = 50;
 const BELOW =
   'BEGIN { n = split(roots, r, " "); for (i = 1; i <= n; i++) if (r[i] + 0 > 0) mark[r[i] + 0] = 1 } { up[$1 + 0] = $2 + 0 } END { for (c in up) { x = up[c]; for (s = 0; s < 64; s++) { if (x in mark) { print c; break } if (!(x in up)) break; x = up[x] } } }';
-const REAPER = `set -f; PATH=/bin:/usr/bin; list=" "; while read -r op p; do case "$op" in +) list="$list$p " ;; -) case "$list" in *" $p "*) list="\${list%% $p *} \${list#* $p }" ;; esac ;; esac; done; [ "$list" = " " ] && exit 0; below=$(ps -axo pid=,ppid= | awk -v roots="$list" '${BELOW}'); kill -9 -- $list $below 2>/dev/null; exit 0`;
+const REAPER = `set -f; PATH=/bin:/usr/bin; list=" "; while read -r op p; do case "$op" in +) list="$list$p " ;; -) case "$list" in *" $p "*) list="\${list%% $p *} \${list#* $p }" ;; esac ;; esac; done; [ "$list" = " " ] && exit 0; below=$(ps -axo pid=,ppid= | awk -v roots="$list" '${BELOW}'); kill -9 $list $below 2>/dev/null; exit 0`;
 
 type ChildProcess = typeof import('node:child_process');
 
