@@ -20,6 +20,10 @@ edges:
     to: 01a14c13-c481-7acc-8aa6-03c6a28ec4cb
 sources:
   - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/closure.ts
+  - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/team.ts
+  - kind: file
     ref: apps/tagma/server/src/landing/land/message.ts
   - kind: file
     ref: apps/tagma/server/src/landing/land/submit.ts
@@ -30,10 +34,6 @@ sources:
   - kind: symbol
     ref: apps/tagma/server/src/landing/contract/wire/operations.ts
     symbol: LANDING_OPERATIONS
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/team.ts
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/closure.ts
 ---
 **Value.** Several agents write into one tree, and any of them lands its finished work in one call, with no wait on, consent of or message to another writer: the commit is whole files as they stand on disk, every writer's lines in them credited.
 

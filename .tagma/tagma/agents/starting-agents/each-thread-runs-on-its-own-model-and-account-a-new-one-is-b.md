@@ -30,14 +30,14 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/native/ModelPanel.svelte
   - kind: file
+    ref: apps/tagma/server/src/native-harness/models/preference.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/models/preferences.ts
+  - kind: file
     ref: apps/tagma/server/src/threads/harness/registry.ts
   - kind: symbol
     ref: apps/tagma/server/src/native-harness/contract/wire/operations/models.ts
     symbol: MODEL_OPERATIONS
-  - kind: file
-    ref: apps/tagma/server/src/native-harness/models/preference.ts
-  - kind: file
-    ref: apps/tagma/server/src/native-harness/models/preferences.ts
 ---
 **Value.** The operator spreads threads across several subscriptions and keys instead of setting up the model again for every new thread.
 

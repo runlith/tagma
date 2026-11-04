@@ -15,9 +15,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/http/health.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/builds/checkout.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/release.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/builds/checkout.ts
   - kind: file
     ref: apps/tagma/server/src/protocol/machineStanding.ts
 ---

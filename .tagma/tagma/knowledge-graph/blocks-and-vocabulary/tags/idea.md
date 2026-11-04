@@ -39,7 +39,7 @@ fields:
     "identity": {
       "shipped": {
         "export": "idea",
-        "library": "software-development"
+        "library": "work"
       }
     },
     "roles": {

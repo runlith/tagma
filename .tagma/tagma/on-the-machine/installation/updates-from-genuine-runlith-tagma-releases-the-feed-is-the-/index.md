@@ -12,11 +12,11 @@ edges:
     to: 01a13283-fc95-76c8-a601-3f5eac2d9a04
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/feed.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
     ref: apps/tagma/server/src/cut/published.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/feed.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/places.ts
 ---

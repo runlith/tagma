@@ -10,9 +10,9 @@ edges:
     to: 01a1a2cf-058e-7f33-a6cd-6d6dc7e9bcae
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/contract/service/machineRegistry.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/registry/file.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/contract/service/machineRegistry.ts
 ---
 `registry.json` beside the machine store is the copy a lost database is reseeded from. Each section belongs to the module whose table it copies, and that module contributes a part at `platform/machine-registry`: the section, its row fields, the tables its restore writes, its dump, and the owner signal after which the file is written again. Installation composes the parts composition collects and knows none of their tables: a new table that must survive a lost database is a part in its owner's manifest, never an edit in installation. The point stands in platform because the owners lie below installation in the module order; a point installation declared would close a cycle.
 

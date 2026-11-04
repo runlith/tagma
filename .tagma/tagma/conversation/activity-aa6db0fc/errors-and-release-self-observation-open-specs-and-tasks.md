@@ -21,8 +21,8 @@ fields:
         "order": "desc"
       },
       "tags": [
-        "shipped:software-development/spec",
-        "shipped:software-development/task"
+        "shipped:work/spec",
+        "shipped:work/task"
       ]
     }
   }

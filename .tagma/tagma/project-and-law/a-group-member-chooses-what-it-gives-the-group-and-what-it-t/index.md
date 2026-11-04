@@ -14,11 +14,11 @@ edges:
     to: 01a18d86-3376-7adb-aa00-abfaf88b843f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/projects/groups.ts
-  - kind: file
     ref: apps/tagma/server/src/graph/orientation/Instructions.ts
   - kind: file
     ref: apps/tagma/server/src/graph/orientation/prime.ts
+  - kind: file
+    ref: apps/tagma/server/src/projects/groups.ts
 ---
 ## Why
 

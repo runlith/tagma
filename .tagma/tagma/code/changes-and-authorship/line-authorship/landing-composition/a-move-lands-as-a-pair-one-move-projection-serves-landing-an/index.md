@@ -8,12 +8,12 @@ edges:
     to: 01a13236-64ca-761e-999f-75e717872cd0
 sources:
   - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/team.ts
+  - kind: file
     ref: apps/tagma/server/src/change-record/record/moves.ts
   - kind: symbol
     ref: apps/tagma/server/src/change-record/holdings/inputs.ts
     symbol: probeAt
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/team.ts
 ---
 Landing builds a tree from the base and the carried paths, so a move source missing from them would stay in the judged tree as an old copy: the rules would judge its dead imports, and the commit would add the new file without deleting the old one.
 

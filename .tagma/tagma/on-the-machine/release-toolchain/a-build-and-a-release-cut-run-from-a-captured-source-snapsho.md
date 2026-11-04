@@ -10,11 +10,11 @@ edges:
     to: 01a1a2bb-6070-765d-ad16-10beda41e0db
 sources:
   - kind: file
+    ref: apps/tagma/server/src/cut/entry.ts
+  - kind: file
     ref: apps/tagma/server/src/cut/snapshot.ts
   - kind: file
     ref: apps/tagma/server/src/cut/source.ts
-  - kind: file
-    ref: apps/tagma/server/src/cut/entry.ts
   - kind: symbol
     ref: apps/tagma/server/src/platform/git/readings.ts
     symbol: sourceTree

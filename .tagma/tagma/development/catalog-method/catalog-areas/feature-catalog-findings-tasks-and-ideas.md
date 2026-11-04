@@ -18,8 +18,8 @@ fields:
         "order": "asc"
       },
       "tags": [
-        "shipped:software-development/task",
-        "shipped:software-development/idea"
+        "shipped:work/task",
+        "shipped:work/idea"
       ]
     }
   }

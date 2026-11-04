@@ -5,11 +5,11 @@ ord: 12
 tags: ["explanation"]
 sources:
   - kind: file
+    ref: apps/tagma/server/src/cut/stage.ts
+  - kind: file
     ref: apps/tagma/server/src/installation/contract/service/platform.ts
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/feed.ts
-  - kind: file
-    ref: apps/tagma/server/src/cut/stage.ts
   - kind: file
     ref: apps/tagma/server/src/installation/setup/macos.ts
   - kind: file

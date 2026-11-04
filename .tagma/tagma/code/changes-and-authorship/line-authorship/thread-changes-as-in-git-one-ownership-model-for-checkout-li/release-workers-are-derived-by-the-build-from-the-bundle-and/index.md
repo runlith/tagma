@@ -9,9 +9,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/release.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/manifest.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/transcript/restedWork.ts
   - kind: file

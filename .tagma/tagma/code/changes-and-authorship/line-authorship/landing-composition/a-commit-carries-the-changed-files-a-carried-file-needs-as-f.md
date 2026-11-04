@@ -4,13 +4,13 @@ title: A commit carries the changed files a carried file needs, as far as a lang
 ord: 6
 tags: ["explanation"]
 sources:
+  - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/closure.ts
+  - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/dependencyWalk.ts
   - kind: symbol
     ref: apps/tagma/server/src/change-record/prepared/dependencies.ts
     symbol: neededPaths
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/dependencyWalk.ts
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/closure.ts
 ---
 Whole files are right in every language, so this walk is not what makes a commit safe: it keeps a landing from carrying a use without the declaration that exists only in another changed file — the broken HEAD that reached a checkout build. It can err only toward a larger commit: a false match carries one more file, never a refusal or a lost file.
 

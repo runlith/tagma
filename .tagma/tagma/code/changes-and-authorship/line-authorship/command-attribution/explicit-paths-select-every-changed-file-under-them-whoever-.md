@@ -7,11 +7,11 @@ edges:
   - kind: discovered-from
     to: 01a12d36-21ec-7231-9683-75c20f274db0
 sources:
+  - kind: file
+    ref: apps/tagma/server/src/change-record/prepared/team.ts
   - kind: symbol
     ref: apps/tagma/server/src/change-record/prepared/place.ts
     symbol: landingPlace
-  - kind: file
-    ref: apps/tagma/server/src/change-record/prepared/team.ts
 ---
 `paths` names files or directories, relative or absolute, and selects every changed file under them — tracked changes, deletions and untracked files from git status read without the fsmonitor — whoever wrote it, nobody included. Names that select nothing, or lie outside the checkout, come back in `unmatched`; a call whose names select nothing answers `nothing`.
 

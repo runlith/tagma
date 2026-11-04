@@ -15,9 +15,9 @@ edges:
     to: 01a16915-34b6-7bf8-9a01-c8c56bc98bc4
 sources:
   - kind: file
-    ref: apps/tagma/server/src/cut/publish.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/notarize.ts
+  - kind: file
+    ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
     ref: apps/tagma/server/src/cut/stage.ts
 ---
