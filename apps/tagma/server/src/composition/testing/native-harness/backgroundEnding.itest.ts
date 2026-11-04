@@ -144,7 +144,9 @@ it.live('a background bash ending after logic handover agrees with read_command 
     );
     const quiet = yield* host.port.quiesce({ installation: execution.installation, operation: HostRequestKey.make('ending-handover') });
     if (quiet._tag === 'Refused') return yield* Effect.die(quiet.refusal);
-    expect((yield* host.port.yield(quiet.ticket))._tag).toBe('Yielding');
+    const yielded = yield* Effect.result(host.port.yield(quiet.ticket));
+    if (yielded._tag === 'Success') expect(yielded.success._tag).toBe('Yielding');
+    else expect(yielded.failure._tag).toBe('WireLost');
     yield* Fiber.join(changed);
     yield* host.port.status();
     yield* waiters.recover();

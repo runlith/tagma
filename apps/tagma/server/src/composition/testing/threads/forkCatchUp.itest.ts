@@ -101,11 +101,13 @@ layer(Layer.effect(World, makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
         expect(yield* positions(yield* rolloutOf(child))).toEqual([EVENTS + 1]);
         const interrupted = yield* branchOf('interrupted export', source);
         const path = yield* rolloutOf(interrupted.child);
-        yield* until(files.exists(path), (exists) => exists);
-        yield* files.remove(path);
-        yield* Context.get(runtime.graph, MachineStore).db.run(
-          sql`delete from thread_rollout_cursor where thread_id = ${interrupted.child}`,
+        const { db } = Context.get(runtime.graph, MachineStore);
+        yield* until(
+          db.all(sql`select 1 from thread_rollout_cursor where thread_id = ${interrupted.child}`),
+          (cursors) => cursors.length > 0,
         );
+        yield* files.remove(path);
+        yield* db.run(sql`delete from thread_rollout_cursor where thread_id = ${interrupted.child}`);
         yield* interrupted.append([said(TURNS + 1, 'user', 'and in spring')]);
         expect(yield* positions(path)).toEqual([EVENTS + 1]);
       }),
