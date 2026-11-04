@@ -6,7 +6,7 @@ import { it } from '@runlith/effect-test';
 import { Context, Effect, Fiber, Option, Stream } from 'effect';
 import { AccountQuota } from '../../providers/contract/service/quota.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
-import { makeE2eWorld } from './e2eWorld.js';
+import { makeDoorWorld } from './doorFixture.js';
 
 const ran = (program: string, args: readonly string[]) =>
   new Promise<{ readonly stdout: string; readonly code: number }>((resolve) => {
@@ -15,8 +15,8 @@ const ran = (program: string, args: readonly string[]) =>
 
 it.live('a fresh login world stands only its controlled CLIs, holds a status until answered and counts every start', () =>
   Effect.gen(function* () {
-    const served = yield* makeE2eWorld({ logins: { claude: 'held', codex: 'absent' } });
-    const installs = Context.get(served.world.runtime.owners, InstalledHarnesses);
+    const served = yield* makeDoorWorld({ logins: { claude: 'held', codex: 'absent' } });
+    const installs = Context.get(served.runtime.owners, InstalledHarnesses);
     const binary = (rows: Effect.Success<typeof installs.settled>, harness: string) =>
       rows.find((row) => row.harness === harness)?.binary ?? null;
     const first = yield* installs.settled;
@@ -24,7 +24,7 @@ it.live('a fresh login world stands only its controlled CLIs, holds a status unt
     expect(binary(first, 'codex')).toBeNull();
 
     yield* served.logins.started('claude');
-    const quota = Context.get(served.world.runtime.owners, AccountQuota);
+    const quota = Context.get(served.runtime.owners, AccountQuota);
     const connected = yield* Effect.forkChild(
       Stream.runHead(Stream.filter(quota.changes, (table) => table.some((row) => row.provider === 'claude-code' && row.problem === null))),
     );
