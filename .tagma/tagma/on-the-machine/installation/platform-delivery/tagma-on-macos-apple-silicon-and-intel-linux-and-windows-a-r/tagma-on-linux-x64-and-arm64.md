@@ -12,7 +12,7 @@ Tagma installs and runs on Linux x64 and arm64: window, server, agents, terminal
 
 ## What the code says
 
-- **Execution holder.** The Rust core needs a Linux module behind the `Platform` trait: now the only module is macOS ([[4a736f36]]). The native library (`packages/execution-host/native/src/lib.rs`) wires its modules only under macOS, though `usage.rs` already carries a Linux branch. The POSIX adapter in the host logic is shared for macOS and Linux anyway ([[921755ee]]).
+- **Execution holder.** macOS and Linux fill the Rust `Platform` contract and share POSIX custody and succession ([[4a736f36]]). The native library and TypeScript platform adapters supply process witnesses, accounting, readiness and resource limits on both systems; the host logic binds them through the POSIX adapter ([[921755ee]]). Linux GPU sampling reports unavailable without a portable counter, and reversible Lowest requires `CAP_SYS_NICE`.
 - **Install.**
   - Package format picked in the work.
   - `sh` launcher portable.

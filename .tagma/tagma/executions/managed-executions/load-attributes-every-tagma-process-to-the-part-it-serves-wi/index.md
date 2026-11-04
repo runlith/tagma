@@ -26,7 +26,7 @@ sources:
   - kind: file
     ref: packages/execution-host/src/posix/macos/programs.ts
   - kind: file
-    ref: packages/execution-host/src/posix/macos/Sampler.ts
+    ref: packages/execution-host/src/posix/Sampler.ts
   - kind: file
     ref: packages/execution-host/src/ProcessAccount.ts
   - kind: file

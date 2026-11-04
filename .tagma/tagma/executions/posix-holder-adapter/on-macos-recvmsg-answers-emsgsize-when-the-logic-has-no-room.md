@@ -11,4 +11,4 @@ sources:
     ref: packages/execution-host/native/src/channel.rs
     symbol: receive
 ---
-When receiving SCM_RIGHTS on a macOS stream socket, a short fd table can surface as `EMSGSIZE`. That refusal concerns descriptor receive, not frame size: the payload must still be read without rights, so the holder client parses the answer, rolls back the launch, and reports `CapacityExceeded`, keeping the channel for the next requests.
+When receiving SCM_RIGHTS on a macOS stream socket, a short fd table can surface as `EMSGSIZE`. That refusal concerns descriptor receive, not frame size: the payload must still be read without rights, so the holder client parses the answer, rolls back the launch, and reports `CapacityExceeded`, keeping the channel for the next requests. XNU may retain the original ancillary header length after shortening the copied control data; parsing stays inside the returned buffer so truncation cannot close an unrelated descriptor.

@@ -45,6 +45,8 @@ edges:
     to: 01a12893-cecf-7798-9b3d-e2ed4a42e855
   - kind: imports
     to: 01a13b1a-1851-79b3-ba84-3b0e9f581885
+  - kind: imports
+    to: 01a1a809-1932-7465-ace6-6eae3277cc67
   - kind: imports-tests
     to: 01a127e3-cc5c-73fa-99ff-b228d2a60527
   - kind: imports-tests
@@ -52,9 +54,5 @@ edges:
 sources:
   - kind: dir
     ref: packages/execution-host/src/posix
-  - kind: file
-    ref: packages/execution-host/native/src/channel.rs
-  - kind: file
-    ref: packages/execution-host/native/src/reactor.rs
 ---
 Host logic talks to the holder through one POSIX adapter: it fills the holder client's `Link` — the socketpair channel, fd receive over SCM_RIGHTS, their I/O through the native library and readiness, launch preparation with program lookup — and implements the process-table, evidence, platform-facts, tempo, endpoint, and credentials ports. OS-dependent process reads, accounting, census and build details are supplied by platform adapters. The holder client owns the frame protocol and the `Holder` port's execution assembly; the host core decides launches, deadlines, and status collection.
