@@ -46,6 +46,7 @@ export const TreeCommits = Context.Reference<
       readonly carry: (paths: readonly string[]) => Effect.Effect<void>;
       readonly moved: (head: string | null) => Effect.Effect<void>;
       readonly commit: Effect.Effect<SyncAnswer, OwnGitFailed | StoreFailure>;
+      readonly flush: Effect.Effect<void>;
       readonly uncommitted: Effect.Effect<number, OwnGitFailed>;
     }
   | undefined
@@ -297,10 +298,24 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
       }),
     );
 
+  const flush = Effect.suspend(() =>
+    pending === null
+      ? Effect.void
+      : Effect.flatMap(Effect.exit(Effect.flatMap(policy, (chosen) => (chosen === 'auto' ? commit : Effect.void))), (outcome) =>
+          outcome._tag === 'Success'
+            ? Effect.void
+            : Effect.logWarning('a closing tree did not commit its batch: the checkout keeps it and the next opening commits it', {
+                tree: treeRoot,
+                cause: outcome.cause,
+              }),
+        ),
+  ).pipe(Effect.withSpan('TreeCommits.flush'));
+
   return {
     carry: due,
     moved,
     commit,
+    flush,
     uncommitted: Effect.map(dirt, (paths) => new Set(paths).size),
   };
 }

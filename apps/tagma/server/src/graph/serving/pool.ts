@@ -122,14 +122,18 @@ export const makeGraphPool = Effect.gen(function* () {
     yield* overRepositoryAndTree(gate, copy.graph.layout)(Effect.andThen(flushedHeld(copy.treeRoot, copy.graph), copy.graph.dispose()));
   });
 
-  const closing = (copy: Copy, due: () => boolean): Effect.Effect<void> =>
+  const closing = (copy: Copy, due: () => boolean, flush = false): Effect.Effect<void> =>
     Effect.flatMap(
       overEntry(
         gate,
         copy.treeRoot,
       )(
         Effect.uninterruptible(
-          Effect.suspend(() => (due() && copies.unpublish(copy) ? Effect.as(closeCopy(copy), true) : Effect.succeed(false))),
+          Effect.suspend(() =>
+            due() && copies.unpublish(copy)
+              ? Effect.as(Effect.andThen(flush ? copy.graph.checkoutFlush : Effect.void, closeCopy(copy)), true)
+              : Effect.succeed(false),
+          ),
         ),
       ),
       (gone) =>
@@ -142,7 +146,7 @@ export const makeGraphPool = Effect.gen(function* () {
     keeping,
     clock,
     fork: (effect) => void keepFork(effect),
-    lapse: (copy) => closing(copy, () => copies.lapsed(copy)),
+    lapse: (copy) => closing(copy, () => copies.lapsed(copy), true),
   });
 
   const places = makePlaces({
@@ -443,6 +447,7 @@ export const makeGraphPool = Effect.gen(function* () {
               project: { repoKey: row.repoKey, rootPath: row.rootPath, storage: row.storage },
               batches: built.batches,
               checkoutChanged: built.checkoutChanged,
+              checkoutFlush: built.checkoutFlush,
               fresh: () => both((treeRoot) => freshnessGate.fresh(treeRoot)),
               copyFailures: () => freshnessGate.copyFailures(layout.treeRoot),
               settled: (force = false) => both((treeRoot) => freshnessGate.settled(treeRoot, force)),

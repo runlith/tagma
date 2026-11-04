@@ -558,6 +558,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
                 batches,
                 topology,
                 checkoutChanged,
+                checkoutFlush: Effect.suspend(() => checkoutCommits?.flush ?? Effect.void),
                 scope: runtime.scope,
                 dispose: async () => {
                   try {

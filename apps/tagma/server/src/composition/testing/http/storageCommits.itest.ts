@@ -10,6 +10,7 @@ import { suiteGit } from '../suiteGit.js';
 it.live('storage moves commit checkout additions and removals only under the automatic graph policy', () =>
   Effect.gen(function* () {
     const clock = yield* TestClock.make();
+    const idle = TestClock.adjust('10 minutes').pipe(Effect.provideService(Clock.Clock, clock));
     const world = yield* makeDoorWorld({ own: 'the graph committer captures a controlled clock' }).pipe(
       Effect.provideService(Clock.Clock, clock),
     );
@@ -40,7 +41,7 @@ it.live('storage moves commit checkout additions and removals only under the aut
     });
     const settled = yield* nextCommit();
     expect(yield* world.op('set_project_storage', { ref: String(project), mode: 'team' })).toMatchObject({ status: 200 });
-    yield* TestClock.adjust(10_000).pipe(Effect.provideService(Clock.Clock, clock));
+    yield* idle;
     yield* Fiber.join(settled);
     const tracked = (yield* suiteGit(root, 'ls-tree', '-r', '--name-only', 'HEAD', '--', '.tagma')).split('\n').filter(Boolean);
     const standing = (yield* suiteGit(root, 'ls-files', '--cached', '--others', '--exclude-standard', '--', '.tagma'))
@@ -54,25 +55,25 @@ it.live('storage moves commit checkout additions and removals only under the aut
       expect(yield* world.op('write_setting', { project, key: 'graph.commit', value })).toMatchObject({ status: 200 });
       const head = yield* suiteGit(root, 'rev-parse', 'HEAD');
       expect(yield* world.op('set_project_storage', { ref: String(project), mode: 'stealth' })).toMatchObject({ status: 200 });
-      yield* TestClock.adjust(10_000).pipe(Effect.provideService(Clock.Clock, clock));
+      yield* idle;
       expect(yield* suiteGit(root, 'rev-parse', 'HEAD')).toBe(head);
       expect(yield* suiteGit(root, 'diff', '--name-only', '--', '.tagma')).not.toBe('');
       expect(yield* world.op('set_project_storage', { ref: String(project), mode: 'team' })).toMatchObject({ status: 200 });
-      yield* TestClock.adjust(10_000).pipe(Effect.provideService(Clock.Clock, clock));
+      yield* idle;
       expect(yield* suiteGit(root, 'rev-parse', 'HEAD')).toBe(head);
       expect(yield* suiteGit(root, 'diff', '--cached', '--name-only', '--', 'peer.ts')).toBe('peer.ts');
     }
     expect(yield* world.op('write_setting', { project, key: 'graph.commit', value: 'auto' })).toMatchObject({ status: 200 });
     const removed = yield* nextCommit();
     expect(yield* world.op('set_project_storage', { ref: String(project), mode: 'stealth' })).toMatchObject({ status: 200 });
-    const hidden = yield* world.runtime.pool.resolve({ projectId: project });
+    const hidden = yield* world.runtime.pool.hold({ projectId: project });
     const operation = yield* suiteGit(hidden.layout.treeRoot, 'rev-parse', '--git-path', 'MERGE_HEAD');
     yield* Effect.acquireRelease(files.writeFileString(operation, yield* suiteGit(hidden.layout.treeRoot, 'rev-parse', 'HEAD')), () =>
       Effect.orDie(files.remove(operation, { force: true })),
     );
     const privateTitle = 'Private knowledge after the move';
     expect(yield* world.op('create_block', { project, parentId, title: privateTitle })).toMatchObject({ status: 200 });
-    yield* TestClock.adjust(10_000).pipe(Effect.provideService(Clock.Clock, clock));
+    yield* idle;
     yield* Fiber.join(removed);
     expect(yield* suiteGit(root, 'ls-tree', '-r', '--name-only', 'HEAD', '--', '.tagma')).toBe('');
     expect(yield* suiteGit(root, 'diff', '--cached', '--name-only', '--', 'peer.ts')).toBe('peer.ts');
