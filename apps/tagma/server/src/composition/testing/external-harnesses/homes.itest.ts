@@ -76,7 +76,7 @@ it.live(
       const homes = fileURLToPath(new URL('../../../external-harnesses/installs/skillInstall.ts', import.meta.url));
       const junction = fileURLToPath(new URL('../../../installation/contract/wire/junction.ts', import.meta.url));
       const sections = fileURLToPath(new URL('../../../platform/contract/service/sections.ts', import.meta.url));
-      const graph = fileURLToPath(new URL('../../doctrine.ts', import.meta.url));
+      const graph = fileURLToPath(new URL('../composed.ts', import.meta.url));
       const installed = fileURLToPath(new URL('../../../external-harnesses/birth/installed.ts', import.meta.url));
       const adapters = fileURLToPath(new URL('./shipped.ts', import.meta.url));
       const environment = fileURLToPath(new URL('../../../installation/process/userEnvironment.ts', import.meta.url));
@@ -111,7 +111,7 @@ it.live(
         stdout: 'pipe',
         stderr: 'pipe',
       });
-      expect(ran.exitCode).toBe(0);
+      if (ran.exitCode !== 0) return yield* Effect.die(new Error(`the home installer exited ${ran.exitCode}: ${ran.stderr.toString()}`));
       expect(existsSync(join(home, 'cli.log'))).toBe(false);
       const [first, second, between, after] = JSON.parse(ran.stdout.toString()) as [
         { harness: string; failed?: string }[],
