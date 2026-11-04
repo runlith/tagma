@@ -15,7 +15,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { credentialRefusal } from '../credentials/refusal.js';
 import { chooseAccount } from './choice.js';
 import { DEFAULT_LOGIN, DefaultLogins } from './defaultLogins.js';
-import { HarnessDirectories } from './harnessRows.js';
+import { directoryOrigin, HarnessDirectories } from './harnessRows.js';
 import { requestedAccount, type DirectoryAccount, type DirectoryLogin } from '../contract/wire/harnessAccounts.js';
 
 const unavailable = (provider: string) =>
@@ -72,7 +72,7 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
         label: row.label,
         expiresAt: null,
         addedAt: row.addedAt,
-        origin: { kind: 'cli', place: row.directory ?? 'default' },
+        origin: directoryOrigin(row),
         default: row.key === account,
         pending: row.pending,
         failed: row.failed,
@@ -262,6 +262,7 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
               pending: true,
               requested: true,
               failed: false,
+              made: true,
             }
           : { ...existing, pending: true, requested: true, failed: false, problem: null };
       const writing: Effect.Effect<void, GateRefusal | CredentialFileFault> =

@@ -5,7 +5,7 @@ export type AccountKey = typeof AccountKey.Type;
 
 export const CredentialOrigin = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('own') }),
-  Schema.Struct({ kind: Schema.Literal('cli'), place: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal('cli'), place: Schema.String, shown: Schema.String, made: Schema.Boolean }),
 ]);
 export type CredentialOrigin = typeof CredentialOrigin.Type;
 

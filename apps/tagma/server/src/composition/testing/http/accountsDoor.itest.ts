@@ -179,7 +179,12 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
 
       expect((yield* world.op('list_accounts', {})).body).toMatchObject({
         accounts: expect.arrayContaining([
-          expect.objectContaining({ provider, account, origin: { kind: 'cli', place: directory }, problem: { kind: 'not-installed' } }),
+          expect.objectContaining({
+            provider,
+            account,
+            origin: expect.objectContaining({ kind: 'cli', place: directory, made: false }),
+            problem: { kind: 'not-installed' },
+          }),
         ]),
       });
       const removed = yield* world.op('remove_account', { provider, account });
@@ -192,6 +197,30 @@ layer(doorFixture({ quotaProviders: [provider] }), { excludeTestServices: true }
       const remaining = (yield* world.op('list_accounts', {})).body as { accounts: { provider: string }[] };
       expect(remaining.accounts.filter((account) => account.provider === provider)).toEqual([]);
     }).pipe(Effect.provide(BunFileSystem.layer)),
+  );
+
+  it.effect('a directory Tagma made for a sign-in reads as made, a stored one from before the mark included', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const provider = 'made-harness';
+      const home = join(world.root, 'home');
+      const rows = makeHarnessDirectoryStore({ home, machine: hostname() });
+      const made = AccountKey.make('7c1e0a52-made');
+      const given = AccountKey.make('given');
+      const givenDirectory = yield* world.directory('given-cli');
+      yield* Effect.addFinalizer(() => Effect.all([rows.remove(provider, made), rows.remove(provider, given)]).pipe(Effect.orDie));
+      const row = { label: 'CLI account', machine: hostname(), addedAt: 0, signed: true, pending: false };
+      yield* rows.keep(provider, { ...row, key: made, directory: join(home, 'claude', made) });
+      yield* rows.keep(provider, { ...row, key: given, directory: givenDirectory });
+
+      const listed = (yield* world.op('list_accounts', {})).body as { accounts: { provider: string; account: string; origin: unknown }[] };
+      expect(listed.accounts.filter((one) => one.provider === provider).map(({ account, origin }) => ({ account, origin }))).toEqual(
+        expect.arrayContaining([
+          { account: made, origin: expect.objectContaining({ kind: 'cli', place: join(home, 'claude', made), made: true }) },
+          { account: given, origin: expect.objectContaining({ kind: 'cli', place: givenDirectory, made: false }) },
+        ]),
+      );
+    }),
   );
 
   it.effect('an uninstalled provider default can be cleared through the door but cannot be assigned', () =>

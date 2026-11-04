@@ -3,7 +3,7 @@ import type { AccountRows, StoredAccount } from '../contract/service/accounts.js
 import type { NotInstalled, ProviderRegistry } from '../contract/service/registry.js';
 import type { AccountProblem } from '../contract/wire/accounts.js';
 import type { DefaultLoginBook } from './defaultLogins.js';
-import type { HarnessDirectoryStore } from './harnessRows.js';
+import { directoryOrigin, type HarnessDirectoryStore } from './harnessRows.js';
 import { requestedAccount } from '../contract/wire/harnessAccounts.js';
 
 export const harnessStored = (
@@ -22,7 +22,7 @@ export const harnessStored = (
           return {
             key: row.key,
             label: row.label,
-            origin: { kind: 'cli', place: row.directory ?? 'default' },
+            origin: directoryOrigin(row),
             secret: 'subscription',
             fingerprint: JSON.stringify([row.machine, row.directory]),
             enrollment: String(row.addedAt),

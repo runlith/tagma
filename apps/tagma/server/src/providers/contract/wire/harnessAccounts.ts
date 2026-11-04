@@ -24,6 +24,7 @@ export const DirectoryAccount = Schema.Struct({
   login: Schema.optional(DirectoryLogin),
   problem: Schema.optional(Schema.NullOr(accountProblemSchema)),
   observed: Schema.optional(Schema.Literal(true)),
+  made: Schema.optional(Schema.Literal(true)),
 });
 export type DirectoryAccount = typeof DirectoryAccount.Type;
 

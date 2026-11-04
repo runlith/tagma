@@ -151,7 +151,7 @@ layer(storage, { excludeTestServices: true })('account quota', (it) => {
             {
               key,
               label: 'CLI',
-              origin: { kind: 'cli', place: 'directory' },
+              origin: { kind: 'cli', place: 'directory', shown: 'directory', made: false },
               secret: 'subscription',
               fingerprint: 'machine/directory',
               enrollment: '1',
@@ -221,7 +221,7 @@ layer(storage, { excludeTestServices: true })('account quota', (it) => {
       const row = (fingerprint: string) => ({
         key,
         label: 'CLI',
-        origin: { kind: 'cli' as const, place: 'directory' },
+        origin: { kind: 'cli' as const, place: 'directory', shown: 'directory', made: false },
         secret: 'subscription' as const,
         fingerprint,
         enrollment: '1',

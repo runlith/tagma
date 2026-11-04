@@ -87,7 +87,7 @@ const KEEP_RETRY = '10 seconds';
 const rowKey = (provider: string, account: AccountKey): string => `${provider}/${account}`;
 
 const sameOrigin = (left: AccountQuotaRow['origin'], right: AccountQuotaRow['origin']): boolean =>
-  left.kind === right.kind && (left.kind === 'own' || (right.kind === 'cli' && left.place === right.place));
+  left.kind === right.kind && (left.kind === 'own' || (right.kind === 'cli' && left.place === right.place && left.made === right.made));
 
 const sameProblem = (left: AccountProblem | null, right: AccountProblem | null): boolean =>
   left === null

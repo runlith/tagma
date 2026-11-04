@@ -5,7 +5,7 @@ import { TokenStoreFailed, type TokenStoreFault } from '@runlith/llm/oauth/store
 import type { BorrowedAccounts, CliHarnessProvider } from '@runlith/tagma/adapter/provider';
 import { VENDOR_CALL_TIMEOUT_MS } from '@runlith/llm/vendorCall';
 import { Deferred, Effect } from 'effect';
-import type { HarnessDirectoryStore } from '../accounts/harnessRows.js';
+import { directoryOrigin, type HarnessDirectoryStore } from '../accounts/harnessRows.js';
 import { DEFAULT_LOGIN, type DefaultLoginBook } from '../accounts/defaultLogins.js';
 import type { AccountCli } from '../contract/service/cli.js';
 import type { ProviderCatalog } from '../contract/service/registry.js';
@@ -17,12 +17,10 @@ type Lending = { readonly borrows: BorrowedAccounts; readonly lender: CliHarness
 
 type Borrowed = { readonly lending: Lending; readonly row: DirectoryAccount };
 
-const originOf = (row: DirectoryAccount) => ({ kind: 'cli' as const, place: row.directory ?? 'default' });
-
 const rowOf = (row: DirectoryAccount, credential: StoredCredential): AccountRow => ({
   key: row.key,
   label: row.label,
-  origin: originOf(row),
+  origin: directoryOrigin(row),
   addedAt: row.addedAt,
   credential,
 });
@@ -222,7 +220,7 @@ export const makeBorrowingTokens = (input: {
         Effect.map(Effect.result(readLent(provider, row)), (read): HeldAccount => ({
           key: row.row.key,
           label: row.row.label,
-          origin: originOf(row.row),
+          origin: directoryOrigin(row.row),
           addedAt: row.row.addedAt,
           credential: read._tag === 'Success' ? read.success : null,
           unreadable:

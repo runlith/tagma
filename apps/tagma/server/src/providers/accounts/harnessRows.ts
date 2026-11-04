@@ -1,19 +1,51 @@
-import { hostname } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { makeCredentialFile } from '@runlith/credential-file/CredentialFile';
 import { CredentialFileInvalid, type CredentialFileFault } from '@runlith/credential-file/failure';
-import type { AccountKey } from '@runlith/llm/models/authStatus';
+import type { AccountKey, CredentialOrigin } from '@runlith/llm/models/authStatus';
 import { DirectoryAccount, requestedAccount } from '../contract/wire/harnessAccounts.js';
 import { Context, Effect, Layer, Schema } from 'effect';
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { CredentialFiles } from '../contract/service/credentials.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 
 const Document = Schema.Record(Schema.String, Schema.Array(DirectoryAccount));
+
+const spelled = (place: string): string => {
+  const user = homedir();
+  const under = relative(user, place);
+  return place === user ? '~' : under !== '' && !isAbsolute(under) && !under.startsWith('..') ? join('~', under) : place;
+};
+
+export const directoryOrigin = (row: DirectoryAccount): CredentialOrigin => ({
+  kind: 'cli',
+  place: row.directory ?? 'default',
+  shown: row.directory === null ? 'default' : spelled(row.directory),
+  made: row.made === true,
+});
 const accountsOf = (document: typeof Document.Type, provider: string): readonly DirectoryAccount[] =>
   Object.hasOwn(document, provider) ? (document[provider] ?? []) : [];
 
 export const makeHarnessDirectoryStore = (input: { readonly home: string; readonly machine: string }) => {
   const { home, machine } = input;
+
+  const madeBefore = (row: DirectoryAccount): boolean =>
+    row.made === undefined &&
+    row.directory !== null &&
+    basename(row.directory) === row.key &&
+    !isAbsolute(relative(home, row.directory)) &&
+    !relative(home, row.directory).startsWith('..');
+  const marked = (document: typeof Document.Type) => {
+    const unmarked = Object.values(document).some((rows) => rows.some(madeBefore));
+    const value = unmarked
+      ? Object.fromEntries(
+          Object.entries(document).map(([provider, rows]) => [
+            provider,
+            rows.map((row) => (madeBefore(row) ? { ...row, made: true as const } : row)),
+          ]),
+        )
+      : document;
+    return { value, needsWrite: unmarked };
+  };
 
   const file = makeCredentialFile({
     path: join(home, 'harness-accounts.json'),
@@ -21,7 +53,7 @@ export const makeHarnessDirectoryStore = (input: { readonly home: string; readon
       empty: (): typeof Document.Type => ({}),
       decode: (path, parsed) =>
         Schema.decodeUnknownEffect(Document)(parsed).pipe(
-          Effect.map((value) => ({ value, needsWrite: false })),
+          Effect.map(marked),
           Effect.mapError((error) => new CredentialFileInvalid({ path, reason: error.message })),
         ),
     },

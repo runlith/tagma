@@ -196,7 +196,7 @@ it.live('sign-in uses the default place, reconnect keeps its address, and an uns
         const flow = begun.flow;
         if (flow.flow !== 'external-cli') return yield* Effect.die('The signed-out default did not open its CLI login');
         const primary = yield* next((row) => row.provider === 'claude-code' && row.account === flow.account && row.problem === null);
-        expect(primary.origin).toEqual({ kind: 'cli', place: 'default' });
+        expect(primary.origin).toEqual({ kind: 'cli', place: 'default', shown: 'default', made: false });
         const login = (yield* world.logins.starts('claude')).find((start) => start.argv[0] === 'auth' && start.argv[1] === 'login');
         expect(login?.variable).toBeNull();
         yield* finishLogin(world, tenant.projectId, primary.account);
@@ -228,7 +228,7 @@ it.live('sign-in uses the default place, reconnect keeps its address, and an uns
         const flow = started.flow;
         if (flow.flow !== 'external-cli') return yield* Effect.die('An unsupported login did not open an isolated CLI login');
         const signed = yield* next((row) => row.provider === 'claude-code' && row.account === flow.account && row.problem === null);
-        expect(signed.origin).not.toEqual({ kind: 'cli', place: 'default' });
+        expect(signed.origin).toMatchObject({ kind: 'cli', made: true });
         expect(yield* files.readFileString(original)).toBe(before);
       }),
     );
