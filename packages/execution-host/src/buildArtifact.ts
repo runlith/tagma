@@ -16,10 +16,10 @@ import {
 import { WIRE_RANGE } from '@runlith/executions/protocol/wire';
 import { bundle, type BundleOptions } from '@runlith/bundle/bundle';
 import { buildEngine, carrier } from '@runlith/sqlite-process/artifact';
-import { type Signing, signCode } from '@runlith/codesign/codesign';
+import type { CodeSigning } from './Artifact';
 import { nativeRelease } from './composition/nativeBuild';
 import { pipeCapability } from './nativeLaunch';
-import { artifactOf } from './posix/macos/artifact';
+import { nativeArtifact, nativeWorkers } from './composition/artifact';
 
 export class BuildRefused extends Data.TaggedError('BuildRefused')<{ readonly part: string; readonly detail: string }> {
   override get message(): string {
@@ -44,7 +44,7 @@ export type BuildInput = {
   readonly build: string;
   readonly bundling?: BundleOptions;
   readonly maps?: string;
-  readonly signing?: Signing;
+  readonly signing?: CodeSigning;
 };
 
 export type BuiltArtifact = {
@@ -59,10 +59,8 @@ const refuse = (part: string, detail: string) => Effect.fail(new BuildRefused({ 
 
 const platformArtifact = (arch: string) =>
   Effect.suspend(() => {
-    const adapter = artifactOf(arch);
-    return process.platform === adapter.platform.os
-      ? Effect.succeed(adapter)
-      : refuse('platform', `no host adapter for ${process.platform}/${arch}`);
+    const adapter = nativeArtifact(arch);
+    return adapter === undefined ? refuse('platform', `no host adapter for ${process.platform}/${arch}`) : Effect.succeed(adapter);
   });
 
 const written = Effect.fnUntraced(function* (
@@ -195,7 +193,7 @@ export const buildArtifact = Effect.fnUntraced(function* (
   const beside = new Map<string, ArtifactRole>([
     [carrier.path, carrier.role],
     [evidence, 'evidence'],
-    [yield* worker('sampler', 'src/posix/processes.worker.ts'), 'sampler'],
+    ...(yield* Effect.forEach(nativeWorkers, (entry) => worker('sampler', entry))).map((entry) => [entry, 'sampler'] as const),
     [yield* worker('sampler', 'src/posix/terminals.worker.ts'), 'sampler'],
   ]);
   const bundling = input.bundling ?? {};
@@ -206,7 +204,7 @@ export const buildArtifact = Effect.fnUntraced(function* (
     signing === undefined
       ? Effect.succeed(bytes)
       : Effect.gen(function* () {
-          const signed = signCode(at(relative), signing);
+          const signed = adapter.seal(at(relative), signing);
           if (signed._tag === 'Refused') return yield* refuse(relative, `it could not be signed: ${signed.detail}`);
           return yield* files
             .readFile(at(relative))

@@ -7,7 +7,7 @@ import { binding, Host, start, textUntil, withExecution } from './session';
 import { hosted } from './host';
 import { posix } from './posix';
 import { loadLibrary } from '../../posix/Library';
-import { processReader } from '../../posix/macos/processes';
+import { processReader } from './native';
 import { HOLDER_LIBRARY } from '../../posix/testing/holder';
 import { sameProcess } from '@runlith/executions/protocol/evidence';
 

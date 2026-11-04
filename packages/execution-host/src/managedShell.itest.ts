@@ -1,7 +1,7 @@
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { afterAll, describe, expect } from 'bun:test';
 import { it, layer } from '@runlith/effect-test';
-import { heldHost } from './posix/testing/holder';
+import { heldHost, HOLDER_LIBRARY } from './posix/testing/holder';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
@@ -27,7 +27,7 @@ import { type WireLimits } from '@runlith/executions/protocol/wire';
 import { HostBoot } from '@runlith/executions/protocol/boot';
 import { hostPolicy, hostShare, hostWireLimits, registrationOf, serving, stateDirectories } from './hostFixture';
 
-const LIBRARY = join(import.meta.dir, '..', 'native', 'target', 'release', 'libexecution_platform.dylib');
+const LIBRARY = HOLDER_LIBRARY;
 const ENTRY = join(import.meta.dir, 'main.ts');
 const encodeBoot = Schema.encodeSync(Schema.fromJsonString(HostBoot));
 const readPrincipal = Schema.decodeUnknownSync(Principal);

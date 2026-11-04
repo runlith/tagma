@@ -4,7 +4,7 @@ import { EXECUTIONS } from '../installation/contract/wire/manifest.js';
 import { makeProcessChain } from '../installation/process/chain.js';
 import { join } from 'node:path';
 import { Processes, ProcessesUnreadable } from '@runlith/execution-host/ProcessReader';
-import { processLayer, yieldAsker } from '@runlith/execution-host/composition/platform';
+import { nativeLibrary, processLayer, yieldAsker } from '@runlith/execution-host/composition/platform';
 import { pathOf, readArtifact } from '@runlith/executions/hostArtifacts';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChildLedger, childLedger } from '../platform/contract/service/children.js';
@@ -28,7 +28,13 @@ const platformLibrary = Effect.fnUntraced(function* (
     const path = pathOf(bundle, read.success, 'platform');
     return path === undefined ? { _tag: 'Unavailable', detail: `${bundle} names no platform library` } : { _tag: 'Found', path };
   }
-  if (checkout !== undefined) return { _tag: 'Found', path: join(checkout, 'native', 'target', 'release', 'libexecution_platform.dylib') };
+  if (checkout !== undefined)
+    return yield* nativeLibrary(checkout).pipe(
+      Effect.match({
+        onSuccess: (path): PlatformLibrary => ({ _tag: 'Found', path }),
+        onFailure: (failure): PlatformLibrary => ({ _tag: 'Unavailable', detail: failure.detail }),
+      }),
+    );
   return { _tag: 'Unavailable', detail: 'this world has no process-reader artifact' };
 });
 

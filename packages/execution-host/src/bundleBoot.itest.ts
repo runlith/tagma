@@ -15,7 +15,7 @@ import { buildArtifact, CARRIER_ENTRY, EVIDENCE_ENTRY, HOST_ENTRY, MIGRATIONS, R
 import { host } from './host';
 import { fixtureHolder, fixtureFacts, hostPolicy, hostShare, hostWireLimits, registrationOf } from './hostFixture';
 import { PlatformFacts } from './PlatformFacts';
-import { processLayer } from './composition/macos';
+import { processLayer } from './composition/platform';
 import { HOLDER_BINARY, HOLDER_LIBRARY } from './posix/testing/holder';
 
 const SOURCE = join(import.meta.dir, '..');

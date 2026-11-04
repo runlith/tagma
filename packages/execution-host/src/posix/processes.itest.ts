@@ -2,10 +2,10 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect } from 'effect';
-import { loadLibrary } from '../Library';
-import type { Request } from '../processes.worker';
-import { HOLDER_LIBRARY } from '../testing/holder';
-import { processReader } from './processes';
+import { loadLibrary } from './Library';
+import type { Request } from './ProcessServer';
+import { HOLDER_LIBRARY } from './testing/holder';
+import { processReader } from '../composition/testing/native';
 
 const Platform = globalThis.Worker;
 

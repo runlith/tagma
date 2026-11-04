@@ -2,7 +2,7 @@
 
 import { constants } from 'node:os';
 import type { ProcessCounters, UsageDemand, UsageRead } from '../../UsageReader';
-import type { ProcessAbi } from './ProcessAbi';
+import type { ProcessAbi } from '../ProcessAbi';
 import { baseName, programsOf } from './programs';
 import type { NativeCounters, UsageAbi } from './UsageAbi';
 import type { RefusedRead, RefusedUsage } from './ps';

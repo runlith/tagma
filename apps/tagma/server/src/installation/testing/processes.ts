@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 import { Effect, Layer } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { fileHolders, processLayer } from '@runlith/execution-host/composition/platform';
+import { fileHolders, nativeLibrary, processLayer } from '@runlith/execution-host/composition/platform';
 import { LockHolders } from '../contract/service/lockHolders.js';
 
 export const testProcesses = Layer.orDie(
-  processLayer(resolve(import.meta.dir, '../../../../../..', 'packages/execution-host/native/target/release/libexecution_platform.dylib')),
+  Layer.unwrap(Effect.map(nativeLibrary(resolve(import.meta.dir, '../../../../../..', 'packages/execution-host')), processLayer)),
 ).pipe(Layer.provide(BunFileSystem.layer));
 
 export const testLockHolders = Layer.succeed(LockHolders, {

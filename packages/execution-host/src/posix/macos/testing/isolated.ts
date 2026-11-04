@@ -4,7 +4,8 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { randomUUID } from 'node:crypto';
 import { constants, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { HolderUnavailable } from '../../holder-client/Connection';
+import { HolderUnavailable } from '../../../holder-client/Connection';
+import type { FixtureProcess } from '../../testing/System';
 
 const SYMBOLS = {
   socket: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
@@ -48,12 +49,6 @@ const job = (label: string, argv: ReadonlyArray<string>) =>
 
 const unavailable = (detail: string) => new HolderUnavailable({ detail });
 const failed = (error: unknown) => (error instanceof HolderUnavailable ? error : unavailable(String(error)));
-
-export type FixtureProcess = {
-  readonly exited: Effect.Effect<number, HolderUnavailable>;
-  readonly exitCode: () => number | null;
-  readonly kill: Effect.Effect<void, HolderUnavailable>;
-};
 
 export const isolatedProcess = Effect.fn('posix.testing.isolatedProcess')(
   function* (command: ReadonlyArray<string>) {

@@ -27,7 +27,7 @@ import {
   registrationOf,
 } from '../../hostFixture';
 import { HOLDER_LIBRARY, testHolder } from '../../posix/testing/holder';
-import { platformLayer } from '../macos';
+import { platformLayer } from '../platform';
 import { credentialsLayer } from '../../posix/credentials';
 
 it.live('an adopted child ending during globals leaves its sampled descriptors out of the initialized occupancy', () =>

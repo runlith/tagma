@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { constants } from 'node:os';
 import type { ProcessIdentity, ProcessReading, ProcessRow } from '../../ProcessReader';
 import type { LoadedLibrary } from '../Library';
-import type { ProcessAbi } from './ProcessAbi';
+import type { ProcessAbi } from '../ProcessAbi';
 import type { NativeCounters, UsageAbi } from './UsageAbi';
 import { Sampler } from './Sampler';
 import { processReader } from './processes';

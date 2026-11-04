@@ -3,11 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { HOLDER_LIBRARY } from './testing/holder';
 import type { NativeExit } from '@runlith/executions/protocol/execution';
 
 const RELEASE = resolve(import.meta.dir, '../../native/target/release');
 const HOLDER = join(RELEASE, 'execution-holder');
-const LIBRARY = join(RELEASE, 'libexecution_platform.dylib');
+const LIBRARY = HOLDER_LIBRARY;
 const LOGIC = join(import.meta.dir, 'testing/succession.ts');
 const HOLDER_PART = 'native/execution-holder';
 const state = join(homedir(), '.tagma-tests', `holder-succession-${randomUUID()}`);

@@ -2,19 +2,19 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { join } from 'node:path';
+import { HOLDER_LIBRARY } from './posix/testing/holder';
 import type { CapabilityProfile } from '@runlith/executions/protocol/capacity';
 import { ExecutionCapacity } from './ExecutionCapacity';
 import { hostProfile } from './hostFixture';
 import { loadLibrary } from './posix/Library';
-import { platformIdentity } from './posix/macos/facts';
+import { platformIdentity } from './composition/testing/native';
 
-const ARTIFACT = join(import.meta.dir, '..', 'native/target/release/libexecution_platform.dylib');
+const ARTIFACT = HOLDER_LIBRARY;
 
 it.live('host startup binds a profile that matches the loaded artifact, and refuses one naming another build or promoting the group', () =>
   Effect.gen(function* () {
     const library = yield* loadLibrary(ARTIFACT);
-    const native = platformIdentity(library);
+    const native = yield* platformIdentity(library);
     const matched: CapabilityProfile = {
       ...hostProfile({ executions: 2 }),
       version: 2,

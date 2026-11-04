@@ -12,11 +12,12 @@ import { HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { PrepareAnswer } from '@runlith/executions/protocol/runtime';
 import { copyBundle } from './artifact';
 import { HOLDER_BINARY } from '../../posix/testing/holder';
+import { nativeArtifact } from '../artifact';
 import { hostPolicy, hostShare, hostWireLimits, registrationOf, spawned } from '../../hostFixture';
 import type { Client } from './session';
 
 const HOLDER_PART = 'native/execution-holder';
-const LIBRARY_PART = 'native/libexecution_platform.dylib';
+const LIBRARY_PART = `native/${nativeArtifact()!.library}`;
 
 export type Offer = {
   readonly build: string;

@@ -1,6 +1,6 @@
 import { Effect, Layer } from 'effect';
-import { ProcessTempo, TempoRefused, type PaceDirection, type TempoKept } from '../../ProcessTempo';
-import { Holder, type HolderRefused } from '../../holder/Holder';
+import { ProcessTempo, TempoRefused, type PaceDirection, type TempoKept } from '../ProcessTempo';
+import { Holder, type HolderRefused } from '../holder/Holder';
 
 const refusal = (pid: number, reason: HolderRefused['reason'], detail: string): TempoRefused =>
   new TempoRefused({

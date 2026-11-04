@@ -1,8 +1,8 @@
 import { dlopen, FFIType, ptr, read } from 'bun:ffi';
 import { Effect } from 'effect';
 import { constants } from 'node:os';
+import { testSystem } from '../../composition/testing/system';
 
-const NOFILE = 8;
 const LIMIT = 32n;
 const DEVICE = new TextEncoder().encode('/dev/null\0');
 const symbols = {
@@ -10,14 +10,19 @@ const symbols = {
   setrlimit: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   open: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   close: { args: [FFIType.i32], returns: FFIType.i32 },
-  __error: { args: [], returns: FFIType.ptr },
 } as const;
 
 export const withoutHandles = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   Effect.scoped(
     Effect.gen(function* () {
+      const system = yield* Effect.orDie(testSystem);
+      const NOFILE = system.nofile;
+      const errno = yield* Effect.acquireRelease(
+        Effect.sync(() => dlopen(system.libc, { [system.errno]: { args: [], returns: FFIType.ptr } })),
+        (opened) => Effect.sync(() => opened.close()),
+      );
       const library = yield* Effect.acquireRelease(
-        Effect.sync(() => dlopen('libc.dylib', symbols)),
+        Effect.sync(() => dlopen(system.libc, symbols)),
         (opened) => Effect.sync(() => opened.close()),
       );
       const original = new BigUint64Array(2);
@@ -41,7 +46,7 @@ export const withoutHandles = <A, E, R>(work: Effect.Effect<A, E, R>) =>
             held.push(fd);
             continue;
           }
-          const error = library.symbols.__error();
+          const error = errno.symbols[system.errno]!();
           if (error === null || read.i32(error, 0) !== constants.errno.EMFILE)
             throw new Error('the descriptor fixture stopped without EMFILE');
           break;

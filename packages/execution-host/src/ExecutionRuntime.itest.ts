@@ -1,7 +1,7 @@
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { processReader } from './posix/macos/processes';
+import { processReader } from './composition/testing/native';
 import { Processes } from './ProcessReader';
-import { tempoLayer } from './posix/macos/Tempo';
+import { tempoLayer } from './posix/Tempo';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { join } from 'node:path';
@@ -34,12 +34,12 @@ import { Holder, type HeldExecution, type WorkState } from './holder/Holder';
 import { connectionOf, keyOf, principalOf, registrationOf } from './hostFixture';
 import { hostState } from './hostState';
 import { hostSpawner } from './hostSpawner';
-import { testHolder } from './posix/testing/holder';
+import { testHolder, HOLDER_LIBRARY } from './posix/testing/holder';
 import { runtimeProfile } from './runtimeFixture';
 import { loadLibrary } from './posix/Library';
 import { pidStanding } from './posix/testing/processes';
 
-const ARTIFACT = join(import.meta.dir, '..', 'native/target/release/libexecution_platform.dylib');
+const ARTIFACT = HOLDER_LIBRARY;
 
 const waitFor = Effect.fnUntraced(function* <A, E, R>(
   executions: Executions['Service'],

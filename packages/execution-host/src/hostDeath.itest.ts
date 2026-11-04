@@ -14,7 +14,7 @@ import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { byteOffset } from '@runlith/executions/protocol/record';
 import { hostPolicy, hostShare, hostWireLimits, principalOf } from './hostFixture';
 import { makeProcessWorld, type ProcessWorld } from './composition/testing/servedWorld';
-import { processLayer } from './composition/macos';
+import { processLayer } from './composition/platform';
 import { processControl } from './posix/control';
 import { HOLDER_LIBRARY } from './posix/testing/holder';
 import { Processes } from './ProcessReader';

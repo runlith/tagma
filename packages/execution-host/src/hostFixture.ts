@@ -154,7 +154,7 @@ export const hostProfile = (options: HostSizing = {}): CapabilityProfile => {
   return decodeProfile({
     ...policy,
     version: 1,
-    platform: { os: 'darwin', arch: 'arm64' },
+    platform: { os: process.platform, arch: process.arch },
     runtime: { name: 'bun', version: '1.4.2' },
     native: { crate: 'execution-platform', version: '0.1.0', build: 'fixture' },
     granted: machine.granted,

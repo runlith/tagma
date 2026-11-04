@@ -2,9 +2,7 @@ import { Data, Deferred, Effect, type Scope } from 'effect';
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
 import type { UsageDemand, UsageRead } from '../UsageReader';
 import type { Refused } from './refusal';
-import type { Answer, Question, Request } from './processes.worker';
-
-const OPEN_MS = 10_000;
+import type { Answer, Question, Request } from './ProcessServer';
 
 export class WorkerUnanswered extends Data.TaggedError('WorkerUnanswered')<{ readonly detail: string }> {
   override get message(): string {
@@ -26,6 +24,7 @@ type Settle = (answer: Replied | WorkerUnanswered) => void;
 
 export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function* (
   path: string,
+  spawn: () => Worker,
 ): Effect.fn.Return<ProcessWorker, WorkerUnanswered, Scope.Scope> {
   const opened = yield* Deferred.make<string, WorkerUnanswered>();
   const waiting = new Map<number, Settle>();
@@ -42,7 +41,7 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
   };
   const worker = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const worker = new Worker(new URL('./processes.worker.ts', import.meta.url), { type: 'module' });
+      const worker = spawn();
       worker.onerror = (event) => end(worker, new WorkerUnanswered({ detail: `the process worker failed: ${event.message}` }));
       worker.addEventListener('close', () => end(worker, new WorkerUnanswered({ detail: 'the process worker ended' })));
       worker.onmessage = (event: MessageEvent<Answer>) => {
@@ -58,13 +57,7 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
     }),
     (worker) => Effect.sync(() => end(worker, new WorkerUnanswered({ detail: 'the process worker was closed' }))),
   );
-  const machineName = yield* Deferred.await(opened).pipe(
-    Effect.timeoutOrElse({
-      duration: OPEN_MS,
-      orElse: () => new WorkerUnanswered({ detail: `the process worker did not open within ${OPEN_MS} ms` }),
-    }),
-    Effect.tapError((reason) => Effect.sync(() => end(worker, reason))),
-  );
+  const machineName = yield* Deferred.await(opened);
   const asked = <A>(question: Question, take: (answer: Replied) => A | undefined): Effect.Effect<A, WorkerUnanswered> =>
     Effect.callback<A, WorkerUnanswered>((resume) => {
       if (lost !== undefined) return resume(Effect.fail(lost));

@@ -1,7 +1,5 @@
 import { ProcessesUnreadable } from '../../ProcessReader';
 
-export const birthOf = (seconds: number | bigint, micros: number | bigint): string => `${seconds}:${micros}`;
-
 const parts = (birth: string): readonly [bigint, bigint] | ProcessesUnreadable => {
   const matched = /^(0|[1-9]\d{0,19}):(0|[1-9]\d{0,5})$/u.exec(birth);
   if (matched === null) return new ProcessesUnreadable({ detail: 'the birth is not a native macOS seconds:microseconds witness' });

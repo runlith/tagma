@@ -8,11 +8,11 @@ import { UsageSource } from '../UsageReader';
 import { Holder } from '../holder/Holder';
 import { loadLibrary } from '../posix/Library';
 import { holderLayer as heldLayer } from '../posix/PosixHolder';
-import { processReader } from '../posix/macos/processes';
-import { platformFacts } from '../posix/macos/facts';
+import { processReader, processWorker } from '../posix/macos/processes';
+import { platformFacts, platformIdentity } from '../posix/macos/facts';
 import { evidenceProbe } from '../posix/macos/evidence';
-import { MACHINE_PROBE_LIMITS } from '../posix/macos/standing';
-import { tempoLayer } from '../posix/macos/Tempo';
+import { MACHINE_PROBE_LIMITS, readStanding } from '../posix/macos/standing';
+import { tempoLayer } from '../posix/Tempo';
 import { openUsage } from '../posix/Usage';
 import { endpointLayer } from '../posix/endpoint';
 import { fileHolders as holdersOf } from '../posix/macos/holders';
@@ -20,6 +20,14 @@ import { askLogicToYield, yieldRequests } from '../posix/yieldSignal';
 import { YieldRequests } from '../YieldRequests';
 import { hostSpawner } from '../hostSpawner';
 import { BootRefused } from '../boot';
+
+export const nativePlatform = {
+  processes: processReader,
+  facts: platformFacts,
+  identity: platformIdentity,
+  standing: readStanding,
+  usage: (path: string) => openUsage(path, processWorker),
+};
 
 export const holderLayer = (path: string) =>
   heldLayer(path).pipe(
@@ -51,7 +59,7 @@ export const platformLayer = (path: string) =>
         Context.add(Processes, reader),
         Context.add(ProcessControl, processControl(reader)),
         Context.add(EvidenceReader, probe),
-        Context.add(UsageSource, { open: openUsage(path) }),
+        Context.add(UsageSource, { open: openUsage(path, processWorker) }),
         Context.add(YieldRequests, asked),
       );
     }),

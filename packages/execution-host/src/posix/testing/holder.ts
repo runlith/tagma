@@ -3,11 +3,11 @@ import { Context, Effect, Exit, FileSystem, Layer, Schedule } from 'effect';
 import { ChildProcessSpawner } from 'effect/process';
 import { PlatformFacts } from '../../PlatformFacts';
 import { ProcessTempo } from '../../ProcessTempo';
-import { platformFacts } from '../macos/facts';
-import { tempoLayer } from '../macos/Tempo';
+import { platformFacts, processReader } from '../../composition/testing/native';
+import { nativeArtifact } from '../../composition/artifact';
+import { tempoLayer } from '../Tempo';
 import { Processes } from '../../ProcessReader';
 import { ProcessControl } from '../../ProcessControl';
-import { processReader } from '../macos/processes';
 import { processControl } from '../control';
 import { loadLibrary, type LibraryUnavailable } from '../Library';
 import { Holder } from '../../holder/Holder';
@@ -15,11 +15,12 @@ import { Descriptors } from '../native';
 import { HolderUnavailable } from '../../holder-client/Connection';
 import { openPosixHolder } from '../PosixHolder';
 import { TerminalInputs } from '../../TerminalInputs';
-import { isolatedProcess, type FixtureProcess } from './isolated';
+import { testSystem } from '../../composition/testing/system';
+import type { FixtureProcess } from './System';
 
 const RELEASE = resolve(import.meta.dir, '../../../native/target/release');
 export const HOLDER_BINARY = join(RELEASE, 'execution-holder');
-export const HOLDER_LIBRARY = join(RELEASE, 'libexecution_platform.dylib');
+export const HOLDER_LIBRARY = join(RELEASE, nativeArtifact()!.library);
 const RELAY = join(RELEASE, 'execution-holder-relay');
 
 export const heldHost = (entry: string, boot: string): Array<string> => [HOLDER_BINARY, dirname(boot), process.execPath, entry, boot];
@@ -33,7 +34,7 @@ export const testHolder = (
   isolated = false,
 ): Layer.Layer<
   Holder | Processes | ProcessControl | PlatformFacts | ProcessTempo,
-  HolderUnavailable | LibraryUnavailable,
+  HolderUnavailable | LibraryUnavailable | import('../../boot').BootRefused,
   FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > => {
   const held = Layer.effectContext(
@@ -53,7 +54,7 @@ export const testHolder = (
           }),
       );
       if (!('ends' in pair)) return yield* unavailable(`no socket pair: ${pair.refusal} ${pair.detail}`);
-      const detached = isolated ? yield* isolatedProcess([binary, state, RELAY]) : undefined;
+      const detached = isolated ? yield* Effect.flatMap(testSystem, (system) => system.isolated([binary, state, RELAY])) : undefined;
       const mine = detached?.fd ?? pair.ends[0];
       const theirs = pair.ends[1];
       const launching: Effect.Effect<FixtureProcess, HolderUnavailable> =

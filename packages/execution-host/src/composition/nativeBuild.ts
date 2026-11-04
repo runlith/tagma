@@ -8,7 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { withFileLock } from '@runlith/file-lock/FileLock';
-import { artifactOf, RUST_TRIPLES } from '../posix/macos/artifact';
+import { nativeArtifact } from './artifact';
 
 export type NativeBuild = {
   readonly crate: string;
@@ -188,10 +188,10 @@ export const nativeBuilt = Effect.fnUntraced(
 );
 
 export const nativeRelease = Effect.fnUntraced(function* (arch?: string) {
-  const adapter = artifactOf(arch ?? process.arch);
-  if (process.platform !== adapter.platform.os)
+  const adapter = nativeArtifact(arch ?? process.arch);
+  if (adapter === undefined)
     return yield* new NativeBuildFailed({ detail: `no host adapter for ${process.platform}/${arch ?? process.arch}` });
-  const triple = arch === undefined ? undefined : RUST_TRIPLES[arch];
+  const triple = arch === undefined ? undefined : adapter.triple;
   if (arch !== undefined && triple === undefined) return yield* new NativeBuildFailed({ detail: `no Rust target for ${arch}` });
   const source = fileURLToPath(new URL('../..', import.meta.url));
   const crate = join(source, 'native');
@@ -213,4 +213,10 @@ export const nativeRelease = Effect.fnUntraced(function* (arch?: string) {
   return { source, library, holder };
 });
 
-if (import.meta.main) BunRuntime.runMain(nativeRelease().pipe(Effect.asVoid, Effect.provide(BunServices.layer)));
+if (import.meta.main)
+  BunRuntime.runMain(
+    Effect.suspend(() => (nativeArtifact() === undefined ? Effect.void : nativeRelease())).pipe(
+      Effect.asVoid,
+      Effect.provide(BunServices.layer),
+    ),
+  );
