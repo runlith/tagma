@@ -160,18 +160,23 @@ export const evidenceProbe = Effect.gen(function* () {
           });
       }
       const held = new Map<string, ProcessRow[]>();
+      let changed = 0;
+      const refusals: string[] = [];
       for (const row of before.success) {
         const links = yield* linksOf(row.pid).pipe(Effect.provideService(FileSystem.FileSystem, files), Effect.result);
         if (!current(row)) {
-          unmeasured.push({
-            region: `the sockets of pid ${row.pid}`,
-            reason: 'unknown',
-            detail: 'the process changed or left during the reading',
-          });
+          if (request._tag === 'Inventory') changed++;
+          else
+            unmeasured.push({
+              region: `the sockets of pid ${row.pid}`,
+              reason: 'unknown',
+              detail: 'the process changed or left during the reading',
+            });
           continue;
         }
         if (links._tag === 'Failure') {
-          unmeasured.push({ region: `the sockets of pid ${row.pid}`, reason: 'refused', detail: links.failure.detail });
+          if (request._tag === 'Inventory') refusals.push(links.failure.detail);
+          else unmeasured.push({ region: `the sockets of pid ${row.pid}`, reason: 'refused', detail: links.failure.detail });
           continue;
         }
         for (const inode of new Set(
@@ -206,6 +211,18 @@ export const evidenceProbe = Effect.gen(function* () {
         if (addresses === undefined) hidden.set(socket.port, new Set([socket.address]));
         else addresses.add(socket.address);
       }
+      if (changed > 0)
+        unmeasured.push({
+          region: `the sockets of ${changed} processes`,
+          reason: 'unknown',
+          detail: 'these processes changed or left during the reading',
+        });
+      if (refusals.length > 0)
+        unmeasured.push({
+          region: `the sockets of ${refusals.length} processes`,
+          reason: 'refused',
+          detail: `their descriptor tables refused this reader, the first with ${refusals[0]}; a listener they hold appears without a visible owner`,
+        });
       for (const [port, addresses] of hidden)
         unmeasured.push({
           region: `listening sockets without a visible owner on port ${port}`,

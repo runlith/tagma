@@ -63,16 +63,16 @@ export class BirthClock {
   bornBetween = (birth: string, fromMs: number, untilMs: number): boolean | ProcessesUnreadable => {
     const ticks = ticksOf(birth);
     if (ticks instanceof ProcessesUnreadable) return ticks;
-    const from = Math.ceil(fromMs * 1000);
-    const until = Math.floor(untilMs * 1000);
-    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(until) || from > until)
+    const outerFrom = Math.floor(fromMs * 1000);
+    const outerUntil = Math.ceil(untilMs * 1000);
+    if (!Number.isSafeInteger(outerFrom) || !Number.isSafeInteger(outerUntil) || fromMs > untilMs)
       return new ProcessesUnreadable({ detail: 'the accounting interval cannot be compared to the kernel start time' });
     const earliest = this.earliest(ticks);
     const before = this.before(ticks);
-    const start = BigInt(from) * 1000n;
-    const end = BigInt(until) * 1000n;
-    if (before <= start || earliest > end) return false;
-    if (earliest >= start && before <= end + 1n) return true;
+    if (before <= BigInt(outerFrom) * 1000n || earliest > BigInt(outerUntil) * 1000n) return false;
+    const innerFrom = BigInt(Math.ceil(fromMs * 1000)) * 1000n;
+    const innerUntil = BigInt(Math.floor(untilMs * 1000)) * 1000n;
+    if (earliest >= innerFrom && before <= innerUntil + 1n) return true;
     return new ProcessesUnreadable({ detail: 'the kernel keeps this start time to a clock tick that straddles the interval bound' });
   };
 }

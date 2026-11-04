@@ -1,7 +1,6 @@
 import { expect } from 'bun:test';
 import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
-import { shared } from '@runlith/testbed/worlds';
 import { Effect, Layer, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import * as BunServices from '@effect/platform-bun/BunServices';
@@ -11,16 +10,16 @@ import { HostRequestKey, type HostRequestRef } from '@runlith/executions/protoco
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { hostPolicy, hostShare, hostWireLimits, principalOf } from './hostFixture';
 import { makeWorld } from './composition/testing/servedWorld';
-import { bundleWorld } from './composition/testing/artifact';
+import { Bundle, bundleFixture } from './composition/testing/artifact';
 import { RECOVERY_ENTRY } from './buildArtifact';
 
 const policy = hostPolicy({ executions: 2, transports: ['pipes'], custodyReceipts: 16 });
 const limits = hostWireLimits(policy, 2, { envelopeBytes: 16384, connections: 4, requests: 8 });
-const platform = Layer.mergeAll(HostRegistration.layer, endpointConnection).pipe(Layer.provideMerge(BunServices.layer));
+const platform = Layer.mergeAll(HostRegistration.layer, endpointConnection, bundleFixture).pipe(Layer.provideMerge(BunServices.layer));
 type Invocation = { readonly state: string; readonly args: readonly string[] };
 const recovery = Effect.fnUntraced(function* ({ state, args }: Invocation) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const bundle = yield* shared(bundleWorld, null);
+  const bundle = yield* Bundle;
   const child = yield* spawner.spawn(
     ChildProcess.make(process.execPath, [join(bundle.root, RECOVERY_ENTRY), state, ...args], {
       stdin: 'ignore',
