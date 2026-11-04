@@ -31,7 +31,7 @@ const injectedTypes = (command: Command): readonly string[] => {
 };
 
 export type Probed = {
-  readonly paused: () => boolean;
+  readonly share: () => number;
   readonly report: (responsive: boolean) => void;
 };
 
@@ -150,13 +150,13 @@ export class Driven {
     const probed = this.probed;
     if (this.ended || probed === null) return;
     if (this.asking) {
-      if (!this.silent && this.budget.sample(cpu, probed.paused())) {
+      if (!this.silent && this.budget.sample(cpu, probed.share())) {
         this.silent = true;
         probed.report(false);
       }
       return;
     }
-    if (probed.paused() || cpu === null) return;
+    if (probed.share() === 0 || cpu === null) return;
     this.asking = true;
     this.silent = false;
     this.budget.start(cpu);

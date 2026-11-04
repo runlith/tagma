@@ -39,8 +39,8 @@ test('a pause between CPU samples invalidates only the paused renderer verdict',
   });
   const release = strains.hold([11], { factor: 1, paused: true });
   release();
-  expect(paused.sample({ process: '11', millis: 6_000 }, false)).toBe(false);
-  expect(other.sample({ process: '22', millis: 6_000 }, false)).toBe(true);
+  expect(paused.sample({ process: '11', millis: 6_000 }, 1)).toBe(false);
+  expect(other.sample({ process: '22', millis: 6_000 }, 1)).toBe(true);
 });
 
 test('CPU membership follows renderer changes and borrows only the profile factor while navigation is pending', () => {

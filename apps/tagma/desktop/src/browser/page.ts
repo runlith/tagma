@@ -328,12 +328,17 @@ export class HeldPage {
     return this.strains.current(this.contents.getOSProcessId(), this.profile);
   }
 
+  private get share(): number {
+    const strain = this.strain;
+    return this.dialogOpen || strain.paused ? 0 : 1 / strain.factor;
+  }
+
   driving(driven: Driven | null): void {
     this.driven = driven;
     this.placed.driven = driven !== null;
     if (driven !== null) this.clearProbe();
     driven?.watch({
-      paused: () => this.dialogOpen || this.strain.paused,
+      share: () => this.share,
       report: (responsive) => this.respond(responsive),
     });
     if (driven === null && this.held !== null && !this.held.told) this.surface(this.held);
@@ -448,7 +453,7 @@ export class HeldPage {
     const probe = this.probe;
     if (probe === null) return;
     if (probe.phase === 'starting') {
-      if (cpu === null || this.strain.paused || this.dialogOpen) return;
+      if (cpu === null || this.share === 0) return;
       probe.phase = 'waiting';
       this.budget.start(cpu);
       const frame = this.contents.mainFrame;
@@ -472,7 +477,7 @@ export class HeldPage {
           console.debug(`[tagma-desktop] the native renderer probe was not answered: ${String(error)}`);
         },
       );
-    } else if (probe.phase === 'waiting' && this.budget.sample(cpu, this.strain.paused || this.dialogOpen)) {
+    } else if (probe.phase === 'waiting' && this.budget.sample(cpu, this.share)) {
       probe.phase = 'unresponsive';
       this.respond(false);
     }
