@@ -53,7 +53,7 @@
   },
   "scripts": {
     "build:native": "bun run src/artifact.ts",
-    "postinstall": "bun run src/artifact.ts",
+    "postinstall": "bun -e \"await (await import('./src/engine.ts')).prepareEngine()\"",
     "test": "testbed bun test --no-isolate",
     "test:integration": "testbed itest --no-isolate",
     "typecheck": "runlith-typecheck"
