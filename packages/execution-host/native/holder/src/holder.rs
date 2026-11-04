@@ -3,7 +3,7 @@ use crate::frames::{self, Action, Greeting, Reason, Request, Stream, Target};
 use crate::handover;
 use crate::platform::{Event, Failure, Launching, Opened, Part, Platform, Timer};
 use crate::table::{Exit, Prepared, Record, Table, Transport};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 macro_rules! eprintln {
@@ -560,6 +560,19 @@ impl<P: Platform> Holder<P> {
     }
 
     fn children(&mut self) {
+        let owned: HashSet<u64> = self
+            .table
+            .records()
+            .filter(|record| record.reaped.is_none())
+            .map(|record| P::process_value(&record.process))
+            .chain(self.table.orphans.iter().map(P::process_value))
+            .chain(self.starting.values().map(|starting| P::process_value(&starting.record.process)))
+            .chain(self.logic.iter().map(|logic| P::process_value(&logic.process)))
+            .chain(self.preparing.iter().map(|preparing| P::process_value(&preparing.process)))
+            .collect();
+        if let Err(detail) = self.platform.sweep(&owned) {
+            eprintln!("execution-holder: descendants this holder inherited could not be reaped: {detail}");
+        }
         self.verdict();
         let platform = &mut self.platform;
         self.table.orphans.retain_mut(|process| matches!(platform.reap(process), Ok(None)));

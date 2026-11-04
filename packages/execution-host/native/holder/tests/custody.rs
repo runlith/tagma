@@ -281,6 +281,11 @@ fn priority(pid: i32) -> i32 {
 }
 
 #[cfg(target_os = "linux")]
+fn threads(pid: i32) -> Vec<i32> {
+    std::fs::read_dir(format!("/proc/{pid}/task")).unwrap().map(|task| priority(task.unwrap().file_name().to_str().unwrap().parse().unwrap())).collect()
+}
+
+#[cfg(target_os = "linux")]
 #[test]
 fn linux_pacing_keeps_the_inherited_priority_and_restores_it_after_lowest() {
     let baseline = priority(0).max(10);
@@ -302,6 +307,16 @@ fn linux_pacing_keeps_the_inherited_priority_and_restores_it_after_lowest() {
             assert_eq!(holder.pace(record, initial, initial), Ok(baseline != 19));
             assert_eq!(priority(record.pid), baseline);
         }
+        let mut threaded = holder.launch("threaded", "exec python3 -c 'import sys, threading; event = threading.Event(); [threading.Thread(target=event.wait, daemon=True).start() for _ in range(3)]; print(\"ready\", flush=True); sys.stdin.read()'", false, 0);
+        let _input = blocking(threaded.handles.pop().unwrap());
+        let _errors = blocking(threaded.handles.pop().unwrap());
+        let mut output = BufReader::new(blocking(threaded.handles.pop().unwrap()));
+        assert_eq!(line(&mut output), "ready");
+        assert_eq!(threads(threaded.pid).len(), 4);
+        assert_eq!(holder.pace(&threaded, 0, 2), Ok(baseline != 19));
+        assert!(threads(threaded.pid).into_iter().all(|nice| nice == 19));
+        assert_eq!(holder.pace(&threaded, 0, 0), Ok(baseline != 19));
+        assert!(threads(threaded.pid).into_iter().all(|nice| nice == baseline));
     } else if baseline < 19 {
         assert_eq!(holder.pace(&full, 0, 2), Err(8));
         assert_eq!(priority(full.pid), baseline);
@@ -335,6 +350,9 @@ fn native_holder_keeps_custody_through_logic_and_image_replacement() {
     terminal_input.write_all(b"one\n").unwrap();
     assert_eq!(line(&mut output), "first:one");
     assert_eq!(line(&mut terminal_output), "first:one");
+    let mut early = holder.launch("early", "read stop; exit 5", false, 0);
+    blocking(early.handles.pop().unwrap()).write_all(b"go\n").unwrap();
+    assert_eq!(holder.channel.exited(b"early"), Ok(5));
     holder.stage(false);
     let refused = holder.prepare();
     assert_eq!(refused.body[0], 133);
@@ -343,13 +361,20 @@ fn native_holder_keeps_custody_through_logic_and_image_replacement() {
     let prepared = holder.prepare();
     assert_eq!(prepared.body[0], 131, "{:?}", prepared.body);
     holder.channel.done(14, vec![]);
-    let records = holder.renew(2);
+    let records = holder.renew(3);
     assert!(holder.state.join("bundle.prior/holder").is_file());
     assert!(std::fs::read(holder.state.join("bundle/holder")).unwrap().ends_with(b"native-succession"));
     for record in records {
-        let original = if record.key == b"pipes" { &pipe } else { &terminal };
+        let original = [&pipe, &terminal, &early].into_iter().find(|original| original.key == record.key).unwrap();
         assert_eq!((record.pid, &record.birth), (original.pid, &original.birth));
     }
+    let mut late = holder.launch("late", "read stop; exit 6", false, 0);
+    blocking(late.handles.pop().unwrap()).write_all(b"go\n").unwrap();
+    assert_eq!(holder.channel.exited(b"late"), Ok(6));
+    let reaped = holder.channel.call(4, keyed(b"early"));
+    assert_eq!(reaped.body[0], 132, "{:?}", reaped.body);
+    assert_eq!(Reader { bytes: &reaped.body, at: 5 }.exit(), Some(Ok(5)));
+    holder.channel.done(5, keyed(b"early"));
     input.write_all(b"two\n").unwrap();
     terminal_input.write_all(b"two\n").unwrap();
     assert_eq!(line(&mut output), "last:two");

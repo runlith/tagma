@@ -65,8 +65,16 @@ impl Queue {
             ready.push(Ready { token: interest.token, flags });
             interest.flags &= !event.events;
             if bits & (libc::EPOLLRDHUP | libc::EPOLLHUP | libc::EPOLLERR) != 0 { interest.flags = 0; }
-            if interest.flags != 0 { self.change(libc::EPOLL_CTL_MOD, fd, key, interest.flags | (libc::EPOLLONESHOT | libc::EPOLLRDHUP) as u32)?; }
-            else { interests.by_fd.remove(&fd); interests.by_key.remove(&key); }
+            let left = interest.flags;
+            if left != 0 {
+                match self.change(libc::EPOLL_CTL_MOD, fd, key, left | (libc::EPOLLONESHOT | libc::EPOLLRDHUP) as u32) {
+                    Ok(()) => continue,
+                    Err(error) if matches!(error.raw_os_error(), Some(libc::EBADF) | Some(libc::ENOENT)) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            interests.by_fd.remove(&fd);
+            interests.by_key.remove(&key);
         }
         Ok(ready)
     }

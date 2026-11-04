@@ -1,5 +1,6 @@
 use crate::frames::{Action, Launch, Reason, Target};
 use crate::table::{Exit, Pace, Prepared, Transport, Usage};
+use std::collections::HashSet;
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -104,6 +105,9 @@ pub trait Platform: Sized {
     fn settle(&mut self, status: &mut Self::Status) -> Option<Result<(), Failure>>;
     fn observe(&mut self, process: &Self::Process) -> Option<Exit>;
     fn reap(&mut self, process: &mut Self::Process) -> Result<Option<(Exit, Usage)>, Failure>;
+    fn sweep(&mut self, _owned: &HashSet<u64>) -> Result<(), String> {
+        Ok(())
+    }
     fn close(&mut self, process: &mut Self::Process, part: Part, handles: Vec<Rc<Self::Handle>>);
     fn release(&mut self, process: &mut Self::Process, transport: Transport<Self::Handle>);
     fn act(&mut self, process: &mut Self::Process, target: Target, action: Action) -> Result<(), Failure>;

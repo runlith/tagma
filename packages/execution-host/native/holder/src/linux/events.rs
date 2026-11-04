@@ -16,7 +16,6 @@ pub struct Queue {
     timers: [OwnedFd; 3],
     interests: RefCell<HashMap<RawFd, u32>>,
     children: RefCell<HashMap<i32, OwnedFd>>,
-    known: RefCell<HashSet<i32>>,
 }
 
 fn own(fd: RawFd) -> Result<OwnedFd, i32> { sys::check(fd)?; Ok(unsafe { OwnedFd::from_raw_fd(fd) }) }
@@ -30,7 +29,7 @@ impl Queue {
         sys::check(unsafe { libc::sigprocmask(libc::SIG_BLOCK, &mask, std::ptr::null_mut()) })?;
         let signal = own(unsafe { libc::signalfd(-1, &mask, libc::SFD_CLOEXEC | libc::SFD_NONBLOCK) })?;
         let timer = || own(unsafe { libc::timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_CLOEXEC | libc::TFD_NONBLOCK) });
-        let queue = Self { fd, signal, timers: [timer()?, timer()?, timer()?], interests: RefCell::new(HashMap::new()), children: RefCell::new(HashMap::new()), known: RefCell::new(HashSet::new()) };
+        let queue = Self { fd, signal, timers: [timer()?, timer()?, timer()?], interests: RefCell::new(HashMap::new()), children: RefCell::new(HashMap::new()) };
         queue.change(libc::EPOLL_CTL_ADD, queue.signal.as_raw_fd(), SIGNAL, libc::EPOLLIN as u32)?;
         for (index, timer) in queue.timers.iter().enumerate() { queue.change(libc::EPOLL_CTL_ADD, timer.as_raw_fd(), RESTART + index as u64, libc::EPOLLIN as u32)?; }
         Ok(queue)
@@ -57,7 +56,6 @@ impl Queue {
     pub fn write(&self, fd: RawFd, on: bool) -> Result<(), i32> { self.interest(fd, false, on) }
 
     pub fn child(&self, pid: i32) -> Result<(), i32> {
-        self.known.borrow_mut().insert(pid);
         let mut children = self.children.borrow_mut();
         if children.contains_key(&pid) { return Ok(()); }
         let fd = own(unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) as i32 })?;
@@ -66,7 +64,7 @@ impl Queue {
         Ok(())
     }
 
-    pub fn reaped(&self, pid: i32) { self.children.borrow_mut().remove(&pid); self.known.borrow_mut().remove(&pid); }
+    pub fn reaped(&self, pid: i32) { self.children.borrow_mut().remove(&pid); }
 
     pub fn timer(&self, timer: Timer, ms: u64) -> Result<(), i32> {
         let index = match timer { Timer::Restart => 0, Timer::Preparation => 1, Timer::Departure => 2 };
@@ -77,13 +75,12 @@ impl Queue {
         sys::check(unsafe { libc::timerfd_settime(self.timers[index].as_raw_fd(), 0, &settings, std::ptr::null_mut()) })
     }
 
-    fn adopted(&self) -> Result<(), i32> {
+    pub fn sweep(&self, owned: &HashSet<u64>) -> Result<(), i32> {
         let path = format!("/proc/self/task/{}/children", std::process::id());
         let text = std::fs::read_to_string(path).map_err(crate::procfs::error)?;
-        let children = self.known.borrow();
         for child in text.split_whitespace() {
             let pid = child.parse::<i32>().map_err(|_| libc::EBADMSG)?;
-            if children.contains(&pid) { continue; }
+            if owned.contains(&(pid as u64)) { continue; }
             if unsafe { libc::waitpid(pid, std::ptr::null_mut(), libc::WNOHANG) } < 0 {
                 let errno = sys::errno();
                 if errno != libc::ECHILD && errno != libc::EINTR { return Err(errno); }
@@ -120,7 +117,6 @@ impl Queue {
                 if bits & libc::EPOLLOUT != 0 { out.push(Event::Writable(token as RawFd)); }
             }
         }
-        if out.iter().any(|event| matches!(event, Event::Child)) { self.adopted()?; }
         Ok(())
     }
 }

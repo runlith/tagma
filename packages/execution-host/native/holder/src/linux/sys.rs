@@ -12,6 +12,7 @@ pub const SPAWN_START_SUSPENDED: i32 = 0;
 pub const OPEN_MAX: libc::rlim_t = libc::RLIM_INFINITY;
 pub const LOW_PRIORITY: i32 = 5;
 const LOWEST_PRIORITY: i32 = 19;
+const TEMPO_PASSES: usize = 8;
 
 pub fn ground() -> Result<(), String> {
     check(unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) }).map_err(|errno| format!("PR_SET_CHILD_SUBREAPER: errno {errno}"))
@@ -57,16 +58,41 @@ pub fn lower(pid: i32) -> Result<(), i32> {
     check(unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, LOWEST_PRIORITY) })
 }
 
+fn tasks(pid: i32) -> Result<Vec<i32>, i32> {
+    std::fs::read_dir(format!("/proc/{pid}/task"))
+        .map_err(crate::procfs::error)?
+        .map(|entry| {
+            let entry = entry.map_err(crate::procfs::error)?;
+            entry.file_name().to_str().and_then(|name| name.parse().ok()).ok_or(libc::EBADMSG)
+        })
+        .collect()
+}
+
 pub fn tempo(pid: i32, expected: &str, initial: Pace, pace: Pace) -> Result<bool, i32> {
     if birth(pid)? != expected { return Err(libc::ESTALE); }
     let wanted = match pace { Pace::Full => priority(0)?, Pace::Low => priority(0)?.max(LOW_PRIORITY), Pace::Lowest => LOWEST_PRIORITY };
-    let priority = priority(pid)?;
-    if priority == wanted { return Ok(false); }
-    if matches!(initial, Pace::Low) && matches!(pace, Pace::Full) { return Err(libc::ENOTSUP); }
-    if matches!(pace, Pace::Lowest) && !pace_raises()? { return Err(libc::ENOTSUP); }
-    if wanted < priority && !pace_raises()? { return Err(libc::ENOTSUP); }
-    check(unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, wanted) })?;
-    Ok(true)
+    let mut moved = false;
+    for _ in 0..TEMPO_PASSES {
+        let mut changed = false;
+        for task in tasks(pid)? {
+            let priority = match priority(task) {
+                Ok(priority) => priority,
+                Err(libc::ESRCH) => continue,
+                Err(code) => return Err(code),
+            };
+            if priority == wanted { continue; }
+            if matches!(initial, Pace::Low) && matches!(pace, Pace::Full) { return Err(libc::ENOTSUP); }
+            if matches!(pace, Pace::Lowest) && !pace_raises()? { return Err(libc::ENOTSUP); }
+            if wanted < priority && !pace_raises()? { return Err(libc::ENOTSUP); }
+            match check(unsafe { libc::setpriority(libc::PRIO_PROCESS, task as libc::id_t, wanted) }) {
+                Ok(()) | Err(libc::ESRCH) => changed = true,
+                Err(code) => return Err(code),
+            }
+        }
+        if !changed { break; }
+        moved = true;
+    }
+    Ok(moved)
 }
 
 pub fn monotonic_ms() -> u64 {

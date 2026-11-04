@@ -27,6 +27,8 @@ use crate::platform::{Event, Failure, Inheritance, Io, Launching, Opened, Part, 
 use crate::table::{Exit, Pace, Prepared, Transport, Usage};
 use events::Queue;
 use succession::Mode;
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString, c_int};
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
@@ -499,6 +501,11 @@ impl Platform for Posix {
         let rss_unit = 1024;
         let usage = Usage { user_micros: micros(usage.ru_utime), system_micros: micros(usage.ru_stime), peak_rss_bytes: usage.ru_maxrss.max(0) as u64 * rss_unit };
         Ok(Some((exit, usage)))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sweep(&mut self, owned: &HashSet<u64>) -> Result<(), String> {
+        self.queue.sweep(owned).map_err(|errno| format!("errno {errno}"))
     }
 
     fn close(&mut self, _: &mut Child, _: Part, handles: Vec<Rc<OwnedFd>>) {
