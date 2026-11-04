@@ -3,7 +3,7 @@
   import type { Side } from '@runlith/primitives/place';
   import { tooltip, type TooltipHint } from '@runlith/primitives/tooltip.svelte';
   import type { Snippet } from 'svelte';
-  import type { ClassValue } from 'svelte/elements';
+  import type { ClassValue, HTMLAttributes } from 'svelte/elements';
   import { cn } from '$lib/shared/utils.js';
 
   let {
@@ -15,6 +15,7 @@
     class: className,
     style,
     children,
+    ...rest
   }: {
     text?: string | null;
     keys?: string | null;
@@ -24,7 +25,7 @@
     class?: ClassValue;
     style?: string;
     children: Snippet;
-  } = $props();
+  } & Omit<HTMLAttributes<HTMLSpanElement>, 'children' | 'class' | 'style'> = $props();
 
   const wrapClass = $derived(cn(className));
   const boxed = $derived(wrapClass !== '');
@@ -50,6 +51,7 @@
 </script>
 
 <span
+  {...rest}
   bind:this={wrap}
   class={boxed ? wrapClass : 'contents'}
   {style}

@@ -94,17 +94,20 @@
           >
             {tone === 'add' ? '+' : tone === 'remove' ? '−' : '·'}
           </span>
-          <FadeText class="min-w-0 flex-1 text-muted-foreground" text={change.label} />
-          {#if change.peerName !== null && change.peerIdentity !== null}
-            {@const peer = rows.get(change.peerIdentity)}
-            <a
-              href={hrefOf(change.peerIdentity)}
-              data-block={change.peerIdentity}
-              class="max-w-56 min-w-0 shrink text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {#if peer?.title.trim()}<FadeText text={peer.title.trim()} />{:else}<BlockName name={change.peerName} />{/if}
-            </a>
-          {/if}
+          <span data-line class="flex-1 items-center gap-1.5">
+            <FadeText class="text-muted-foreground" text={change.label} />
+            {#if change.peerName !== null && change.peerIdentity !== null}
+              {@const peer = rows.get(change.peerIdentity)}
+              <a
+                href={hrefOf(change.peerIdentity)}
+                data-block={change.peerIdentity}
+                data-yield
+                class="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {#if peer?.title.trim()}<FadeText text={peer.title.trim()} />{:else}<BlockName name={change.peerName} />{/if}
+              </a>
+            {/if}
+          </span>
         </div>
       {/each}
 

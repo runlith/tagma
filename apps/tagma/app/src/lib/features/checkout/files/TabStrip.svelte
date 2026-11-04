@@ -36,14 +36,14 @@
   {:else}
     <FileIcon path={tab.path} />
   {/if}
-  <span class="flex min-w-0 flex-1 items-center gap-1.5">
+  <span data-line class="flex-1 items-center gap-1.5">
     <FadeText
-      class={cn('min-w-0', tab.state === 'preview' && 'italic', (tabs.orphaned(tab) || tabs.goneFile(tab)) && 'line-through')}
+      class={cn(tab.state === 'preview' && 'italic', (tabs.orphaned(tab) || tabs.goneFile(tab)) && 'line-through')}
       text={nameOf(tab)}
       data-tab-state={tab.state}
     />
     {#if tab.branch !== null}
-      <FadeText class="max-w-24 min-w-0 shrink rounded-sm bg-hover px-1 text-meta text-muted-foreground" text={tab.branch} />
+      <FadeText data-yield class="rounded-sm bg-hover px-1 text-meta text-muted-foreground" text={tab.branch} />
     {/if}
   </span>
   {#if mark !== null}

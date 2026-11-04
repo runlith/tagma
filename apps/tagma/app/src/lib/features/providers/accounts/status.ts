@@ -181,7 +181,8 @@ function noteOf(failure: AccountQuotaRow['failure'], restored: boolean, readAt: 
     restored ? 'last known before the server restarted' : null,
     readAt === null ? null : `updated ${updatedAgo(readAt, now)}`,
   ].filter((part): part is string => part !== null);
-  return parts.length === 0 ? null : parts.join(' · ');
+  const said = parts.join(', ');
+  return said === '' ? null : said.charAt(0).toUpperCase() + said.slice(1);
 }
 
 export function failureReason(row: AccountQuotaRow, served: ServedProvider | undefined): string | null {

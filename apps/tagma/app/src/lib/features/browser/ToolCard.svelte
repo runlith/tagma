@@ -63,12 +63,12 @@
 <div class="grid min-w-0 gap-1.5 rounded-lg border bg-raised p-1.5" data-browser-tool={entry.toolName}>
   <div class="flex h-7 min-w-0 items-center gap-2 px-1.5">
     <Globe class="size-3.5 shrink-0 text-muted-foreground" />
-    <FadeText class="shrink text-ui" text={seen?.title || seen?.url || asked.url || (page === null ? 'Page' : `Page ${page.slice(-8)}`)} />
-    {#if what !== '' || (seen?.url && seen.title)}
-      <FadeText class="flex-1 text-small text-muted-foreground" text={what || seen?.url} />
-    {:else}
-      <span class="flex-1"></span>
-    {/if}
+    <span data-line class="flex-1 items-center gap-2 text-ui">
+      <FadeText text={seen?.title || seen?.url || asked.url || (page === null ? 'Page' : `Page ${page.slice(-8)}`)} />
+      {#if what !== '' || (seen?.url && seen.title)}
+        <FadeText data-yield class="text-small text-muted-foreground" text={what || seen?.url} />
+      {/if}
+    </span>
     {#if page !== null}
       <Button size="xs" variant="ghost" onclick={() => showPage(panes, { project, page: page as PageId })}>Show</Button>
     {/if}

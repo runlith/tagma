@@ -45,10 +45,10 @@
       {#if rest.length > 0}
         <div class="grid gap-1 text-ui">
           {#each rest as one (one.glob)}
-            <div class="flex min-w-0 items-baseline gap-2">
-              <span class="stamp min-w-0 truncate">{one.glob}</span>
-              <span class="shrink-0 tabular">{one.lines}</span>
-              {#if one.why}<span class="min-w-0 truncate text-small text-muted-foreground">{one.why}</span>{/if}
+            <div data-line class="items-baseline gap-2">
+              <FadeText class="stamp" text={one.glob} />
+              <span class="tabular">{one.lines}</span>
+              {#if one.why}<FadeText data-yield class="text-small text-muted-foreground" text={one.why} />{/if}
             </div>
           {/each}
         </div>

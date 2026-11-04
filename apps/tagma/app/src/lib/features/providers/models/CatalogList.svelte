@@ -373,15 +373,15 @@
     {#if line.marked}
       <ProviderMark provider={line.choice.provider} class="size-3.5 shrink-0 text-muted-foreground" titled={false} />
     {/if}
-    <span class="flex min-w-0 flex-1 items-center gap-2">
+    <span data-line class="flex-1 items-center gap-2">
       <Tooltip text={line.choice.meta ? `${line.choice.meta} context` : null} class="flex min-w-0">
         <FadeText class="font-medium"><MatchText text={line.choice.label} {query} /></FadeText>
       </Tooltip>
       {#if line.named}
-        <span class="shrink-0 text-small text-muted-foreground/70">{line.choice.providerLabel}</span>
+        <span class="text-small text-muted-foreground/70">{line.choice.providerLabel}</span>
       {/if}
       {#each line.choice.flags ?? [] as flag (flag.text)}
-        <FadeText class={['min-w-0 shrink text-small', TONE[flag.tone]]} text={flag.text} />
+        <FadeText data-yield class={['text-small', TONE[flag.tone]]} text={flag.text} />
       {/each}
       {#if on && cost}
         {@render cost(line.choice, rung)}

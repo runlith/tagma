@@ -37,7 +37,7 @@ test('a signed CLI login names why the plan borrowing it cannot run, and only to
   const keyring = 'Codex keeps its login in the system keychain, which Tagma does not read';
   const codex = row({
     provider: 'codex',
-    origin: { kind: 'cli', place: 'default' },
+    origin: { kind: 'cli', place: 'default', shown: 'default', made: false },
     lent: [
       { provider: 'openai-oauth', problem: { kind: 'unreadable', reason: keyring } },
       { provider: 'other', problem: null },
@@ -72,7 +72,7 @@ test('a row nobody has read yet says so, and says nothing else', () => {
 
 test('a rejected account needs sign-in even while its last quota figures are kept', () => {
   const dead = row({
-    origin: { kind: 'cli', place: 'Codex CLI' },
+    origin: { kind: 'cli', place: 'Codex CLI', shown: 'Codex CLI', made: false },
     failure: { _tag: 'missing-scope', scope: 'user:profile' } as AccountQuotaRow['failure'],
     failedAt: NOW,
   });
@@ -118,7 +118,7 @@ test('a failed read keeps the windows it had, marked and dated', () => {
   );
   expect(failed.word).toBeNull();
   expect(failed.stale).toBe(true);
-  expect(failed.note).toBe('the provider answered 503 · updated just now');
+  expect(failed.note).toBe('The provider answered 503, updated just now');
 });
 
 test('the age beside figures is the figures’ own, never the age of the attempt that failed', () => {
@@ -131,7 +131,7 @@ test('the age beside figures is the figures’ own, never the age of the attempt
     SUBSCRIPTION,
     NOW,
   );
-  expect(failed.note).toBe('the provider could not be reached · updated 3h ago');
+  expect(failed.note).toBe('The provider could not be reached, updated 3h ago');
 });
 
 test('figures nobody refreshed for two cadences are marked; fresher ones are not', () => {

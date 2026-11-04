@@ -34,6 +34,7 @@
   import ShelfLayer from './ShelfLayer.svelte';
   import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import WorktreeDepartedGroup from './worktrees/DepartedGroup.svelte';
   import MoveToWorktree from './worktrees/MoveToWorktree.svelte';
   import PlaceBadge from './worktrees/PlaceBadge.svelte';
@@ -299,12 +300,15 @@
       onclick={() => void col.revealThread(from.parent.id)}
     >
       <CornerLeftUp class="size-3 shrink-0" />
-      <span class="min-w-0 truncate">
-        {from.parent.parentThreadId === null ? from.parent.title.trim() || 'Untitled' : (from.parent.name ?? from.parent.agentId)}
+      <span data-line class="items-center gap-1.5">
+        <FadeText
+          text={from.parent.parentThreadId === null ? from.parent.title.trim() || 'Untitled' : (from.parent.name ?? from.parent.agentId)}
+        />
+        <span data-yield class="flex items-center gap-1">
+          <WorktreeSwatch row={from.row} />
+          <FadeText class="font-mono" text={from.row.branch ?? from.row.name} />
+        </span>
       </span>
-      <span class="shrink-0 opacity-60">·</span>
-      <WorktreeSwatch row={from.row} />
-      <span class="min-w-0 shrink truncate font-mono">{from.row.branch ?? from.row.name}</span>
     </button>
   {/if}
 {/snippet}

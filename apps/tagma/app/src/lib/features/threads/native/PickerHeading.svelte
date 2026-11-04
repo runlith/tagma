@@ -53,7 +53,7 @@
 
 {#snippet modeWord()}
   {#if mode !== null}
-    <span class="shrink-0 text-muted-foreground/70" data-picker-mode={explicit ? 'pinned' : 'default'}>{mode}</span>
+    <span class="text-muted-foreground/70" data-picker-mode={explicit ? 'pinned' : 'default'}>{mode}</span>
   {/if}
 {/snippet}
 
@@ -73,12 +73,14 @@
       data-picker-account={account}
       onclick={ontoggle}
     >
-      <FadeText text={named ?? 'Choose an account'} />
-      {@render modeWord()}
+      <span data-line class="items-center gap-1">
+        <FadeText text={named ?? 'Choose an account'} />
+        {@render modeWord()}
+      </span>
       <ChevronDown class="size-3 shrink-0" />
     </button>
   {:else if named !== null}
-    <span class={['flex min-w-0 max-w-56 shrink items-center gap-1 px-1.5 font-normal text-muted-foreground', pushed && 'ml-auto']}>
+    <span data-line class={['max-w-56 shrink items-center gap-1 px-1.5 font-normal text-muted-foreground', pushed && 'ml-auto']}>
       <FadeText text={named} />
       {@render modeWord()}
     </span>

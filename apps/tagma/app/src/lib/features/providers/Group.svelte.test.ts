@@ -13,6 +13,7 @@ import { UsageAccounts } from './usage/Accounts.svelte.js';
 import { testProviders } from './testing.js';
 import { CountdownClock } from './accounts/CountdownClock.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { Outside } from '$lib/features/checkout/files/Outside.svelte.js';
 import ProviderGroup from './Group.svelte';
 
 const door = {
@@ -78,6 +79,7 @@ async function draw(
       Layer.of(UsageAccounts, accounts),
       testProviders(),
       Layer.of(Workspace, { contextProject: null } as never),
+      Layer.of(Outside, { local: false } as never),
       Layer.of(AccountsRepo, {
         begin: stubMutation(door.begin),
         complete: stubMutation(door.complete),

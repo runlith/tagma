@@ -63,13 +63,15 @@
     <span class="grid size-5 shrink-0 place-items-center rounded-md border border-border bg-hover">
       <ProviderMark provider={entry.provider} titled={false} class="size-3 text-foreground" />
     </span>
-    <FadeText class="shrink text-ui font-medium text-foreground">
-      {catalog.name(entry.provider)}{#if plan !== null}<span class="ml-1.5 font-normal text-muted-foreground">{plan}</span>{/if}
-    </FadeText>
-    {#if figures.length === 0}
-      {#if status !== null}
-        <FadeText class="text-small text-muted-foreground" text={status} />
+    <span data-line class="flex-1 items-center gap-3 text-ui">
+      <FadeText class="font-medium text-foreground">
+        {catalog.name(entry.provider)}{#if plan !== null}<span class="ml-1.5 font-normal text-muted-foreground">{plan}</span>{/if}
+      </FadeText>
+      {#if figures.length === 0 && status !== null}
+        <FadeText data-yield class="text-small text-muted-foreground" text={status} />
       {/if}
+    </span>
+    {#if figures.length === 0}
       {#if action !== null}
         <span class="ml-auto shrink-0 rounded-md border border-border bg-hover px-3 py-0.5 text-small text-foreground">
           {action}

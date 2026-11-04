@@ -129,7 +129,7 @@
           </span>
         {/if}
       </div>
-      <FadeText class="flex h-4 items-center gap-3 text-meta whitespace-nowrap text-muted-foreground" data-work-figures>
+      <div data-line class="items-center gap-3 text-meta text-muted-foreground" data-work-figures>
         {#each ports as port (`${port.address}:${port.port}`)}
           {#if port.url !== null}
             {@const url = port.url}
@@ -144,12 +144,12 @@
             <span class="shrink-0 font-mono text-foreground" data-work-port={port.port}>{port.address}:{port.port}</span>
           {/if}
         {/each}
-        {#if line?.cwd}<PathText class="min-w-0 shrink font-mono" path={line.cwd} />{/if}
-        {#if line?.current}<FadeText class="shrink font-mono" text={line.current} />{/if}
-        {#if execution.share !== null}<span class="shrink-0 tabular">{percent(execution.share)}</span>{/if}
-        {#if execution.memoryBytes > 0}<span class="shrink-0 tabular">{formatBytes(execution.memoryBytes)}</span>{/if}
-        {#if line?.wait === 'background'}<span class="shrink-0 opacity-70">background</span>{/if}
-      </FadeText>
+        {#if execution.share !== null}<span class="tabular">{percent(execution.share)}</span>{/if}
+        {#if execution.memoryBytes > 0}<span class="tabular">{formatBytes(execution.memoryBytes)}</span>{/if}
+        {#if line?.wait === 'background'}<span class="opacity-70">background</span>{/if}
+        {#if line?.current}<FadeText data-yield class="font-mono" text={line.current} />{/if}
+        {#if line?.cwd}<PathText data-yield directory="after" class="font-mono" path={line.cwd} />{/if}
+      </div>
     </div>
   </div>
   <span

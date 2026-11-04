@@ -138,9 +138,9 @@
                 <FadeText class="flex-1 text-ui" text={titleOf(row)} />
                 <span class="shrink-0 tabular text-meta text-muted-foreground">{timeCompact(row.at, clock.now)}</span>
               </span>
-              <span class="flex items-baseline gap-1.5 text-small text-muted-foreground">
-                <span class="shrink-0 font-medium">{row.project.name}</span>
-                <FadeText class="flex-1" text={readingOf(row)} />
+              <span data-line class="items-baseline gap-1.5 text-small text-muted-foreground">
+                <FadeText class="font-medium" text={row.project.name} />
+                <FadeText data-yield text={readingOf(row)} />
               </span>
             </span>
           </a>

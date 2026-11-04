@@ -8,6 +8,7 @@
   import { conversationLabel } from './conversationLabel.js';
   import { ThreadsRepo } from './Repo.js';
   import Spans from '$lib/shared/Spans.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
 
   const WINDOW_TEXT = 400;
 
@@ -48,12 +49,12 @@
   onclick={onToggle}
 >
   <ChevronRight class={['mt-0.5 size-3.5 text-muted-foreground transition-transform', open && 'rotate-90']} />
-  <span class="min-w-0 truncate leading-[18px]">{label}</span>
+  <FadeText class="leading-[18px]" text={label} />
   <span class="tabular text-meta leading-[18px] text-muted-foreground" data-conversation-time>{timeCompact(hit.match.occurredAt)}</span>
   {#if elsewhere !== null || hit.archived}
-    <span class="col-span-2 col-start-2 flex min-w-0 items-center gap-1.5 text-small leading-[15px] text-muted-foreground/80">
-      {#if elsewhere !== null}<span class="min-w-0 truncate font-mono" data-conversation-project>{elsewhere.name}</span>{/if}
-      {#if hit.archived}<span class="eyebrow shrink-0">Archived</span>{/if}
+    <span data-line class="col-span-2 col-start-2 items-center gap-1.5 text-small text-muted-foreground/80">
+      {#if elsewhere !== null}<FadeText class="font-mono" text={elsewhere.name} data-conversation-project />{/if}
+      {#if hit.archived}<span class="eyebrow">Archived</span>{/if}
     </span>
   {/if}
   <span class="col-span-2 col-start-2 line-clamp-2 text-small leading-[16px] text-muted-foreground">

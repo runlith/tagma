@@ -113,8 +113,10 @@
     {#if here}<span class="pointer-events-none absolute inset-y-2 left-0 w-0.5 bg-brand" aria-hidden="true"></span>{/if}
     <span class="pointer-events-none flex min-w-0 flex-1 items-center gap-2 select-none">
       <WorktreeSwatch row={row.missing ? null : row} size="md" />
-      <FadeText class="max-w-1/2 shrink-0 font-mono text-ui font-medium" text={label} />
-      {#if what !== null}<FadeText class="flex-1 text-ui text-muted-foreground" text={what} data-board-what />{/if}
+      <span data-line class="flex-1 items-center gap-2 text-ui">
+        <FadeText class="font-mono font-medium" text={label} />
+        {#if what !== null}<FadeText data-yield class="text-muted-foreground" text={what} data-board-what />{/if}
+      </span>
     </span>
     <span class="pointer-events-none flex w-18 shrink-0 items-center select-none">
       <AgentCounts waiting={row.agents.waiting} working={row.agents.working} />
@@ -124,14 +126,15 @@
         <ActLine {flight} class="max-w-full text-ui" />
       {:else if phrase !== null}
         <span
-          class={['flex min-w-0 items-center gap-1.5 text-ui', phrase.hint !== null && 'pointer-events-auto relative']}
+          data-line
+          class={['items-center gap-1.5 text-ui', phrase.hint !== null && 'pointer-events-auto relative']}
           title={phrase.hint ?? undefined}
           data-board-phrase={phrase.kind}
         >
           {#if phrase.pending}<Waiting class="size-3 text-muted-foreground" />{/if}
           <FadeText class={phrase.ink} text={phrase.words} />
           {#each phrase.asides as aside (aside)}
-            <FadeText class="text-small text-muted-foreground" text={aside} />
+            <FadeText data-yield class="text-small text-muted-foreground" text={aside} />
           {/each}
         </span>
       {/if}

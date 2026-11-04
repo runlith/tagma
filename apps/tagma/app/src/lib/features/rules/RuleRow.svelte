@@ -76,17 +76,20 @@
     </span>
   </Tooltip>
 
-  <FadeText class={cn('min-w-0 shrink', row.enabled ? 'text-foreground/90 group-hover/rule:text-foreground' : 'text-muted-foreground/70')}>
-    <CodeText text={row.title} />
-  </FadeText>
-
-  {#if row.inspection !== null}
-    <Tooltip text={row.function ?? (row.enabled ? 'cannot be read' : 'switched off, the key stays named')} class="min-w-0 max-w-48 shrink">
-      <FadeText class="font-mono text-small text-muted-foreground/70" text={row.inspection} />
-    </Tooltip>
-  {/if}
-
-  <span class="min-w-0 flex-1"></span>
+  <span data-line class="flex-1 items-center gap-3">
+    <FadeText class={row.enabled ? 'text-foreground/90 group-hover/rule:text-foreground' : 'text-muted-foreground/70'}>
+      <CodeText text={row.title} />
+    </FadeText>
+    {#if row.inspection !== null}
+      <Tooltip
+        text={row.function ?? (row.enabled ? 'cannot be read' : 'switched off, the key stays named')}
+        class="block min-w-0"
+        data-yield
+      >
+        <FadeText class="font-mono text-small text-muted-foreground/70" text={row.inspection} />
+      </Tooltip>
+    {/if}
+  </span>
 
   <Tooltip text={tail.detail}>
     <span class={cn('w-36 shrink-0 text-right text-small tabular-nums', tail.tone)}>{tail.word}</span>

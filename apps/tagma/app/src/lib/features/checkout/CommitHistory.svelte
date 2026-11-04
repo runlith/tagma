@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { timeAgo } from '$lib/shared/time.js';
   import { CheckoutRepo } from './Repo.js';
   import { PathCommits } from './PathCommits.svelte.js';
@@ -44,8 +45,10 @@
             data-history-commit={line.sha}
           >
             <span class="shrink-0 font-mono text-meta text-muted-foreground/60">{line.sha}</span>
-            <span class="min-w-0 flex-1 truncate">{line.subject}</span>
-            <span class="shrink-0 truncate text-small text-muted-foreground/60">{line.author}</span>
+            <span data-line class="flex-1 items-center gap-3">
+              <FadeText text={line.subject} />
+              <FadeText data-yield class="text-small text-muted-foreground/60" text={line.author} />
+            </span>
             <span class="shrink-0 text-meta tabular-nums text-muted-foreground/60">{timeAgo(line.date)}</span>
           </button>
         </li>

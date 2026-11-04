@@ -204,12 +204,12 @@
           )}
         >
           <span class="size-1.5 shrink-0 rounded-full" style:background={peer ? tags.statusVar(peer) : 'var(--muted-foreground)'}></span>
-          <span class={cn('min-w-0 flex-1', !title && 'text-muted-foreground')}>
-            <FadeText text={title || item.name} />
+          <span data-line class="flex-1 items-center gap-1.5">
+            <FadeText class={cn(!title && 'text-muted-foreground')} text={title || item.name} />
+            {#if far !== undefined}
+              <FadeText data-yield class="stamp text-muted-foreground" text={far.project} />
+            {/if}
           </span>
-          {#if far !== undefined}
-            <span class="stamp max-w-24 shrink-0 text-muted-foreground"><FadeText text={far.project} /></span>
-          {/if}
         </a>
       {/if}
     {/each}

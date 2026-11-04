@@ -56,14 +56,14 @@
     {@const elsewhere = row.hit.project !== null && row.hit.project.id !== projectId ? row.hit.project : null}
     <MessagesSquare class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
     <div class="min-w-0 flex-1">
-      <div class="flex min-w-0 items-baseline gap-2">
-        <span class="truncate">{conversationLabel(row.hit)}</span>
-        {#if elsewhere !== null}<span class="stamp shrink-0 text-muted-foreground" data-palette-project>{elsewhere.name}</span>{/if}
-        {#if row.hit.archived}<span class="eyebrow shrink-0 text-muted-foreground">Archived</span>{/if}
+      <div data-line class="items-baseline gap-2">
+        <FadeText text={conversationLabel(row.hit)} />
+        {#if elsewhere !== null}<span class="stamp text-muted-foreground" data-palette-project>{elsewhere.name}</span>{/if}
+        {#if row.hit.archived}<span class="eyebrow text-muted-foreground">Archived</span>{/if}
       </div>
-      <div class="truncate text-small text-muted-foreground">
+      <FadeText class="text-small text-muted-foreground">
         <Spans text={row.hit.match.snippet} spans={row.hit.match.highlights} />
-      </div>
+      </FadeText>
     </div>
     <span class="stamp tabular shrink-0 text-muted-foreground">{timeCompact(row.hit.match.occurredAt)}</span>
   {:else if row.kind === 'block'}
@@ -72,9 +72,9 @@
       class={twoLines ? 'mt-0.5 size-3.5 shrink-0 text-muted-foreground' : 'size-3.5 shrink-0 text-muted-foreground'}
     />
     <div class="min-w-0 flex-1">
-      <div class="truncate">{row.hit.title.trim() || 'Untitled'}</div>
+      <FadeText text={row.hit.title.trim() || 'Untitled'} />
       {#if row.hit.snippet}
-        <div class="truncate text-small text-muted-foreground">{row.hit.snippet}</div>
+        <FadeText class="text-small text-muted-foreground" text={row.hit.snippet} />
       {/if}
     </div>
     <span class="flex shrink-0 items-center gap-1.5">
@@ -83,16 +83,18 @@
   {:else if row.kind === 'commit'}
     <GitCommitHorizontal class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
     <div class="min-w-0 flex-1">
-      <div class="truncate">{row.commit.subject}</div>
-      <div class="truncate text-small text-muted-foreground">
+      <FadeText text={row.commit.subject} />
+      <FadeText class="text-small text-muted-foreground">
         <span class="stamp">{row.commit.sha.slice(0, 7)}</span> · {row.commit.author}
-      </div>
+      </FadeText>
     </div>
     <span class="stamp tabular shrink-0 text-muted-foreground">{timeCompact(row.commit.date)}</span>
   {:else if row.kind === 'setting'}
     <Settings2 class="size-3.5 shrink-0 text-muted-foreground" />
-    <FadeText class="flex-1"><MatchText text={row.entry.title} positions={row.positions} /></FadeText>
-    <span class="stamp min-w-0 shrink truncate text-muted-foreground">{row.entry.id}</span>
+    <span data-line class="flex-1 items-baseline gap-2">
+      <FadeText><MatchText text={row.entry.title} positions={row.positions} /></FadeText>
+      <FadeText data-yield class="stamp text-muted-foreground" text={row.entry.id} />
+    </span>
   {:else if row.kind === 'action'}
     {@const Icon = row.action.icon ?? ChevronRight}
     {@const note = row.action.note?.(env) ?? null}
@@ -102,7 +104,7 @@
   {:else}
     <Sparkles class="size-3.5 shrink-0 text-brand" />
     <span class="shrink-0">Ask Tagma</span>
-    <span class="min-w-0 flex-1 truncate text-muted-foreground">“{row.text}”</span>
+    <FadeText class="flex-1 text-muted-foreground" text={`“${row.text}”`} />
     <Kbd chord={keymap.spell(keymap.mod('Enter'))} size="sm" />
   {/if}
 </Command.Item>

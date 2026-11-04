@@ -245,8 +245,10 @@
 {#snippet head(row: { id: Part; label: string; badge: string; tokens: number; opens: boolean }, open: boolean)}
   <span class="flex min-w-0 items-center gap-2">
     <span class={['size-1.5 shrink-0', TONE[row.id]]}></span>
-    <FadeText class="text-ui text-foreground" text={row.label} />
-    {#if row.badge}<span class="shrink-0 font-mono text-meta text-muted-foreground">{row.badge}</span>{/if}
+    <span data-line class="items-center gap-2 text-ui">
+      <FadeText class="text-foreground" text={row.label} />
+      {#if row.badge}<span class="font-mono text-meta text-muted-foreground">{row.badge}</span>{/if}
+    </span>
     {#if row.opens}{@render chevron(open)}{/if}
   </span>
   <span class="flex shrink-0 items-baseline font-mono tabular-nums">

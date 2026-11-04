@@ -7,6 +7,7 @@
   import { fade } from 'svelte/transition';
   import { Finishing, type Outcome } from './Finishing.svelte.js';
   import WorktreeSwatch from './WorktreeSwatch.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
 
   let { outcome, named = false, class: className = '' }: { outcome: Outcome; named?: boolean; class?: ClassValue } = $props();
 
@@ -41,9 +42,11 @@
     {/if}
     {#if named}
       <WorktreeSwatch row={{ hue: outcome.hue, kind: 'tagma' }} />
-      <span class="max-w-[45%] shrink-0 truncate font-mono text-foreground/80">{outcome.label}</span>
     {/if}
-    <span class={['min-w-0 truncate', refused ? 'text-destructive/90' : 'text-muted-foreground']}>{outcome.words}</span>
+    <span data-line class="flex-1 items-center gap-2">
+      {#if named}<FadeText class="font-mono text-foreground/80" text={outcome.label} />{/if}
+      <FadeText data-yield class={refused ? 'text-destructive/90' : 'text-muted-foreground'} text={outcome.words} />
+    </span>
     {#if outcome.link !== null}
       <a href={outcome.link} target="_blank" rel="noopener noreferrer" class={[LINK, 'inline-flex items-center gap-1']}>
         <ExternalLink class="size-3" />Open

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import Copy from '@lucide/svelte/icons/copy';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
   import PencilLine from '@lucide/svelte/icons/pencil-line';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -7,15 +9,14 @@
   import { Dialogs } from '@runlith/primitives/DialogRegistry.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
+  import { Outside } from '$lib/features/checkout/files/Outside.svelte.js';
   import { AccountsRepo } from '$lib/features/providers/AccountsRepo.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
-  import { cn } from '$lib/shared/utils.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import { spellKey } from '$lib/shared/chordSpelling.js';
   import { Host } from '@runlith/layer/Host';
   import FadeText from '$lib/shared/FadeText.svelte';
-  import PathText from '$lib/shared/PathText.svelte';
   import { CountdownClock } from './CountdownClock.svelte.js';
   import RemoveAccountDialog from '../auth/RemoveAccountDialog.svelte';
   import { usageNeed, usageStatus, readingAt, updatedAgo, NEED_WORDS, problemWords } from './status.js';
@@ -32,6 +33,7 @@
   const countdownClock = CountdownClock.use();
   const accounts = AccountsRepo.use();
   const catalog = ProviderCatalog.use();
+  const outside = Outside.use();
 
   const TAG = 'shrink-0 rounded-sm border px-1 stamp leading-4';
   const MENU_TRIGGER =
@@ -48,8 +50,11 @@
   const section = $derived(catalog.section(row.provider));
   const mode = $derived(section?.options.find((option) => option.provider === row.provider));
   const directory = $derived(row.origin.kind === 'cli' && row.origin.place !== 'default' ? row.origin.place : null);
+  const given = $derived(row.origin.kind === 'cli' && row.origin.place !== 'default' && !row.origin.made ? row.origin.shown : null);
   const place = $derived(
-    row.origin.kind === 'own' ? 'Tagma sign-in' : (mode?.defaultPlace ?? `${mode?.label ?? catalog.name(row.provider)} default`),
+    row.origin.kind === 'own' || row.origin.made
+      ? 'Tagma sign-in'
+      : (mode?.defaultPlace ?? `${mode?.label ?? catalog.name(row.provider)} default`),
   );
   const lending = $derived(
     row.lent.flatMap((one) => {
@@ -57,7 +62,7 @@
       return words === null ? [] : [{ provider: one.provider, words }];
     }),
   );
-  const staleNote = $derived(status.stale && status.note !== null && bars.length > 0 ? status.note : null);
+  const staleNote = $derived(status.stale && bars.length > 0 ? status.note : null);
   const read = $derived(readingAt(row));
 
   let busy = $state(false);
@@ -155,15 +160,10 @@
 
     <div class="grid min-w-0 gap-0.5">
       {#if renaming === null}
-        <div class="flex min-w-0 items-center gap-2">
+        <div data-line class="items-center gap-2">
           <Tooltip text={row.label} class="block min-w-0">
-            <FadeText class={cn('block min-w-0', keyed ? 'stamp text-ui' : 'font-medium')}>{row.label}</FadeText>
+            <FadeText class={keyed ? 'stamp text-ui' : 'font-medium'}>{row.label}</FadeText>
           </Tooltip>
-          {#if directory !== null}
-            <PathText path={directory} class="min-w-0 text-small text-muted-foreground" />
-          {:else}
-            <FadeText class="min-w-0 shrink text-small text-muted-foreground">{place}</FadeText>
-          {/if}
           {#if row.problem !== null}
             <Tooltip text={status.note ?? undefined}>
               <span
@@ -175,16 +175,14 @@
               </span>
             </Tooltip>
           {/if}
+          {#if given !== null}
+            <FadeText data-yield class="text-small text-muted-foreground">{given}</FadeText>
+          {:else}
+            <span class="text-small text-muted-foreground">{place}</span>
+          {/if}
         </div>
-        {#if row.expiresAt !== undefined || staleNote !== null}
-          <div class="flex min-w-0 items-center gap-3 text-small text-muted-foreground">
-            {#if row.expiresAt !== undefined}
-              <span class="shrink-0">Expires {new Date(row.expiresAt).toLocaleDateString()}</span>
-            {/if}
-            {#if staleNote !== null}
-              <FadeText class="min-w-0">{staleNote}</FadeText>
-            {/if}
-          </div>
+        {#if row.expiresAt !== undefined}
+          <span class="text-small text-muted-foreground">Expires {new Date(row.expiresAt).toLocaleDateString()}</span>
         {/if}
         {#each lending as one (one.provider)}
           <div class="flex min-w-0 items-center gap-2 text-small" data-lent={one.provider}>
@@ -201,28 +199,30 @@
       {/if}
     </div>
 
-    <div
-      class="hidden items-center gap-x-2 gap-y-1 transition-opacity @min-[34rem]:grid @min-[34rem]:grid-cols-[1.5rem_4rem_2.5rem_auto] {status.stale &&
-      bars.length > 0
-        ? 'opacity-45'
-        : ''}"
-    >
-      {#if bars.length > 0}
-        {#each bars as figure (figure.kind + (figure.name ?? ''))}
-          {@const tone = figureTone(figure, countdownClock.now)}
-          <span class="stamp text-muted-foreground">{figure.name ?? ''}</span>
-          <Bar used={figure.usedPercent} color={toneFill(tone)} class="h-1" />
-          <span class="text-right stamp {toneText(tone)}">{usagePercentText(figure.usedPercent)}</span>
-          <span class="whitespace-nowrap stamp text-muted-foreground">
-            {figure.resetsAt === null ? '' : resetText(figure.resetsAt, countdownClock.now)}
-          </span>
-        {/each}
-      {:else if status.word !== null}
-        <Tooltip text={status.note ?? undefined} class="col-span-4 block min-w-0">
-          <span class="stamp {toneText(status.tone)}">{status.word}</span>
-        </Tooltip>
-      {/if}
-    </div>
+    <Tooltip text={staleNote}>
+      <div
+        class="hidden items-center gap-x-2 gap-y-1 transition-opacity @min-[34rem]:grid @min-[34rem]:grid-cols-[1.5rem_4rem_2.5rem_auto] {status.stale &&
+        bars.length > 0
+          ? 'opacity-45'
+          : ''}"
+      >
+        {#if bars.length > 0}
+          {#each bars as figure (figure.kind + (figure.name ?? ''))}
+            {@const tone = figureTone(figure, countdownClock.now)}
+            <span class="stamp text-muted-foreground">{figure.name ?? ''}</span>
+            <Bar used={figure.usedPercent} color={toneFill(tone)} class="h-1" />
+            <span class="text-right stamp {toneText(tone)}">{usagePercentText(figure.usedPercent)}</span>
+            <span class="whitespace-nowrap stamp text-muted-foreground">
+              {figure.resetsAt === null ? '' : resetText(figure.resetsAt, countdownClock.now)}
+            </span>
+          {/each}
+        {:else if status.word !== null}
+          <Tooltip text={status.note ?? undefined} class="col-span-4 block min-w-0">
+            <span class="stamp {toneText(status.tone)}">{status.word}</span>
+          </Tooltip>
+        {/if}
+      </div>
+    </Tooltip>
 
     <div class="flex shrink-0 items-center gap-1">
       {#if needsSignIn && onSignIn !== undefined}
@@ -246,6 +246,19 @@
             Refresh quota
           </DropdownMenu.Item>
           <DropdownMenu.Item icon={PencilLine} onSelect={() => (renaming = row.label)}>Rename</DropdownMenu.Item>
+          {#if directory !== null}
+            {#if outside.local}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                icon={FolderOpen}
+                onSelect={() => void outside.reveal({ projectId: null, rootId: null, path: directory, line: null })}
+              >
+                {outside.finder}
+              </DropdownMenu.Item>
+            {/if}
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item icon={Copy} onSelect={() => void navigator.clipboard.writeText(directory)}>Copy path</DropdownMenu.Item>
+          {/if}
           <DropdownMenu.Separator />
           <DropdownMenu.Item variant="destructive" icon={Trash2} onSelect={confirmRemove}>Remove</DropdownMenu.Item>
           <DropdownMenu.Separator />

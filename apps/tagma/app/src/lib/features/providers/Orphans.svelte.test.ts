@@ -8,6 +8,7 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/accounts';
 import { liveFeed, mountShell } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { Outside } from '$lib/features/checkout/files/Outside.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
@@ -43,6 +44,7 @@ test('accounts outside the catalog remain visible for removal, without installed
     Layer.mergeAll(Notices, CountdownClock, UsageAccounts, AccountsRepo, AdaptersRepo),
     Layer.mergeAll(
       testProviders([]),
+      Layer.of(Outside, { local: false } as never),
       Layer.of(Cache, new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       Layer.of(Live, feed.live),
       Layer.of(

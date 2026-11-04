@@ -148,7 +148,7 @@
   {@const words =
     cold === null || standing ? null : coldWords(catalog.models, cold, { provider: choice.provider, model: choice.model, rung }, clock.now)}
   {#if words !== null}
-    <FadeText class="min-w-0 shrink text-small text-muted-foreground" text={words} />
+    <FadeText data-yield class="text-small text-muted-foreground" text={words} />
   {/if}
 {/snippet}
 
