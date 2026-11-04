@@ -13,7 +13,7 @@ import { birthsOf, inboxOf, threadInbox, turnsOf } from '../../../threads/testin
 import { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { EvidenceFeed } from '../../../threads/contract/service/evidence.js';
-import { makeDoorWorld } from '../doorFixture.js';
+import { ProtocolWorld, protocolWorld } from '../threads/protocolWorld.js';
 import { nativeLeads } from '../claudeLogin.js';
 import { holdThreads } from '../threadScope.js';
 
@@ -23,37 +23,42 @@ const ARCHIVE = 'Put the sweeper away.';
 
 const setup = Effect.gen(function* () {
   const archived = yield* Deferred.make<void>();
-  const world = yield* makeDoorWorld({
-    models: (standing) => ({
-      ...standing,
-      request: (input) => ({
-        ...standing.request(input),
-        stream: (call) => {
-          const asked = JSON.stringify(call.messages);
-          if (asked.includes(ARCHIVE) && !asked.includes('"type":"tool-result","id":"archive-sweeper"'))
-            return Stream.fromIterable([
-              { type: 'tool-input-start', id: 'archive-sweeper', name: 'archive_thread' },
-              { type: 'tool-call', id: 'archive-sweeper', name: 'archive_thread', input: { threadId: 'sweeper' } },
-              { type: 'finish', reason: 'tool-calls' },
-            ]);
-          if (asked.includes('"type":"tool-result","id":"archive-sweeper"')) Deferred.doneUnsafe(archived, Effect.void);
-          if (asked.includes('Say where the floor stands.'))
+  const context = yield* Layer.build(
+    protocolWorld({
+      name: 'collaboration-door',
+      own: 'harness executables on PATH',
+      models: (standing) => ({
+        ...standing,
+        request: (input) => ({
+          ...standing.request(input),
+          stream: (call) => {
+            const asked = JSON.stringify(call.messages);
+            if (asked.includes(ARCHIVE) && !asked.includes('"type":"tool-result","id":"archive-sweeper"'))
+              return Stream.fromIterable([
+                { type: 'tool-input-start', id: 'archive-sweeper', name: 'archive_thread' },
+                { type: 'tool-call', id: 'archive-sweeper', name: 'archive_thread', input: { threadId: 'sweeper' } },
+                { type: 'finish', reason: 'tool-calls' },
+              ]);
+            if (asked.includes('"type":"tool-result","id":"archive-sweeper"')) Deferred.doneUnsafe(archived, Effect.void);
+            if (asked.includes('Say where the floor stands.'))
+              return Stream.fromIterable([
+                { type: 'text-start', id: 'reply' },
+                { type: 'text-delta', id: 'reply', text: 'The floor stands.' },
+                { type: 'text-end', id: 'reply' },
+                { type: 'finish', reason: 'stop' },
+              ]);
             return Stream.fromIterable([
               { type: 'text-start', id: 'reply' },
-              { type: 'text-delta', id: 'reply', text: 'The floor stands.' },
+              { type: 'text-delta', id: 'reply', text: 'Noted.' },
               { type: 'text-end', id: 'reply' },
               { type: 'finish', reason: 'stop' },
             ]);
-          return Stream.fromIterable([
-            { type: 'text-start', id: 'reply' },
-            { type: 'text-delta', id: 'reply', text: 'Noted.' },
-            { type: 'text-end', id: 'reply' },
-            { type: 'finish', reason: 'stop' },
-          ]);
-        },
+          },
+        }),
       }),
     }),
-  });
+  );
+  const { world, projectId } = Context.get(context, ProtocolWorld);
   const account = yield* Effect.acquireRelease(
     world.runtime.tokens.add('subscription', {
       accessToken: 'fixture-bearer',
@@ -66,7 +71,6 @@ const setup = Effect.gen(function* () {
     (key) => world.runtime.tokens.remove('subscription', key).pipe(Effect.orDie),
   );
   yield* nativeLeads(world, account);
-  const projectId = yield* world.stealthProject();
   yield* holdThreads(world);
   return { world, account, archived, projectId };
 });
