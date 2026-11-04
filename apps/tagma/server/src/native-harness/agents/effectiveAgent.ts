@@ -61,27 +61,23 @@ function unofferedTools(
   overlay: AgentProfile | undefined,
   registered: readonly Capability[],
   offers: CapabilityOffers['Service'],
-  facts: OfferFacts,
 ): ReadonlyMap<string, readonly string[]> {
   const unoffered = new Map<string, readonly string[]>();
-  if (overlay?.tools === undefined) return unoffered;
+  if (overlay?.tools === undefined || overlay.capabilities === undefined) return unoffered;
   if (effective.grant.sources.some((entry) => entry.standing === true && !CONVERSATION_SOURCES.has(entry.source))) return unoffered;
   const offered = new Set(CONVERSATION_TOOLS);
   for (const capability of effective.held) {
-    const inventory = capabilityInventory(capability, offers, facts);
+    const inventory = capabilityInventory(capability, offers, 'any-world');
     if (!inventory.complete) return unoffered;
     for (const tool of inventory.tools) offered.add(tool.name);
   }
   const others = registered
     .filter((capability) => !effective.held.includes(capability))
-    .map((capability) => ({ id: capability.id, ...capabilityInventory(capability, offers, facts) }));
+    .map((capability) => ({ id: capability.id, ...capabilityInventory(capability, offers, 'any-world') }));
   for (const name of overlay.tools) {
     if (offered.has(name)) continue;
     const offering = others.filter((other) => other.tools.some((tool) => tool.name === name)).map((other) => other.id);
-    unoffered.set(
-      name,
-      offering.length > 0 ? offering : others.filter((other) => !other.complete).map((other) => `${other.id} (runtime sources)`),
-    );
+    unoffered.set(name, offering);
   }
   return unoffered;
 }
@@ -122,7 +118,7 @@ export function agentPrompt(
   render: SectionRender,
   overlay: AgentProfile | undefined,
 ): Result.Result<PromptDocument, GateRefusal<'agent-invalid'>> {
-  const refusal = unofferedRefusal(unofferedTools(effective, overlay, registered, offers, facts), overlay?.id ?? agentId);
+  const refusal = unofferedRefusal(unofferedTools(effective, overlay, registered, offers), overlay?.id ?? agentId);
   if (refusal !== undefined) return Result.fail(refusal);
   const document = promptDocument({
     agentId,

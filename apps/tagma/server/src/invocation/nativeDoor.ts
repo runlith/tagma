@@ -125,6 +125,7 @@ export const nativeOffers = (catalog: OperationCatalog['Service']): CapabilityOf
   return CapabilityOffers.of({
     offers: (capability, facts) =>
       (offered.get(capability) ?? []).filter(({ needs }) => needs.every((need) => needMet(need, facts))).map(({ offer }) => offer),
+    everywhere: (capability) => (offered.get(capability) ?? []).map(({ offer }) => offer),
   });
 };
 
