@@ -179,10 +179,13 @@ export function describeThreadSpawnBirth<TTx, TWrite extends TTx = TTx, R = neve
       Effect.fnUntraced(function* () {
         const stack = yield* openedSpawn(open);
         const { world, parent, storage } = stack;
-        const source = yield* storage.aggregate.insert({
+        const source = yield* storage.createThread({
           ownerId: OWNER,
-          agentId: 'harness',
+          scope: SCOPE,
           transport: { adapter: 'acp', profile: 'claude-code', agent: stack.agentId },
+        });
+        yield* storage.aggregate.update(source.id, {
+          agentId: 'harness',
           systemPrompt: 'The prompt the hosted session was opened with.',
         });
         const forked = yield* world.harness.collaboration.collaborate(parent, OWNER, (verbs) =>
