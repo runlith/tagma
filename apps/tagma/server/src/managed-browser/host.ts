@@ -428,10 +428,10 @@ export const makeManagedHost = Effect.gen(function* () {
     yield* launch(profile).pipe(
       Effect.onExit((exit) =>
         Effect.andThen(
-          Deferred.done(done, exit),
           Effect.sync(() => {
             starting.delete(profile.id);
           }),
+          Deferred.done(done, exit),
         ),
       ),
       Effect.forkIn(scope),
