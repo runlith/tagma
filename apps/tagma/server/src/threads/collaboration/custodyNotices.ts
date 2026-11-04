@@ -1,3 +1,4 @@
+import { CurrentCost, rootCost } from '@runlith/performance/CostLedger';
 import { Clock, Duration, Effect, Queue, Stream } from 'effect';
 import { RETAINED_DETAIL_MS } from '../../executions/contract/wire/requestKeys.js';
 import {
@@ -112,7 +113,7 @@ export const makeCustodyNotices = Effect.fnUntraced(function* ({ send }: { reado
   const attend = (moved: Queue.Dequeue<TerminalDisplaced>, everyMs: number): Effect.Effect<never> =>
     Stream.merge(Stream.fromQueue(moved).pipe(Stream.map(() => undefined)), Stream.tick(Duration.millis(everyMs))).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-      Stream.runForEach(() => pass()),
+      Stream.runForEach(() => rootCost('CustodyNotices.pass', pass()).pipe(Effect.provideService(CurrentCost, null))),
       Effect.andThen(Effect.never),
     );
   return { deliver, pass, attend };
