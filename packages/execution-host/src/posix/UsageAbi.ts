@@ -1,8 +1,8 @@
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { constants } from 'node:os';
-import type { MachineMemory, MemoryPressure } from '@runlith/executions/protocol/evidence';
-import type { MachineCounters } from '../../UsageReader';
-import { birthOf } from '../birth';
+import type { MachineMemory, MemoryKind, MemoryPressure } from '@runlith/executions/protocol/evidence';
+import type { MachineCounters } from '../UsageReader';
+import { birthOf } from './birth';
 import type { GpuClient, GpuRead } from './gpu';
 
 const USAGE_SYMBOLS = {
@@ -26,6 +26,7 @@ export type NativeCounters = {
   readonly residentBytes: number;
   readonly footprintBytes: number | undefined;
   readonly memoryErrno: number;
+  readonly memoryKind: MemoryKind;
   readonly responsible: number;
 };
 
@@ -36,16 +37,29 @@ export interface UsageAbi {
   gpu(): GpuRead;
 }
 
+export type UsagePlatform = {
+  readonly code: number;
+  readonly adapter: string;
+  readonly memoryProbe: string;
+  readonly pressureProbe: string;
+  readonly startedAt: (first: bigint, second: bigint) => number;
+  readonly gpuUnavailable: (errno: number) => string;
+  readonly clientUnavailable: (errno: number) => string;
+};
+
 export class NativeUsage implements UsageAbi {
   private capacity = 2048;
   private values = new BigUint64Array(this.capacity * ROW);
   private gpuCapacity = 256;
   private gpuValues = new BigUint64Array(this.gpuCapacity * 6);
 
-  private constructor(private readonly library: ReturnType<typeof dlopen<typeof USAGE_SYMBOLS>>) {}
+  private constructor(
+    private readonly library: ReturnType<typeof dlopen<typeof USAGE_SYMBOLS>>,
+    private readonly platform: UsagePlatform,
+  ) {}
 
-  static load(path: string): NativeUsage {
-    return new NativeUsage(dlopen(path, USAGE_SYMBOLS));
+  static load(path: string, platform: UsagePlatform): NativeUsage {
+    return new NativeUsage(dlopen(path, USAGE_SYMBOLS), platform);
   }
 
   unload(): void {
@@ -73,13 +87,14 @@ export class NativeUsage implements UsageAbi {
           parent: word(2),
           work: word(3),
           birth: birthOf(values[at + 4]!, values[at + 5]!),
-          startedAtMs: word(4) * 1000 + word(5) / 1000,
+          startedAtMs: this.platform.startedAt(values[at + 4]!, values[at + 5]!),
           zombie: word(6) !== 0,
           cpuMicros: word(7),
           childMicros: word(8),
           residentBytes: word(9),
           footprintBytes: kind === 0 || kind === 4 || word(12) !== 0 ? undefined : word(10),
           memoryErrno: word(12),
+          memoryKind: kind === 0 || kind === 4 || word(12) !== 0 ? 'resident' : kind === 2 ? 'pss' : kind === 3 ? 'private' : 'footprint',
           responsible: word(13),
         };
       }
@@ -95,10 +110,7 @@ export class NativeUsage implements UsageAbi {
         const errno = -total;
         return {
           _tag: 'Unavailable',
-          reason:
-            errno === constants.errno.ENOTSUP
-              ? 'no AGX AppUsage GPU counters are visible in this registry read'
-              : `the IOKit GPU registry read answered errno ${errno}`,
+          reason: this.platform.gpuUnavailable(errno),
         };
       }
       if (total > this.gpuCapacity) {
@@ -117,7 +129,7 @@ export class NativeUsage implements UsageAbi {
           gpu:
             errno === 0
               ? { _tag: 'Measured', micros: Number(values[at + 4]! / 1000n) }
-              : { _tag: 'Unavailable', reason: `the AGX client's GPU counter answered errno ${errno}` },
+              : { _tag: 'Unavailable', reason: this.platform.clientUnavailable(errno) },
         });
       }
       return { _tag: 'Read', clients };
@@ -130,10 +142,8 @@ export class NativeUsage implements UsageAbi {
     if (errno !== 0) return { errno };
     const [busy, total, cores, memoryBytes, usedBytes, availableBytes, level, value, memoryErrno, pressureErrno, platform, shape] =
       Array.from(values, Number) as [number, number, number, number, number, number, number, number, number, number, number, number];
-    if (platform !== 1) return { errno: constants.errno.ENOTSUP };
-    const adapter = 'darwin';
-    const probe = 'host_statistics64:HOST_VM_INFO64 + hw.memsize';
-    const pressureProbe = 'kern.memorystatus_vm_pressure_level';
+    if (platform !== this.platform.code) return { errno: constants.errno.ENOTSUP };
+    const { adapter, memoryProbe: probe, pressureProbe } = this.platform;
     const pressure: MemoryPressure =
       pressureErrno !== 0 || level === 0
         ? {

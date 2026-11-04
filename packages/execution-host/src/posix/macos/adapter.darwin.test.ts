@@ -5,11 +5,11 @@ import { constants } from 'node:os';
 import type { ProcessIdentity, ProcessReading, ProcessRow } from '../../ProcessReader';
 import type { LoadedLibrary } from '../Library';
 import type { ProcessAbi } from '../ProcessAbi';
-import type { NativeCounters, UsageAbi } from './UsageAbi';
-import { Sampler } from './Sampler';
+import type { NativeCounters, UsageAbi } from '../UsageAbi';
+import { Sampler, type RefusedUsage } from '../Sampler';
+import { sampling } from './sampling';
 import { processReader } from './processes';
-import type { RefusedUsage } from './ps';
-import type { GpuRead } from './gpu';
+import type { GpuRead } from '../gpu';
 
 const unused = (): never => {
   throw new Error('unexpected native operation');
@@ -64,6 +64,7 @@ const counter = (pid: number, parent: number, responsible: number, errno = 0): N
   residentBytes: 1000,
   footprintBytes: 800,
   memoryErrno: 0,
+  memoryKind: 'footprint',
   responsible,
 });
 
@@ -71,7 +72,7 @@ test('usage reads refused processes only on demand and discards a replaced pid',
   const denied = constants.errno.EPERM;
   const counters = [
     counter(10, 1, 10),
-    { ...counter(20, 10, 20), footprintBytes: undefined },
+    { ...counter(20, 10, 20), footprintBytes: undefined, memoryKind: 'resident' as const },
     counter(30, 1, 10, denied),
     counter(40, 1, 10, denied),
   ];
@@ -110,7 +111,7 @@ test('usage reads refused processes only on demand and discards a replaced pid',
       };
     },
   };
-  const sampler = new Sampler(usage, processes, refused);
+  const sampler = new Sampler(usage, processes, { ...sampling, refused });
   const closed = sampler.read({ others: false });
   if (typeof closed === 'string') throw new Error(closed);
   expect(sampler.machineName).toBe('Mac');
@@ -142,7 +143,7 @@ test('GPU client resets and departures preserve cumulative usage without crossin
   let read: GpuRead = { _tag: 'Read', clients: [] };
   const usage: UsageAbi = { unload: unused, all: () => [row], machine: () => ({ errno: 1 }), gpu: () => read };
   const processes: ProcessAbi = { ...native(), processFacts: () => ({ processes: [], unread: [] }) };
-  const sampler = new Sampler(usage, processes, { read: unused });
+  const sampler = new Sampler(usage, processes, { ...sampling, refused: { read: unused } });
   const sample = () => {
     const result = sampler.read({ others: false });
     if (typeof result === 'string') throw new Error(result);

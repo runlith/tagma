@@ -2,13 +2,13 @@ import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { resolve } from 'node:path';
 import { arch, cpus, loadavg, platform, totalmem } from 'node:os';
 import { Abi } from '../ProcessAbi';
-import { Sampler } from './Sampler';
-import { NativeUsage } from './UsageAbi';
-import { psUsage, type RefusedUsage } from './ps';
+import { Sampler, type RefusedUsage } from '../Sampler';
+import { nativeUsage, sampling } from './sampling';
+import { psUsage } from './ps';
 
 const library = resolve(import.meta.dir, '../../../native/target/release/libexecution_platform.dylib');
 const processReader = Abi.load(library);
-const counters = NativeUsage.load(library);
+const counters = nativeUsage(library);
 const system = dlopen('/usr/lib/libSystem.B.dylib', {
   getrusage: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
 });
@@ -33,7 +33,7 @@ const measure = (others: boolean) => {
       return psUsage.read(pids);
     },
   };
-  const sampler = new Sampler(counters, processReader, refused);
+  const sampler = new Sampler(counters, processReader, { ...sampling, refused });
   const warm = sampler.read({ others });
   if (typeof warm === 'string') throw new Error(warm);
   calls = 0;

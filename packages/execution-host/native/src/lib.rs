@@ -1,21 +1,26 @@
 #![allow(clippy::missing_safety_doc)]
 mod usage;
-#[cfg(target_os = "macos")]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+mod testing;
+#[cfg(any(target_os = "linux", test))]
+#[path = "linux/procfs.rs"]
+mod procfs;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod channel;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod clock;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod identity;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod limits;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod process;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod reactor;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod refusal;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod abi {
 use crate::{channel, clock, identity, limits, process};
 use crate::reactor::Reactor;
@@ -105,6 +110,24 @@ pub extern "C" fn execution_platform_error() -> *const c_char {
 #[unsafe(no_mangle)]
 pub extern "C" fn execution_platform_uptime_nanos() -> u64 {
     clock::uptime_nanos()
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_clock_ticks() -> u64 {
+    clock::ticks().unwrap_or_else(|errno| { record(&format!("clock ticks: {}", std::io::Error::from_raw_os_error(errno))); 0 })
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_boot_nanos() -> u64 {
+    clock::boot_nanos().unwrap_or_else(|errno| { record(&format!("boot instant: {}", std::io::Error::from_raw_os_error(errno))); 0 })
+}
+
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_thread_interactive() -> i32 {
+    status(|| Err(Refusal::Failed("Linux grants an unprivileged thread no interactive scheduling class".into())))
 }
 
 #[unsafe(no_mangle)]
@@ -326,13 +349,16 @@ pub unsafe extern "C" fn execution_platform_fd_foreground(fd: i32, values: *mut 
     })
 }
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn pthread_set_qos_class_self_np(class: u32, relative: i32) -> i32;
 }
 
+#[cfg(target_os = "macos")]
 const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
 
 #[unsafe(no_mangle)]
+#[cfg(target_os = "macos")]
 pub extern "C" fn execution_platform_thread_interactive() -> i32 {
     status(|| match unsafe { pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) } {
         0 => Ok(()),

@@ -62,13 +62,15 @@ pub fn close(fd: i32) -> Result<(), Refusal> {
 
 pub fn receive(fd: i32, buffer: &mut [u8], fds: &mut [i32]) -> Result<(usize, usize, bool), Refusal> {
     let room = size_of_val(fds) as u32;
+    #[cfg(target_os = "macos")]
+    let room = room.max(512 * size_of::<i32>() as u32);
     let mut control = vec![0u8; unsafe { libc::CMSG_SPACE(room) } as usize];
     let mut part = libc::iovec { iov_base: buffer.as_mut_ptr().cast(), iov_len: buffer.len() };
     let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
     message.msg_iov = &mut part;
     message.msg_iovlen = 1;
     message.msg_control = control.as_mut_ptr().cast();
-    message.msg_controllen = control.len() as libc::socklen_t;
+    message.msg_controllen = control.len() as _;
     let read = unsafe { libc::recvmsg(fd, &mut message, libc::MSG_DONTWAIT) };
     if read < 0 {
         let error = io::Error::last_os_error();
@@ -80,11 +82,19 @@ pub fn receive(fd: i32, buffer: &mut [u8], fds: &mut [i32]) -> Result<(usize, us
     }
     let mut count = 0;
     let mut overflow = false;
+    let available = (message.msg_controllen as usize).min(control.len());
     let mut header = unsafe { libc::CMSG_FIRSTHDR(&message) };
     while !header.is_null() {
+        let offset = header as usize - control.as_ptr() as usize;
+        let left = available.saturating_sub(offset);
+        let prefix = unsafe { libc::CMSG_LEN(0) } as usize;
+        if left < prefix { overflow = true; break; }
         let item = unsafe { &*header };
+        let length = item.cmsg_len as usize;
+        if length < prefix { overflow = true; break; }
+        if length > left { overflow = true; }
         if item.cmsg_level == libc::SOL_SOCKET && item.cmsg_type == libc::SCM_RIGHTS {
-            let carried = (item.cmsg_len as usize - unsafe { libc::CMSG_LEN(0) } as usize) / size_of::<i32>();
+            let carried = (length.min(left) - prefix) / size_of::<i32>();
             let data = unsafe { libc::CMSG_DATA(header) }.cast::<i32>();
             for index in 0..carried {
                 let received = unsafe { data.add(index).read_unaligned() };
@@ -97,6 +107,7 @@ pub fn receive(fd: i32, buffer: &mut [u8], fds: &mut [i32]) -> Result<(usize, us
                 }
             }
         }
+        if length > left { break; }
         header = unsafe { libc::CMSG_NXTHDR(&message, header) };
     }
     if overflow || message.msg_flags & libc::MSG_CTRUNC != 0 {
@@ -123,6 +134,7 @@ pub enum Group {
     Unmeasured,
 }
 
+#[cfg(target_os = "macos")]
 pub fn group(group: i32, leader: i32, leader_exited: bool) -> Result<Group, Refusal> {
     let mut members = vec![0i32; 64];
     loop {
@@ -154,6 +166,19 @@ pub fn group(group: i32, leader: i32, leader_exited: bool) -> Result<Group, Refu
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn group(group: i32, leader: i32, leader_exited: bool) -> Result<Group, Refusal> {
+    for pid in crate::procfs::pids().map_err(|code| Refusal::Failed(io::Error::from_raw_os_error(code).to_string()))? {
+        if pid == leader && leader_exited { continue; }
+        match crate::procfs::stat(pid) {
+            Ok(read) if read.group == group as u32 && !read.zombie => return Ok(Group::Standing),
+            Ok(_) | Err(libc::ESRCH) => {},
+            Err(_) => return Ok(Group::Unmeasured),
+        }
+    }
+    Ok(Group::Ended)
+}
+
 pub fn resize(fd: i32, rows: i32, cols: i32) -> Result<(), Refusal> {
     if !(1..=65535).contains(&rows) || !(1..=65535).contains(&cols) {
         return Err(Refusal::Invalid("terminal geometry must be within 1..=65535".into()));
@@ -182,7 +207,11 @@ pub fn foreground(fd: i32) -> Result<[u64; 3], Refusal> {
 
 pub fn interrupt(fd: i32) -> Result<usize, Refusal> {
     let mut pending: libc::c_int = 0;
-    if unsafe { libc::ioctl(fd, libc::TIOCOUTQ, &mut pending) } < 0 {
+    #[cfg(target_os = "macos")]
+    let queued = libc::TIOCOUTQ;
+    #[cfg(target_os = "linux")]
+    let queued = libc::FIONREAD;
+    if unsafe { libc::ioctl(fd, queued, &mut pending) } < 0 {
         return Err(refusal(io::Error::last_os_error()));
     }
     if unsafe { libc::ioctl(fd, libc::TIOCSIG as libc::c_ulong, libc::SIGINT) } < 0 {

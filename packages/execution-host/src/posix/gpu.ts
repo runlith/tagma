@@ -1,4 +1,4 @@
-import type { ProcessGpu } from '../../UsageReader';
+import type { ProcessGpu } from '../UsageReader';
 
 export type GpuClient = {
   readonly pid: number;

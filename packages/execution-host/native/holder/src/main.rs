@@ -1,19 +1,22 @@
-#[cfg(not(target_os = "macos"))]
-compile_error!("execution-holder has a platform module for macOS alone");
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+compile_error!("execution-holder requires a native platform module");
 
 mod control;
 mod frames;
 mod handover;
 mod holder;
-#[cfg(target_os = "macos")]
-mod macos;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod posix;
+#[cfg(target_os = "linux")]
+#[path = "../../src/linux/procfs.rs"]
+mod procfs;
 mod platform;
 mod table;
 #[cfg(test)]
 mod testing;
 
-#[cfg(target_os = "macos")]
-type Native = macos::Macos;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+type Native = posix::Posix;
 
 fn main() {
     std::process::exit(match holder::run::<Native>() {

@@ -1,11 +1,20 @@
 /// <reference types="bun" />
 
 import { constants } from 'node:os';
-import type { ProcessCounters, UsageDemand, UsageRead } from '../../UsageReader';
-import type { ProcessAbi } from '../ProcessAbi';
-import { baseName, programsOf } from './programs';
+import type { ProcessCounters, ProcessProgram, UsageDemand, UsageRead } from '../UsageReader';
+import type { ProcessAbi } from './ProcessAbi';
+import { baseName, type ProgramProcess } from './programs';
 import type { NativeCounters, UsageAbi } from './UsageAbi';
-import type { RefusedRead, RefusedUsage } from './ps';
+
+export type RefusedCounter = { readonly micros: number; readonly residentBytes: number };
+type RefusedRead = { readonly read: ReadonlyMap<number, RefusedCounter>; readonly detail?: string };
+export type RefusedUsage = { readonly read: (pids: readonly number[]) => RefusedRead };
+export type SamplingPlatform = {
+  readonly machineName: string;
+  readonly programs: (processes: readonly ProgramProcess[]) => ReadonlyMap<number, ProcessProgram>;
+  readonly refused: RefusedUsage;
+  readonly gpuMissing: string;
+};
 import { Gpu } from './gpu';
 
 type Described = {
@@ -21,14 +30,16 @@ const SETTLED_MS = 2_000;
 const REFUSED = new Set([constants.errno.EPERM, constants.errno.EACCES]);
 
 export class Sampler {
-  readonly machineName = 'Mac';
+  get machineName(): string {
+    return this.platform.machineName;
+  }
   private described = new Map<string, Described>();
   private readonly gpu = new Gpu();
 
   constructor(
     private readonly usage: UsageAbi,
     private readonly processes: ProcessAbi,
-    private readonly refused: RefusedUsage,
+    private readonly platform: SamplingPlatform,
   ) {}
 
   read({ others }: UsageDemand): UsageRead | string {
@@ -41,7 +52,7 @@ export class Sampler {
     const gpuRead = this.usage.gpu();
     const gpu = this.gpu.read(gpuRead);
     const refused = others ? listed.filter((row) => REFUSED.has(row.errno)) : [];
-    const borrowedRead: RefusedRead = others ? this.refused.read(refused.map((row) => row.pid)) : { read: new Map() };
+    const borrowedRead: RefusedRead = others ? this.platform.refused.read(refused.map((row) => row.pid)) : { read: new Map() };
     const kept = new Set<number>();
     if (borrowedRead.read.size > 0) {
       const after = this.processes.processTable({ _tag: 'Pids', pids: [...borrowedRead.read.keys()] });
@@ -88,7 +99,7 @@ export class Sampler {
         name: named === undefined ? `process ${row.pid}` : baseName(named).replace(/^-/, '') || baseName(named),
       };
     });
-    const programs = programsOf(placed);
+    const programs = this.platform.programs(placed);
     const rows = listed.map((row, index): ProcessCounters => {
       const name = placed[index]!.name;
       const one = described.get(key(row));
@@ -109,7 +120,7 @@ export class Sampler {
                   gpuRead._tag === 'Unavailable'
                     ? gpuRead.reason
                     : measuredGpu === undefined
-                      ? 'the process has no visible AGX GPU client'
+                      ? this.platform.gpuMissing
                       : 'the GPU client does not match the sampled kernel process witness',
               },
         name,
@@ -122,7 +133,7 @@ export class Sampler {
           cpu: { micros: row.cpuMicros + row.childMicros, reapedMicros: row.childMicros },
           residentBytes: row.residentBytes,
           footprintBytes: row.footprintBytes,
-          memoryKind: row.footprintBytes === undefined ? 'resident' : 'footprint',
+          memoryKind: row.memoryKind,
           signal: !row.zombie,
         };
       const lent = kept.has(row.pid) ? borrowedRead.read.get(row.pid) : undefined;
@@ -143,7 +154,7 @@ export class Sampler {
         signal: !row.zombie && !REFUSED.has(row.errno),
         unread: REFUSED.has(row.errno)
           ? others
-            ? `the system refused this process's counters and /bin/ps did not read them${borrowedRead.detail === undefined ? '' : ` (${borrowedRead.detail})`}`
+            ? `the system refused this process's counters and the alternate reading did not read them${borrowedRead.detail === undefined ? '' : ` (${borrowedRead.detail})`}`
             : "the system refused this process's counters"
           : `the native counter read answered errno ${row.errno}`,
       };

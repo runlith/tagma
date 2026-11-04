@@ -1,11 +1,22 @@
 macro_rules! eprintln {
-    ($($message:tt)*) => { crate::macos::output::message(format_args!($($message)*)) };
+    ($($message:tt)*) => { crate::posix::output::message(format_args!($($message)*)) };
 }
 
 mod output;
+#[cfg(target_os = "macos")]
+#[path = "../macos/events.rs"]
 mod events;
-mod image;
+#[cfg(target_os = "linux")]
+#[path = "../linux/events.rs"]
+mod events;
+#[cfg(target_os = "macos")]
+#[path = "../macos/spawner.rs"]
+mod spawner;
+#[cfg(target_os = "linux")]
+#[path = "../linux/spawner.rs"]
+mod spawner;
 mod signals;
+mod image;
 mod rescue;
 mod spawn;
 mod succession;
@@ -34,11 +45,12 @@ const CAPABILITIES: [&str; 7] = [
     "holder-replaces-itself",
 ];
 
-pub struct Macos {
+pub struct Posix {
     queue: Queue,
     claim: Rc<OwnedFd>,
     handle_limit: u64,
     child_nofile: libc::rlim_t,
+    capabilities: Vec<&'static str>,
     image: image::Image,
     pid: u32,
     state: PathBuf,
@@ -100,12 +112,12 @@ fn rights(fd: RawFd, bytes: &[u8], fds: &[Rc<OwnedFd>]) -> isize {
     message.msg_iov = &mut part;
     message.msg_iovlen = 1;
     message.msg_control = control.as_mut_ptr().cast();
-    message.msg_controllen = control.len() as libc::socklen_t;
+    message.msg_controllen = control.len() as _;
     unsafe {
         let header = libc::CMSG_FIRSTHDR(&message);
         (*header).cmsg_level = libc::SOL_SOCKET;
         (*header).cmsg_type = libc::SCM_RIGHTS;
-        (*header).cmsg_len = libc::CMSG_LEN(length) as libc::socklen_t;
+        (*header).cmsg_len = libc::CMSG_LEN(length) as _;
         std::ptr::copy_nonoverlapping(raw.as_ptr().cast::<u8>(), libc::CMSG_DATA(header), length as usize);
         libc::sendmsg(fd, &message, 0)
     }
@@ -126,7 +138,7 @@ fn standard_descriptors() -> Result<(), String> {
 
 fn dispositions() {
     unsafe {
-        let mut empty: libc::sigset_t = 0;
+        let mut empty: libc::sigset_t = std::mem::zeroed();
         libc::sigemptyset(&mut empty);
         libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut());
         libc::signal(libc::SIGPIPE, libc::SIG_IGN);
@@ -150,7 +162,7 @@ fn descriptor_room() -> Result<(u64, libc::rlim_t), String> {
     Ok((limit.rlim_cur, inherited))
 }
 
-fn ground(state: &Path) -> Result<(u64, libc::rlim_t), String> {
+fn ground(state: &Path) -> Result<(u64, libc::rlim_t, Vec<&'static str>), String> {
     if !state.is_dir() {
         return Err(format!("{} is not a directory", state.display()));
     }
@@ -158,7 +170,10 @@ fn ground(state: &Path) -> Result<(u64, libc::rlim_t), String> {
     let room = descriptor_room()?;
     dispositions();
     session()?;
-    Ok(room)
+    sys::ground()?;
+    let raises = sys::pace_raises().map_err(|errno| format!("the scheduling capability could not be read: errno {errno}"))?;
+    let capabilities = CAPABILITIES.into_iter().filter(|capability| *capability != "pace-raise" || raises).collect();
+    Ok((room.0, room.1, capabilities))
 }
 
 fn session() -> Result<(), String> {
@@ -190,7 +205,7 @@ fn claim(state: &Path) -> Result<Option<OwnedFd>, String> {
     Ok(Some(fd))
 }
 
-impl Platform for Macos {
+impl Platform for Posix {
     type Handle = OwnedFd;
     type Channel = OwnedFd;
     type Process = Child;
@@ -214,17 +229,17 @@ impl Platform for Macos {
                 rescue::arm(&inherited);
             }
             let attempt = (|| {
-                let (handle_limit, _) = ground(&inherited.state)?;
+                let (handle_limit, _, capabilities) = ground(&inherited.state)?;
                 let table = inherited.table()?;
                 if inherited.mode == Mode::Verifying {
-                    Queue::new().map_err(|e| format!("kqueue: errno {e}"))?;
+                    Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
                     return Ok(Err(table));
                 }
                 let image = image::Image::open(&inherited.state)?;
-                let queue = Queue::new().map_err(|e| format!("kqueue: errno {e}"))?;
-                Ok::<_, String>(Ok((handle_limit, table, image, queue)))
+                let queue = Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
+                Ok::<_, String>(Ok((handle_limit, capabilities, table, image, queue)))
             })();
-            let (handle_limit, table, image, queue) = match attempt {
+            let (handle_limit, capabilities, table, image, queue) = match attempt {
                 Ok(Ok(taken)) => taken,
                 Ok(Err(table)) => return Ok(Opened::Verifying(table)),
                 Err(detail) => return Err(inherited.retreat(&[], &detail, false)),
@@ -236,6 +251,7 @@ impl Platform for Macos {
                 claim: Rc::new(unsafe { OwnedFd::from_raw_fd(inherited.claim) }),
                 handle_limit,
                 child_nofile: inherited.child_nofile,
+                capabilities,
                 image,
                 pid: std::process::id(),
                 state: inherited.state.clone(),
@@ -254,15 +270,15 @@ impl Platform for Macos {
         if !logic.first().is_some_and(|program| Path::new(program).is_absolute()) {
             return Err("the logic program must be named by an absolute path".into());
         }
-        let (handle_limit, child_nofile) = ground(state)?;
+        let (handle_limit, child_nofile, capabilities) = ground(state)?;
         let Some(claim) = claim(state)? else {
             return Ok(Opened::Held(state.display().to_string()));
         };
         let image = image::Image::open(state)?;
-        let queue = Queue::new().map_err(|e| format!("kqueue: errno {e}"))?;
+        let queue = Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
         let pid = std::process::id();
         let output = output::Capture::open(&queue)?;
-        let platform = Self { queue, claim: Rc::new(claim), handle_limit, child_nofile, image, pid, state: state.to_path_buf(), inherited: None, output };
+        let platform = Self { queue, claim: Rc::new(claim), handle_limit, child_nofile, capabilities, image, pid, state: state.to_path_buf(), inherited: None, output };
         Ok(Opened::Claimed { platform, logic, carried: None })
     }
 
@@ -283,11 +299,11 @@ impl Platform for Macos {
     }
 
     fn handle_limit(&self) -> Option<u64> {
-        Some(self.handle_limit)
+        (self.handle_limit != libc::RLIM_INFINITY).then_some(self.handle_limit)
     }
 
     fn capabilities(&self) -> &[&'static str] {
-        &CAPABILITIES
+        &self.capabilities
     }
 
     fn start_logic(&mut self, argv: &[String]) -> Result<(Child, OwnedFd), String> {
@@ -301,8 +317,13 @@ impl Platform for Macos {
         let (ours, theirs) = sys::socket_pair().map_err(|e| format!("socketpair: errno {e}"))?;
         sys::nonblocking(ours.as_raw_fd()).map_err(|e| format!("fcntl O_NONBLOCK: errno {e}"))?;
         sys::nonblocking(theirs.as_raw_fd()).map_err(|e| format!("fcntl O_NONBLOCK: errno {e}"))?;
-        self.queue.read(ours.as_raw_fd()).map_err(|e| format!("kevent: errno {e}"))?;
+        self.queue.read(ours.as_raw_fd()).map_err(|e| format!("event queue: errno {e}"))?;
         let pid = spawn::logic(&argv, &theirs, self.output.as_ref().map(output::Capture::writer)).map_err(|(_, detail)| detail)?;
+        #[cfg(target_os = "linux")]
+        if let Err(errno) = self.queue.child(pid) {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+            return Err(format!("the logic could not be watched: errno {errno}"));
+        }
         Ok((Child { pid }, ours))
     }
 
@@ -350,7 +371,7 @@ impl Platform for Macos {
     }
 
     fn wait(&mut self, events: &mut Vec<Event<RawFd>>) -> Result<(), String> {
-        self.queue.wait(events).map_err(|e| format!("kevent: errno {e}"))?;
+        self.queue.wait(events).map_err(|e| format!("event queue: errno {e}"))?;
         if let Some(output) = &self.output {
             events.retain(|event| {
                 if matches!(event, Event::Readable(fd) if *fd == output.reader()) {
@@ -365,7 +386,7 @@ impl Platform for Macos {
     }
 
     fn timer(&mut self, timer: Timer, ms: u64) -> Result<(), String> {
-        self.queue.timer(timer, ms).map_err(|e| format!("kevent: errno {e}"))
+        self.queue.timer(timer, ms).map_err(|e| format!("event queue: errno {e}"))
     }
 
     fn now_ms(&self) -> u64 {
@@ -385,6 +406,11 @@ impl Platform for Macos {
             pace: started.pace,
             transport: started.transport,
         };
+        #[cfg(target_os = "linux")]
+        if let Err(errno) = self.queue.child(started.pid) {
+            spawn::abandon(started.pid);
+            return Err((sys::failure(errno, "the launch could not be watched"), Some(spawned.process)));
+        }
         if let Err(errno) = self.queue.read(token).and_then(|_| self.queue.write(token, true)) {
             spawn::abandon(started.pid);
             return Err((sys::failure(errno, "the launch channel could not be watched"), Some(spawned.process)));
@@ -434,19 +460,27 @@ impl Platform for Macos {
     }
 
     fn observe(&mut self, process: &Child) -> Option<Exit> {
+        #[cfg(target_os = "linux")]
+        if let Err(errno) = self.queue.child(process.pid) { eprintln!("execution-holder: pidfd watch of {} failed: errno {errno}", process.pid); }
         let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
         let found = unsafe { libc::waitid(libc::P_PID, process.pid as libc::id_t, &mut info, libc::WEXITED | libc::WNOHANG | libc::WNOWAIT) };
-        if found < 0 || info.si_pid != process.pid {
+        #[cfg(target_os = "macos")]
+        let (pid, status) = (info.si_pid, info.si_status);
+        #[cfg(target_os = "linux")]
+        let (pid, status) = unsafe { (info.si_pid(), info.si_status()) };
+        if found < 0 || pid != process.pid {
             return None;
         }
         match info.si_code {
-            sys::CLD_EXITED => Some(Exit::Code(info.si_status)),
-            sys::CLD_KILLED | sys::CLD_DUMPED => Some(Exit::Signal(signals::name(info.si_status))),
+            sys::CLD_EXITED => Some(Exit::Code(status)),
+            sys::CLD_KILLED | sys::CLD_DUMPED => Some(Exit::Signal(signals::name(status))),
             _ => None,
         }
     }
 
     fn reap(&mut self, process: &mut Child) -> Result<Option<(Exit, Usage)>, Failure> {
+        #[cfg(target_os = "linux")]
+        self.queue.child(process.pid).map_err(|errno| sys::failure(errno, "pidfd watch"))?;
         let mut status: c_int = 0;
         let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
         let reaped = unsafe { libc::wait4(process.pid, &mut status, libc::WNOHANG, &mut usage) };
@@ -457,7 +491,13 @@ impl Platform for Macos {
             return Ok(None);
         }
         let exit = if libc::WIFEXITED(status) { Exit::Code(libc::WEXITSTATUS(status)) } else { Exit::Signal(signals::name(libc::WTERMSIG(status))) };
-        let usage = Usage { user_micros: micros(usage.ru_utime), system_micros: micros(usage.ru_stime), peak_rss_bytes: usage.ru_maxrss.max(0) as u64 };
+        #[cfg(target_os = "linux")]
+        self.queue.reaped(process.pid);
+        #[cfg(target_os = "macos")]
+        let rss_unit = 1;
+        #[cfg(target_os = "linux")]
+        let rss_unit = 1024;
+        let usage = Usage { user_micros: micros(usage.ru_utime), system_micros: micros(usage.ru_stime), peak_rss_bytes: usage.ru_maxrss.max(0) as u64 * rss_unit };
         Ok(Some((exit, usage)))
     }
 
@@ -546,7 +586,10 @@ impl Platform for Macos {
 
     fn prepare(&mut self, holder: &str, table: &[u8], handles: &[Rc<OwnedFd>]) -> Result<Child, Failure> {
         let handles: Vec<RawFd> = handles.iter().map(|handle| handle.as_raw_fd()).collect();
-        succession::verify(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, &handles).map(|pid| Child { pid })
+        let pid = succession::verify(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, &handles)?;
+        #[cfg(target_os = "linux")]
+        if let Err(errno) = self.queue.child(pid) { eprintln!("execution-holder: pidfd watch of verifier {pid} failed: errno {errno}"); }
+        Ok(Child { pid })
     }
 
     fn rotate(&mut self) -> Result<(), Failure> {

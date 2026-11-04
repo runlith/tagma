@@ -10,7 +10,7 @@ import type { LoadReading } from '@runlith/executions/protocol/evidence';
 import { hosted } from './host';
 import { posix } from './posix';
 import { Host } from './session';
-import { NativeUsage } from '../../posix/macos/UsageAbi';
+import { nativeUsage } from '../../posix/macos/sampling';
 import { HOLDER_LIBRARY } from '../../posix/testing/holder';
 
 class GpuFixtureFailed extends Data.TaggedError('GpuFixtureFailed')<{ readonly message: string }> {}
@@ -83,7 +83,7 @@ layer(adapter.layer.pipe(Layer.provideMerge(BunServices.layer)), { excludeTestSe
         });
       const ready = yield* line();
       expect(['ready', 'unavailable']).toContain(ready);
-      const native = yield* Effect.acquireRelease(Effect.try({ try: () => NativeUsage.load(HOLDER_LIBRARY), catch: failed }), (library) =>
+      const native = yield* Effect.acquireRelease(Effect.try({ try: () => nativeUsage(HOLDER_LIBRARY), catch: failed }), (library) =>
         Effect.sync(() => library.unload()),
       );
       const own = () => {

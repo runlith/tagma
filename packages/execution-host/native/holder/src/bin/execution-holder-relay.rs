@@ -18,12 +18,12 @@ fn hand(fd: i32) -> Result<(), String> {
     message.msg_iov = &mut part;
     message.msg_iovlen = 1;
     message.msg_control = room.as_mut_ptr().cast();
-    message.msg_controllen = room.len() as libc::socklen_t;
+    message.msg_controllen = room.len() as _;
     let sent = unsafe {
         let header = libc::CMSG_FIRSTHDR(&message);
         (*header).cmsg_level = libc::SOL_SOCKET;
         (*header).cmsg_type = libc::SCM_RIGHTS;
-        (*header).cmsg_len = libc::CMSG_LEN(length) as libc::socklen_t;
+        (*header).cmsg_len = libc::CMSG_LEN(length) as _;
         std::ptr::copy_nonoverlapping((&fd as *const i32).cast::<u8>(), libc::CMSG_DATA(header), length as usize);
         libc::sendmsg(PEER, &message, 0)
     };

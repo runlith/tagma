@@ -59,11 +59,13 @@ export const HostGrant = Schema.Struct({
 });
 export type HostGrant = typeof HostGrant.Type;
 
+export type KernelLimit = number | 'absent';
+
 export type PlatformLimits = {
-  readonly openFiles: number | 'absent';
-  readonly holderFiles: number | 'absent';
-  readonly processes: number | 'absent';
-  readonly terminals: number | 'absent';
+  readonly openFiles: KernelLimit;
+  readonly holderFiles: KernelLimit;
+  readonly processes: KernelLimit;
+  readonly terminals: KernelLimit;
 };
 
 export type PlatformState = {

@@ -1,4 +1,4 @@
-use super::spawn::Spawner;
+use super::spawner::Spawner;
 use super::sys;
 use crate::frames::Reason;
 use crate::platform::Failure;
@@ -215,7 +215,7 @@ fn environment() -> Vec<CString> {
 }
 
 fn inheriting(flags: c_int, kept: &[RawFd]) -> Result<Spawner, Failure> {
-    let mut spawner = Spawner::new(flags | libc::POSIX_SPAWN_CLOEXEC_DEFAULT | libc::POSIX_SPAWN_SETSIGDEF | libc::POSIX_SPAWN_SETSIGMASK)
+    let mut spawner = Spawner::new(flags | sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK)
         .map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))?;
     for fd in (0..=2).chain(kept.iter().copied()) {
         spawner.inherit(fd).map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))?;
@@ -258,7 +258,7 @@ fn replacing(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_
     for fd in &kept {
         sys::inheritable(*fd).map_err(|errno| sys::failure(errno, &format!("descriptor {fd} could not be carried")))?;
     }
-    let spawner = inheriting(libc::POSIX_SPAWN_SETEXEC, &kept)?;
+    let spawner = inheriting(sys::SPAWN_SETEXEC, &kept)?;
     let argv = [
         image.clone(),
         CString::new(SUCCESSOR).unwrap(),
@@ -316,7 +316,7 @@ fn exists(path: &Path) -> bool {
 
 fn swap(from: &Path, to: &Path) -> Result<(), Failure> {
     let (from_text, to_text) = (text(from)?, text(to)?);
-    sys::check(unsafe { libc::renamex_np(from_text.as_ptr(), to_text.as_ptr(), libc::RENAME_SWAP) })
+    sys::check(unsafe { sys::exchange(from_text.as_ptr(), to_text.as_ptr()) })
         .map_err(|errno| sys::failure(errno, &format!("swap {} and {}", from.display(), to.display())))
 }
 

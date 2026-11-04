@@ -83,7 +83,7 @@ fn fire() {
     let plan = unsafe { &*plan };
     unsafe {
         libc::write(2, SAID.as_ptr().cast(), SAID.len());
-        let argv = if libc::renamex_np(plan.prior.as_ptr(), plan.standing.as_ptr(), libc::RENAME_SWAP) == 0 {
+        let argv = if super::sys::exchange(plan.prior.as_ptr(), plan.standing.as_ptr()) == 0 {
             libc::rename(plan.prior.as_ptr(), plan.next.as_ptr());
             (&plan.returned, &plan.returning)
         } else {

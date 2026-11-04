@@ -1,4 +1,4 @@
-use super::sys::{self, POSIX_SPAWN_SETSID, QOS_CLASS_UTILITY};
+use super::sys;
 use crate::frames::{Shape, Stdin};
 use crate::table::{Pace, Transport};
 use std::ffi::{CStr, CString, c_char, c_int};
@@ -36,87 +36,7 @@ fn failed(errno: i32, what: &str) -> Failure {
     (errno, format!("{what}: {}", std::io::Error::from_raw_os_error(errno)))
 }
 
-fn outcome(code: c_int, what: &str) -> Result<(), Failure> {
-    if code == 0 { Ok(()) } else { Err(failed(code, what)) }
-}
-
-pub struct Spawner {
-    attr: libc::posix_spawnattr_t,
-    actions: libc::posix_spawn_file_actions_t,
-}
-
-impl Spawner {
-    pub fn new(flags: c_int) -> Result<Self, Failure> {
-        let mut spawner = Self { attr: ptr::null_mut(), actions: ptr::null_mut() };
-        let code = unsafe { libc::posix_spawnattr_init(&mut spawner.attr) };
-        if code != 0 {
-            return Err(failed(code, "posix_spawnattr_init"));
-        }
-        let code = unsafe { libc::posix_spawn_file_actions_init(&mut spawner.actions) };
-        if code != 0 {
-            return Err(failed(code, "posix_spawn_file_actions_init"));
-        }
-        let mut empty: libc::sigset_t = 0;
-        let mut every: libc::sigset_t = 0;
-        unsafe {
-            libc::sigemptyset(&mut empty);
-            libc::sigfillset(&mut every);
-        }
-        outcome(unsafe { libc::posix_spawnattr_setflags(&mut spawner.attr, flags as libc::c_short) }, "posix_spawnattr_setflags")?;
-        outcome(unsafe { libc::posix_spawnattr_setsigmask(&mut spawner.attr, &empty) }, "posix_spawnattr_setsigmask")?;
-        outcome(unsafe { libc::posix_spawnattr_setsigdefault(&mut spawner.attr, &every) }, "posix_spawnattr_setsigdefault")?;
-        Ok(spawner)
-    }
-
-    fn duplicate(&mut self, from: RawFd, to: RawFd) -> Result<(), Failure> {
-        outcome(unsafe { libc::posix_spawn_file_actions_adddup2(&mut self.actions, from, to) }, "posix_spawn_file_actions_adddup2")
-    }
-
-    pub fn inherit(&mut self, fd: RawFd) -> Result<(), Failure> {
-        outcome(unsafe { sys::posix_spawn_file_actions_addinherit_np(&mut self.actions, fd) }, "posix_spawn_file_actions_addinherit_np")
-    }
-
-    pub fn placeholder(&mut self, fd: RawFd) -> Result<(), Failure> {
-        self.open(fd, c"/dev/null", libc::O_RDONLY)
-    }
-
-    fn open(&mut self, fd: RawFd, path: &CStr, flags: c_int) -> Result<(), Failure> {
-        outcome(unsafe { libc::posix_spawn_file_actions_addopen(&mut self.actions, fd, path.as_ptr(), flags, 0) }, "posix_spawn_file_actions_addopen")
-    }
-
-    fn chdir(&mut self, path: &CStr) -> Result<(), Failure> {
-        outcome(unsafe { sys::posix_spawn_file_actions_addchdir_np(&mut self.actions, path.as_ptr()) }, "posix_spawn_file_actions_addchdir_np")
-    }
-
-    pub fn spawn(&self, path: &CStr, argv: &[CString], env: &[CString]) -> Result<i32, Failure> {
-        let mut args: Vec<*mut c_char> = argv.iter().map(|value| value.as_ptr().cast_mut()).collect();
-        if args.is_empty() {
-            args.push(path.as_ptr().cast_mut());
-        }
-        args.push(ptr::null_mut());
-        let mut vars: Vec<*mut c_char> = env.iter().map(|value| value.as_ptr().cast_mut()).collect();
-        vars.push(ptr::null_mut());
-        let mut pid: libc::pid_t = 0;
-        let code = unsafe { libc::posix_spawn(&mut pid, path.as_ptr(), &self.actions, &self.attr, args.as_ptr(), vars.as_ptr()) };
-        if code != 0 {
-            return Err(failed(code, &format!("posix_spawn {}", path.to_string_lossy())));
-        }
-        Ok(pid)
-    }
-}
-
-impl Drop for Spawner {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.actions.is_null() {
-                libc::posix_spawn_file_actions_destroy(&mut self.actions);
-            }
-            if !self.attr.is_null() {
-                libc::posix_spawnattr_destroy(&mut self.attr);
-            }
-        }
-    }
-}
+use super::spawner::Spawner;
 
 pub fn abandon(pid: i32) {
     unsafe {
@@ -146,13 +66,13 @@ fn terminal(rows: u16, cols: u16) -> Result<(OwnedFd, OwnedFd, CString), Failure
 pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, soft_nofile: libc::rlim_t) -> Result<Started, (Failure, Option<i32>)> {
     let mut born = None;
     let attempted = (|| -> Result<Started, Failure> {
-        let mut flags = POSIX_SPAWN_SETSID | libc::POSIX_SPAWN_CLOEXEC_DEFAULT | libc::POSIX_SPAWN_SETSIGDEF | libc::POSIX_SPAWN_SETSIGMASK;
+        let mut flags = sys::SPAWN_SETSID | sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK;
         if matches!(requested, Pace::Lowest) {
-            flags |= libc::POSIX_SPAWN_START_SUSPENDED;
+            flags |= sys::SPAWN_START_SUSPENDED;
         }
         let mut spawner = Spawner::new(flags)?;
         let mut pace = Pace::Full;
-        if matches!(requested, Pace::Low) && unsafe { sys::posix_spawnattr_set_qos_class_np(&mut spawner.attr, QOS_CLASS_UTILITY) } == 0 {
+        if spawner.pace(matches!(requested, Pace::Low)) {
             pace = Pace::Low;
         }
         let mut child_ends: Vec<OwnedFd> = Vec::new();
@@ -235,7 +155,7 @@ pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, so
                 }
             }
             if matches!(requested, Pace::Lowest) {
-                if unsafe { libc::setpriority(libc::PRIO_DARWIN_PROCESS, pid as libc::id_t, libc::PRIO_DARWIN_BG) } == 0 {
+                if sys::lower(pid).is_ok() {
                     pace = Pace::Lowest;
                 }
                 if unsafe { libc::kill(pid, libc::SIGCONT) } < 0 {
@@ -246,7 +166,7 @@ pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, so
             if group < 0 {
                 return Err(failed(sys::errno(), "getpgid"));
             }
-            Ok((sys::birth(pid).map_err(|e| failed(e, "proc_pidinfo"))?, group))
+            Ok((sys::birth(pid).map_err(|e| failed(e, "process birth"))?, group))
         })();
         let (birth, group) = prepared?;
         Ok(Started { pid, group, birth, pace, transport, status: reader, environment })
@@ -338,7 +258,7 @@ pub fn enter() -> i32 {
                 return Err(sys::errno());
             }
         }
-        let mut mask: libc::sigset_t = 0;
+        let mut mask: libc::sigset_t = unsafe { std::mem::zeroed() };
         sys::check(unsafe { libc::sigemptyset(&mut mask) })?;
         sys::check(unsafe { libc::sigprocmask(libc::SIG_SETMASK, &mask, ptr::null_mut()) })?;
         unsafe { libc::execve(path.as_ptr(), pointers.as_ptr(), vars.as_ptr()) };
@@ -381,7 +301,7 @@ pub fn logic(argv: &[CString], control: &OwnedFd, output: Option<RawFd>) -> Resu
         return Err(failed(sys::errno(), "fcntl F_DUPFD_CLOEXEC"));
     }
     let moved = unsafe { OwnedFd::from_raw_fd(moved) };
-    let mut spawner = Spawner::new(libc::POSIX_SPAWN_CLOEXEC_DEFAULT | libc::POSIX_SPAWN_SETSIGDEF | libc::POSIX_SPAWN_SETSIGMASK)?;
+    let mut spawner = Spawner::new(sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK)?;
     for fd in 0..=2 {
         if fd != 0 && let Some(output) = output {
             spawner.duplicate(output, fd)?;

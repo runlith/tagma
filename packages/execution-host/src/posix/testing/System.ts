@@ -13,7 +13,8 @@ export type FixtureSystem = {
   readonly libc: string;
   readonly nofile: number;
   readonly errno: string;
-  readonly priorities: { readonly low: string; readonly lowest: string };
+  readonly priorityColumn: string;
+  readonly priorities: (full: string) => { readonly low: string; readonly lowest: string };
   readonly background: (pid: number) => Effect.Effect<boolean, ChannelFailed>;
   readonly isolated: (
     command: readonly string[],

@@ -1,5 +1,7 @@
 use super::{events::Queue, sys};
-use std::ffi::{CStr, OsStr};
+#[cfg(target_os = "macos")]
+use std::ffi::CStr;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -51,11 +53,17 @@ pub fn install() -> Result<(), String> {
     let Some(limit) = std::env::var_os(LIMIT_VARIABLE) else { return Ok(()); };
     let limit = limit.to_str().and_then(|value| value.parse::<usize>().ok()).filter(|limit| *limit > 0)
         .ok_or_else(|| format!("{LIMIT_VARIABLE} must name a positive byte limit"))?;
-    let mut path = [0 as libc::c_char; libc::PATH_MAX as usize];
-    if unsafe { libc::fcntl(libc::STDERR_FILENO, libc::F_GETPATH, path.as_mut_ptr()) } < 0 {
-        return Err(format!("the diagnostic output file could not be named: {}", io::Error::last_os_error()));
-    }
-    let path = unsafe { CStr::from_ptr(path.as_ptr()) };
+    #[cfg(target_os = "macos")]
+    let path = {
+        let mut path = [0 as libc::c_char; libc::PATH_MAX as usize];
+        if unsafe { libc::fcntl(libc::STDERR_FILENO, libc::F_GETPATH, path.as_mut_ptr()) } < 0 { return Err(format!("the diagnostic output file could not be named: {}", io::Error::last_os_error())); }
+        unsafe { CStr::from_ptr(path.as_ptr()) }.to_owned()
+    };
+    #[cfg(target_os = "linux")]
+    let path = {
+        let path = std::fs::read_link("/proc/self/fd/2").map_err(|error| format!("the diagnostic output file could not be named: {error}"))?;
+        std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|error| error.to_string())?
+    };
     let file = OpenOptions::new().read(true).append(true).open(Path::new(OsStr::from_bytes(path.to_bytes())))
         .map_err(|error| format!("the diagnostic output file could not be opened: {error}"))?;
     if !file.metadata().map_err(|error| error.to_string())?.is_file() {

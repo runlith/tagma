@@ -6,7 +6,8 @@ export const system: FixtureSystem = {
   libc: '/usr/lib/libSystem.B.dylib',
   nofile: 8,
   errno: '__error',
-  priorities: { low: '20', lowest: '4' },
+  priorityColumn: 'pri=',
+  priorities: () => ({ low: '20', lowest: '4' }),
   background,
   isolated: isolatedProcess,
 };

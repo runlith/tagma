@@ -1,86 +1,52 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { kind, shared, world } from '@runlith/testbed/worlds';
+import { shared } from '@runlith/testbed/worlds';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { Context, Data, Deferred, Effect, Fiber, FileSystem, Layer, Option, Schedule, Schema, Scope, Stream } from 'effect';
+import { Deferred, Effect, Fiber, FileSystem, Layer, Option, Schedule, Schema, Scope, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { spawn as spawnDetached } from 'node:child_process';
 import type { CommandEnvironment } from '@runlith/executions/CommandEnvironment';
 import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import type { ExecutionFeedItem } from '@runlith/executions/Executions';
-import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { executionSpawner, type SpawnContext } from '@runlith/executions/executionSpawner';
 import { managedCall } from '@runlith/executions/ManagedCall';
 import { recoveryClient } from '@runlith/executions/RecoveryClient';
-import { endpointConnection } from '@runlith/executions/posix/endpoint';
-import type { ExecutionRef, HostRequestRef } from '@runlith/executions/protocol/execution';
+import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { CallCancellation, type CallStopping } from '@runlith/executions/protocol/call';
 import type { CommandLimits } from '@runlith/executions/protocol/command';
-import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import type { UsageReading } from '@runlith/executions/protocol/evidence';
 import { byteOffset } from '@runlith/executions/protocol/record';
 import { HostBoot } from '@runlith/executions/protocol/boot';
-import { HostFrame, SubscriptionId, WIRE_VERSION, frameSize, type WireLimits } from '@runlith/executions/protocol/wire';
+import { HostFrame, SubscriptionId, WIRE_VERSION, frameSize } from '@runlith/executions/protocol/wire';
 import { hostPolicy, hostShare, hostWireLimits, principalOf, registrationOf } from './hostFixture';
 import { makeProcessWorld, writerClaimAvailable, type ProcessWorld } from './composition/testing/servedWorld';
 import { bundleWorld } from './composition/testing/artifact';
 import { HOST_ENTRY } from './buildArtifact';
 import { HOLDER_LIBRARY } from './posix/testing/holder';
-import { processLayer } from './composition/platform';
-import { processControl } from './posix/control';
-import { background } from './posix/testing/tempo';
 import { Processes } from './ProcessReader';
 import { ProcessControl } from './ProcessControl';
 
-const policy = hostPolicy({ executions: 12, transports: ['pipes'], custodyReceipts: 32 });
-const limits = hostWireLimits(policy, 12, { envelopeBytes: 16384, connections: 4, requests: 8 });
-const native = Layer.effect(ProcessControl, Effect.map(Processes, processControl)).pipe(Layer.provideMerge(processLayer(HOLDER_LIBRARY)));
-const platform = Layer.mergeAll(HostRegistration.layer, endpointConnection, native).pipe(Layer.provideMerge(BunServices.layer));
-class World extends Context.Service<World, ProcessWorld>()('test/HostProcess/World') {}
-type FixtureInput = { readonly policy: ExecutionPolicy; readonly executions: number; readonly limits: WireLimits };
-const processWorld = kind(World, ({ policy, executions, limits }: FixtureInput, directory) =>
-  Effect.gen(function* () {
-    yield* (yield* FileSystem.FileSystem).makeDirectory(directory, { recursive: true, mode: 0o700 });
-    return yield* makeProcessWorld({ prefix: 'host-process-', directory, policy, limits, share: hostShare(policy, executions) });
-  }).pipe(Effect.provide(platform)),
-);
-const fixture = (params: FixtureInput) => Layer.merge(world(processWorld, params), platform);
-const key = (host: ProcessWorld, name: string): HostRequestRef => ({
-  installation: host.registration.installation,
-  operation: HostRequestKey.make(name),
-});
-const take = Effect.fnUntraced(function* (name: string) {
-  const host = yield* World;
-  const first = yield* host.client.take(key(host, name), 0);
-  const held = first._tag === 'Stale' ? yield* host.client.take(key(host, `${name}-standing`), first.standing.revision) : first;
-  expect(held._tag).toBe('Held');
-  return host;
-});
-const request = (host: ProcessWorld, program: string, args: readonly string[]): LaunchRequest => ({
-  command: { program, args, cwd: host.directory, environment: [{ name: 'PATH', value: '/usr/bin:/bin' }] },
-  transport: { _tag: 'pipes', stdin: 'ignore' },
-  lifetime: 'call',
-  purpose: 'command',
-  target: { environment: 'e', namespace: 'n', cwd: host.directory, dependencies: [] },
-  holder: principalOf('tester'),
-  origin: principalOf('tester'),
-});
-type StartInput = { readonly host: ProcessWorld; readonly name: string; readonly request: LaunchRequest };
-const start = Effect.fnUntraced(function* ({ host, name, request }: StartInput) {
-  const answer = yield* host.client.start(key(host, name), request);
-  if (answer._tag !== 'Started') return yield* Effect.die(new Error(`start ${name}: ${answer._tag}`));
-  return answer;
-});
-const lane = Effect.gen(function* () {
-  const host = yield* World;
-  const principal = principalOf('tester');
-  const answer = yield* host.client.openBinding(principal);
-  if (answer._tag !== 'Bound') return yield* Effect.die(new Error(`binding: ${answer._tag}`));
-  return { binding: answer.binding, principal };
-});
+import {
+  policy,
+  limits,
+  platform,
+  World,
+  processWorld,
+  fixture,
+  key,
+  take,
+  request,
+  start,
+  lane,
+  text,
+  through,
+  bytes,
+  command,
+  failed,
+} from './composition/testing/processCases';
 const environment: CommandEnvironment = {
   materialize: (request) =>
     Effect.succeed(request.entries.flatMap((entry) => (entry._tag === 'Set' ? [{ name: entry.name, value: entry.value }] : []))),
@@ -101,34 +67,11 @@ const makeSpawner = Effect.fnUntraced(function* ({ correlation, stop }: SpawnInp
   };
   return yield* executionSpawner(environment, context).pipe(Effect.provide(ExecutionClient.context(host.client)));
 });
-const text = <E>(stream: Stream.Stream<Uint8Array, E>) =>
-  Stream.runCollect(stream).pipe(Effect.map((chunks) => Buffer.concat(chunks).toString()));
-const through = <E>(stream: Stream.Stream<ExecutionFeedItem, E>, marker: string) =>
-  Stream.runLast(
-    Stream.takeUntil(
-      Stream.scan(
-        stream,
-        () => '',
-        (held, delivery) => (delivery._tag === 'Bytes' ? held + new TextDecoder().decode(delivery.bytes) : held),
-      ),
-      (held) => held.includes(marker),
-    ),
-  );
-const bytes = (host: ProcessWorld, ref: ExecutionRef, stream: 'stdout' | 'pty' = 'stdout', offset = 0n) =>
-  host.client.subscribe({ _tag: 'Bytes', cursor: { ref, stream, offset: byteOffset(offset) } }, limits.credits);
 const callOf = (handle: ChildProcessSpawner.ChildProcessHandle) => {
   const call = managedCall(handle);
   if (call === undefined) throw new Error('the managed handle has no call');
   return call;
 };
-class FixtureFailed extends Data.TaggedError('FixtureFailed')<{ readonly message: string }> {}
-const failed = (cause: unknown) => new FixtureFailed({ message: String(cause) });
-const command = Effect.fnUntraced(function* (argv: readonly [string, ...string[]]) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(argv[0], argv.slice(1), { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
-  const [stdout, stderr, code] = yield* Effect.all([text(child.stdout), text(child.stderr), child.exitCode], { concurrency: 3 });
-  return { stdout, stderr, code: Number(code) };
-}, Effect.scoped);
 
 layer(platform, { excludeTestServices: true })('host program admission', (it) => {
   it.effect(
@@ -748,113 +691,6 @@ layer(fixture({ policy, executions: 12, limits }), { excludeTestServices: true }
       expect(answer.processes?.rulings.map((ruling) => [ruling._tag, 'rule' in ruling ? ruling.rule.id : undefined])).toEqual([
         ['Ended', 'sleep'],
       ]);
-    }),
-  );
-});
-
-const childOf = Effect.fnUntraced(function* (pid: number) {
-  const found = (yield* command(['pgrep', '-P', String(pid)])).stdout.trim().split('\n')[0];
-  return yield* Schema.decodeUnknownEffect(Schema.NumberFromString)(found);
-});
-const backgrounds = (pids: readonly number[]) => Effect.forEach(pids, background);
-type PaceInput = { readonly name: string; readonly line: string; readonly paced: boolean; readonly input?: boolean };
-const paced = Effect.fnUntraced(function* ({ name, line, paced, input = false }: PaceInput) {
-  const host = yield* World;
-  const answer = yield* Effect.acquireRelease(
-    start({
-      host,
-      name,
-      request: {
-        ...request(host, '/bin/sh', ['-c', line]),
-        paced: paced ? true : undefined,
-        transport: { _tag: 'pipes', stdin: input ? 'pipe' : 'ignore' },
-      },
-    }),
-    (answer) => host.client.stop(key(host, `${name}-cleanup`), answer.execution, 'explicit-stop', 'destroy').pipe(Effect.orDie),
-  );
-  if (answer.native.pid === undefined) return yield* Effect.die(new Error('the paced execution has no pid'));
-  yield* through(bytes(host, answer.execution), 'READY\n');
-  return { ref: answer.execution, pid: answer.native.pid };
-});
-layer(fixture({ policy, executions: 12, limits }), { excludeTestServices: true })('agent-work pace over actual children', (it) => {
-  it.effect(
-    'backgrounds paced descendants, preserves unpaced work and raises live work to full',
-    Effect.fnUntraced(function* () {
-      const host = yield* take('pace-lowest-take');
-      expect(yield* host.client.pace('lowest')).toEqual({ _tag: 'Applied', pace: 'lowest', reached: 0, kept: 0, failed: 0 });
-      const held = yield* paced({ name: 'pace-lowest', line: "sh -c 'echo READY; exec sleep 30'; :", paced: true });
-      const unpaced = yield* Effect.acquireRelease(
-        start({ host, name: 'pace-unpaced', request: request(host, '/bin/sleep', ['30']) }),
-        (answer) => host.client.stop(key(host, 'pace-unpaced-cleanup'), answer.execution, 'explicit-stop', 'destroy').pipe(Effect.orDie),
-      );
-      if (unpaced.native.pid === undefined) return yield* Effect.die(new Error('the unpaced process has no pid'));
-      const child = yield* childOf(held.pid);
-      const pids = [held.pid, child, unpaced.native.pid];
-      expect(yield* backgrounds(pids)).toEqual([true, true, false]);
-      const before = (yield* host.client.commandsAt([held.ref])).revision;
-      expect(yield* host.client.pace('full')).toEqual({ _tag: 'Applied', pace: 'full', reached: 2, kept: 0, failed: 0 });
-      expect(yield* backgrounds(pids)).toEqual([false, false, false]);
-      const changed = yield* host.client.changes(before, 8);
-      expect(changed._tag === 'Changed' ? changed.executions.map((summary) => summary.state.ref.execution) : changed).toContain(
-        held.ref.execution,
-      );
-      yield* host.client.pace('lowest');
-      expect(yield* backgrounds(pids)).toEqual([true, true, false]);
-      yield* host.client.pace('full');
-      yield* host.client.stop(key(host, 'pace-lowest-stop'), held.ref, 'explicit-stop', 'destroy');
-      yield* host.client.stop(key(host, 'pace-unpaced-stop'), unpaced.execution, 'explicit-stop', 'destroy');
-    }),
-  );
-  it.effect(
-    'applies a full move while running utility work keeps its level, and applies supported lower moves',
-    Effect.fnUntraced(function* () {
-      const host = yield* take('pace-low-take');
-      yield* host.client.pace('low');
-      const held = yield* paced({ name: 'pace-low', line: "sh -c 'echo READY; exec sleep 30'; :", paced: true });
-      const child = yield* childOf(held.pid);
-      expect(yield* backgrounds([held.pid, child])).toEqual([false, false]);
-      expect(yield* host.client.pace('full')).toEqual({ _tag: 'Applied', pace: 'full', reached: 0, kept: 2, failed: 0 });
-      expect(yield* backgrounds([held.pid, child])).toEqual([false, false]);
-      yield* host.client.pace('lowest');
-      expect(yield* backgrounds([held.pid, child])).toEqual([true, true]);
-      yield* host.client.pace('low');
-      expect(yield* backgrounds([held.pid, child])).toEqual([false, false]);
-      yield* host.client.stop(key(host, 'pace-low-stop'), held.ref, 'explicit-stop', 'destroy');
-    }),
-  );
-  it.effect(
-    'backgrounds a live command and the descendant it starts afterward',
-    Effect.fnUntraced(function* () {
-      const host = yield* take('pace-running-take');
-      yield* host.client.pace('full');
-      const held = yield* paced({
-        name: 'pace-running',
-        line: "echo READY; read wake; sh -c 'echo READY; exec sleep 30'; :",
-        paced: true,
-        input: true,
-      });
-      expect(yield* background(held.pid)).toBe(false);
-      expect(yield* host.client.pace('lowest')).toEqual({ _tag: 'Applied', pace: 'lowest', reached: 1, kept: 0, failed: 0 });
-      yield* host.client.input(held.ref, yield* lane, { sequence: 0, cause: 'raw', act: { _tag: 'Write', bytes: Buffer.from('GO\n') } });
-      yield* through(bytes(host, held.ref, 'stdout', 6n), 'READY\n');
-      const child = yield* childOf(held.pid);
-      expect(yield* backgrounds([held.pid, child])).toEqual([true, true]);
-      yield* host.client.pace('full');
-      yield* host.client.stop(key(host, 'pace-running-stop'), held.ref, 'explicit-stop', 'destroy');
-    }),
-  );
-  it.effect(
-    'keeps lowest-born work at lowest on a low move and still permits full',
-    Effect.fnUntraced(function* () {
-      const host = yield* take('pace-eased-take');
-      yield* host.client.pace('lowest');
-      const held = yield* paced({ name: 'pace-eased', line: "sh -c 'echo READY; exec sleep 30'; :", paced: true });
-      const child = yield* childOf(held.pid);
-      expect(yield* host.client.pace('low')).toEqual({ _tag: 'Applied', pace: 'low', reached: 0, kept: 2, failed: 0 });
-      expect(yield* backgrounds([held.pid, child])).toEqual([true, true]);
-      yield* host.client.pace('full');
-      expect(yield* backgrounds([held.pid, child])).toEqual([false, false]);
-      yield* host.client.stop(key(host, 'pace-eased-stop'), held.ref, 'explicit-stop', 'destroy');
     }),
   );
 });

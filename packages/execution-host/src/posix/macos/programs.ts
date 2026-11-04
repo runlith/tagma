@@ -1,13 +1,6 @@
 import type { ProcessProgram } from '../../UsageReader';
 
-type Placed = {
-  readonly pid: number;
-  readonly parent: number;
-  readonly responsible: number | undefined;
-  readonly executable: string | undefined;
-  readonly invoked: string | undefined;
-  readonly name: string;
-};
+import { ownProgram, type ProgramProcess } from '../programs';
 
 const BUNDLE = '.app/';
 
@@ -19,18 +12,7 @@ const bundleOf = (executable: string | undefined): ProcessProgram | undefined =>
   return { key, name: key.slice(key.lastIndexOf('/') + 1, -'.app'.length) };
 };
 
-export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1) || path;
-
-const ownProgram = (placed: Placed): ProcessProgram =>
-  placed.executable === undefined
-    ? { key: `name:${placed.name}`, name: placed.name }
-    : {
-        key: `exe:${placed.executable}`,
-        name: placed.name,
-        where: placed.executable.includes('/') ? placed.executable.slice(0, placed.executable.lastIndexOf('/')) || '/' : undefined,
-      };
-
-export const programsOf = (listed: ReadonlyArray<Placed>): ReadonlyMap<number, ProcessProgram> => {
+export const programsOf = (listed: ReadonlyArray<ProgramProcess>): ReadonlyMap<number, ProcessProgram> => {
   const byPid = new Map(listed.map((one) => [one.pid, one]));
   const bundled = new Map<number, ProcessProgram | null>();
   const bundleAbove = (start: number): ProcessProgram | undefined => {

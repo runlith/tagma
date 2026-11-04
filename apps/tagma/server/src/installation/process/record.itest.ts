@@ -27,7 +27,7 @@ it.live('a reused PID and an issued predecessor record older than its process do
     const record = (yield* writer.state).record!;
     writeFileSync(path, JSON.stringify({ ...record, predecessor: { ...record.predecessor, birth: 'another-process' } }));
     expect((yield* readStartup(path)).restart?.underway).toBe(false);
-    const accepted = (yield* Clock.currentTimeMillis) - 1;
+    const accepted = (yield* Clock.currentTimeMillis) - 1_000;
     const child = yield* Effect.acquireRelease(
       Effect.sync(() =>
         Bun.spawn([process.execPath, '-e', 'await Bun.stdin.text()'], { stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' }),

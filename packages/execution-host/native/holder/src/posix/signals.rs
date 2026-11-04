@@ -1,12 +1,13 @@
 use std::ffi::c_int;
 
-const SIGNALS: [(&str, c_int); 31] = [
+const SIGNALS: &[(&str, c_int)] = &[
     ("SIGHUP", libc::SIGHUP),
     ("SIGINT", libc::SIGINT),
     ("SIGQUIT", libc::SIGQUIT),
     ("SIGILL", libc::SIGILL),
     ("SIGTRAP", libc::SIGTRAP),
     ("SIGABRT", libc::SIGABRT),
+    #[cfg(target_os = "macos")]
     ("SIGEMT", libc::SIGEMT),
     ("SIGBUS", libc::SIGBUS),
     ("SIGFPE", libc::SIGFPE),
@@ -30,7 +31,12 @@ const SIGNALS: [(&str, c_int); 31] = [
     ("SIGPROF", libc::SIGPROF),
     ("SIGWINCH", libc::SIGWINCH),
     ("SIGIO", libc::SIGIO),
+    #[cfg(target_os = "macos")]
     ("SIGINFO", libc::SIGINFO),
+    #[cfg(target_os = "linux")]
+    ("SIGPWR", libc::SIGPWR),
+    #[cfg(target_os = "linux")]
+    ("SIGSTKFLT", libc::SIGSTKFLT),
     ("SIGSYS", libc::SIGSYS),
 ];
 
