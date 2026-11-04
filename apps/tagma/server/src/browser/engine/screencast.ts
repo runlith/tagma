@@ -270,7 +270,10 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       const frame = castFrame(event.text);
       if (frame === undefined) return yield* Effect.logWarning(`browser: a frame of page ${cast.page} was unreadable`);
       cast.arrived += 1;
+      const superseded = cast.pending;
       cast.pending = frame.ack;
+      if (superseded !== null && cast.attached !== null)
+        yield* cast.attached.session.post('Page.screencastFrameAck', { sessionId: superseded });
       const now = yield* Clock.currentTimeMillis;
       const held: Held = {
         event: { type: 'frame', data: frame.data, width: frame.width, height: frame.height },

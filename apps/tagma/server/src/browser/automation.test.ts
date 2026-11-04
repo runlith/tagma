@@ -21,6 +21,7 @@ import { Profiles } from './contract/service/profiles.js';
 import { ThreadRuns } from './contract/service/runs.js';
 import { PageId, ProfileId } from './contract/wire/ids.js';
 import type { Live, Page } from './contract/wire/page.js';
+import type { Frame, ScreencastEvent } from './contract/wire/screencast.js';
 import type { PAGE_OPERATIONS } from './contract/wire/pageOperations.js';
 import { conditionsOf, NETWORKS, NO_CONDITIONS } from './contract/wire/emulation.js';
 import { type Strain, strainOf } from './contract/wire/host.js';
@@ -30,6 +31,7 @@ import { fixedCheckoutPaths } from '../workspace/testing/doubles.js';
 import { makeAutomation } from './engine/automation.js';
 import { makeAnalysis } from './engine/analysis.js';
 import { makeDrive } from './engine/drive.js';
+import { makeScreencast } from './engine/screencast.js';
 import { PAGE_PAIRS } from './operations.js';
 
 type Act = typeof PAGE_OPERATIONS.act_on_page;
@@ -44,13 +46,24 @@ type Capture = typeof PAGE_OPERATIONS.capture_page;
 type CaptureCall = Effect.Effect<DeclaredAnswer<Capture['answer']>, Refused<Capture>, Automation | Pages | CurrentProject>;
 const unused = () => Effect.die('this scenario does not use this port');
 const PAGE = PageId.make('01a184cf-76ca-7d83-87c6-2f78805e2612');
+const CHROMIUM_FRAMES_IN_FLIGHT = 2;
 const caller: Caller = {
   actor: { kind: 'thread', threadId: 'agent', projectId: 1, principalId: 'agent', session: { harness: 'tagma', key: 'agent' } },
   files: null,
 };
 
 const engine = Effect.fnUntraced(function* (
-  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap' | 'viewport' | 'viewport-quantized',
+  mode:
+    | 'dialog'
+    | 'detach'
+    | 'conditions'
+    | 'replacement'
+    | 'late-adoption'
+    | 'pick-detach'
+    | 'heap'
+    | 'viewport'
+    | 'viewport-quantized'
+    | 'screencast',
 ) {
   const incoming = yield* Queue.unbounded<string>();
   const frameTrees = yield* Queue.unbounded<string>();
@@ -69,6 +82,11 @@ const engine = Effect.fnUntraced(function* (
   let viewportRead: { readonly id: number; readonly sessionId: string | undefined } | null = null;
   const resizing = yield* Deferred.make<void>();
   const changingViewport = yield* Deferred.make<void>();
+  const screencasting = yield* Deferred.make<void>();
+  let castSession = 0;
+  let framesInFlight = 0;
+  let pictures = 0;
+  let pointerX = 0;
   const inspecting = new Set<string>();
   const rates = new Map<string, number>();
   const strains = new Set<Strain>();
@@ -84,12 +102,21 @@ const engine = Effect.fnUntraced(function* (
           readonly key?: string;
           readonly mode?: string;
           readonly rate?: number;
+          readonly sessionId?: number;
+          readonly x?: number;
           readonly width?: number;
           readonly height?: number;
           readonly expression?: string;
           readonly matchedNetworkConditions?: readonly { readonly latency: number }[];
         };
       };
+      if (command.method === 'Page.startScreencast') {
+        castSession += 1;
+        framesInFlight = 0;
+        yield* Deferred.succeed(screencasting, undefined);
+      }
+      if (command.method === 'Page.screencastFrameAck' && command.params?.sessionId === castSession) framesInFlight -= 1;
+      if (command.method === 'Input.dispatchMouseEvent') pointerX = command.params?.x ?? 0;
       if (command.method === 'Input.dispatchKeyEvent' && command.params?.type === 'keyDown') {
         if (mode === 'dialog' && command.params.key === 'a') {
           yield* Deferred.succeed(started, undefined);
@@ -270,7 +297,7 @@ const engine = Effect.fnUntraced(function* (
       geolocation: unused,
       answer: unused,
       events: unused(),
-      paint: () => (mode === 'pick-detach' ? Effect.void : unused()),
+      paint: () => (mode === 'pick-detach' || mode === 'screencast' ? Effect.void : unused()),
       session: () => Effect.succeed(session),
     },
     profiles: { prepare: unused, session: unused, remove: unused },
@@ -354,6 +381,11 @@ const engine = Effect.fnUntraced(function* (
     Effect.provide(BunPath.layer),
     Effect.provide(Memory.layer),
   );
+  const { screencast } = yield* makeScreencast({ pages, drive }).pipe(
+    Effect.provideService(BrowserPlace, { root: '/browser' }),
+    Effect.provide(BunPath.layer),
+    Effect.provide(Memory.layer),
+  );
   const act = (steps: Act['input']['Type']['steps']) =>
     (PAGE_PAIRS.act_on_page.body.execute({ page: PAGE, steps }, undefined, caller) as Call).pipe(
       forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
@@ -389,6 +421,26 @@ const engine = Effect.fnUntraced(function* (
   );
   return {
     act,
+    screencast,
+    screencasting: Deferred.await(screencasting),
+    pointerX: () => pointerX,
+    capture: (picture: string) =>
+      Effect.suspend(() => {
+        if (framesInFlight > CHROMIUM_FRAMES_IN_FLIGHT) return Effect.succeed(undefined);
+        framesInFlight += 1;
+        const width = 100 + (pictures += 1);
+        return Effect.as(
+          Queue.offer(
+            incoming,
+            JSON.stringify({
+              method: 'Page.screencastFrame',
+              params: { data: picture, metadata: { deviceWidth: width, deviceHeight: 300, timestamp: 0 }, sessionId: castSession },
+              sessionId: 'engine',
+            }),
+          ),
+          width,
+        );
+      }),
     pick: channels['browser.pick']({ projectId: 1, page: PAGE }),
     evaluate: (expression = 'globalThis.clicks') =>
       (PAGE_PAIRS.evaluate_in_page.body.execute({ page: PAGE, expression }, undefined, caller) as EvaluateCall).pipe(
@@ -474,6 +526,42 @@ const engine = Effect.fnUntraced(function* (
     join: join('child'),
   };
 });
+
+it.effect('a viewer that took no frame while Chromium ran out of frame credit still receives the last picture', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('screencast');
+    const pull = yield* Stream.toPull(browser.screencast.watch(PAGE, { width: 400, height: 300, scale: 1 }));
+    const held: ScreencastEvent[] = [];
+    const next = Effect.suspend(() => {
+      const first = held.shift();
+      return first !== undefined
+        ? Effect.succeed(first)
+        : Effect.map(pull, (chunk) => {
+            held.push(...chunk.slice(1));
+            return chunk[0];
+          });
+    });
+    const frame: Effect.Effect<Frame, unknown> = Effect.flatMap(next, (event) => (event.type === 'frame' ? Effect.succeed(event) : frame));
+    const named = yield* next;
+    if (named.type !== 'viewer') return yield* Effect.die('the stream did not name its viewer first');
+    yield* browser.screencasting;
+    let turn = 0;
+    const captured = Effect.fnUntraced(function* (picture: string) {
+      const width = yield* browser.capture(picture);
+      if (width === undefined) return;
+      while (browser.pointerX() !== width) {
+        yield* browser.screencast.input(PAGE, named.viewer, turn++, [
+          { kind: 'mouse', type: 'move', x: 1, y: 0, button: 'none', clicks: 0, modifiers: 0 },
+        ]);
+        yield* Effect.yieldNow;
+      }
+    });
+    yield* captured('first');
+    expect((yield* frame).data).toBe('first');
+    for (const picture of ['one', 'two', 'three', 'last']) yield* captured(picture);
+    expect((yield* frame).data).toBe('last');
+  }),
+);
 
 it.effect('a native resize before a device override becomes the restored viewport', () =>
   Effect.gen(function* () {

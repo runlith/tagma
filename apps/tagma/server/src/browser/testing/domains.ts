@@ -9,7 +9,7 @@ import { Profiles } from '../contract/service/profiles.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import { allowedDomains, blockedDomains } from '../contract/wire/settings.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
-import { calling, OPERATOR, refIn, refusalOf, Seeded } from './world.js';
+import { calling, loaded, OPERATOR, refIn, refusalOf, Seeded } from './world.js';
 
 const denied = Effect.fnUntraced(function* <A, E, R, W, RW>(
   work: Effect.Effect<A, E, R>,
@@ -186,7 +186,7 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   expect(redirected.code).toBe('domain-blocked');
   expect(visits.length).toBe(before);
   yield* navigate(url, OPERATOR);
-  yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'load', timeoutMs: 120_000 }, undefined, caller));
+  yield* loaded(page);
   for (const label of ['Blocked frame', 'Blocked popup', 'Blocked link']) {
     const shot = yield* snapshot;
     const outcome = yield* denied(click(refIn(shot, new RegExp(`(?:button|link) "${label}"`))), watch(page), input.reached);
@@ -198,9 +198,31 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
     expect(visits.length).toBe(before);
   }
   yield* navigate(url, OPERATOR);
-  yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'load', timeoutMs: 120_000 }, undefined, caller));
+  yield* loaded(page);
   yield* click(refIn(yield* snapshot, /button "Fetch resource"/));
-  yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'Resource fetched', timeoutMs: 5_000 }, undefined, caller));
+  const fetched = yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `new Promise(resolve => {
+          const output = document.getElementById('resource');
+          const observer = new MutationObserver(() => {
+            if (output.textContent !== 'Resource fetched') return;
+            observer.disconnect();
+            resolve(output.textContent);
+          });
+          observer.observe(output, { childList: true });
+          if (output.textContent === 'Resource fetched') {
+            observer.disconnect();
+            resolve(output.textContent);
+          }
+        })`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  expect(fetched).toMatchObject({ value: JSON.stringify('Resource fetched') });
   expect(visits.length).toBe(before + 1);
   yield* navigate(forbidden, OPERATOR);
   expect(visits.length).toBe(before + 2);

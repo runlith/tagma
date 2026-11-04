@@ -23,6 +23,7 @@ import { chordOf, sameChord } from './chords.js';
 import type { Executor, Reporter } from './connection.js';
 import { forwardFramed } from './framedKeys.js';
 import { Driven } from './driven.js';
+import { HeapCaptures } from './heaps.js';
 import { readKey } from './keychain.js';
 import { showPageMenu } from './menu.js';
 import { allowedUrl, HeldPage, type PageEvents, type Settled, viewPreferences } from './page.js';
@@ -37,7 +38,7 @@ const TAB_BUDGET = 4;
 const TAB_WINDOW_MS = 2_000;
 const ACTIVATING = new Set(['mouseDown', 'mouseUp', 'keyDown', 'rawKeyDown', 'char', 'touchStart', 'touchEnd', 'gestureTap']);
 const OPERATED_EVERY_MS = 1_000;
-const HEAP_SWEEP_MS = 1_000;
+const PROBE_EVERY_MS = 1_000;
 const OPERATING = new Set([
   'mouseDown',
   'mouseUp',
@@ -68,8 +69,6 @@ type GateWatch = { readonly gate: NavigationGate; failure: GateFailure | null };
 
 type Lease = { readonly page: HeldPage; readonly release: () => void };
 
-type HeapCapture = { readonly renderer: number; readonly created: number; readonly gone: () => void };
-
 export class BrowserHost implements Executor {
   readonly placement: Placement;
   private reporter: Reporter | null = null;
@@ -81,9 +80,13 @@ export class BrowserHost implements Executor {
   private readonly holds = new Map<number, HeldPage>();
   private readonly watches = new Map<number, GateWatch>();
   private readonly leases = new Map<number, Lease>();
-  private readonly strains = new RendererStrain();
-  private readonly heaps = new Map<symbol, HeapCapture>();
-  private heapSweep: ReturnType<typeof setInterval> | null = null;
+  private readonly strains = new RendererStrain((renderers) => {
+    for (const page of this.pages.values()) {
+      if (!page.contents.isDestroyed() && renderers.has(page.contents.getOSProcessId())) page.suspend();
+    }
+  });
+  private readonly heaps = new HeapCaptures(this.strains);
+  private probing: ReturnType<typeof setInterval> | null = null;
   private readonly services = new Map<string, Service>();
   private readonly chords = new Map<WebContents, readonly Chord[]>();
   private readonly framed = new Map<WebContents, readonly FramedChord[]>();
@@ -306,7 +309,7 @@ export class BrowserHost implements Executor {
       case 'heap': {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
-        return this.heap(page, call.path, reporter, id);
+        return this.heaps.capture(page, call.path, reporter, id);
       }
       case 'answer': {
         const page = this.byId.get(call.page);
@@ -470,51 +473,6 @@ export class BrowserHost implements Executor {
     };
   }
 
-  private heap(page: HeldPage, path: string, reporter: Reporter, id: number): void {
-    const renderer = page.contents.getOSProcessId();
-    const metric = app.getAppMetrics().find((process) => process.pid === renderer);
-    if (metric === undefined) {
-      reporter.fail(id, {
-        kind: 'refused',
-        message: 'the page heap was not captured because its renderer is not running',
-        unblock: ['capture_page with what: heap again'],
-      });
-      return;
-    }
-    const capture = Symbol();
-    const release = this.strains.hold([renderer], { factor: 1, paused: true });
-    const finish = (failure: Failure | null) => {
-      if (!this.heaps.delete(capture)) return;
-      release();
-      if (this.heaps.size === 0 && this.heapSweep !== null) {
-        clearInterval(this.heapSweep);
-        this.heapSweep = null;
-      }
-      if (failure === null) reporter.answer(id, null);
-      else reporter.fail(id, failure);
-    };
-    const failed = (error: unknown) =>
-      finish({
-        kind: 'refused',
-        message: `the page heap was not captured: ${String(error)}`,
-        unblock: ['capture_page with what: heap again'],
-      });
-    this.heaps.set(capture, { renderer, created: metric.creationTime, gone: () => failed('the captured renderer exited') });
-    this.heapSweep ??= setInterval(() => this.sweepHeaps(), HEAP_SWEEP_MS);
-    try {
-      void page.contents.takeHeapSnapshot(path).then(() => finish(null), failed);
-    } catch (error) {
-      failed(error);
-    }
-  }
-
-  private sweepHeaps(): void {
-    const live = new Map(app.getAppMetrics().map((process) => [process.pid, process.creationTime]));
-    for (const capture of this.heaps.values()) {
-      if (live.get(capture.renderer) !== capture.created) capture.gone();
-    }
-  }
-
   private local(): string {
     this.locals += 1;
     return `page-${this.locals}`;
@@ -536,6 +494,7 @@ export class BrowserHost implements Executor {
 
   private track(page: HeldPage): HeldPage {
     this.pages.set(page.local, page);
+    this.probing ??= setInterval(() => this.sampleRenderers(), PROBE_EVERY_MS);
     if (page.id !== null) this.byId.set(page.id, page);
     this.byContents.set(page.contents, page);
     this.placement.add(page.placed);
@@ -543,6 +502,18 @@ export class BrowserHost implements Executor {
     this.trim(page);
     this.pagesMoved();
     return page;
+  }
+
+  private sampleRenderers(): void {
+    const metrics = new Map(app.getAppMetrics().map((metric) => [metric.pid, metric]));
+    for (const page of this.pages.values()) {
+      if (page.contents.isDestroyed()) continue;
+      const metric = metrics.get(page.contents.getOSProcessId());
+      const cpu = metric?.cpu.cumulativeCPUUsage;
+      page.sample(
+        metric === undefined || cpu === undefined ? null : { process: `${metric.pid}/${metric.creationTime}`, millis: cpu * 1_000 },
+      );
+    }
   }
 
   private pagesMoved(): void {
@@ -553,6 +524,10 @@ export class BrowserHost implements Executor {
     this.profiles.navigation(page.contents, null);
     for (const [watch, watched] of this.watches) if (watched.gate.source === page.restrictions) this.watches.delete(watch);
     this.pages.delete(page.local);
+    if (this.pages.size === 0 && this.probing !== null) {
+      clearInterval(this.probing);
+      this.probing = null;
+    }
     if (page.id !== null && this.byId.get(page.id) === page) this.byId.delete(page.id);
     this.byContents.delete(page.contents);
     this.popups.delete(page);

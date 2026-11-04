@@ -23,6 +23,7 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@runlith/cdp": "workspace:*",
     "@runlith/desktop-host": "workspace:*",
     "@runlith/desktop-input": "workspace:*",
     "@runlith/window-behavior": "workspace:*",

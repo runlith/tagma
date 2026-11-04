@@ -127,7 +127,7 @@ export const screencastScenarios = (input: CastHost): void => {
       Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
     );
 
-  layer(input.fixture(), { excludeTestServices: true, timeout: '60 seconds' })(`the screencast on ${input.name}`, (it) => {
+  layer(input.fixture(), { excludeTestServices: true })(`the screencast on ${input.name}`, (it) => {
     it.effect(
       'viewers receive their viewport, share the smaller budget and recover the larger stream when a stalled viewer is evicted',
       () =>
@@ -150,7 +150,6 @@ export const screencastScenarios = (input: CastHost): void => {
           const ending = yield* Effect.exit(stalled.next);
           expect(Exit.isFailure(ending) && Pull.isDoneCause(ending.cause)).toBe(true);
         }).pipe(Effect.provide(TestClock.layer())),
-      30_000,
     );
 
     it.effect('a still page takes viewer clicks, ordered text input, copy and a chosen file', () =>
@@ -230,15 +229,20 @@ export const screencastScenarios = (input: CastHost): void => {
     const record = (page: PageId, action: 'start' | 'stop') =>
       calling(RECORD.record_page.body.execute({ page, action }, undefined, agent).pipe(Effect.provide(input.clips)));
 
-    const recorded = Effect.fnUntraced(function* (page: PageId, act: Effect.Effect<void, unknown, Served>) {
+    const recorded = Effect.fnUntraced(function* (page: PageId, act: Effect.Effect<void, unknown, Served>, controlled = false) {
       const before = yield* Clock.currentTimeMillis;
       const started = yield* record(page, 'start');
       const after = yield* Clock.currentTimeMillis;
       if (started.status !== 'recording') return yield* Effect.die(`the recording did not start: ${JSON.stringify(started)}`);
-      yield* act;
-      const stopping = yield* Clock.currentTimeMillis;
-      const stopped = yield* record(page, 'stop');
-      const end = yield* Clock.currentTimeMillis;
+      const ending = Effect.gen(function* () {
+        yield* act;
+        const stopping = yield* Clock.currentTimeMillis;
+        const stopped = yield* record(page, 'stop');
+        return { stopping, stopped, end: yield* Clock.currentTimeMillis };
+      });
+      const { stopping, stopped, end } = yield* controlled
+        ? Effect.andThen(TestClock.setTime(after), ending).pipe(Effect.provide(TestClock.layer()))
+        : ending;
       if (stopped.status !== 'recorded') return yield* Effect.die(`the recording did not stop: ${JSON.stringify(stopped)}`);
       expect(stopped.path).toBe(started.path);
       expect(stopped.durationMs).toBeGreaterThanOrEqual(stopping - after - FRAME_MS);
@@ -287,8 +291,9 @@ export const screencastScenarios = (input: CastHost): void => {
           page,
           Effect.gen(function* () {
             expect((yield* refusalOf(record(page, 'start'))).code).toBe('recording-running');
-            yield* Effect.sleep('3 seconds');
+            yield* TestClock.adjust('3 seconds');
           }),
+          true,
         );
         expect(still.durationMs).toBeGreaterThanOrEqual(3000);
         expect((yield* refusalOf(record(page, 'stop'))).code).toBe('no-recording');
@@ -413,27 +418,27 @@ export const screencastScenarios = (input: CastHost): void => {
   });
 
   const nativeHome = mkdtempSync(join(tmpdir(), 'browser-native-'));
-  layer(input.fixture({ native: true }), {
-    excludeTestServices: true,
-    timeout: '60 seconds',
-  })(`the screencast of a page with a native view on ${input.name}`, (it) => {
-    it.effect('a viewer asking for its own layout leaves the size of the page alone', () =>
-      Effect.gen(function* () {
-        const page = yield* calling(
-          PAGE.open_page.body.execute({ url: at('/still'), profile: input.profile }, undefined, agentIn(nativeHome)),
-        ).pipe(Effect.map((opened) => opened.page.id));
-        const pages = yield* Pages;
-        yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
-        const before = (yield* calling(
-          PAGE.evaluate_in_page.body.execute({ page, expression: 'innerWidth' }, undefined, agentIn(nativeHome)),
-        )) as {
-          readonly value: string;
-        };
-        const viewing = yield* watching(page, { width: 500, height: 400, scale: 1, layout: true });
-        const frame = yield* viewing.frame;
-        expect(frame.width).toBe(Number(before.value));
-        expect(frame.width).not.toBe(500);
-      }),
-    );
-  });
+  layer(input.fixture({ native: true }), { excludeTestServices: true })(
+    `the screencast of a page with a native view on ${input.name}`,
+    (it) => {
+      it.effect('a viewer asking for its own layout leaves the size of the page alone', () =>
+        Effect.gen(function* () {
+          const page = yield* calling(
+            PAGE.open_page.body.execute({ url: at('/still'), profile: input.profile }, undefined, agentIn(nativeHome)),
+          ).pipe(Effect.map((opened) => opened.page.id));
+          const pages = yield* Pages;
+          yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
+          const before = (yield* calling(
+            PAGE.evaluate_in_page.body.execute({ page, expression: 'innerWidth' }, undefined, agentIn(nativeHome)),
+          )) as {
+            readonly value: string;
+          };
+          const viewing = yield* watching(page, { width: 500, height: 400, scale: 1, layout: true });
+          const frame = yield* viewing.frame;
+          expect(frame.width).toBe(Number(before.value));
+          expect(frame.width).not.toBe(500);
+        }),
+      );
+    },
+  );
 };

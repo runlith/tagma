@@ -10,6 +10,7 @@ const host: EngineHost = {
   name: 'the desktop host',
   adapter: desktopAdapter,
   profile: AGENT_PROFILE,
+  rendererCpu: true,
   fixture: desktopFixture,
 };
 

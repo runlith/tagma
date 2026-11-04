@@ -13,8 +13,13 @@ export class RendererStrain {
   private readonly renderers = new Map<number, HeldStrain>();
   private readonly profiles = new Map<string, HeldStrain>();
 
+  constructor(private readonly onPause?: (renderers: ReadonlySet<number>) => void) {}
+
   hold(renderers: Iterable<number>, strain: Strain): () => void {
-    return this.holdIn(this.renderers, renderers, strain);
+    const captured = new Set(renderers);
+    const release = this.holdIn(this.renderers, captured, strain);
+    if (strain.paused) this.onPause?.(captured);
+    return release;
   }
 
   cpu(profile: string, factor: number): CpuLease {
@@ -34,7 +39,7 @@ export class RendererStrain {
           release();
           held.delete(renderer);
         }
-        if (pending) fallback ??= this.holdIn(this.profiles, [profile], strain);
+        if (pending) fallback ??= this.holdIn(this.profiles, new Set([profile]), strain);
         else {
           fallback?.();
           fallback = null;
@@ -54,8 +59,7 @@ export class RendererStrain {
     return strainOf([this.renderers.get(renderer)?.current ?? CLEAR, this.profiles.get(profile)?.current ?? CLEAR]);
   }
 
-  private holdIn<Key>(states: Map<Key, HeldStrain>, keys: Iterable<Key>, strain: Strain): () => void {
-    const captured = new Set(keys);
+  private holdIn<Key>(states: Map<Key, HeldStrain>, captured: ReadonlySet<Key>, strain: Strain): () => void {
     const hold = Symbol();
     for (const key of captured) {
       let state = states.get(key);

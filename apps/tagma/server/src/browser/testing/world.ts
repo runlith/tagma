@@ -2,7 +2,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Stream } from 'effect';
 import { migrationsFolder, seedDirectory } from '../../installation/testing/doubles.js';
 import { forProject } from '../../invocation/testing/call.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -21,10 +21,10 @@ import { fixedCheckoutPaths } from '../../workspace/testing/doubles.js';
 import { project } from '../../projects/store/table.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { resolveSetting, type SettingLayer } from '../../settings/resolution.js';
-import { ProfileId } from '../contract/wire/ids.js';
+import { type PageId, ProfileId } from '../contract/wire/ids.js';
 import type { Automation } from '../contract/service/automation.js';
 import { type HostAdapter, HostAdapters, type Hosts } from '../contract/service/hosts.js';
-import type { Pages } from '../contract/service/pages.js';
+import { Pages } from '../contract/service/pages.js';
 import { BrowserPlace } from '../contract/service/place.js';
 import type { Profiles } from '../contract/service/profiles.js';
 import { RunEnds, runsLayer } from './runs.js';
@@ -76,6 +76,17 @@ export const calling = <A, E>(work: Effect.Effect<A, E, unknown>): Effect.Effect
       forProject(Effect.succeed({ project: { id: seeded.id, name: seeded.name } })),
     ),
   );
+
+export const loaded = Effect.fnUntraced(function* (page: PageId) {
+  const pages = yield* Pages;
+  const moves = yield* pages.moves(page);
+  const live = pages.live(page);
+  if (live === undefined) return yield* Effect.die(`page ${page} closed before its document loaded`);
+  if (!live.loading) return;
+  const completed = yield* Stream.runHead(Stream.filter(moves, (move) => move.signal === 'closed' || !move.live.loading));
+  if (completed._tag === 'None' || completed.value.signal === 'closed')
+    return yield* Effect.die(`page ${page} closed before its document loaded`);
+});
 
 export const refusalOf = <A, E>(work: Effect.Effect<A, E, Served>) =>
   Effect.map(Effect.flip(work), (failure) => {

@@ -1,32 +1,28 @@
-import { expect } from 'bun:test';
-import { it } from '@runlith/effect-test';
-import { TestClock } from 'effect/testing';
-import { Effect, Queue, Stream } from 'effect';
-import { watchResponsive } from './probe.js';
-import { connect } from './session.js';
+import { expect, it } from 'bun:test';
+import { Probe } from './probe.js';
 
-it.effect('a running probe follows CPU strain and pause, then detects a hang and recovery', () =>
-  Effect.gen(function* () {
-    const incoming = yield* Queue.unbounded<string>();
-    const outgoing = yield* Queue.unbounded<string>();
-    const reports = yield* Queue.unbounded<boolean>();
-    const connection = yield* connect({ send: (text) => Effect.asVoid(Queue.offer(outgoing, text)), incoming: Stream.fromQueue(incoming) });
-    let factor = 20;
-    let paused = false;
-    const options = { every: '1 second', threshold: '5 seconds', factor: () => factor, paused: () => paused } as const;
-    yield* Effect.forkScoped(watchResponsive(connection.root, options, (responsive) => Effect.asVoid(Queue.offer(reports, responsive))));
-    yield* TestClock.adjust('6 seconds');
-    expect(yield* Queue.size(reports)).toBe(0);
-    paused = true;
-    factor = 1;
-    yield* TestClock.adjust('6 seconds');
-    expect(yield* Queue.size(reports)).toBe(0);
-    paused = false;
-    yield* TestClock.adjust('6 seconds');
-    expect(yield* Queue.take(reports)).toBe(false);
-    const commands = yield* Queue.takeAll(outgoing);
-    const { id } = JSON.parse(commands.at(-1)!) as { readonly id: number };
-    yield* Queue.offer(incoming, JSON.stringify({ id, result: { result: { type: 'number', value: 0 } } }));
-    expect(yield* Queue.take(reports)).toBe(true);
-  }),
-);
+it('a silent request spends only cumulative CPU, excluding paused samples', () => {
+  const probe = new Probe(5_000);
+  probe.start({ process: 'first', millis: 0 });
+  expect(probe.sample({ process: 'first', millis: 0 }, false)).toBe(false);
+  expect(probe.sample({ process: 'first', millis: 4_000 }, false)).toBe(false);
+  expect(probe.sample({ process: 'first', millis: 10_000 }, true)).toBe(false);
+  expect(probe.sample({ process: 'first', millis: 11_000 }, false)).toBe(true);
+  probe.start({ process: 'first', millis: 11_000 });
+  expect(probe.sample({ process: 'first', millis: 11_000 }, false)).toBe(false);
+});
+
+it('an unattributed, replaced or reset process cannot support the current request verdict', () => {
+  const probe = new Probe(5_000);
+  probe.start(null);
+  expect(probe.sample({ process: 'first', millis: 50_000 }, false)).toBe(false);
+  probe.start({ process: 'first', millis: 0 });
+  expect(probe.sample({ process: 'replacement', millis: 50_000 }, false)).toBe(false);
+  expect(probe.sample({ process: 'replacement', millis: 100_000 }, false)).toBe(false);
+  probe.start({ process: 'replacement', millis: 100_000 });
+  expect(probe.sample(null, false)).toBe(false);
+  expect(probe.sample({ process: 'replacement', millis: 200_000 }, false)).toBe(false);
+  probe.start({ process: 'replacement', millis: 200_000 });
+  expect(probe.sample({ process: 'replacement', millis: 0 }, false)).toBe(false);
+  expect(probe.sample({ process: 'replacement', millis: 50_000 }, false)).toBe(false);
+});

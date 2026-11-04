@@ -1,78 +1,45 @@
 import { Database } from 'bun:sqlite';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { engineFor } from './platform.js';
 
-export const SOURCE_ID = '2026-03-13 10:38:09 737ae4a34738ffa0c3ff7f9bb18df914dd1cad163f28fd6b6e114a344fe6d618';
-export const SOURCE_DIGEST = '32d5424f97e0a7fc5ed2f6335afbb58be4e0298bd7117a34e39d345ff13d859e';
+export const SOURCE_ID = '2026-07-24 19:02:57 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc';
+export const SOURCE_DIGEST = '67f423e9ebbbdc473cbc4772c872ee6b89f31fde4ed0279a5c25d5f65c043a16';
 export const LIBRARY_NAME = 'sqlite.native';
 export const SOURCE_ARCHIVE = fileURLToPath(new URL('../native/sqlite.zip', import.meta.url));
-const library = fileURLToPath(new URL('./sqlite.native', import.meta.url));
+const REQUIRED_OPTIONS = ['ENABLE_FTS5'];
 const here = dirname(fileURLToPath(import.meta.url));
-const VERIFIED = join(here, '..', 'native', 'build', `${process.platform}-${process.arch}`, 'verified');
-const SOURCES = [SOURCE_ARCHIVE, join(here, 'artifact.ts'), fileURLToPath(import.meta.url)];
-const DENIED = new Set(['ENOENT', 'EACCES', 'EPERM', 'EROFS']);
+const engine = engineFor({
+  library: fileURLToPath(new URL('./sqlite.native', import.meta.url)),
+  archive: SOURCE_ARCHIVE,
+  sources: [SOURCE_ARCHIVE, join(here, 'artifact.ts'), join(here, 'supply.ts'), fileURLToPath(import.meta.url)],
+});
 let prepared: Promise<void> | undefined;
 let selected = false;
 
-const denied = (cause: unknown): boolean => cause instanceof Error && 'code' in cause && DENIED.has(String(cause.code));
-
-const stamp = (paths: readonly string[]): string =>
-  paths
-    .map((path) => {
-      const stat = statSync(path, { throwIfNoEntry: false });
-      return stat === undefined ? '-' : `${stat.size}:${stat.mtimeMs}`;
-    })
-    .join(' ');
-
-const verified = (): string | undefined => {
-  try {
-    return readFileSync(VERIFIED, 'utf8');
-  } catch (cause) {
-    if (denied(cause)) return undefined;
-    throw cause;
-  }
-};
-
-const recordVerified = (stamp: string): void => {
-  try {
-    writeFileSync(VERIFIED, stamp);
-  } catch (cause) {
-    if (!denied(cause)) throw cause;
-  }
-};
-
-export const prepareEngine = (): Promise<void> =>
-  (prepared ??= (async () => {
-    if (await Bun.file(SOURCE_ARCHIVE).exists()) {
-      const sources = stamp(SOURCES);
-      if (verified() === `${sources} ${stamp([library])}`) return;
-      await (await import('./artifact.js')).buildEngine();
-      if (stamp(SOURCES) === sources) recordVerified(`${sources} ${stamp([library])}`);
-    } else if (!(await Bun.file(library).exists())) {
-      throw new Error('The supplied SQLite native asset is missing from this program.');
-    }
-  })());
+export const prepareEngine = (): Promise<void> => (prepared ??= engine.prepare());
 
 export const selectEngine = (): void => {
   if (selected) return;
+  engine.select();
+  const database = new Database(':memory:');
   try {
-    if (!Database.setCustomSQLite(library)) {
-      throw new Error('The supplied SQLite engine could not be selected before opening a database.');
-    }
-  } catch (cause) {
-    if (!(cause instanceof Error) || !cause.message.startsWith('SQLite already loaded')) throw cause;
-    const database = new Database(':memory:');
-    try {
-      checkEngine(database);
-    } finally {
-      database.close();
-    }
+    checkEngine(database);
+    const options = new Set(
+      database
+        .query<{ compile_options: string }, []>('PRAGMA compile_options')
+        .all()
+        .map((row) => row.compile_options),
+    );
+    const missing = REQUIRED_OPTIONS.filter((option) => !options.has(option));
+    if (missing.length > 0) throw new Error(`The SQLite engine lacks ${missing.join(', ')}.`);
+  } finally {
+    database.close();
   }
   selected = true;
 };
 
 export const checkEngine = (database: Database): void => {
   const source = database.query<{ source: string }, []>('SELECT sqlite_source_id() AS source').get()?.source;
-  if (source !== SOURCE_ID) throw new Error(`The supplied SQLite source is ${source}; expected ${SOURCE_ID}.`);
+  if (source !== SOURCE_ID) throw new Error(`The SQLite source is ${source}; expected ${SOURCE_ID}.`);
 };

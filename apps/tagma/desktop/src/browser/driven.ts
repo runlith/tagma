@@ -1,9 +1,9 @@
+import { Probe, type RendererCpu } from '@runlith/cdp/probe';
 import type { Failure } from '@tagma/server/desktop-browser/contract/wire/channel';
 import type { Event, WebContents } from 'electron';
 import type { Reporter, SessionEnd } from './connection.js';
 
-const PROBE_EVERY_MS = 1_000;
-const UNRESPONSIVE_AFTER_MS = 5_000;
+const UNRESPONSIVE_CPU_MS = 5_000;
 
 type Command = { readonly id: number; readonly method: string; readonly params?: object; readonly sessionId?: string };
 
@@ -32,17 +32,15 @@ const injectedTypes = (command: Command): readonly string[] => {
 
 export type Probed = {
   readonly paused: () => boolean;
-  readonly factor: () => number;
   readonly report: (responsive: boolean) => void;
 };
 
 export class Driven {
   private ended = false;
-  private probing: ReturnType<typeof setInterval> | null = null;
+  private probed: Probed | null = null;
+  private readonly budget = new Probe(UNRESPONSIVE_CPU_MS);
   private asking = false;
   private silent = false;
-  private waited = 0;
-  private previous = 0;
   private readonly injected = new Map<number, readonly string[]>();
 
   private leaveDialog = false;
@@ -124,9 +122,8 @@ export class Driven {
     return false;
   }
 
-  probe(probed: Probed): void {
-    if (this.probing !== null || this.ended) return;
-    this.probing = setInterval(() => this.ask(probed), PROBE_EVERY_MS);
+  watch(probed: Probed): void {
+    if (!this.ended) this.probed = probed;
   }
 
   detach(): void {
@@ -141,13 +138,15 @@ export class Driven {
     if (!this.contents.isDestroyed() && this.contents.debugger.isAttached()) this.contents.debugger.detach();
   }
 
-  private ask(probed: Probed): void {
-    if (this.ended) return;
-    const now = performance.now();
+  suspend(): void {
+    this.budget.suspend();
+  }
+
+  sample(cpu: RendererCpu | null): void {
+    const probed = this.probed;
+    if (this.ended || probed === null) return;
     if (this.asking) {
-      if (!probed.paused()) this.waited += (now - this.previous) / probed.factor();
-      this.previous = now;
-      if (!this.silent && this.waited >= UNRESPONSIVE_AFTER_MS) {
+      if (!this.silent && this.budget.sample(cpu, probed.paused())) {
         this.silent = true;
         probed.report(false);
       }
@@ -155,15 +154,17 @@ export class Driven {
     }
     if (probed.paused()) return;
     this.asking = true;
-    this.previous = now;
-    this.waited = 0;
+    this.budget.start(cpu);
     const answered = () => {
       this.asking = false;
       if (!this.silent || this.ended) return;
       this.silent = false;
       probed.report(true);
     };
-    this.contents.debugger.sendCommand('Runtime.evaluate', { expression: '0', returnByValue: true }).then(answered, answered);
+    this.contents.debugger.sendCommand('Runtime.evaluate', { expression: '0', returnByValue: true }).then(answered, (error: unknown) => {
+      this.asking = false;
+      if (!this.ended) console.debug(`[tagma-desktop] a renderer probe was not answered: ${String(error)}`);
+    });
   }
 
   private close(end: SessionEnd): void {
@@ -174,8 +175,7 @@ export class Driven {
 
   private stop(): void {
     this.ended = true;
-    if (this.probing !== null) clearInterval(this.probing);
-    this.probing = null;
+    this.probed = null;
     if (!this.contents.isDestroyed()) {
       this.contents.debugger.off('message', this.message);
       this.contents.debugger.off('detach', this.detached);

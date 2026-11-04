@@ -1,6 +1,5 @@
 import { type Domains, shareDomains } from '@runlith/cdp/domains';
 import type { Ring } from '@runlith/cdp/ring';
-import { watchResponsive } from '@runlith/cdp/probe';
 import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, SessionEnded } from '@runlith/cdp/session';
 import type { Protocol } from 'devtools-protocol';
 import { Clock, Deferred, Effect, Exit, PubSub, Scope, Semaphore, Stream } from 'effect';
@@ -26,7 +25,6 @@ import {
   syncMetrics,
 } from './emulate.js';
 import { commitFrame, detachFrame, type Frame, joinChild, leaveChild, readTree, retireChild } from './frames.js';
-import type { Strain } from '../contract/wire/host.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
 import { makePictures, type Pictures } from './pictures.js';
@@ -38,8 +36,6 @@ const IDLE_MS = 30_000;
 const SWEEP = '10 seconds';
 
 export type Picking = { readonly node: number; readonly child: string | undefined };
-
-export type StrainState = { readonly holds: Map<object, Strain>; value: Strain };
 
 export type Attached = {
   readonly page: PageId;
@@ -65,7 +61,6 @@ export type Attached = {
   conditions: Scope.Closeable | null;
   readonly metrics: Metrics;
   readonly emulating: Semaphore.Semaphore;
-  readonly strain: StrainState;
   overlaid: boolean;
   readonly overlaying: Semaphore.Semaphore;
   cursor: Mark | null;
@@ -108,7 +103,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   const { pages, profiles, runs } = input;
   const scope = yield* Effect.scope;
   const held = new Map<PageId, Paged>();
-  const strains = new Map<ProfileId, StrainState>();
 
   const paged = (page: PageId): Effect.Effect<Paged> =>
     Effect.suspend(() => {
@@ -248,17 +242,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         attached.adopted.set(joined.sessionId, adopted);
         const target: FrameTarget = { session: joined.sessionId, frame: joined.targetInfo.targetId, url: joined.targetInfo.url };
         yield* Scope.addFinalizer(adopted, pages.mark(state.page, { responsive: true }, target));
-        yield* watchResponsive(
-          attached.session,
-          {
-            every: '1 second',
-            threshold: '5 seconds',
-            paused: () => attached.strain.value.paused || pages.live(state.page)?.dialog !== null,
-            factor: () => attached.strain.value.factor,
-            child: joined.sessionId,
-          },
-          (responsive) => pages.mark(state.page, { responsive }, { ...target, url: attached.frames.get(target.frame)?.url ?? target.url }),
-        ).pipe(Effect.forkIn(adopted));
         yield* adoptChild(state, attached, joined.sessionId, adopted).pipe(
           Effect.catchTags({
             SessionEnded: () => Effect.void,
@@ -383,10 +366,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           ),
         );
       });
-      const profile = pages.profileOf(state.page);
-      if (profile === undefined) return yield* unknownPage(state.page);
-      const strain = strains.get(profile) ?? { holds: new Map<object, Strain>(), value: { factor: 1, paused: false } };
-      strains.set(profile, strain);
+      if (pages.profileOf(state.page) === undefined) return yield* unknownPage(state.page);
       const attached: Attached = {
         page: state.page,
         session,
@@ -411,7 +391,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         conditions: null,
         metrics: yield* Scope.provide(makeMetrics, attachment),
         emulating: yield* Semaphore.make(1),
-        strain,
         overlaid: false,
         overlaying: yield* Semaphore.make(1),
         cursor: null,

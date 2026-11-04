@@ -4,7 +4,7 @@ import { Schema } from 'effect';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LIBRARY_NAME, SOURCE_DIGEST, SOURCE_ARCHIVE as ARCHIVE } from './engine.js';
-const AMALGAMATION = 'sqlite-amalgamation-3510300';
+const AMALGAMATION = 'sqlite-amalgamation-3530400';
 const ORIGIN = `https://sqlite.org/2026/${AMALGAMATION}.zip`;
 const FLAGS = [
   'SQLITE_THREADSAFE=2',
@@ -69,7 +69,7 @@ export const buildEngine = async (arch?: string): Promise<EngineAsset> => {
     throw new Error(`The SQLite native build for ${arch} is declared on macOS for arm64 and x64.`);
   }
   const archive = hash(await readFile(ARCHIVE));
-  if (archive !== 'acb1e6f5d832484bf6d32b681e858c38add8b2acdfd42ac5df24b8afb46552b4') {
+  if (archive !== '1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d') {
     throw new Error(`The fixed SQLite source archive has digest ${archive}.`);
   }
   const root =

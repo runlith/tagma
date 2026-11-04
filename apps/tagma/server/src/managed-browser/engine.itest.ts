@@ -9,6 +9,7 @@ const host: EngineHost = {
   name: 'the managed Chromium',
   adapter: managedAdapter,
   profile: MANAGED_AGENT,
+  rendererCpu: false,
   fixture: managedFixture,
 };
 

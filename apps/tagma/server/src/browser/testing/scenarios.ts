@@ -17,7 +17,7 @@ import { PAGE_PAIRS as PAGE, PROFILE_PAIRS as PROFILE } from '../operations.js';
 import { neutral, pixelOf } from './pixels.js';
 import { framePickScenario } from './picking.js';
 import { engineSite } from './site.js';
-import { agentIn, calling, OPERATOR, refIn, refusalOf, Seeded, type Served } from './world.js';
+import { agentIn, calling, loaded, OPERATOR, refIn, refusalOf, Seeded, type Served } from './world.js';
 
 import { conditionScenario, refusedConditionScenario } from './conditions.js';
 import { domainScenario } from './domains.js';
@@ -30,6 +30,7 @@ export type EngineHost = {
   readonly name: string;
   readonly adapter: HostAdapter;
   readonly profile: ProfileId;
+  readonly rendererCpu: boolean;
   readonly fixture: () => Layer.Layer<Served | Hosts>;
 };
 
@@ -65,12 +66,6 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
     return page;
-  });
-  const loaded = Effect.fnUntraced(function* (page: PageId) {
-    const pages = yield* Pages;
-    const moves = yield* pages.moves(page);
-    if (pages.live(page)?.loading === false) return;
-    yield* Stream.runHead(Stream.filter(moves, (move) => !move.live.loading));
   });
   const snapshot = (page: PageId) =>
     calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent)).pipe(Effect.map((shot) => shot.text));
@@ -294,7 +289,7 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('a hung out-of-process frame refuses attachment work and unsafe reload, and closes without holding the queue', () =>
+    it.effect('a silent frame without CPU attribution keeps attachment cancellable and closes without holding another page', () =>
       Effect.gen(function* () {
         const own = yield* open('/second');
         const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/hung-frame'), profile: input.profile }, undefined, OPERATOR));
@@ -302,19 +297,12 @@ export const engineScenarios = (input: EngineHost): void => {
         const pages = yield* Pages;
         yield* Effect.addFinalizer(() => (pages.live(page) === undefined ? Effect.void : pages.close(page).pipe(Effect.orDie)));
         yield* Deferred.await(childSpinning);
-        const refused = yield* refusalOf(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)));
-        expect(refused.code).toBe('page-unresponsive');
-        expect(refused.reason).toContain(crossSite('/hung-inner').replace('localhost', 'hung.localhost'));
-        expect(refused.unblock.join(' ')).toContain(page);
-        expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
-        expect((yield* refusalOf(act(page, { action: 'click', x: 20, y: 20 }))).code).toBe('page-unresponsive');
-        expect((yield* refusalOf(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)))).code).toBe(
-          'page-unresponsive',
-        );
-        yield* pages.mark(page, { responsive: true });
-        const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
-        expect(listed.pages.find((held) => held.id === page)?.live.responsive).toBe(false);
-        expect(refused.unblock.some((line) => line.includes(own) && line.includes('agent'))).toBe(true);
+        const attaching = yield* Effect.forkChild(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)), {
+          startImmediately: true,
+        });
+        yield* Fiber.interrupt(attaching);
+        expect(Exit.hasInterrupts(yield* Fiber.await(attaching))).toBe(true);
+        expect(refIn(yield* snapshot(own), /heading "Second page"/)).toMatch(/^e\d+$/);
         yield* calling(PAGE.close_page.body.execute({ page }, undefined, OPERATOR));
         const remaining = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
         expect(remaining.pages.some((held) => held.id === page)).toBe(false);
@@ -468,7 +456,7 @@ export const engineScenarios = (input: EngineHost): void => {
         }),
     );
 
-    it.effect('a limited snapshot and a CPU-hung action refuse, closing ends its renderer, and a fresh same-site page works', () =>
+    it.effect('a limited snapshot stays bounded, and silent actions recover through renderer facts or caller cancellation', () =>
       Effect.gen(function* () {
         const page = yield* open('/heavy');
         const pages = yield* Pages;
@@ -493,8 +481,20 @@ export const engineScenarios = (input: EngineHost): void => {
         const ref = refIn(shot.text, /button "Spin"/);
         const acting = yield* Effect.forkChild(act(page, { action: 'click', ref }));
         yield* Deferred.await(spinning);
-        expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
-        expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
+        if (input.rendererCpu) {
+          expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
+          expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
+        } else {
+          yield* Fiber.interrupt(acting);
+          expect(Exit.hasInterrupts(yield* Fiber.await(acting))).toBe(true);
+          const reading = yield* Effect.forkChild(snapshot(page), { startImmediately: true });
+          yield* Fiber.interrupt(reading);
+          expect(Exit.hasInterrupts(yield* Fiber.await(reading))).toBe(true);
+          const dropping = yield* pages.moves(page);
+          const record = yield* (yield* Profiles).record(input.profile);
+          yield* (yield* (yield* Hosts).reach(record.adapter)).profiles.remove(input.profile);
+          yield* Stream.runHead(Stream.filter(dropping, (move) => move.signal === 'dropped'));
+        }
         yield* Effect.all(
           [
             calling(PAGE.close_page.body.execute({ page }, undefined, agent)),
@@ -503,7 +503,7 @@ export const engineScenarios = (input: EngineHost): void => {
           { concurrency: 'unbounded' },
         );
         yield* Deferred.await(closed);
-        expect(crashed).toBe(true);
+        expect(crashed).toBe(input.rendererCpu);
         expect(refIn(yield* snapshot(other), /heading "Second page"/)).toMatch(/^e\d+$/);
         const fresh = yield* open('/second');
         expect(refIn(yield* snapshot(fresh), /heading "Second page"/)).toMatch(/^e\d+$/);
@@ -539,7 +539,12 @@ export const engineScenarios = (input: EngineHost): void => {
         yield* loaded(peer);
         expect(refIn(yield* snapshot(peer), /heading "Recovery peer"/)).toMatch(/^e\d+$/);
         const acting = yield* Effect.forkChild(act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Spin"/) }));
-        expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
+        if (input.rendererCpu) expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
+        else {
+          yield* Fiber.interrupt(acting);
+          expect(Exit.hasInterrupts(yield* Fiber.await(acting))).toBe(true);
+          yield* pages.mark(page, { responsive: false });
+        }
         const host = yield* pages.hold(page);
         yield* Effect.scoped(
           Effect.gen(function* () {

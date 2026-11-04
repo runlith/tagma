@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Probe } from '@runlith/cdp/probe';
 import { RendererStrain } from './strain.js';
 
 test('renderer leases snapshot their processes and preserve overlapping CPU and native pause contributions on release', () => {
@@ -25,6 +26,21 @@ test('renderer leases snapshot their processes and preserve overlapping CPU and 
   slower();
   expect(strains.current(11, 'one')).toEqual({ factor: 1, paused: false });
   expect(strains.current(22, 'one')).toEqual({ factor: 1, paused: false });
+});
+
+test('a pause between CPU samples invalidates only the paused renderer verdict', () => {
+  const paused = new Probe(5_000);
+  const other = new Probe(5_000);
+  paused.start({ process: '11', millis: 0 });
+  other.start({ process: '22', millis: 0 });
+  const strains = new RendererStrain((renderers) => {
+    if (renderers.has(11)) paused.suspend();
+    if (renderers.has(22)) other.suspend();
+  });
+  const release = strains.hold([11], { factor: 1, paused: true });
+  release();
+  expect(paused.sample({ process: '11', millis: 6_000 }, false)).toBe(false);
+  expect(other.sample({ process: '22', millis: 6_000 }, false)).toBe(true);
 });
 
 test('CPU membership follows renderer changes and borrows only the profile factor while navigation is pending', () => {

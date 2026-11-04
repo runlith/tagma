@@ -1,3 +1,4 @@
+import { Probe, type RendererCpu } from '@runlith/cdp/probe';
 import type { HostEvent, Navigation, PageChange, Strain } from '@tagma/server/browser/contract/wire/host';
 import type { DomainBlock } from '@tagma/server/browser/contract/wire/domains';
 import type { PageId, ProfileId } from '@tagma/server/browser/contract/wire/ids';
@@ -86,7 +87,8 @@ export class HeldPage {
   private allowLeave = false;
   private responsive = true;
   private restarting = false;
-  private unresponsive: ReturnType<typeof setInterval> | null = null;
+  private unresponsive: 'starting' | 'waiting' | null = null;
+  private readonly budget = new Probe(5_000);
   private readonly firefox: string | null;
 
   constructor(
@@ -320,9 +322,8 @@ export class HeldPage {
     this.driven = driven;
     this.placed.driven = driven !== null;
     if (driven !== null) this.clearUnresponsive();
-    driven?.probe({
+    driven?.watch({
       paused: () => this.dialogOpen || this.strain.paused,
-      factor: () => this.strain.factor,
       report: (responsive) => this.respond(responsive),
     });
     if (driven === null && this.held !== null && !this.held.told) this.surface(this.held);
@@ -420,29 +421,31 @@ export class HeldPage {
     }
   }
 
+  suspend(): void {
+    this.budget.suspend();
+    this.driven?.suspend();
+  }
+
+  sample(cpu: RendererCpu | null): void {
+    if (this.driven !== null) {
+      this.driven.sample(cpu);
+      return;
+    }
+    if (this.unresponsive === 'starting') {
+      this.budget.start(cpu);
+      this.unresponsive = 'waiting';
+    } else if (this.unresponsive === 'waiting' && this.budget.sample(cpu, this.strain.paused || this.dialogOpen)) {
+      this.clearUnresponsive();
+      this.respond(false);
+    }
+  }
+
   private clearUnresponsive(): void {
-    if (this.unresponsive !== null) clearInterval(this.unresponsive);
     this.unresponsive = null;
   }
 
   private nativeUnresponsive(): void {
-    if (this.driven !== null || this.unresponsive !== null) return;
-    const strain = this.strain;
-    if (!strain.paused && !this.dialogOpen && strain.factor === 1) {
-      this.respond(false);
-      return;
-    }
-    let previous = performance.now();
-    let waited = 0;
-    this.unresponsive = setInterval(() => {
-      const now = performance.now();
-      const strain = this.strain;
-      if (!strain.paused && !this.dialogOpen) waited += (now - previous) / strain.factor;
-      previous = now;
-      if (waited < 5_000) return;
-      this.clearUnresponsive();
-      this.respond(false);
-    }, 1_000);
+    if (this.driven === null && this.unresponsive === null) this.unresponsive = 'starting';
   }
 
   private respond(responsive: boolean): void {

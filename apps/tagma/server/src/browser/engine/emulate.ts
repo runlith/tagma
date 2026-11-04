@@ -12,7 +12,7 @@ import {
   networkOf,
   type Viewport,
 } from '../contract/wire/emulation.js';
-import { type Strain, strainOf } from '../contract/wire/host.js';
+import type { Strain } from '../contract/wire/host.js';
 import type { Attached, Paged } from './drive.js';
 import { unknownPage } from './refusal.js';
 import { endsWithRun } from './lifetime.js';
@@ -107,21 +107,6 @@ export const applyConditions = Effect.fn('browser.applyConditions')(function* (
 export const holdStrain = Effect.fnUntraced(function* (attached: Attached, strain: Strain) {
   const pages = yield* Pages;
   const host = yield* pages.hold(attached.page);
-  const token = {};
-  const update = () => {
-    attached.strain.value = strainOf(attached.strain.holds.values());
-  };
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      attached.strain.holds.set(token, strain);
-      update();
-    }),
-    () =>
-      Effect.sync(() => {
-        attached.strain.holds.delete(token);
-        update();
-      }),
-  );
   yield* host.pages.strain(attached.page, strain).pipe(
     Effect.catchTags({
       PageMissing: () => Effect.fail(unknownPage(attached.page)),
