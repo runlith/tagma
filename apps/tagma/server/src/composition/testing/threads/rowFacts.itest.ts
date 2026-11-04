@@ -4,9 +4,8 @@ import { it } from '@runlith/effect-test';
 import { CostLedger, costLedgerLayer, CurrentCost } from '@runlith/performance/CostLedger';
 import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
-import { Clock, Context, Deferred, Effect, Exit } from 'effect';
+import { Clock, Deferred, Effect, Exit } from 'effect';
 import { COMMAND_RESULT_SIGNAL } from '../../../executions/contract/wire/commands.js';
-import { MachineStore } from '../../../platform/contract/service/store.js';
 import { project } from '../../../projects/testing/doubles.js';
 import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import type { ThreadRows } from '../../../threads/contract/service/rows.js';
@@ -18,15 +17,9 @@ it.live(
   'a held row takes a rename, a newer ended run, that run’s deletion and a heartbeat from committed row facts with no storage read, and a heartbeat alone tells no row',
   Effect.fnUntraced(function* () {
     const demo = yield* threadStoreFixture;
-    const census = Context.get(demo.context, MachineStore).processes.statements;
-    const counted = () =>
-      new Map(
-        census
-          .read({ limit: 100_000 })
-          .rows.filter((row) => /^select\b/i.test(row.summary))
-          .map((row) => [row.fingerprint, row.statements]),
-      );
-    const rows = yield* threadRows(ENTRY_KINDS).pipe(Effect.provide(demo.context));
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
+    const reads = ledger.open('rowFacts.reads');
+    const rows = yield* threadRows(ENTRY_KINDS).pipe(Effect.provide(demo.context), Effect.provideService(CurrentCost, reads));
     const followed = new Set<string>();
     const release = rows.retain({ wants: (place) => followed.has(place.threadId), keeps: (row) => followed.has(row.id) });
     yield* Effect.addFinalizer(() => Effect.sync(release));
@@ -44,10 +37,10 @@ it.live(
     yield* ended('run-a');
 
     followed.add(threadId);
-    const before = counted();
-    expect((yield* rows.read([threadId]))[0]?.outcome?.runId).toBe('run-a');
-    const hydration = [...counted()].filter(([fingerprint, statements]) => statements > (before.get(fingerprint) ?? 0));
-    expect(hydration.length).toBeGreaterThan(0);
+    const before = reads.counts.statements;
+    expect((yield* rows.read([threadId]).pipe(Effect.provideService(CurrentCost, reads)))[0]?.outcome?.runId).toBe('run-a');
+    const hydration = reads.counts.statements;
+    expect(hydration).toBeGreaterThan(before);
 
     yield* demo.units.write(demo.records.writes, (unit) => demo.records.setTitle(unit, threadId, 'renamed', 'manual'));
     yield* ended('run-b');
@@ -65,8 +58,7 @@ it.live(
     expect(rows.current(threadId)?.activeRun?.heartbeatAt).toEqual(beat);
     expect(told).toEqual([]);
 
-    const after = counted();
-    expect(hydration.map(([fingerprint, statements]) => after.get(fingerprint) === statements)).toEqual(hydration.map(() => true));
+    expect(reads.counts.statements).toBe(hydration);
   }),
 );
 
