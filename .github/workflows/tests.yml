@@ -120,6 +120,11 @@ jobs:
         env:
           E2E_IOS_RUNTIMES: '26'
         run: bun packages/e2e/scripts/fetch-ios.ts
+      - if: contains(inputs.lanes, 'ios')
+        name: iOS lane device
+        env:
+          E2E_IOS_RUNTIMES: '26'
+        run: bun packages/e2e/scripts/prewarm-ios.ts
       - uses: actions/download-artifact@v8
         with:
           name: timings-${{ inputs.name }}-baseline

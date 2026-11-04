@@ -533,11 +533,13 @@ export const iosLane = (options: SimulatorOptions): (() => Lane) => {
     }, Infinity);
   }
   let held: Lane | undefined;
+  let cold = false;
   const fixture = recordedFixture(`iOS ${key.trim()} lane`, () =>
     provision(options).pipe(
       Effect.tap((made) =>
         Effect.sync(() => {
-          held = made;
+          held = made.lane;
+          cold = made.cold;
         }),
       ),
       Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause })),
@@ -546,7 +548,7 @@ export const iosLane = (options: SimulatorOptions): (() => Lane) => {
   const hooks = fixtureHooks(fixture);
   const warmed = fixtureHooks(
     recordedFixture(`iOS ${key.trim()} lane first launch`, () =>
-      borrowing() ? Effect.void : warm(device()).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause }))),
+      cold ? warm(device()).pipe(Effect.mapError((cause) => new IOSUnavailable({ message: cause.message, cause }))) : Effect.void,
     ),
   );
   const close = () =>
@@ -554,7 +556,10 @@ export const iosLane = (options: SimulatorOptions): (() => Lane) => {
       lanes.delete(key);
     });
   beforeAll(hooks.setup, Infinity);
-  beforeAll(warmed.setup, Infinity);
+  beforeAll(async () => {
+    await warmed.setup();
+    await warmed.close();
+  }, Infinity);
   if (lock === undefined) afterAll(close, Infinity);
   else closing.push(close);
   const device = (): Lane => {

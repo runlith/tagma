@@ -3,7 +3,7 @@ import { withFileLock } from '@runlith/file-lock/FileLock';
 import { runLiveness, runRoot } from '@runlith/testbed/fixture';
 import { once, runKind } from '@runlith/testbed/worlds';
 import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
-import { Clock, Effect, FileSystem, Schema, type Scope } from 'effect';
+import { Clock, Effect, Exit, FileSystem, Schema, type Scope } from 'effect';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -119,73 +119,111 @@ export const holdLane = (): (() => void) => {
   console.info('iOS lane: holding the Simulator lane lock');
   return () => closeSync(handle);
 };
-export const prepareTemplate = Effect.fn('e2e.iosTemplateAhead')(function* (options: SimulatorOptions) {
-  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
-  const base = join(
-    yield* cacheDirectory().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause }))),
-    'simulators',
+const simulatorBase = () =>
+  cacheDirectory().pipe(
+    Effect.map((directory) => join(directory, 'simulators')),
+    Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })),
   );
+const preparationFor = Effect.fn('e2e.iosPreparation')(function* (options: SimulatorOptions) {
+  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
+  const base = yield* simulatorBase();
   const params = parameters(options);
-  return yield* prepare({ base, params, tools, ...(yield* resolve(params.runtime)) }, Effect.succeed);
+  const preparation: Preparation = { base, params, tools, ...(yield* resolve(params.runtime)) };
+  return preparation;
+});
+export const prepareTemplate = Effect.fn('e2e.iosTemplateAhead')(function* (options: SimulatorOptions) {
+  return yield* prepare(yield* preparationFor(options), Effect.succeed);
 }, Effect.provide(BunFileSystem.layer));
 
 export type Lane = { readonly device: Device; readonly runtime: string; readonly timing: SimulatorTiming };
-const LaneRecord = Schema.fromJsonString(
-  Schema.Struct({
-    device: Schema.Struct({ set: Schema.String, udid: Schema.String }),
-    runtime: Schema.String,
-    timing: Schema.Struct({ clone: Schema.Number, boot: Schema.Number }),
-  }),
-);
+export type Provisioned = { readonly lane: Lane; readonly cold: boolean };
+const LaneShape = Schema.Struct({
+  device: Schema.Struct({ set: Schema.String, udid: Schema.String }),
+  runtime: Schema.String,
+  timing: Schema.Struct({ clone: Schema.Number, boot: Schema.Number }),
+});
+const LaneRecord = Schema.fromJsonString(LaneShape);
+const PreparedRecord = Schema.fromJsonString(Schema.Struct({ runtime: Schema.String, deviceType: Schema.String, lane: LaneShape }));
 const LENT = 'E2E_IOS_LANE';
+const ADOPTED = 'E2E_IOS_DEVICE';
 export const lent = (held: Lane): Record<string, string> => ({ [LENT]: JSON.stringify(held) });
 export const borrowing = (): boolean => process.env[LENT] !== undefined;
+const preparedHome = (base: string): string => join(base, 'prepared');
 
-export const lane = Effect.fn('e2e.iosLane')(function* (
-  options: SimulatorOptions,
+const device = Effect.fn('e2e.iosDevice')(function* (
+  preparation: Preparation,
+  set: string,
+  retained: boolean,
 ): Effect.fn.Return<Lane, SimulatorUnavailable, Scope.Scope> {
-  const borrowed = process.env[LENT];
-  if (borrowed !== undefined)
-    return yield* Schema.decodeUnknownEffect(LaneRecord)(borrowed).pipe(
-      Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the lent iOS lane could not be read', cause })),
-    );
-  const template = yield* once(templates, parameters(options));
-  const set = template.value.clones;
+  const runtime = preparation.runtime.version;
   const started = yield* Clock.currentTimeMillis;
   let phase = 'clone';
-  let device: Device | undefined;
+  let target: Device | undefined;
   let timing: SimulatorTiming | undefined;
   const unhook = onFailure(async (directory) => {
     const results = await Promise.allSettled([
-      Bun.write(
-        join(directory, 'ios-lane.json'),
-        JSON.stringify({ phase, device: device ?? null, runtime: template.value.runtime, timing: timing ?? null }),
-      ),
-      device === undefined ? Promise.resolve() : simctl(device.set, 'io', device.udid, 'screenshot', join(directory, 'screenshot.png')),
+      Bun.write(join(directory, 'ios-lane.json'), JSON.stringify({ phase, device: target ?? null, runtime, timing: timing ?? null })),
+      target === undefined ? Promise.resolve() : simctl(target.set, 'io', target.udid, 'screenshot', join(directory, 'screenshot.png')),
     ]);
     const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
     if (failures.length > 0) throw new AggregateError(failures, 'native lane evidence was incomplete');
   });
   yield* Effect.addFinalizer(() => Effect.sync(unhook));
   const udid = yield* Effect.acquireRelease(
-    prepare(template.value.preparation, (source) =>
+    prepare(preparation, (source) =>
       attempted('the Safari template could not be cloned', () =>
         simctl(source.set, 'clone', source.udid, `runlith-e2e-ios-${process.pid}-${crypto.randomUUID()}`, set),
       ),
     ).pipe(Effect.provide(BunFileSystem.layer)),
-    (udid) => attempted('the iOS clone did not shut down and delete', () => remove({ udid, set })).pipe(Effect.orDie),
+    (udid, exit) =>
+      retained && Exit.isSuccess(exit)
+        ? Effect.void
+        : attempted('the iOS clone did not shut down and delete', () => remove({ udid, set })).pipe(Effect.orDie),
   );
   const cloned = yield* Clock.currentTimeMillis;
-  const target = { set, udid };
-  device = target;
+  target = { set, udid };
   phase = 'boot';
   yield* boot(target);
   const booted = yield* Clock.currentTimeMillis;
   const measured = { clone: cloned - started, boot: booted - cloned };
   timing = measured;
-  console.info(`iOS ${template.value.runtime}: clone ${measured.clone} ms, boot ${measured.boot} ms`);
+  console.info(`iOS ${runtime}: clone ${measured.clone} ms, boot ${measured.boot} ms`);
   phase = 'booted';
-  return { device: target, runtime: template.value.runtime, timing: measured };
+  return { device: target, runtime, timing: measured };
+});
+
+const adoption = Effect.fn('e2e.iosAdoption')(function* (
+  options: SimulatorOptions,
+): Effect.fn.Return<Lane | undefined, SimulatorUnavailable, FileSystem.FileSystem> {
+  const udid = process.env[ADOPTED];
+  if (udid === undefined) return undefined;
+  const files = yield* FileSystem.FileSystem;
+  const path = join(preparedHome(yield* simulatorBase()), `${udid}.json`);
+  const record = yield* files.readFileString(path).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(PreparedRecord)),
+    Effect.mapError((cause) => new SimulatorUnavailable({ message: `the prepared iOS device record ${path} could not be read`, cause })),
+  );
+  const params = parameters(options);
+  if (record.runtime !== params.runtime || record.deviceType !== params.deviceType) return undefined;
+  console.info(`iOS ${record.lane.runtime}: adopting prepared device ${udid}`);
+  return record.lane;
+}, Effect.provide(BunFileSystem.layer));
+
+export const lane = Effect.fn('e2e.iosLane')(function* (
+  options: SimulatorOptions,
+): Effect.fn.Return<Provisioned, SimulatorUnavailable, Scope.Scope> {
+  const borrowed = process.env[LENT];
+  if (borrowed !== undefined)
+    return {
+      lane: yield* Schema.decodeUnknownEffect(LaneRecord)(borrowed).pipe(
+        Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the lent iOS lane could not be read', cause })),
+      ),
+      cold: false,
+    };
+  const adopted = yield* adoption(options);
+  if (adopted !== undefined) return { lane: adopted, cold: false };
+  const template = yield* once(templates, parameters(options));
+  return { lane: yield* device(template.value.preparation, template.value.clones, false), cold: true };
 });
 
 export const simulator = Effect.fn('e2e.iosSimulator')(function* (
@@ -264,11 +302,26 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
   };
 });
 
-export const warm = Effect.fn('e2e.iosLaneWarm')((held: Lane) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const session = yield* simulator(held);
-      yield* attempted('MobileSafari did not become ready on the booted lane device', () => session.launchSafari());
-    }),
-  ),
-);
+export const warm = Effect.fn('e2e.iosLaneWarm')(function* (held: Lane): Effect.fn.Return<void, SimulatorUnavailable, Scope.Scope> {
+  const session = yield* simulator(held);
+  yield* attempted('MobileSafari did not become ready on the booted lane device', () => session.launchSafari());
+});
+
+export const prewarm = Effect.fn('e2e.iosPrewarm')(function* (
+  options: SimulatorOptions,
+): Effect.fn.Return<Lane, SimulatorUnavailable, Scope.Scope | FileSystem.FileSystem> {
+  const preparation = yield* preparationFor(options);
+  const files = yield* FileSystem.FileSystem;
+  const home = preparedHome(preparation.base);
+  const set = join(home, 'set');
+  yield* files
+    .makeDirectory(set, { recursive: true })
+    .pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the prepared device set could not be made', cause })));
+  const held = yield* device(preparation, set, true);
+  yield* warm(held);
+  const { runtime, deviceType } = preparation.params;
+  yield* files
+    .writeFileString(join(home, `${held.device.udid}.json`), JSON.stringify({ runtime, deviceType, lane: held }))
+    .pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the prepared device record could not be written', cause })));
+  return held;
+}, Effect.provide(BunFileSystem.layer));
