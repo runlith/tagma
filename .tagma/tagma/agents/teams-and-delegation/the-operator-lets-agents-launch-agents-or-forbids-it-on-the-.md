@@ -45,6 +45,6 @@ sources:
 
 **How.** The Team/Solo pill in the composer, the `/delegation` command, the `set_thread_delegation` operation (only on the operator's word), the `agent.delegation` and `agent.subAgentDepth` settings.
 
-**Behaviour.** The nearest switch up the spawning lineage decides, otherwise the machine one; a thread can be returned to inheriting. A working agent learns about the switch at its next step. Switching off forbids only new launches: running agents are still messaged, stopped and continued, and they report. At birth a child is told its depth and how many floors remain.
+**Behaviour.** The nearest switch up the spawning lineage decides, otherwise the machine one; a thread can be returned to inheriting. A working agent learns about the switch at its next step. Switching off forbids only the agents' own new launches: an agent the operator asked for in his words, or a reviewer his review policy calls for, still starts with `operatorAsked`, and the thread stays Solo; running agents are still messaged, stopped and continued, and they report. At birth a child is told its depth and how many floors remain.
 
 **Limits.** Delegation judges every agent birth, independent root and history copy included; depth judges only children — a root starts from zero. Depth caps only new launches, so a detached thread returned to its place may stand deeper.
