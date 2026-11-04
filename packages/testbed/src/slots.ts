@@ -18,18 +18,27 @@ export const NICE = 10;
 
 const WAIT_MS = 50;
 
-export const coresOf = (override: string | undefined): number => {
-  const cores = override === undefined ? availableParallelism() : Number(override);
-  if (!Number.isSafeInteger(cores) || cores < 1) throw new Error('TESTBED_CORES must be a positive integer');
-  return cores;
-};
-
-export const memoryOf = (): number => Math.min(totalmem(), process.constrainedMemory() || Infinity);
-
 const WORKER_MEMORY = 2 * 1024 ** 3;
 
-export const budgetOf = (cores: number, memory: number): number =>
-  Math.max(1, Math.min(cores - Math.max(2, Math.floor(cores / 8)), Math.floor((cores * 2) / 3), Math.floor(memory / 2 / WORKER_MEMORY)));
+const countOf = (name: string, value: string): number => {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < 1) throw new Error(`${name} must be a positive integer`);
+  return count;
+};
+
+export const machineBudget = (
+  env: Record<string, string | undefined>,
+  memory = Math.min(totalmem(), process.constrainedMemory() || Infinity),
+): number => {
+  const fixed = env['TESTBED_BUDGET'];
+  if (fixed !== undefined) return countOf('TESTBED_BUDGET', fixed);
+  const override = env['TESTBED_CORES'];
+  const cores = override === undefined ? availableParallelism() : countOf('TESTBED_CORES', override);
+  return Math.max(
+    1,
+    Math.min(cores - Math.max(2, Math.floor(cores / 8)), Math.floor((cores * 2) / 3), Math.floor(memory / 2 / WORKER_MEMORY)),
+  );
+};
 
 export const budgetRoot = (): string => process.env['TESTBED_BUDGET_ROOT'] ?? join(BASE, 'budget');
 

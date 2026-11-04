@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { Graph } from './graph.ts';
 import { Hashes } from './inputs.ts';
 import { Records } from './records.ts';
-import { budgetOf, memoryOf } from '@runlith/testbed/budget';
+import { machineBudget } from '@runlith/testbed/budget';
 import { rendezvousSource } from './testing/rendezvous.ts';
 
 let root: string;
@@ -418,6 +418,7 @@ test('reads through open', () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '1',
+      TESTBED_BUDGET: undefined,
       TESTBED_BUDGET_ROOT: join(external, 'budget'),
       RUNLITH_SQLITE_HOSTING: 'inline',
     };
@@ -469,8 +470,9 @@ test('the files a change check selects in one package run side by side on the ma
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '12',
+      TESTBED_BUDGET: undefined,
       TESTBED_BUDGET_ROOT: join(marks, 'budget'),
-      MEET: budgetOf(12, memoryOf()) > 1 ? '1' : '0',
+      MEET: machineBudget({ TESTBED_CORES: '12' }) > 1 ? '1' : '0',
     };
     delete env['RUNLITH_TEST_SLOT'];
     const run = Bun.spawn(

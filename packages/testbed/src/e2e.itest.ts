@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FileRow } from './core/ledger.ts';
 import type { RunRow } from './report.ts';
-import { budgetOf, memoryOf, SLOT_ENV } from './slots.ts';
+import { machineBudget, SLOT_ENV } from './slots.ts';
 
 const CLI = join(import.meta.dir, 'cli.ts');
 const ENGINE = Bun.resolveSync('@runlith/sqlite-process/engine', import.meta.dir);
@@ -52,12 +52,13 @@ console.log(JSON.stringify({ root, units: Number(process.env.${SLOT_ENV}.split('
   for (const cores of [8, 1]) {
     const result = await run(root, ['e2e', '--program', './bench.ts', '--sample', 'frames'], {
       TESTBED_CORES: String(cores),
+      TESTBED_BUDGET: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'units'),
       [SLOT_ENV]: undefined,
     });
     expect(result.code, result.output).toBe(0);
     const output = JSON.parse(result.output.split('\n').find((line) => line.startsWith('{'))!) as ProgramOutput;
-    expect(output.units).toBe(Math.min(2, budgetOf(cores, memoryOf())));
+    expect(output.units).toBe(Math.min(2, machineBudget({ TESTBED_CORES: String(cores) })));
     expect(output.args).toEqual(['--sample', 'frames']);
     expect(readFileSync(join(output.root, 'measurement'), 'utf8')).toBe('frames');
     const report = readFileSync(result.report, 'utf8')
@@ -171,7 +172,7 @@ test('an empty e2e or itest selection fails without falling back to ordinary tes
 test('e2e workers retain two budget units each and one on a tiny machine', async () => {
   for (const cores of [8, 1]) {
     const root = directory();
-    const budget = budgetOf(cores, memoryOf());
+    const budget = machineBudget({ TESTBED_CORES: String(cores) });
     const quantum = Math.min(2, budget);
     const workers = Math.max(1, Math.floor(budget / quantum));
     for (let index = 0; index < 3; index++)
@@ -193,6 +194,7 @@ test('worker allowance', async () => {
       cores === 1 ? ['e2e', '--parallel-delay=0'] : ['bun', 'test', '--parallel-delay=0', './0.e2e.ts', './1.e2e.ts', './2.e2e.ts'];
     const result = await run(root, command, {
       TESTBED_CORES: String(cores),
+      TESTBED_BUDGET: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'units'),
       [SLOT_ENV]: undefined,
     });

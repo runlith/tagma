@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { packagesOf } from './packages.ts';
 import { suitesOf } from './suites.ts';
 import { vitestConfigsOf } from './vitestConfigs.ts';
-import { budgetOf, memoryOf } from '@runlith/testbed/budget';
+import { machineBudget } from '@runlith/testbed/budget';
 import { rendezvousSource } from './testing/rendezvous.ts';
 
 test('combined Vitest follows new workspace packages and extra configs while preserving the app cwd', () => {
@@ -286,6 +286,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
     const env: Record<string, string | undefined> = {
       ...process.env,
       TESTBED_CORES: '12',
+      TESTBED_BUDGET: undefined,
       TESTBED_BUDGET_ROOT: join(root, 'budget'),
     };
     delete env['RUNLITH_TEST_SLOT'];
@@ -307,7 +308,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
       ]);
       return { code, output: stdout + stderr };
     };
-    const side = await invoke('side.json', budgetOf(12, memoryOf()) > 1);
+    const side = await invoke('side.json', machineBudget({ TESTBED_CORES: '12' }) > 1);
     expect(side.code, side.output).toBe(0);
     const alone = await invoke('alone.json', false, '--jobs', '1');
     expect(alone.code, alone.output).toBe(0);

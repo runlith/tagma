@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { budgetOf, memoryOf, SLOT_ENV } from './slots.ts';
+import { machineBudget, SLOT_ENV } from './slots.ts';
 
 const CLI = join(import.meta.dir, 'cli.ts');
 const CORES = 12;
@@ -19,7 +19,12 @@ const pool = () => {
   const root = join(process.env['TMPDIR']!, `budget-${crypto.randomUUID()}`);
   const units = join(root, 'units');
   mkdirSync(units, { recursive: true });
-  const env: Record<string, string | undefined> = { ...process.env, TESTBED_CORES: String(CORES), TESTBED_BUDGET_ROOT: units };
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    TESTBED_CORES: String(CORES),
+    TESTBED_BUDGET: undefined,
+    TESTBED_BUDGET_ROOT: units,
+  };
   delete env[SLOT_ENV];
   const start = (name: string, holding: (index: number) => boolean = () => true): Run => {
     const dir = join(root, name);
@@ -90,15 +95,20 @@ const finish = async (runs: readonly Run[]): Promise<void> => {
 
 test('worker families fit CPU and memory capacity without starving a small machine', () => {
   const gib = 1024 ** 3;
-  expect(budgetOf(12, 32 * gib)).toBe(8);
-  expect(budgetOf(64, 8 * gib)).toBe(2);
-  expect(budgetOf(64, 256 * gib)).toBe(42);
-  expect(budgetOf(1, gib / 2)).toBe(1);
+  expect(machineBudget({ TESTBED_CORES: '12' }, 32 * gib)).toBe(8);
+  expect(machineBudget({ TESTBED_CORES: '64' }, 8 * gib)).toBe(2);
+  expect(machineBudget({ TESTBED_CORES: '64' }, 256 * gib)).toBe(42);
+  expect(machineBudget({ TESTBED_CORES: '1' }, gib / 2)).toBe(1);
+});
+
+test('a fixed budget replaces the shared-machine formula', () => {
+  expect(machineBudget({ TESTBED_CORES: '3', TESTBED_BUDGET: '3' }, 7 * 1024 ** 3)).toBe(3);
+  expect(() => machineBudget({ TESTBED_BUDGET: '0' })).toThrow('TESTBED_BUDGET must be a positive integer');
 });
 
 test('runs share the machine budget at entry, never exceed it, and get back the processes of a killed run', async () => {
   const { root, units, start } = pool();
-  const budget = budgetOf(CORES, memoryOf());
+  const budget = machineBudget({ TESTBED_CORES: String(CORES) });
   const runs: Run[] = [];
   try {
     const alone = start('alone');
@@ -144,7 +154,7 @@ test('runs share the machine budget at entry, never exceed it, and get back the 
 
 test('a run gives back spare workers, and a single-worker run keeps its only place until it ends', async () => {
   const { start } = pool();
-  const budget = budgetOf(CORES, memoryOf());
+  const budget = machineBudget({ TESTBED_CORES: String(CORES) });
   const runs: Run[] = [];
   try {
     const tail = start('tail', (index) => index === 0);

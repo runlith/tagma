@@ -2,6 +2,11 @@ name: integration
 
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: Workspace directory to run alone, `.` for the root; empty runs every package
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -13,8 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - name: integration tests of every package
-        run: bun run test:all --script test:integration --report "$RUNNER_TEMP/integration/report.json"
+      - name: integration tests
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          export TESTBED_BUDGET="$(getconf _NPROCESSORS_ONLN)"
+          bun run test:all --script test:integration ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/integration/report.json"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
