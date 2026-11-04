@@ -274,5 +274,7 @@ sources:
     ref: packages/agent-tools
   - kind: file
     ref: patches/minimatch@10.2.6.patch
+  - kind: file
+    ref: patches/minimatch@10.2.6.hunks.json
 ---
 The bodies of the tools the product gives its agents — files, shell, search, and web — are written here against the core's tool contract. The package owns the world the catalog runs over, the boundary every file act passes through, the locks file doors hold across mutations, the change record, and the shell doors routing each single-file write to the tool owning it. It decides nothing about models, stores, or grants: a world that bound no resource carries no tool for it.
