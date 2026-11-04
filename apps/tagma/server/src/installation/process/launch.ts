@@ -33,9 +33,14 @@ const decodeRequest = Schema.decodeUnknownSync(Schema.Union([launchRequestSchema
 const decodeAnswer = Schema.decodeUnknownSync(launchAnswerSchema);
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 type Child = Bun.Subprocess<number, number, number>;
-type Attempt = {
+type Start = {
   readonly id: string;
   readonly predecessor: Child;
+  cancelled: boolean;
+  answered: boolean;
+};
+type Attempt = {
+  readonly start: Start;
   readonly child: Child;
   readonly command: string;
   readonly chain: ProcessChain | undefined;
@@ -57,7 +62,7 @@ export class ServerLaunch {
   private readonly launched = new Map<Child, Launched>();
   private stopping = false;
   private returning = 0;
-  private starting: { readonly id: string; cancelled: boolean } | null = null;
+  private starting: Start | null = null;
   private hasFailed = false;
   private code = 0;
   private readonly settled: (code: number) => void;
@@ -80,6 +85,17 @@ export class ServerLaunch {
 
   readonly stop = (signal: NodeJS.Signals = 'SIGTERM'): Promise<number> => {
     this.stopping = true;
+    const starting = this.starting;
+    if (starting !== null) {
+      starting.cancelled = true;
+      this.replyStart(starting, 'the launch is stopping');
+    }
+    const attempt = this.attempt;
+    if (attempt?.state === 'starting') {
+      attempt.state = 'cancelled';
+      attempt.start.cancelled = true;
+      this.replyStart(attempt.start, 'the launch is stopping');
+    }
     for (const child of this.children) child.kill(signal);
     return this.exited;
   };
@@ -130,7 +146,7 @@ export class ServerLaunch {
       if (attempt === null || attempt.child !== sender || attempt.state !== 'starting' || this.stopping) return;
       attempt.state = 'ready';
       this.current = sender;
-      this.answer(attempt.predecessor, { _tag: 'Started', id: attempt.id });
+      this.replyStart(attempt.start, null);
       return;
     }
     let request: LaunchRequest | Handoff | Takeover;
@@ -146,12 +162,12 @@ export class ServerLaunch {
         return;
       attempt.serving = true;
       this.attempt = null;
-      if (!this.children.has(attempt.predecessor)) this.launched.delete(attempt.predecessor);
+      if (!this.children.has(attempt.start.predecessor)) this.launched.delete(attempt.start.predecessor);
       return;
     }
     if (request._tag === 'Released' || request._tag === 'ReleaseFailed') {
       const attempt = this.attempt;
-      if (attempt === null || attempt.predecessor !== sender || request.pid !== sender.pid || attempt.state !== 'ready') {
+      if (attempt === null || attempt.start.predecessor !== sender || request.pid !== sender.pid || attempt.state !== 'ready') {
         this.fail(`pid ${sender.pid} sent a data directory handoff outside its prepared succession`);
         return;
       }
@@ -163,11 +179,14 @@ export class ServerLaunch {
     if (request._tag === 'Cancel') {
       if (this.starting?.id === request.id) {
         this.starting.cancelled = true;
+        this.replyStart(this.starting, 'the successor start was cancelled');
         return;
       }
       const attempt = this.attempt;
-      if (attempt === null || attempt.predecessor !== sender || attempt.id !== request.id) return;
+      if (attempt === null || attempt.start.predecessor !== sender || attempt.start.id !== request.id) return;
       attempt.state = 'cancelled';
+      attempt.start.cancelled = true;
+      this.replyStart(attempt.start, 'the successor start was cancelled');
       if (this.current === attempt.child) this.current = sender;
       attempt.child.kill('SIGTERM');
       return;
@@ -181,16 +200,16 @@ export class ServerLaunch {
           : this.attempt === null
             ? null
             : this.attempt.state === 'ready'
-              ? `the predecessor pid ${this.attempt.predecessor.pid} is still leaving`
+              ? `the predecessor pid ${this.attempt.start.predecessor.pid} is still leaving`
               : 'a successor is still starting or being cancelled';
     if (refused !== null) {
       this.answer(sender, { _tag: 'Failed', id: request.id, detail: refused });
       return;
     }
+    const starting: Start = { id: request.id, predecessor: sender, cancelled: false, answered: false };
     const begin = (child: Child, chain: ProcessChain | undefined): Attempt => {
       this.attempt = {
-        id: request.id,
-        predecessor: sender,
+        start: starting,
         child,
         command: request.command.join(' '),
         chain,
@@ -209,10 +228,9 @@ export class ServerLaunch {
         return;
       }
     } catch (cause) {
-      this.answer(sender, { _tag: 'Failed', id: request.id, detail: `the successor would not start: ${String(cause)}` });
+      this.replyStart(starting, `the successor would not start: ${String(cause)}`);
       return;
     }
-    const starting = { id: request.id, cancelled: false };
     this.starting = starting;
     const generation = chain;
     let spawned: Attempt | null = null;
@@ -227,11 +245,10 @@ export class ServerLaunch {
       const attempt: Attempt | null = spawned;
       if (attempt === null) {
         if (this.children.has(sender))
-          this.answer(sender, {
-            _tag: 'Failed',
-            id: request.id,
-            detail: `the successor would not start: ${forked._tag === 'Failure' ? forked.failure.detail : 'it was never spawned'}`,
-          });
+          this.replyStart(
+            starting,
+            `the successor would not start: ${forked._tag === 'Failure' ? forked.failure.detail : 'it was never spawned'}`,
+          );
       } else if (forked._tag === 'Success' && starting.cancelled && this.attempt === attempt) {
         attempt.state = 'cancelled';
         if (this.current === attempt.child) this.current = sender;
@@ -239,6 +256,15 @@ export class ServerLaunch {
       }
       this.settle();
     });
+  }
+
+  private replyStart(start: Start, failure: string | null): void {
+    if (start.answered) return;
+    start.answered = true;
+    this.answer(
+      start.predecessor,
+      failure === null ? { _tag: 'Started', id: start.id } : { _tag: 'Failed', id: start.id, detail: failure },
+    );
   }
 
   private answer(child: Child, answer: LaunchAnswer | Handoff): void {
@@ -257,32 +283,31 @@ export class ServerLaunch {
 
   private ended(child: Child, code: number): void {
     this.children.delete(child);
-    if (this.attempt?.predecessor !== child) this.launched.delete(child);
+    if (this.attempt?.start.predecessor !== child) this.launched.delete(child);
     const attempt = this.attempt;
     if (attempt !== null && attempt.child === child) {
       if (attempt.state === 'ready' && !attempt.serving && !this.stopping) {
         if (this.current === child) this.current = null;
         if (attempt.released) {
           this.attempt = null;
-          this.returned(attempt.predecessor, attempt.chain);
+          this.returned(attempt.start.predecessor, attempt.chain);
         } else {
           attempt.failed = true;
-          if (!this.children.has(attempt.predecessor)) {
+          if (!this.children.has(attempt.start.predecessor)) {
             this.attempt = null;
-            this.returned(attempt.predecessor, attempt.chain);
+            this.returned(attempt.start.predecessor, attempt.chain);
           }
         }
         return this.settle();
       }
       this.attempt = null;
-      if (attempt.state === 'starting' && !this.stopping) {
-        this.answer(attempt.predecessor, {
-          _tag: 'Failed',
-          id: attempt.id,
-          detail: `the successor ${attempt.command} ended with ${child.signalCode ?? `code ${code}`} before it stood by`,
-        });
+      if (attempt.state === 'starting') {
+        this.replyStart(
+          attempt.start,
+          `the successor ${attempt.command} ended with ${child.signalCode ?? `code ${code}`} before it stood by`,
+        );
       }
-    } else if (attempt !== null && attempt.predecessor === child) {
+    } else if (attempt !== null && attempt.start.predecessor === child) {
       if (attempt.released && !attempt.failed) {
         this.settle();
         return;
