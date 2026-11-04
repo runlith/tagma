@@ -253,6 +253,23 @@ test('a snapshot is the test run’s beside any other command, since the test ru
   });
 });
 
+test('a command ended before the observation window is no rival even within timestamp precision', () => {
+  const time = clock();
+  const lives = new Lives(time.now);
+  const before = lives.open(CHECKOUT, 'session-b', named(''));
+  before.opened();
+  time.at(1_000);
+  before.ended();
+  time.at(1_001);
+  const own = lives.open(CHECKOUT, 'session-a', named('src/a.ts'));
+  own.opened();
+  time.at(1_003);
+  own.ended();
+  expect(
+    lives.decide(CHECKOUT, own.life, { name: 'src/a.ts', after: 'v1', written: instant(1_002) }, { from: 1_001, to: 1_004 }),
+  ).toMatchObject({ kind: 'mine', basis: 'sets' });
+});
+
 test('a write at a known moment that no life touched is untouched, and a write without a moment is judged by the window', () => {
   const time = clock();
   const lives = new Lives(time.now);

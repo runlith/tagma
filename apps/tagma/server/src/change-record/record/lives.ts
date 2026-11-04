@@ -223,12 +223,11 @@ export class Lives {
     const checkout = this.checkouts.get(key);
     if (checkout === undefined) return () => ({ kind: 'unclaimed', basis: 'untouched', counted: true, sole: false });
     const now = this.now();
-    const reach: Span = { from: window.from - WRITE_GAP_MS, to: window.to + WRITE_GAP_MS };
     const living: Candidate[] = [];
     for (const life of checkout.lives) {
       if (life.start === null) continue;
       const one = { life, threadId: life.threadId, start: life.start, end: life.end ?? now, role: life.command.role };
-      if (meets(one, reach)) living.push(one);
+      if (meets(one, window)) living.push(one);
     }
     const marked = (moved: Moved, span: Span): ReadonlySet<string> =>
       new Set(

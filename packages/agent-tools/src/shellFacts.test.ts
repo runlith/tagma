@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { shellFacts } from './shellFacts';
-import { impliedBy } from './WorkspaceChanges';
+import { impliedBy, namedBy } from './WorkspaceChanges';
 
 const CWD = '/repo';
 
@@ -32,6 +32,11 @@ test('an editor names the paths it changes from the directory the line moved to,
   expect(shape("sed -i.bak 's/a/b/' x.ts")[0]?.named).toEqual(['/repo/x.ts', '/repo/x.ts.bak']);
   expect(shape('mv old.ts new.ts')[0]).toEqual({ role: 'named', named: ['/repo/old.ts', '/repo/new.ts'], signature: null });
   expect(shape('bun test > /tmp/log.txt')[0]).toEqual({ role: 'listed', named: ['/tmp/log.txt'], signature: 'bun test' });
+});
+
+test('an escaped caret starts a literal shell class, not a negated set', () => {
+  const paths = shellFacts(String.raw`rm classes/[\^a].js`, CWD).parts[0]?.named ?? [];
+  expect(['^', 'a', 'b'].filter((name) => namedBy(paths, `/repo/classes/${name}.js`))).toEqual(['^', 'a']);
 });
 
 test('shell operands preserve glob syntax and quoting, find names its roots, and dynamic paths stay opaque', () => {

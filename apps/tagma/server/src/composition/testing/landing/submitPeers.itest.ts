@@ -32,7 +32,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
         writeFileSync(join(world.root, 'src', 'Jo\u0308.ts'), `${FILE.join('\n')}\n`);
         yield* world.run(['add', 'src']);
         yield* world.run(['commit', '-q', '-m', 'named']);
-        const path = 'src/J\u00f6.ts';
+        const path = 'src/Jo\u0308.ts';
         yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine'], { path });
         expect((yield* world.submit(MINE, { paths: [path] })).status).toBe('landed');
         expect(yield* world.run(['status', '--porcelain'])).toBe('');

@@ -111,7 +111,7 @@ layer(commandLayer, { excludeTestServices: true })('command landing', (it) => {
 
       const tests = yield* Effect.forkChild(call(s.theirs.bash, { command: 'bun run test', description: 'Run the tests' }));
       yield* fileReady(join(s.w.root, '.git', 'testing'));
-      yield* call(s.mine.bash, { command: 'bunx --no-install oxfmt --threads=3 src/a.ts', description: 'Format' });
+      yield* call(s.mine.bash, { command: 'node_modules/.bin/oxfmt --threads=3 src/a.ts', description: 'Format' });
       yield* Fiber.join(tests);
       yield* Effect.all([s.decided(MINE), s.decided(THEIRS)], { concurrency: 2 });
 

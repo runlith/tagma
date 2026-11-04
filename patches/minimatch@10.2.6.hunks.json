@@ -1,0 +1,9 @@
+{
+  "package": "minimatch@10.2.6",
+  "hunks": {
+    "literal-class-caret": {
+      "markers": ["const braceEscape"],
+      "tests": [{ "package": "packages/agent-tools", "file": "./src/shellFacts.test.ts", "names": "an escaped caret starts a literal shell class" }]
+    }
+  }
+}
