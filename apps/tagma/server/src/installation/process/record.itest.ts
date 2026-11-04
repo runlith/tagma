@@ -27,14 +27,31 @@ it.live('a reused PID and an issued predecessor record older than its process do
     const record = (yield* writer.state).record!;
     writeFileSync(path, JSON.stringify({ ...record, predecessor: { ...record.predecessor, birth: 'another-process' } }));
     expect((yield* readStartup(path)).restart?.underway).toBe(false);
-    writeFileSync(
-      path,
-      JSON.stringify({
-        ...record,
-        predecessor: { pid: process.pid, source: record.predecessor!.source },
-        points: record.points.map((point) => ({ ...point, at: point.at - 60_000 })),
-      }),
+    const accepted = (yield* Clock.currentTimeMillis) - 1;
+    const child = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.spawn([process.execPath, '-e', 'await Bun.stdin.text()'], { stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' }),
+      ),
+      (process) =>
+        Effect.promise(async () => {
+          process.kill();
+          await process.exited;
+        }),
     );
+    const identity = (yield* Processes).identity(child.pid);
+    expect(identity._tag).toBe('Read');
+    const issued = (at: number) =>
+      writeFileSync(
+        path,
+        JSON.stringify({
+          ...record,
+          predecessor: { pid: child.pid, source: record.predecessor!.source },
+          points: record.points.map((point) => ({ ...point, at })),
+        }),
+      );
+    issued((yield* Clock.currentTimeMillis) + 1);
+    expect((yield* readStartup(path)).restart?.underway).toBe(true);
+    issued(accepted);
     expect((yield* readStartup(path)).restart?.underway).toBe(false);
   }).pipe(Effect.provide(testProcesses)),
 );
