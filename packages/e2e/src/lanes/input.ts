@@ -3,15 +3,14 @@ import { Effect, Option, Schema } from 'effect';
 import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { attempted, command, decode, SimulatorUnavailable, type Device } from './device.ts';
-import { nativeTouch, type NativeTouch } from './hid.ts';
+import { nativeInput, type NativeInput } from './hid.ts';
 import type { Point } from './ios.ts';
 import type { Tools } from './iosTools.ts';
 
-export type Input = {
+export type Input = NativeInput & {
   readonly run: (...args: string[]) => Promise<string>;
   readonly quiet: (pid: number) => Promise<void>;
   readonly diagnostics: () => string;
-  readonly touch: NativeTouch;
 };
 const Verdict = Schema.fromJsonString(
   Schema.Struct({ retry: Schema.Literals(['safe', 'safe_after_reread', 'unsafe']), retry_reason: Schema.String }),
@@ -117,7 +116,7 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
       while (!(await answered(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
     },
     diagnostics: () => stderr,
-    touch: yield* nativeTouch({ tools, port }),
+    ...(yield* nativeInput({ tools, port })),
   };
   return control;
 });

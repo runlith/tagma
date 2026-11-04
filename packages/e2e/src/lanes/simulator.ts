@@ -170,20 +170,7 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     },
     tap: (point) => tap(control, point),
     touch: control.touch,
-    swipe: async ({ from, to, duration = 0.15, delta = 5 }) => {
-      await control.run(
-        'ui',
-        'swipe',
-        String(Math.round(from.x)),
-        String(Math.round(from.y)),
-        String(Math.round(to.x)),
-        String(Math.round(to.y)),
-        '--duration',
-        String(duration),
-        '--delta',
-        String(delta),
-      );
-    },
+    swipe: control.swipe,
     webFrame: async (title, pid) => {
       const root = await readAX(device, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
       const elements = elementsOf(root);

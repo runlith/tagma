@@ -32,6 +32,25 @@ async def events():
             break
         command = json.loads(line)
         phase = command["phase"]
+        if phase == "swipe":
+            start, end = command["from"], command["to"]
+            origin, target = (start["x"], start["y"]), (end["x"], end["y"])
+            steps = max(2, math.ceil(math.dist(origin, target) / command["delta"]))
+            loop = asyncio.get_running_loop()
+            began = loop.time()
+            yield sample(*origin)
+            for index in range(1, steps + 1):
+                fraction = index / steps
+                remaining = began + command["duration"] * fraction - loop.time()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                yield sample(
+                    origin[0] + (target[0] - origin[0]) * fraction,
+                    origin[1] + (target[1] - origin[1]) * fraction,
+                )
+            yield sample(*target, HIDDirection.UP)
+            print(json.dumps({"id": command["id"]}), flush=True)
+            return
         x, y = command["x"], command["y"]
         if phase == "press":
             yield sample(x, y)

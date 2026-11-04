@@ -4,10 +4,14 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { TouchFailed, type TouchPhase } from '../touch.ts';
-import type { Point } from './ios.ts';
+import type { Point, Swipe } from './ios.ts';
 import type { Tools } from './iosTools.ts';
 
 export type NativeTouch = (phase: TouchPhase, point: Point) => Promise<void>;
+export type NativeInput = { readonly touch: NativeTouch; readonly swipe: (gesture: Swipe) => Promise<void> };
+type Contact = { readonly phase: TouchPhase; readonly x: number; readonly y: number };
+type Gesture = { readonly phase: 'swipe'; readonly from: Point; readonly to: Point; readonly duration: number; readonly delta: number };
+type Command = Contact | Gesture;
 type HIDOptions = { readonly tools: Tools; readonly port: number };
 type Submission = { readonly resolve: () => void; readonly reject: (cause: unknown) => void };
 type Ended = { readonly failure: TouchFailed | undefined };
@@ -69,15 +73,15 @@ class TouchStream {
     this.child.kill('SIGTERM');
   }
 
-  async send(phase: TouchPhase, point: Point): Promise<void> {
+  async send(command: Command): Promise<void> {
     if (this.ended !== undefined) throw this.ended.failure ?? new TouchFailed({ message: 'the native touch stream already ended' });
     if (this.failure !== undefined) throw this.failure;
     const id = this.sequence++;
     await new Promise<void>((resolve, reject) => {
       this.submissions.set(id, { resolve, reject });
-      this.child.stdin.write(JSON.stringify({ id, phase, x: point.x, y: point.y }) + '\n');
+      this.child.stdin.write(JSON.stringify({ id, ...command }) + '\n');
     });
-    if (phase === 'release') {
+    if (command.phase === 'release' || command.phase === 'swipe') {
       const ended = await this.completion;
       if (ended.failure !== undefined) throw ended.failure;
     }
@@ -89,21 +93,29 @@ class TouchStream {
   }
 }
 
-export const nativeTouch = Effect.fn('e2e.nativeTouch')(function* (options: HIDOptions) {
+export const nativeInput = Effect.fn('e2e.nativeTouch')(function* (options: HIDOptions) {
   let stream: TouchStream | undefined;
   yield* Effect.addFinalizer(() =>
     Effect.promise(async () => {
       await stream?.stop();
     }),
   );
-  const send: NativeTouch = async (phase, point) => {
-    if (phase === 'press') {
+  const input: NativeInput = {
+    touch: async (phase, point) => {
+      if (phase === 'press') {
+        if (stream !== undefined) throw new TouchFailed({ message: 'the native touch stream already holds a finger' });
+        stream = new TouchStream(options);
+      }
+      if (stream === undefined) throw new TouchFailed({ message: 'the native touch stream has no pressed finger' });
+      await stream.send({ phase, x: point.x, y: point.y });
+      if (phase === 'release') stream = undefined;
+    },
+    swipe: async ({ from, to, duration = 0.15, delta = 5 }) => {
       if (stream !== undefined) throw new TouchFailed({ message: 'the native touch stream already holds a finger' });
       stream = new TouchStream(options);
-    }
-    if (stream === undefined) throw new TouchFailed({ message: 'the native touch stream has no pressed finger' });
-    await stream.send(phase, point);
-    if (phase === 'release') stream = undefined;
+      await stream.send({ phase: 'swipe', from, to, duration, delta });
+      stream = undefined;
+    },
   };
-  return send;
+  return input;
 });
