@@ -55,13 +55,13 @@ const feed = liveFeed();
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
-    return this.dataset.line === undefined ? (this.dataset.drop === 'loose' ? 27 : 0) : 26;
+    return this.dataset.columnLine === undefined ? (this.dataset.drop === 'loose' ? 27 : 0) : 26;
   });
   vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
     return this.getAttribute('data-drop') === 'loose' ? 27 : 0;
   });
   vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
-    return Number.parseFloat(this.querySelector<HTMLElement>('[data-line]')?.parentElement?.style.height ?? '') || 0;
+    return Number.parseFloat(this.querySelector<HTMLElement>('[data-column-line]')?.parentElement?.style.height ?? '') || 0;
   });
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
     configurable: true,

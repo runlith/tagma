@@ -113,7 +113,8 @@
         class="relative min-h-0 flex-1 overflow-y-auto px-1.5"
         data-drop="loose"
         onkeydown={(event) => col.listKeys(event)}
-        onfocusin={(event) => (col.focusKey = (event.target as HTMLElement).closest<HTMLElement>('[data-line]')?.dataset.line ?? null)}
+        onfocusin={(event) =>
+          (col.focusKey = (event.target as HTMLElement).closest<HTMLElement>('[data-column-line]')?.dataset.columnLine ?? null)}
         onfocusout={() => (col.focusKey = null)}
         onclickcapture={(event) => shelving.select(event)}
         {@attach win.column}
@@ -143,7 +144,7 @@
                 col.lineTint(line) && 'bg-status-open/5',
                 col.lineLifted(line) && 'opacity-40',
               ]}
-              data-line={line.key}
+              data-column-line={line.key}
               data-drop={col.lineDrop(line)}
               data-team={col.lineTeam(line)}
               {@attach win.measure(line.key)}

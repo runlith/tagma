@@ -496,16 +496,18 @@ export class ColumnState {
   }
 
   private lineElement(key: string): HTMLElement | null {
-    return this.listEl?.querySelector<HTMLElement>(`[data-line="${CSS.escape(key)}"]`) ?? null;
+    return this.listEl?.querySelector<HTMLElement>(`[data-column-line="${CSS.escape(key)}"]`) ?? null;
   }
 
   private tailLinks(): HTMLElement[] {
     if (this.listEl === null) return [];
-    return Array.from(this.listEl.querySelectorAll<HTMLElement>(ROW_FOCUS)).filter((element) => element.closest('[data-line]') === null);
+    return Array.from(this.listEl.querySelectorAll<HTMLElement>(ROW_FOCUS)).filter(
+      (element) => element.closest('[data-column-line]') === null,
+    );
   }
 
   private lineIndexOf(element: HTMLElement): number {
-    const key = element.closest<HTMLElement>('[data-line]')?.dataset.line;
+    const key = element.closest<HTMLElement>('[data-column-line]')?.dataset.columnLine;
     return key === undefined ? -1 : this.win.indexFor(key);
   }
 

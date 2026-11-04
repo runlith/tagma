@@ -39,7 +39,7 @@ e2e.effect(
         await name.waitFor({ state: 'detached' });
         const folder = column.locator('[data-folder-head]');
         const folderId = await folder.getAttribute('data-folder-head');
-        const empty = column.locator(`[data-line="empty:folder:${folderId}"]`);
+        const empty = column.locator(`[data-column-line="empty:folder:${folderId}"]`);
         const from = await row.boundingBox();
         const into = await empty.boundingBox();
         expect(from).not.toBeNull();
@@ -51,11 +51,11 @@ e2e.effect(
         await page.mouse.up();
         expect(await (await filed).json()).toMatchObject({ status: 'filed', folderId, moved: [thread.id] });
         await page.waitForFunction(
-          `document.querySelector('[data-line="${thread.id}"]')?.getAttribute('data-drop') === ${JSON.stringify(`folder:${folderId}`)}`,
+          `document.querySelector('[data-column-line="${thread.id}"]')?.getAttribute('data-drop') === ${JSON.stringify(`folder:${folderId}`)}`,
         );
         await page.reload();
         await row.waitFor();
-        expect(await row.locator('xpath=ancestor::*[@data-line][1]').getAttribute('data-drop')).toBe(`folder:${folderId}`);
+        expect(await row.locator('xpath=ancestor::*[@data-column-line][1]').getAttribute('data-drop')).toBe(`folder:${folderId}`);
       });
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(live);
@@ -63,29 +63,40 @@ e2e.effect(
   { lanes: ['chromium'], context: { viewport: { width: 1280, height: 800 } } },
 );
 
-type Box = { readonly title: string; readonly top: number; readonly bottom: number };
+type Box = { readonly title: string; readonly key: string; readonly top: number; readonly bottom: number; readonly clipped: boolean };
 
 const titles = ['Idle first', 'Answered second', 'Idle third', 'Answered fourth', 'Answered fifth', 'Idle sixth'];
 
 const rows = (page: Page) =>
   page.evaluate<Box[]>(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-    const rows = [...document.querySelectorAll('aside[aria-label="Agents"] [data-line]')];
+    const rows = [...document.querySelectorAll('aside[aria-label="Agents"] [data-column-line]')];
     resolve(rows.map((row) => {
       const rect = row.getBoundingClientRect();
-      return { title: row.innerText.split('\\n')[0] ?? '', top: rect.top, bottom: rect.bottom };
+      return {
+        title: row.innerText.split('\\n')[0] ?? '',
+        key: row.dataset.columnLine ?? '',
+        top: rect.top,
+        bottom: rect.bottom,
+        clipped: row.scrollHeight > row.offsetHeight,
+      };
     }).sort((left, right) => left.top - right.top));
   })))`);
 
 const contiguous = (stage: string, boxes: readonly Box[]) => {
   const gaps = boxes.slice(1).map((box, index) => ({ row: box.title, gap: Math.round((box.top - boxes[index]!.bottom) * 10) / 10 }));
   expect({ stage, gaps }).toEqual({ stage, gaps: gaps.map((one) => ({ row: one.row, gap: 1 })) });
+  expect({ stage, clipped: boxes.filter((box) => box.clipped).map((box) => box.key) }).toEqual({ stage, clipped: [] });
+  expect({ stage, rules: boxes.filter((box) => box.key.startsWith('line:')).map((box) => box.bottom - box.top) }).toEqual({
+    stage,
+    rules: boxes.filter((box) => box.key.startsWith('line:')).map(() => 9),
+  });
 };
 
 const working = (page: Page, title: string, running: boolean) =>
   page.waitForFunction(`(() => {
-    const lines = [...document.querySelectorAll('aside[aria-label="Agents"] [data-line]')];
+    const lines = [...document.querySelectorAll('aside[aria-label="Agents"] [data-column-line]')];
     const grown = lines.some((row) => row.innerText.startsWith(${JSON.stringify(title)}) && row.offsetHeight > 30);
-    const separated = lines.some((row) => row.dataset.line === 'line:quiet');
+    const separated = lines.some((row) => row.dataset.columnLine === 'line:quiet');
     return grown && separated === ${running};
   })()`);
 
