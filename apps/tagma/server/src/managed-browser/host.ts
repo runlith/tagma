@@ -10,7 +10,7 @@ import {
   isCommandFailure,
   type Session,
 } from '@runlith/cdp/session';
-import { Clock, Deferred, Effect, Exit, FileSystem, Option, Path, PubSub, Schema, Scope, Stream } from 'effect';
+import { Clock, Deferred, Effect, Exit, Fiber, FileSystem, Option, Path, PubSub, Schema, Scope, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import {
   type Host,
@@ -331,12 +331,13 @@ export const makeManagedHost = Effect.gen(function* () {
       files.makeDirectory(downloads, { recursive: true }),
     ]).pipe(Effect.mapError((failure) => refused(`the profile directory could not be made: ${failure.message}`)));
     const held = yield* Scope.fork(scope);
+    let readDiagnostic: Effect.Effect<string> = Effect.succeed('');
     const opened = yield* Effect.gen(function* () {
       const handle = yield* Scope.provide(
         ChildProcess.make(build.executable, [...build.args(dir, document.window)], {
           stdin: 'ignore',
           stdout: 'ignore',
-          stderr: 'ignore',
+          stderr: 'pipe',
           forceKillAfter: STOP_AFTER,
           additionalFds: { fd3: { type: 'input' }, fd4: { type: 'output' } },
         }),
@@ -344,6 +345,20 @@ export const makeManagedHost = Effect.gen(function* () {
       ).pipe(
         Effect.provide(spawner),
         Effect.mapError((failure) => refused(`the browser did not start: ${failure.message}`)),
+      );
+      let diagnostic = '';
+      const stderr = yield* handle.stderr.pipe(
+        Stream.decodeText(),
+        Stream.runForEach((chunk) =>
+          Effect.sync(() => {
+            diagnostic = `${diagnostic}${chunk}`.slice(-8_000);
+          }),
+        ),
+        Effect.forkIn(scope),
+      );
+      readDiagnostic = Fiber.join(stderr).pipe(
+        Effect.map(() => diagnostic),
+        Effect.orDie,
       );
       const transport = yield* Scope.provide(pipeTransport({ writer: handle.getInputFd(3), reader: handle.getOutputFd(4) }), held);
       const connection = yield* Scope.provide(connect(transport), held);
@@ -386,7 +401,19 @@ export const makeManagedHost = Effect.gen(function* () {
       );
       yield* Effect.flatMap(connection.ended, () => gone(state)).pipe(Effect.forkIn(scope));
       return state;
-    }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)));
+    }).pipe(
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)),
+      Effect.catchTag('HostLost', (failure) =>
+        Effect.flatMap(readDiagnostic, (diagnostic) =>
+          Effect.fail(
+            new HostRefused({
+              message: `the browser did not become ready: ${failure.message}${diagnostic.trim() === '' ? '' : `\n${diagnostic.trim()}`}`,
+              unblock: ['correct the browser startup error above, then open the page again', 'choose a profile using installed Chrome'],
+            }),
+          ),
+        ),
+      ),
+    );
     running.set(profile.id, opened);
     return opened;
   });

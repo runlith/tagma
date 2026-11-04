@@ -77,10 +77,16 @@ export const launchElectron = Effect.fnUntraced(function* (home: string, url: UR
       createInterface({ input: launched.stdout }).on('line', (line) => {
         const done = /^\{"done":(\d+)\}$/u.exec(line);
         if (done === null) said = `${said}${line}\n`.slice(-8_000);
-        else Deferred.doneUnsafe(acknowledged.get(Number(done[1]))!, Effect.void);
+        else {
+          const waiting = acknowledged.get(Number(done[1]));
+          if (waiting !== undefined) Deferred.doneUnsafe(waiting, Effect.void);
+        }
       });
-      launched.on('exit', (code, signal) =>
+      launched.on('close', (code, signal) =>
         Deferred.doneUnsafe(exited, Effect.succeed(`the Electron host left with ${signal ?? code}:\n${said}`)),
+      );
+      launched.on('error', (failure) =>
+        Deferred.doneUnsafe(exited, Effect.succeed(`the Electron host did not start: ${failure.message}\n${said}`)),
       );
       return launched;
     }),
@@ -97,23 +103,30 @@ export const launchElectron = Effect.fnUntraced(function* (home: string, url: UR
       const done = Deferred.makeUnsafe<void>();
       acknowledged.set(id, done);
       child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
-      return Deferred.await(done);
+      return Effect.raceFirst(Deferred.await(done), Effect.flatMap(Deferred.await(exited), Effect.die)).pipe(
+        Effect.ensuring(Effect.sync(() => acknowledged.delete(id))),
+      );
     });
   return { control, exited: Deferred.await(exited) } satisfies Electron;
+});
+
+export const connected = Effect.fnUntraced(function* (electron: Electron) {
+  const hosts = yield* Hosts;
+  const attached = yield* Deferred.make<void>();
+  yield* hosts.watch({
+    attached: (host) => (host.adapter === DESKTOP ? Effect.asVoid(Deferred.succeed(attached, undefined)) : Effect.void),
+    detached: () => Effect.void,
+  });
+  if (hosts.connected(DESKTOP) === undefined)
+    yield* Effect.raceFirst(Deferred.await(attached), Effect.flatMap(electron.exited, Effect.die));
 });
 
 export const electronHost = (home: string) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const { url } = yield* ServedChannel;
-      const hosts = yield* Hosts;
-      const attached = yield* Deferred.make<void>();
-      yield* hosts.watch({
-        attached: (host) => (host.adapter === DESKTOP ? Effect.asVoid(Deferred.succeed(attached, undefined)) : Effect.void),
-        detached: () => Effect.void,
-      });
       const electron = yield* launchElectron(home, url);
-      yield* Effect.raceFirst(Deferred.await(attached), Effect.flatMap(electron.exited, Effect.die));
+      yield* connected(electron);
       yield* Effect.forkScoped(Effect.flatMap(electron.exited, (said) => Effect.logError(said)));
     }),
   );
