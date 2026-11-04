@@ -57,7 +57,7 @@ export const makeWorktreeFeed = (input: {
   let actMoves = 0;
   let actsSent = false;
   let wake: Queue.Queue<void> | null = null;
-  let topology: { readonly path: string; readonly scope: Scope.Closeable } | undefined;
+  let topology: { readonly path: string; readonly scope: Scope.Closeable; ended: boolean } | undefined;
 
   const poke = (source: Source, rootId?: string, metadata = false): void => {
     dirt.events[source] += 1;
@@ -67,15 +67,22 @@ export const makeWorktreeFeed = (input: {
   };
 
   const observeTopology = Effect.fnUntraced(function* (path: string | undefined, scope: Scope.Scope) {
-    if (topology?.path === path) return;
+    if (topology !== undefined && topology.path === path && !topology.ended) return;
     if (topology !== undefined) yield* Scope.close(topology.scope, Exit.void);
     topology = undefined;
     if (path === undefined) return;
     const own = yield* Scope.fork(scope);
-    topology = { path, scope: own };
+    const observed = { path, scope: own, ended: false };
+    topology = observed;
     yield* Effect.forkIn(
       Stream.runForEach(Stream.drop(reads.topology(path), 1), (event) =>
         event.watching ? Effect.sync(() => poke('record')) : Effect.void,
+      ).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            observed.ended = true;
+          }),
+        ),
       ),
       own,
     );

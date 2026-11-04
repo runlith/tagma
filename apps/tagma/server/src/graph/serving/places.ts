@@ -41,6 +41,13 @@ export const makePlaces = (input: {
           following.watching = moved.watching;
           forget(projectId);
         }),
+      ).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            following.watching = false;
+            if (followed.get(projectId) === following) followed.delete(projectId);
+          }),
+        ),
       ),
     );
     return following;

@@ -1,5 +1,5 @@
 import { access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Effect, Exit, Queue, Scope, Stream } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { locationsAt } from '@runlith/git/repository';
@@ -13,9 +13,10 @@ const REOPEN_CEILING_MS = 60_000;
 const HEAD = 'HEAD';
 const LINKED = 'worktrees';
 const PACKED = 'packed-refs';
+const GIT_DIR = '.git';
 const MARKS: ReadonlySet<string> = new Set([HEAD, 'gitdir', 'locked']);
 
-type Listener = (moved: CheckoutsMoved) => void;
+type Listener = (moved: CheckoutsMoved | 'gone') => void;
 
 type Watched = {
   readonly listeners: Set<Listener>;
@@ -35,6 +36,43 @@ const linkedMoved = (event: WatchEvent): boolean =>
 
 const lost = (event: WatchEvent): boolean => 'rescan' in event && (event.rescan === 'lost' || event.rescan === 'error');
 
+const present = (path: string): Effect.Effect<boolean> =>
+  Effect.promise(() =>
+    access(path).then(
+      () => true,
+      () => false,
+    ),
+  );
+
+const insideRepository = Effect.fnUntraced(function* (root: string) {
+  for (let at = root; ; at = dirname(at)) {
+    if (yield* present(join(at, GIT_DIR))) return true;
+    if (dirname(at) === at) return false;
+  }
+});
+
+const repositoryBorn = (root: string): Effect.Effect<boolean> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const heard = yield* Queue.sliding<void>(1);
+      const watching = yield* Effect.acquireRelease(
+        watchAll([
+          {
+            at: root,
+            recursive: false,
+            required: true,
+            listen: (event) => {
+              if (lost(event) || mayTouch(event, GIT_DIR)) void Queue.offerUnsafe(heard, undefined);
+            },
+          },
+        ]),
+        (opened) => Effect.sync(() => opened.close()),
+      );
+      while (watching.watching() && !(yield* present(join(root, GIT_DIR)))) yield* Queue.take(heard);
+      return watching.watching();
+    }),
+  );
+
 export type TopologyWatches = Effect.Success<typeof makeTopologyWatches>;
 
 export const makeTopologyWatches = Effect.gen(function* () {
@@ -52,7 +90,7 @@ export const makeTopologyWatches = Effect.gen(function* () {
     Stream.callback<CheckoutsMoved>(
       (queue) =>
         Effect.acquireRelease(
-          enter(root, (event) => void Queue.offerUnsafe(queue, event)),
+          enter(root, (event) => (event === 'gone' ? Queue.endUnsafe(queue) : void Queue.offerUnsafe(queue, event))),
           (listener) => leave(root, listener),
         ),
       { bufferSize: 1, strategy: 'sliding' },
@@ -85,12 +123,7 @@ export const makeTopologyWatches = Effect.gen(function* () {
 
   const watch = Effect.fnUntraced(function* (root: string, entry: Watched) {
     const common = (yield* locationsAt(git, root)).commonDir;
-    const linked = yield* Effect.promise(() =>
-      access(join(common, LINKED)).then(
-        () => true,
-        () => false,
-      ),
-    );
+    const linked = yield* present(join(common, LINKED));
     const heard = yield* Queue.sliding<Heard>(4);
     const offer = (what: Heard) => void Queue.offerUnsafe(heard, what);
     return yield* Effect.scoped(
@@ -139,18 +172,34 @@ export const makeTopologyWatches = Effect.gen(function* () {
     );
   });
 
+  const gone = (root: string, entry: Watched): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      entry.watching = false;
+      for (const listener of [...entry.listeners]) {
+        listener({ root, watching: false });
+        listener('gone');
+      }
+      if (watched.get(root) === entry) watched.delete(root);
+      return Effect.forkIn(Scope.close(entry.scope, Exit.void), scope);
+    }).pipe(Effect.asVoid);
+
   const observe = Effect.fnUntraced(function* (root: string, entry: Watched): Effect.fn.Return<void> {
     let wait = REOPEN_MS;
     for (;;) {
       const ran = yield* Effect.exit(watch(root, entry));
-      if (Exit.isFailure(ran))
+      if (Exit.isFailure(ran) && !(yield* present(root))) {
+        yield* Effect.logInfo('the root of a watched repository is gone; the observation of its checkouts ends', { root });
+        return yield* gone(root, entry);
+      }
+      const bare = Exit.isFailure(ran) && !(yield* insideRepository(root));
+      if (Exit.isFailure(ran) && !bare)
         yield* Effect.logWarning('the checkouts of a repository could not be watched, so their moves are not promised until it opens', {
           root,
           cause: ran.cause,
         });
       entry.watching = false;
       tell(root, entry);
-      if (Exit.isSuccess(ran) && ran.value) {
+      if ((Exit.isSuccess(ran) && ran.value) || (bare && (yield* repositoryBorn(root)))) {
         wait = REOPEN_MS;
         continue;
       }
