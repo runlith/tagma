@@ -3,7 +3,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { and, eq, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve as resolvePath } from 'node:path';
+import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { MachineStore, storeDirectory } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
@@ -12,7 +12,7 @@ import { gitRefusal } from '../platform/git/readings.js';
 import { unitsLayer } from '../platform/store/units.js';
 import { ProjectGroups, Projects } from './contract/service/registry.js';
 import { makeGroups } from './groups.js';
-import { keyHolds, markIn, marked, physical } from './identity.js';
+import { commonDirAt, keyHolds, markIn, marked, physical } from './identity.js';
 import { ReservedNames } from './contract/service/names.js';
 import { ProjectChanges, type GroupChange, type ProjectRemoved } from './contract/service/changes.js';
 import { GLOBAL_PROJECT, type ProjectIdentity, type ProjectRootFailure, type ProjectRow } from './contract/wire/project.js';
@@ -56,8 +56,6 @@ export const rootChecked = Effect.fn('Projects.rootChecked')(function* (
 
 type Holder = ProjectRow & { readonly removedAt: Date | null };
 
-const gitDirAt = (rootPath: string): string => join(rootPath, '.git');
-
 const markedRoots = Effect.fn('Projects.markRoots')(function* (
   store: MachineStore['Service'],
   units: MachineUnits['Service'],
@@ -73,14 +71,16 @@ const markedRoots = Effect.fn('Projects.markRoots')(function* (
   );
   const unmarked: { readonly id: number; readonly gitDir: string; readonly repoKey: string; readonly rekeyed: boolean }[] = [];
   for (const row of rows) {
+    const located = yield* commonDirAt(row.rootPath).pipe(Effect.catchTag('GitUnreadable', (failure) => unread(row.id, failure.reason)));
+    if (located === null) continue;
     const repository = yield* Effect.promise(() =>
-      stat(gitDirAt(row.rootPath)).then(
+      stat(located).then(
         (info) => info.isDirectory(),
         () => false,
       ),
     );
     if (!repository) continue;
-    const gitDir = yield* physical(files, gitDirAt(row.rootPath)).pipe(
+    const gitDir = yield* physical(files, located).pipe(
       Effect.flatMap((at) => Effect.map(markIn(at), (held) => (held === null ? at : null))),
       Effect.catchTags({
         PlatformError: (failure) => unread(row.id, failure.message),

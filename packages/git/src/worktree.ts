@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { GitUnavailable, type Git } from './Git.js';
 import {
@@ -8,6 +10,7 @@ import {
   type Head,
   printedCommit,
   run,
+  runEnded,
   unreadableBy,
 } from './repository.js';
 
@@ -38,7 +41,21 @@ export const worktreesOf = Effect.fn('Git.worktrees')(function* (
     }
     rows.push(worktree);
   }
-  return rows;
+  return yield* withMainTree(git, dir, rows);
+});
+
+const withMainTree = Effect.fnUntraced(function* (git: Git['Service'], dir: string, rows: readonly Worktree[]) {
+  const [main] = rows;
+  if (main === undefined || main.bare || existsSync(join(main.path, '.git'))) return rows;
+  const configured = (yield* runEnded(
+    git,
+    dir,
+    ['config', '--file', join(main.path, 'config'), '--get', 'core.worktree'],
+    undefined,
+    [1],
+  )).stdout.trim();
+  if (configured === '') return rows;
+  return [{ ...main, path: resolve(main.path, configured) }, ...rows.slice(1)];
 });
 
 const WORKTREE = 'worktree ';

@@ -8,7 +8,7 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import { scanTree } from '../../../graph/testing/doubles.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
 import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
-import { doorFixture, DoorFixture } from '../doorFixture.js';
+import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('projects door', (it) => {
@@ -61,6 +61,30 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
     }),
   );
 
+  it.effect('a project re-pointed onto a git submodule stands on the submodule tree, and its former clone no longer answers for it', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const clone = yield* files.realPath(yield* world.directory('clone'));
+      yield* suiteGit(clone, 'init', '-q', '-b', 'main');
+      yield* suiteGit(clone, 'commit', '-q', '--allow-empty', '-m', 'born');
+      const outer = yield* files.realPath(yield* world.directory('outer'));
+      yield* suiteGit(outer, 'init', '-q', '-b', 'main');
+      yield* suiteGit(outer, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', clone, 'core');
+      yield* suiteGit(outer, 'commit', '-q', '-m', 'pin');
+      const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: clone, storage: 'stealth' });
+      const projectId = (added.body as { project: { id: number } }).project.id;
+      const nested = join(outer, 'core');
+      expect((yield* world.op('set_project_root', { ref: String(projectId), rootPath: nested })).body).toMatchObject({
+        project: { rootPath: nested },
+      });
+      expect((yield* world.op('list_worktrees', {}, `project=${projectId}`)).body).toMatchObject({
+        worktrees: { rows: [{ kind: 'main', folder: nested }] },
+      });
+      expect((yield* world.op('read_project', {}, `cwd=${encodeURIComponent(clone)}`)).body).toMatchObject({ project: null });
+    }),
+  );
+
   it.effect('a project whose repository no longer opens refuses its own paths and leaves every other project its places', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;
@@ -70,7 +94,9 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         yield* suiteGit(root, 'init', '-q', '-b', 'main');
         yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
         const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
-        return { root, projectId: (added.body as { project: { id: number } }).project.id };
+        const projectId = (added.body as { project: { id: number } }).project.id;
+        yield* projectLeaving(world, projectId);
+        return { root, projectId };
       });
       const healthy = yield* born('healthy');
       const broken = yield* born('broken');

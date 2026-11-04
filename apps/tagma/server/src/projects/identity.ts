@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Layer } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { Git } from '@runlith/git/Git';
 import { type GitAnswerInvalid, type GitRefused, GitUnreadable } from '@runlith/git/repository';
 import { gitRefusal, gitText } from '../platform/git/readings.js';
@@ -52,13 +52,54 @@ export const heldKey = Effect.fn('ProjectIdentification.heldKey')(function* (git
   return (yield* markIn(mark.gitDir))?.key === mark.key ? null : mark.key;
 });
 
+const GITDIR = 'gitdir: ';
+
+const textOr = (path: string, missing: string): Promise<string> =>
+  readFile(path, 'utf8').then(
+    (text) => text,
+    (cause: unknown) => (absent(cause) ? missing : Promise.reject(cause)),
+  );
+
+export const commonDirAt = (root: string): Effect.Effect<string, GitUnreadable> =>
+  Effect.tryPromise({
+    try: async () => {
+      const marker = join(root, '.git');
+      const directory = await stat(marker).then(
+        (info) => info.isDirectory(),
+        (cause: unknown) => (absent(cause) ? true : Promise.reject(cause)),
+      );
+      if (directory) return marker;
+      const named = (await textOr(marker, '')).split('\n', 1)[0]?.trim() ?? '';
+      if (!named.startsWith(GITDIR)) return marker;
+      const at = resolve(root, named.slice(GITDIR.length).trim());
+      const common = (await textOr(join(at, 'commondir'), '')).trim();
+      return common === '' ? at : resolve(at, common);
+    },
+    catch: (cause) => new GitUnreadable({ command: ['read', join(root, '.git')], reason: String(cause) }),
+  });
+
+type GitPlace = { readonly toplevel: string; readonly gitDir: string; readonly commonDir: string };
+
+export const mainWorktree = Effect.fn('ProjectIdentification.mainWorktree')(function* (git: Git['Service'], place: GitPlace) {
+  if (place.gitDir === place.commonDir) return place.toplevel;
+  if (basename(place.commonDir) === '.git') return dirname(place.commonDir);
+  const configured = (yield* gitText(git, place.toplevel, [
+    'config',
+    '--file',
+    join(place.commonDir, 'config'),
+    '--get',
+    'core.worktree',
+  ]))?.trim();
+  return configured ? resolve(place.commonDir, configured) : dirname(place.commonDir);
+});
+
 export const keyHolds = Effect.fn('ProjectIdentification.keyHolds')(function* (
   registered: { readonly repoKey: string; readonly rootPath: string },
   identity: ProjectIdentity,
 ) {
   if (identity.repoKey !== registered.repoKey) return false;
   if (identity.rootPath === registered.rootPath || identity.gitDir === null) return true;
-  const there = yield* markIn(join(registered.rootPath, '.git'));
+  const there = yield* markIn(yield* commonDirAt(registered.rootPath));
   return there?.key !== registered.repoKey || there.gitDir === identity.gitDir;
 });
 
@@ -82,11 +123,14 @@ const identityAt = Effect.fn('ProjectIdentification.identify')(function* (
   files: FileSystem.FileSystem,
   path: string,
 ): Effect.fn.Return<ProjectIdentity, GitUnreadable | GitRefused | GitAnswerInvalid> {
-  const place = yield* gitText(git, path, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir']).pipe(
+  const place = yield* gitText(git, path, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-dir', '--git-common-dir']).pipe(
     Effect.catchTag('GitRefused', () => Effect.succeed(null)),
   );
-  const [toplevel, gitDir] = (place ?? '').split('\n').map((line) => line.trim());
-  if (toplevel && gitDir) return { repoKey: yield* heldKey(gitDir), rootPath: dirname(gitDir), gitDir };
+  const [toplevel, own, gitDir] = (place ?? '').split('\n').map((line) => line.trim());
+  if (toplevel && own && gitDir) {
+    const rootPath = yield* mainWorktree(git, { toplevel, gitDir: own, commonDir: gitDir });
+    return { repoKey: yield* heldKey(gitDir), rootPath, gitDir };
+  }
   return yield* folderIdentity(files, path);
 });
 

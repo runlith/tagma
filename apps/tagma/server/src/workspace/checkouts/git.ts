@@ -1,14 +1,14 @@
 import { Effect, FileSystem, Layer } from 'effect';
 import type { Stats } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Git } from '@runlith/git/Git';
 import type { GitAnswerInvalid, GitRefused, GitUnreadable } from '@runlith/git/repository';
 import { worktreesOf } from '@runlith/git/worktree';
 import { gitText } from '../../platform/git/readings.js';
 import { ProjectIdentification } from '../../projects/contract/service/registry.js';
 import type { ProjectIdentity } from '../../projects/contract/wire/project.js';
-import { folderIdentity, heldKey, projectIdentificationLayer } from '../../projects/identity.js';
+import { folderIdentity, heldKey, mainWorktree, projectIdentificationLayer } from '../../projects/identity.js';
 import { CallerCheckout, type CallerCheckoutState, type GitCheckout } from '../contract/service/checkouts.js';
 
 export type GitWorktree = {
@@ -153,17 +153,18 @@ const locateCheckout = Effect.fn('Repo.locate')(function* (
     '--show-prefix',
     '--path-format=absolute',
     '--show-toplevel',
+    '--git-dir',
     '--git-common-dir',
   ]).pipe(Effect.catchTag('GitRefused', () => Effect.succeed(null)));
   if (place === null) return null;
-  const [prefix = '', toplevel = '', gitDir = ''] = place.split('\n').map((line) => line.trim());
-  if (toplevel === '' || gitDir === '') return null;
+  const [prefix = '', toplevel = '', own = '', gitDir = ''] = place.split('\n').map((line) => line.trim());
+  if (toplevel === '' || own === '' || gitDir === '') return null;
   return {
     key: yield* heldKey(gitDir),
     path: prefix === '' ? '.' : prefix.replace(/\/+$/, ''),
     toplevel,
     gitDir,
-    mainWorktree: dirname(gitDir),
+    mainWorktree: yield* mainWorktree(git, { toplevel, gitDir: own, commonDir: gitDir }),
   };
 });
 
