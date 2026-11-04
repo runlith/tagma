@@ -5,7 +5,7 @@ ord: 10
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -25,7 +25,8 @@ A project without code gets law and the work types without carrying code tags or
 - `Catalog` (`graph/contract/wire/tags/declaration.ts`) gains `requires` — the catalogs installed with it — and `sections` — `{ type, text }` with `type` the permanent id of another library's export. Neither is stored per project: both are shipped TypeScript, carried by the release revision.
 - The installer (`graph/vocabulary/candidate.ts`) closes the wanted set over `requires` — `core` first, a required catalog before the one needing it — and composes every wanted catalog before settling it: the composed type is the shipped type that layers and forks settle over, the type the release records as base, and the catalog the release revision digests. So a contributed section arriving, changing or leaving reads as a shipped change to the receiving library, `current()` sees it, and a project append stays a layer over it.
 - Catalog membership is unchanged: a catalog stays installed while its `#catalog` node stands, whether or not `graph.catalogs` still names it. A section leaves at the installation after its catalog's node is deleted, which every graph opening and server start runs.
-- A copy is judged against its installed base before the current shipped text's prefix (`settle`, `settleText`): a copy equal to its base takes the shipped text, a tail after its base becomes its `project` layer. Otherwise a contributed section that leaves would read as the project's own appended part.
+- An unlayered copy equal to its installed base or to the shipped text takes the shipped text; one extending either keeps as its `project` layer only what follows the longer of the two (`settle`, `settleText`). So neither a section that left nor one newly shipped is read as the project's own part.
+- A catalog node's own `profile` survives installation, which rewrites the node's release.
 - `layerWrite.checkedText` compares a rewritten `#tag` body with the composed shipped type of the project's installed catalogs, so an appended part becomes a `project` layer over the composed text.
 - `tagsOfCatalogs` returns composed tags over the requires closure, so the shipped vocabulary reads what an installation writes.
 - `graph.catalogs` keeps its values; its fallback for new projects is `core`, `work`, `software-development` — a new project reads exactly what one reads today. `brand`-like projects on `["core"]` gain `#rule`.
@@ -41,7 +42,8 @@ A project without code gets law and the work types without carrying code tags or
 
 Every graph holding `software-development` exports `rule`, `task`, `spec`, `idea`, `research` is re-pointed once, before installation, the way `software-development-names` moved `#reflection` and `#view` to `core`:
 - declarations of those exports take `identity.shipped` `core/rule` and `work/<export>`; every stored permanent id and field id (`shipped:software-development/task#status`), in any block's tags or fields — saved queries, profiles, layers, forks, extends, ref fields — and in `block_tag.type_id`, is re-pointed;
-- their names leave the `software-development` catalog's members and their bases leave its release; `#rule`'s join `core`'s, the work types' join a `work` `#catalog` node the step creates with an empty guidance base, so the installer finds each copy's base, takes an unchanged copy to the new text, keeps an appended part as its layer, and keeps a rewritten copy with a migration-conflict finding as today.
+- references are re-pointed only where the declared grammar holds a type id — declarations, catalog releases and profiles, and carrier fields of a document schema (saved queries, layers, forks) — so an ordinary value spelling an old id stays as written;
+- their names leave the `software-development` catalog's members and their bases leave its release; `#rule`'s join `core`'s, the work types' join a `work` `#catalog` node the step creates with an empty guidance base (a standing receiver without a release gains members only, its base staying unknown), so the installer finds each copy's base, takes an unchanged copy to the new text, keeps an appended part as its layer, and keeps a rewritten copy with a migration-conflict finding as today.
 Statuses, holders, enforcement documents, debt, escapes, edges and history stay on the blocks untouched: the law projection is keyed by the type key `rule`, debt by the rule block, and work and law are found by contract, never by library.
 
 ## Owners
