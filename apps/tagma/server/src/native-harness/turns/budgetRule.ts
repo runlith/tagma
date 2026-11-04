@@ -19,7 +19,7 @@ type Gate = {
   reserved: number;
   guided: boolean;
   told: boolean;
-  denied: boolean;
+  denied: string | null;
   closeAsked: boolean;
 };
 
@@ -70,7 +70,7 @@ function budgetRule(): AgentRule<ThreadContext> {
           reserved: 0,
           guided: false,
           told: false,
-          denied: false,
+          denied: null,
           closeAsked: false,
         }));
         const now = yield* Clock.currentTimeMillis;
@@ -84,7 +84,7 @@ function budgetRule(): AgentRule<ThreadContext> {
             gate.premiumAbove = ctx.contextEstimate.premiumAbove;
           }
           const limits = limitsOf(budget, gate);
-          const spent = gate.denied ? 'prompt' : spentOf(limits, gate, steps, now);
+          const spent = gate.denied ?? spentOf(limits, gate, steps, now);
           if (ctx.run.called(ANSWER_TOOL)) {
             return spent === null ? null : ({ type: 'restrict', tools: [] } satisfies AgentDirective);
           }
@@ -112,13 +112,13 @@ function budgetRule(): AgentRule<ThreadContext> {
           const own = estimateThreadTokens(ctx.tool.input);
           const limits = limitsOf(budget, gate);
           gate.reserved += own;
-          const spent = gate.denied ? 'prompt' : spentOf(limits, gate, steps, now);
+          const spent = gate.denied ?? spentOf(limits, gate, steps, now);
           if (spent === null) {
             gate.reserved += RESULT_RESERVE;
             return null;
           }
           gate.reserved -= own;
-          gate.denied = true;
+          gate.denied = spent;
           return {
             type: 'deny',
             reason: `The ${spent} budget is spent, so this call was not run. Answer with what you have.`,
