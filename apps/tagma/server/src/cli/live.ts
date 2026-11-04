@@ -2,7 +2,7 @@ import { Cause, Effect, Exit, Layer } from 'effect';
 import { type Rpc, RpcClient, type RpcClientError, type RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { CurrentInvocation, type Invocation } from '../platform/cli/verb.js';
-import { liveSerialization } from '../platform/contract/wire/live.js';
+import { liveProtocol } from '../platform/contract/wire/live.js';
 
 export type LiveWire<Rpcs extends Rpc.Any> = {
   readonly group: RpcGroup.RpcGroup<Rpcs>;
@@ -14,10 +14,8 @@ export type LiveWire<Rpcs extends Rpc.Any> = {
 function wire<Rpcs extends Rpc.Any>(at: Invocation, live: LiveWire<Rpcs>): Layer.Layer<RpcClient.Protocol> {
   const url = new URL(live.path, live.baseUrl(at));
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  return RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(url.toString())),
-    Layer.provide([
-      liveSerialization,
+  return liveProtocol(url.toString()).pipe(
+    Layer.provide(
       Layer.succeed(
         Socket.WebSocketConstructor,
         (url, protocols) =>
@@ -26,7 +24,7 @@ function wire<Rpcs extends Rpc.Any>(at: Invocation, live: LiveWire<Rpcs>): Layer
             headers: live.headers(at),
           }),
       ),
-    ]),
+    ),
   );
 }
 

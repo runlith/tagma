@@ -14,7 +14,7 @@ import { INSTALLATION_OPERATIONS } from '../../installation/contract/wire/operat
 import { healthSchema } from '../../http/contract/wire/health.js';
 import { RESTART_RECORD, restartRecordSchema, type RestartRecord } from '../../installation/contract/wire/restart.js';
 import { machineStateSchema } from '../../installation/contract/wire/machine.js';
-import { liveSerialization, RESTARTING_CLOSE } from '../../platform/contract/wire/live.js';
+import { liveProtocol, RESTARTING_CLOSE } from '../../platform/contract/wire/live.js';
 import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
 import { LiveRpc } from './composed.js';
 import { rolloutReadSchema, type RolloutRead } from '../../threads/contract/service/rolloutReads.js';
@@ -250,11 +250,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
         );
       return socket;
     });
-    const protocol = RpcClient.layerProtocolSocket().pipe(
-      Layer.provide(Socket.layerWebSocket(`${origin.replace('http:', 'ws:')}${TAGMA_SOCKET_PATH}`)),
-      Layer.provide(liveSerialization),
-      Layer.provide(constructor),
-    );
+    const protocol = liveProtocol(`${origin.replace('http:', 'ws:')}${TAGMA_SOCKET_PATH}`).pipe(Layer.provide(constructor));
     return Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(RpcClient.make(LiveRpc), context));
   };
   const reads = Effect.fn('restart.reads')(function* (pid: number) {

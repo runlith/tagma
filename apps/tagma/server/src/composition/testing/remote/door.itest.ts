@@ -9,7 +9,7 @@ import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { RpcClient } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { ASSEMBLY, LiveRpc } from '../composed.js';
-import { liveSerialization } from '../../../platform/contract/wire/live.js';
+import { liveProtocol } from '../../../platform/contract/wire/live.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { Connections } from '../../../socket/connections.js';
@@ -256,9 +256,7 @@ const reached = Effect.fnUntraced(function* (state: string) {
 
 const websocketProtocol = Effect.fnUntraced(function* (headers: Record<string, string>) {
   const { port } = yield* Remote;
-  return RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`)),
-    Layer.provide(liveSerialization),
+  return liveProtocol(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`).pipe(
     Layer.provide(Layer.succeed(Socket.WebSocketConstructor, (url) => new WebSocket(url, { headers }))),
   );
 });

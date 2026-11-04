@@ -11,7 +11,7 @@ import { BlockNames } from '../../../graph/contract/service/acts.js';
 import { Blocks } from '../../../graph/contract/service/blocks.js';
 import { ProjectLifecycle } from '../../../graph/contract/service/serving.js';
 import { GRANT_HEADER, GRANT_VARIABLE } from '../../../platform/contract/service/credentials.js';
-import { liveSerialization } from '../../../platform/contract/wire/live.js';
+import { liveProtocol } from '../../../platform/contract/wire/live.js';
 import { grantEnvironment } from '../../../platform/testing/grants.js';
 import { testSessionIdentity } from '../../../platform/testing/identity.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
@@ -64,18 +64,16 @@ const makeWorld = Effect.gen(function* () {
   const { runtime } = world;
   const connected = Layer.unwrap(
     Effect.map(HttpServer.HttpServer, (server) =>
-      Socket.layerWebSocket(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
+      liveProtocol(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
     ),
   );
-  const all = RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(connected),
+  const all = connected.pipe(
     Layer.provideMerge(
       HttpRouter.serve(liveDoorLayer(runtime, data), { disableListenLog: true, disableLogger: true }).pipe(
         Layer.provide(websocketHttpTracing),
       ),
     ),
     Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
-    Layer.provide(liveSerialization),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
     Layer.provide(Layer.succeed(Tracer.Tracer)(tracer)),
   );
@@ -113,9 +111,7 @@ const addBlock = Effect.fnUntraced(function* (input: Parameters<Context.Service.
 
 const signed = Effect.fnUntraced(function* <A, E>(threadId: string, work: (caller: LiveClient) => Effect.Effect<A, E>) {
   const { port } = yield* World;
-  const protocol = RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`)),
-    Layer.provide(liveSerialization),
+  const protocol = liveProtocol(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`).pipe(
     Layer.provide(
       Layer.succeed(
         Socket.WebSocketConstructor,

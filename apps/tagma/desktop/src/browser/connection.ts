@@ -9,9 +9,9 @@ import {
 import type { DomainBlock } from '@tagma/server/browser/contract/wire/domains';
 import type { HostEvent } from '@tagma/server/browser/contract/wire/host';
 import type { WindowDeclaration } from '@tagma/server/executions/contract/wire/load';
-import { liveSerialization, rpcOf } from '@tagma/server/platform/contract/wire/live';
+import { liveProtocol, rpcOf } from '@tagma/server/platform/contract/wire/live';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
-import { Data, Deferred, Duration, Effect, Layer, Stream } from 'effect';
+import { Data, Deferred, Effect, Layer, Stream } from 'effect';
 import { RpcClient, RpcGroup } from 'effect/rpc';
 import * as Socket from 'effect/socket/Socket';
 
@@ -115,10 +115,7 @@ const generation = (served: Served) =>
   Effect.scoped(
     Effect.gen(function* () {
       const protocol = yield* Layer.build(
-        RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
-          Layer.provide(Socket.layerWebSocket(socketUrl(served.surface, TAGMA_SOCKET_PATH).toString(), { openTimeout: Duration.infinity })),
-          Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
-        ),
+        liveProtocol(socketUrl(served.surface, TAGMA_SOCKET_PATH).toString()).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
       );
       const client = yield* Effect.provide(RpcClient.make(GROUP), protocol);
       const lost = yield* Deferred.make<void, ReportsClosed>();

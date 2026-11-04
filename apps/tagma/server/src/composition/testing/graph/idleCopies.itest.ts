@@ -30,7 +30,7 @@ import { catalogWriter } from '../../../graph/vocabulary/install.js';
 import { frozenBuildsLayer } from '../../../installation/testing/doubles.js';
 import { signedBy } from '../../../invocation/testing/call.js';
 import { GraphStore } from '../../../platform/contract/service/store.js';
-import { liveSerialization } from '../../../platform/contract/wire/live.js';
+import { liveProtocol } from '../../../platform/contract/wire/live.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { FixtureScope } from '../../../platform/testing/scope.js';
 import { projectIdentificationLayer } from '../../../projects/identity.js';
@@ -119,10 +119,7 @@ const doors = Effect.fnUntraced(function* (runtime: ServerRuntime, data: string)
   );
   const url = new URL(TAGMA_SOCKET_PATH, HttpServer.formatAddress(Context.get(server, HttpServer.HttpServer).address));
   url.protocol = 'ws:';
-  const protocol = RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(url.href)),
-    Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
-  );
+  const protocol = liveProtocol(url.href).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
   const client = yield* Effect.provide(RpcClient.make(LiveRpc), yield* Layer.build(protocol));
   const op = (id: string, body: unknown, projectId: number) =>
     requestEffect(

@@ -3,7 +3,7 @@ import { RpcClient, RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { INPUT_FEED, SCREENCAST_FEED } from '../src/browser/contract/wire/feeds.ts';
 import { PageId } from '../src/browser/contract/wire/ids.ts';
-import { liveSerialization, rpcOf } from '../src/platform/contract/wire/live.ts';
+import { liveProtocol, rpcOf } from '../src/platform/contract/wire/live.ts';
 import { TAGMA_SOCKET_PATH } from '../src/socket/rpc.ts';
 
 const [
@@ -145,10 +145,7 @@ const protocolAt = (port: string) => {
   const url = new URL(TAGMA_SOCKET_PATH, base);
   url.protocol = 'ws:';
   url.port = port;
-  return RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(url.href)),
-    Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
-  );
+  return liveProtocol(url.href).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
 };
 
 const watcher = (id: string, port: string, counted: { frames: number; bytes: number }) =>

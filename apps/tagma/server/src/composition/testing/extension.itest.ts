@@ -19,7 +19,7 @@ import { listened, named } from '../../speech/listening/track.js';
 import { HttpRouter, HttpServer, HttpServerResponse } from 'effect/http';
 import { RpcClient, RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
-import { liveSerialization, rpcOf } from '../../platform/contract/wire/live.js';
+import { liveProtocol, rpcOf } from '../../platform/contract/wire/live.js';
 import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
 import { liveDoorLayer } from './socketDoor.js';
 import { endHosts } from '../../executions/testing/doubles.js';
@@ -393,17 +393,15 @@ const root = Layer.effect(
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
     const assembly = yield* Effect.promise(() => assemble(extended));
     const { runtime, request, origin } = yield* served(home, assembly);
-    const socket = Layer.unwrap(
+    const connected = Layer.unwrap(
       Effect.map(HttpServer.HttpServer, (server) =>
-        Socket.layerWebSocket(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
+        liveProtocol(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
       ),
     );
     const protocol = yield* Layer.build(
-      RpcClient.layerProtocolSocket().pipe(
-        Layer.provide(socket),
+      connected.pipe(
         Layer.provideMerge(HttpRouter.serve(liveDoorLayer(runtime, home, assembly), { disableListenLog: true, disableLogger: true })),
         Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
-        Layer.provide(liveSerialization),
         Layer.provide(Socket.layerWebSocketConstructorGlobal),
       ),
     );

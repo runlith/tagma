@@ -1,5 +1,6 @@
-import { Schema } from 'effect';
-import { Rpc, RpcGroup, type RpcSchema, RpcSerialization } from 'effect/rpc';
+import { Duration, Layer, Schema } from 'effect';
+import { Rpc, RpcClient, RpcGroup, type RpcSchema, RpcSerialization } from 'effect/rpc';
+import { Socket } from 'effect/socket';
 import type { FeedOf, WireModule } from './manifest.js';
 import type { FeedDeclaration } from './operation.js';
 import { refusalSchema } from './refusal.js';
@@ -16,6 +17,12 @@ export type RpcOfFeed<F> = F extends FeedDeclaration
   : never;
 
 export const liveSerialization = RpcSerialization.layerJson;
+
+export const liveProtocol = (url: string): Layer.Layer<RpcClient.Protocol, never, Socket.WebSocketConstructor> =>
+  RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
+    Layer.provide(Socket.layerWebSocket(url, { openTimeout: Duration.infinity })),
+    Layer.provide(liveSerialization),
+  );
 
 export const RESTARTING_CLOSE = 4301;
 

@@ -3,7 +3,7 @@ import { Data, Deferred, Effect, FiberSet, Layer, Stream } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { RpcClient } from 'effect/rpc';
 import { Socket } from 'effect/socket';
-import { liveSerialization } from '../../../platform/contract/wire/live.js';
+import { liveProtocol } from '../../../platform/contract/wire/live.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { LiveRpc } from '../composed.js';
@@ -22,18 +22,16 @@ export const loadFeeds = Effect.fn('loadFeeds')(function* (
   if (threadIds.length === 0) return yield* new FeedTargetsMissing({ message: 'the load feed needs at least one thread' });
   const connected = Layer.unwrap(
     Effect.map(HttpServer.HttpServer, (server) =>
-      Socket.layerWebSocket(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
+      liveProtocol(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
     ),
   );
-  const layers = RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(connected),
+  const layers = connected.pipe(
     Layer.provideMerge(
       HttpRouter.serve(liveDoorLayer(runtime, data), { disableListenLog: true, disableLogger: true }).pipe(
         Layer.provide(websocketHttpTracing),
       ),
     ),
     Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
-    Layer.provide(liveSerialization),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
   );
   const context = yield* Layer.build(layers);

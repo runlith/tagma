@@ -1,5 +1,5 @@
 import type { graphChangeSchema, graphFrameSchema } from '@tagma/server/graph/contract/wire/feed';
-import { liveSerialization } from '@tagma/server/platform/contract/wire/live';
+import { liveProtocol } from '@tagma/server/platform/contract/wire/live';
 import type { Words } from '@tagma/server/platform/contract/wire/refusal';
 import type { Right } from '@tagma/server/platform/contract/wire/right';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
@@ -13,7 +13,7 @@ import { Platform, type PlatformSocket } from '@runlith/layer/Platform';
 import type { Point } from '@runlith/layer/Point';
 import { Scope as AppScope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { Cause, Context, Data, Deferred, Duration, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
+import { Cause, Context, Data, Deferred, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
 import { RpcClient, RpcClientError } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { AccessHint, type AccessHintShape, hinted } from './access.js';
@@ -542,9 +542,8 @@ export class LiveConnection {
       );
       return live;
     });
-    return RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
-      Layer.provide(Socket.layerWebSocket(this.origin.socket(TAGMA_SOCKET_PATH), { openTimeout: Duration.infinity })),
-      Layer.provide([liveSerialization, socket]),
+    return liveProtocol(this.origin.socket(TAGMA_SOCKET_PATH)).pipe(
+      Layer.provide(socket),
       Layer.provide(
         Layer.succeed(RpcClient.ConnectionHooks)({
           onConnect: Effect.sync(() => {

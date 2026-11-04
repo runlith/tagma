@@ -41,7 +41,7 @@ The `sql-parent-span` hunk is generated from Bun's pristine 4.0.1 package. Its t
 
 Read `Statement.SpanPropagationEnabled` and `Statement.withConnectionSpan` in the candidate release and run the trap without this hunk. Remove the patch and its manifest when upstream parents execution on the SQL span by default and the trap passes; otherwise regenerate against the new pristine package.
 
-Read `makeProtocolSocket` and its pinger in the candidate release and run the `rpc-socket-heartbeat` trap without the hunk; drop the hunk when upstream lets a caller keep pinging without a pong deadline, moving `connection.ts` and `Live.ts` to that option.
+Read `makeProtocolSocket` and its pinger in the candidate release and run the `rpc-socket-heartbeat` trap without the hunk; drop the hunk when upstream lets a caller keep pinging without a pong deadline, moving `liveProtocol` (`apps/tagma/server/src/platform/contract/wire/live.ts`, which every live socket client builds on) to that option.
 
 ---
 

@@ -8,7 +8,7 @@ import { HttpRouter, HttpServer } from 'effect/http';
 import { Rpc, RpcClient, RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { SocketOperations } from '../invocation/contract/service/socketOperations.js';
-import { liveSerialization } from '../platform/contract/wire/live.js';
+import { liveProtocol } from '../platform/contract/wire/live.js';
 import { liveLayer, type LiveHandlers } from './live.js';
 import { CallLog, TAGMA_SOCKET_PATH } from './rpc.js';
 
@@ -34,10 +34,7 @@ const served = Effect.fnUntraced(function* () {
   const address = Context.get(yield* Layer.build(server), HttpServer.HttpServer).address;
   const url = new URL(TAGMA_SOCKET_PATH, HttpServer.formatAddress(address));
   url.protocol = 'ws:';
-  const protocol = RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(Socket.layerWebSocket(url.href)),
-    Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
-  );
+  const protocol = liveProtocol(url.href).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
   const client = yield* Effect.provide(RpcClient.make(group), yield* Layer.build(protocol));
   const defects = () => recording.activities().flatMap((activity) => activity.notes.filter((note) => note.type === 'defect'));
   return { client, defects };
