@@ -30,7 +30,8 @@
     }
   },
   "scripts": {
-    "test:e2e": "testbed e2e",
+    "test:e2e": "testbed e2e ./src/guard.e2e.ts ./src/touch.e2e.ts ./src/electron.e2e.ts",
+    "test:e2e:ios": "testbed e2e --parallel=1 ./src/lanes/ios.e2e.ts ./src/lanes/ios-contract.e2e.ts",
     "test:integration": "testbed itest --no-isolate",
     "typecheck": "runlith-typecheck"
   },

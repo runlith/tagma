@@ -1,0 +1,34 @@
+name: e2e
+run-name: e2e ${{ inputs.package || 'all packages' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Workspace directory to run alone; empty runs every package
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    uses: ./.github/workflows/tests.yml
+    with:
+      name: e2e-linux
+      script: test:e2e
+      runner: ubuntu-latest
+      shards: 4
+      package: ${{ inputs.package }}
+      lanes: chromium,webkit,electron
+
+  ios:
+    uses: ./.github/workflows/tests.yml
+    with:
+      name: e2e-ios
+      script: test:e2e:ios
+      runner: macos-latest
+      shards: 1
+      package: ${{ inputs.package }}
+      lanes: ios

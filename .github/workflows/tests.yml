@@ -23,6 +23,11 @@ on:
         required: false
         default: ''
         type: string
+      lanes:
+        description: Real engines needed by an e2e lane; empty needs no e2e setup
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -61,20 +66,44 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - if: inputs.script == 'test:integration'
+      - if: inputs.script == 'test:integration' || inputs.script == 'test:e2e'
         uses: actions/cache@v6
         with:
           path: packages/execution-host/native/target
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/execution-host/native/Cargo.lock', 'packages/execution-host/native/**/Cargo.toml', 'packages/execution-host/native/**/*.rs') }}
           restore-keys: native-${{ runner.os }}-${{ runner.arch }}-
-      - if: inputs.script == 'test:integration'
+      - if: inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')
         uses: actions/cache@v6
         with:
           path: ~/.cache/runlith/browser-builds
           key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/chrome-for-testing/src/build.ts') }}
-      - if: inputs.script == 'test:integration'
+      - if: inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')
         name: Chrome for Testing for the engine tests
         run: bun apps/tagma/server/scripts/fetch-browser.ts
+      - if: contains(inputs.lanes, 'webkit')
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - if: contains(inputs.lanes, 'webkit')
+        name: WebKit and its system libraries
+        run: bun x --no-install playwright-core install --with-deps webkit
+      - if: contains(inputs.lanes, 'electron')
+        name: Electron
+        run: bun -e "require('electron/install.js')"
+        working-directory: packages/e2e
+      - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
+        name: Virtual display for Electron
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - if: contains(inputs.lanes, 'ios')
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - if: contains(inputs.lanes, 'ios')
+        name: iOS tools and Safari template
+        env:
+          E2E_IOS_RUNTIMES: '26'
+        run: bun packages/e2e/scripts/fetch-ios.ts
       - uses: actions/download-artifact@v8
         with:
           name: timings-${{ inputs.name }}-baseline
@@ -82,6 +111,8 @@ jobs:
       - name: tests
         env:
           PACKAGE: ${{ inputs.package }}
+          LANES: ${{ inputs.lanes }}
+          E2E_IOS_RUNTIMES: '26'
         run: |
           mkdir -p "$RUNNER_TEMP/report"
           if [ "$RUNNER_OS" = macOS ]; then
@@ -90,7 +121,12 @@ jobs:
               sleep 30
             done > "$RUNNER_TEMP/report/machine.log" &
           fi
-          bun run test:all --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/report/report.json"
+          if [ -n "$LANES" ]; then export E2E_LANES="$LANES"; fi
+          display=()
+          if [ "$RUNNER_OS" = Linux ] && [[ ",$LANES," = *,electron,* ]]; then
+            display=(xvfb-run -a)
+          fi
+          "${display[@]}" bun run test:all --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} --report "$RUNNER_TEMP/report/report.json"
       - if: ${{ !cancelled() }}
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"

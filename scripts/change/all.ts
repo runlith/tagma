@@ -56,7 +56,7 @@ let suites = suitesOf(packages, paths, {
   shard,
 })
   .filter((suite) => value('--package') === undefined || (suite.directory || '.') === value('--package'))
-  .filter((suite) => script === undefined || suite.script === script);
+  .filter((suite) => (script === undefined ? !suite.script.startsWith('test:e2e') : suite.script === script));
 if (args.includes('--plan')) {
   console.log(JSON.stringify(suites, null, 2));
   process.exit(0);

@@ -98,7 +98,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "runlith-typecheck",
     "test": "testbed bun test --no-isolate --path-ignore-patterns='e2e/**'",
-    "test:e2e": "bun run build && testbed e2e --headed --parallel=1 e2e/window-behavior.e2e.ts",
+    "test:e2e:desktop": "bun run build && testbed e2e --headed --parallel=1 e2e/window-behavior.e2e.ts",
     "test:smoke:macos-native": "bun run native:install && bun run build && testbed e2e --headed --parallel=1 e2e/macos-native-smoke.e2e.ts",
     "native:build": "bun ./scripts/native-install.mjs",
     "native:install": "bun ./scripts/native-install.mjs",

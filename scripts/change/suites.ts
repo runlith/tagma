@@ -24,7 +24,7 @@ export type SuiteOptions = {
   readonly shard?: string | undefined;
 };
 
-export const SCRIPTS = ['test', 'test:integration', 'test:native'] as const;
+export const SCRIPTS = ['test', 'test:integration', 'test:native', 'test:e2e', 'test:e2e:ios'] as const;
 
 const BUN_TEST = /\bbun(?:\s+--\S+)*\s+test\b|^(?:itest|e2e)\b/;
 const TEST_FILE = /\.[cm]?[jt]sx?'?$/;
