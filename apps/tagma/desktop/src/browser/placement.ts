@@ -134,6 +134,7 @@ export class Placement {
         skipTaskbar: true,
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
       });
+      if (process.platform === 'linux') placed.parking.showInactive();
     } else {
       placed.parking.setContentSize(placed.size.width, placed.size.height);
     }
