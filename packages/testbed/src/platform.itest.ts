@@ -16,6 +16,7 @@ test('platform files are selected before importing them in discovered and explic
   writeFileSync(join(root, `native.${process.platform}.test.ts`), native);
   writeFileSync(join(root, `native.${process.platform}.itest.ts`), native);
   writeFileSync(join(root, `foreign.${other}.test.ts`), 'throw new Error("a foreign platform file was imported");');
+  writeFileSync(join(root, `foreign.${other}.spec.ts`), 'throw new Error("a foreign platform file was imported");');
   writeFileSync(join(root, `foreign.${other}.itest.ts`), 'throw new Error("a foreign platform file was imported");');
   const run = async (args: readonly string[]) => {
     const child = Bun.spawn([process.execPath, CLI, ...args], { cwd: root, env: process.env, stdout: 'pipe', stderr: 'pipe' });

@@ -130,7 +130,7 @@ if (command.length === 0) {
 const vitest = !program && command.some((part) => ['vitest', 'vitest.mjs'].includes(basename(part)));
 const bunTest = !program && basename(command[0]!) === 'bun' && command.find((part, index) => index > 0 && !part.startsWith('-')) === 'test';
 if (bunTest && selected === undefined) {
-  const named = command.filter((part) => /\.(?:test|itest|e2e)\.[cm]?[jt]sx?$/.test(part));
+  const named = command.filter((part) => /\.(?:test|itest|e2e|spec)\.[cm]?[jt]sx?$/.test(part));
   const filters: string[] = [];
   for (let at = command.indexOf('test') + 1; at < command.length; at++) {
     const part = command[at]!;
