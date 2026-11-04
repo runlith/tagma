@@ -29,7 +29,7 @@ export const delegation = settingKey({
   order: 70,
   title: 'Delegation',
   description:
-    "Whether agents may start other agents. A thread's own switch overrides this for that thread and the team it starts; off, spawn_agent refuses, including when it copies history with fork, and a working agent is told at its next step.",
+    "Whether agents may start other agents. A thread's own switch overrides this for that thread and the team it starts; off, spawn_agent refuses every agent the operator did not ask for, including when it copies history with fork, and a working agent is told at its next step.",
   schema: Schema.Boolean,
   fallback: true,
   scopes: ['user'],

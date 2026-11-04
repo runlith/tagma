@@ -249,7 +249,7 @@ export const COLLABORATION_PAIRS = {
         Effect.flatMap(CallerAim, (aim) =>
           collaborating(OPS.spawn_agent, caller, (verbs) =>
             Effect.gen(function* () {
-              const over = (yield* verbs.spawnLimits(input.link === 'root'))[0];
+              const over = (yield* verbs.spawnLimits({ root: input.link === 'root', operatorAsked: input.operatorAsked }))[0];
               if (over !== undefined) return yield* new GateRefusal(over.code, over.fact, PLANE_REFUSALS[over.code]);
               const named = aim?.project ?? input.project;
               const home = named === undefined ? null : yield* verbs.spawnHome(named);

@@ -158,7 +158,7 @@ export function collaborationTools(agents: ThreadPlaneAccess): ToolCatalog {
           agents,
           call.caller,
           Effect.fnUntraced(function* (verbs) {
-            const over = (yield* verbs.spawnLimits(input.link === 'root'))[0];
+            const over = (yield* verbs.spawnLimits({ root: input.link === 'root', operatorAsked: input.operatorAsked }))[0];
             if (over !== undefined)
               return yield* new Tool.ToolFailed({ code: over.code, reason: over.fact, unblock: PLANE_REFUSALS[over.code] });
             const home = input.project === undefined ? null : yield* verbs.spawnHome(input.project);
@@ -195,6 +195,7 @@ export function collaborationTools(agents: ThreadPlaneAccess): ToolCatalog {
                       ...(started.model ?? {}),
                       switches: input.switches,
                       lowered: started.lowered,
+                      operatorAsked: input.operatorAsked,
                     }),
                     told(call, startedText(started)),
                   ),
@@ -468,15 +469,20 @@ function spawnDisplay(
       readonly model?: string;
       readonly reasoning?: string;
     };
+    readonly operatorAsked?: boolean;
   },
 ): ToolDisplay {
+  const facts = [
+    ...(input.operatorAsked === true ? [{ label: 'asked by the operator' }] : []),
+    ...(loweredFacts(catalog, input.lowered, input) ?? []),
+  ];
   return {
     form: 'message',
     title,
     subtitle,
     text: input.task ?? '',
     reference: input.threadId === undefined ? undefined : { kind: 'thread' as const, id: input.threadId, projectId: input.projectId },
-    facts: loweredFacts(catalog, input.lowered, input),
+    facts: facts.length === 0 ? undefined : facts,
     details: [
       ...(input.agentId === undefined ? [] : [{ label: 'agent', value: input.agentId }]),
       ...(input.link === 'root' ? [{ label: 'link', value: 'root' }] : []),

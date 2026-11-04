@@ -527,7 +527,7 @@ The same \`operationKey\` with the same move answers what that move reached; the
       },
     }),
     meaning:
-      "Switch delegation on or off for one thread and the team it starts, or hand it back to what it inherits — its spawn lineage's nearest switch, else the machine's `agent.delegation`. Off, `spawn_agent` refuses there; agents already running are untouched.",
+      "Switch delegation on or off for one thread and the team it starts, or hand it back to what it inherits — its spawn lineage's nearest switch, else the machine's `agent.delegation`. Off, `spawn_agent` refuses there every agent the operator did not ask for (`operatorAsked`); agents already running are untouched.",
     grammar:
       "Act on the operator's word alone, never on your own reading of the work. `delegation: false` switches it off for the thread and every descendant without a switch of its own; `true` switches it on there, depth still bounding; `null` clears the thread's own switch. `threadId` defaults to your own thread; the operator names one. The answer is what the thread now resolves to and where that was decided.",
     input: threadInput({

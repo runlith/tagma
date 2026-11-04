@@ -278,6 +278,9 @@ const PROJECT_OUTCOMES =
 const PLAIN_OUTCOMES =
   'Only on the operator’s word: a native agent taking your every task, interrupt and message as the operator’s own — no envelope, birth note or team — though your tasks’ runs still report to you. Another harness refuses `harness-contract`.';
 
+const OPERATOR_ASKED_OUTCOMES =
+  'Only on the operator’s word — his own request for this agent, or a reviewer the review policy you were told calls for: the agent starts where delegation is off, which stays off for your thread and its team; depth, budget and slots still bind.';
+
 export function plainRaised(plain: boolean | undefined): readonly Raised[] {
   if (plain !== true) return [];
   return [{ condition: PLAIN_CHILD.id, fact: 'the child takes every word you send it for the operator’s own' }];
@@ -353,6 +356,7 @@ export const spawnAgentInput = Schema.Struct({
   project: Schema.optional(Schema.Union([Named, Schema.Int])).annotate({ description: PROJECT_OUTCOMES }),
   worktree: Schema.optional(Named).annotate({ description: WORKTREE_OUTCOMES }),
   plain: Schema.optional(Schema.Boolean).annotate({ description: PLAIN_OUTCOMES }),
+  operatorAsked: Schema.optional(Schema.Boolean).annotate({ description: OPERATOR_ASKED_OUTCOMES }),
   subscribe: Schema.optional(Schema.Struct({ wakes: Schema.optional(ThreadWakes) })).annotate({
     description: 'Subscribe to the agent in the same act, before its first run can end, as subscribe_threads would; `wakes` as there.',
   }),
@@ -392,6 +396,7 @@ export function spawnAsk(input: SpawnInput, requestId: string, asked: readonly R
     project: input.project,
     worktree: input.worktree,
     plain: input.plain,
+    operatorAsked: input.operatorAsked,
     subscribe: input.subscribe,
   };
 }

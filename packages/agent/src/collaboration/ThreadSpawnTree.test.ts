@@ -425,9 +425,20 @@ describe('ThreadSpawnTree delegation and depth', () => {
         );
       expect(yield* code(false)).toBe('delegation-off');
       expect(yield* code(true)).toBe('delegation-off');
-      expect(yield* verbs.spawnLimits(true)).toMatchObject([{ code: 'delegation-off' }]);
+      expect(yield* verbs.spawnLimits({ root: true })).toMatchObject([{ code: 'delegation-off' }]);
       yield* made.tree.spawn({ parent: made.records.get('child')!, requestId: 'step-1', agentId: 'code', task: 'the plan' });
       expect(made.created.map((birth) => birth.request.key)).toEqual(['step-1']);
+    }),
+  );
+  it.effect(
+    'a spawn the operator asked for passes delegation-off while depth still binds it',
+    Effect.fnUntraced(function* () {
+      const made = yield* world({ delegation: { allowed: false, setAt: 'root' }, floorsLeft: 0 });
+      const verbs = yield* planeOf(made, 'child');
+      const child = yield* Effect.flip(verbs.spawn({ requestId: 'call-child', agentId: 'code', task: 'review it', operatorAsked: true }));
+      expect(planeRefusalOf(child)?.code).toBe('depth-exhausted');
+      yield* verbs.spawn({ requestId: 'call-root', agentId: 'code', task: 'review it', root: true, operatorAsked: true });
+      expect(made.created.map((birth) => birth.request.key)).toEqual(['call-root']);
     }),
   );
   it.effect(

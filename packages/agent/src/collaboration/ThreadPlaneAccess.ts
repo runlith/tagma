@@ -115,6 +115,7 @@ export type ThreadSpawnAsk = {
   readonly worktree?: string;
   readonly asked?: readonly string[];
   readonly plain?: boolean;
+  readonly operatorAsked?: boolean;
   readonly subscribe?: SpawnSubscription;
 };
 
@@ -130,7 +131,7 @@ export type ThreadPlaneApprovals = {
 
 export type ThreadVerbs = {
   readonly worktreeAsking: Effect.Effect<SpawnWorktrees | null, ThreadBorderFailed>;
-  spawnLimits(root: boolean): Effect.Effect<readonly SpawnLimit[], ThreadPlaneFailure>;
+  spawnLimits(ask: Pick<ThreadSpawnAsk, 'root' | 'operatorAsked'>): Effect.Effect<readonly SpawnLimit[], ThreadPlaneFailure>;
   spawnHome(project: string | number): Effect.Effect<SpawnHome, ThreadPlaneFailure>;
   crossing(input: { to: string; within: Within }): Effect.Effect<readonly Raised[], ThreadPlaneFailure>;
   spawn(input: ThreadSpawnAsk): Effect.Effect<ThreadSpawnResult, ThreadPlaneFailure>;

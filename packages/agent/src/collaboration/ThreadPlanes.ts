@@ -64,20 +64,20 @@ export const threadPlanesLayer = Layer.effect(
       const envelopes = () => messaging.access(sender, runId);
       return {
         worktreeAsking: collaboration.placement === undefined ? Effect.succeed(null) : collaboration.placement.asking(thread),
-        spawnLimits: (root) => tree.limits(thread, true, root),
+        spawnLimits: ({ root, operatorAsked }) => tree.limits(thread, operatorAsked !== true, root === true),
         spawnHome: (project) =>
           collaboration.placement === undefined
             ? Effect.fail(planeRefused('home-unplaced', 'this host places no child in another project.'))
             : collaboration.placement.home(thread, project),
         crossing: ({ to, within }) => acting.crossing(thread, to, within),
-        spawn: ({ step, ...input }) => {
+        spawn: ({ step, operatorAsked, ...input }) => {
           const bornOf = issuedBy(runId, step);
           return tree.spawn({
             ...input,
             parent: thread,
             runId: runId,
             bornOf: bornOf ?? undefined,
-            delegation: true,
+            delegation: operatorAsked !== true,
           });
         },
         approvals: {

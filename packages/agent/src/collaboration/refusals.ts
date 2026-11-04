@@ -4,6 +4,7 @@ import { TRANSPORT_CANNOT_WAYS } from '../thread/record';
 export const PLANE_REFUSALS = {
   'delegation-off': [
     'do the work in your own thread',
+    'the operator asked for this agent in his own words, or the review policy you were told calls for this reviewer: start it with spawn_agent and `operatorAsked: true`',
     'the operator switches it back on: /delegation on the thread, or agent.delegation for the machine',
   ],
   'depth-exhausted': ['do the work in your own thread', 'the operator raises agent.subAgentDepth for this project'],
