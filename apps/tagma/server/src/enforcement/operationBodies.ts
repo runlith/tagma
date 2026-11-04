@@ -450,7 +450,8 @@ export const ENFORCEMENT_PAIRS = {
                 })
               : Effect.gen(function* () {
                   const place = yield* landingPlace(projectId, caller, (yield* ServingGit).run);
-                  yield* (yield* Remeasure).ready(projectId, place.root);
+                  const ready = yield* Effect.result((yield* Remeasure).ready(projectId, place.root));
+                  const unjudged = Result.isFailure(ready) ? [{ gate: 'unread' as const, cause: ready.failure.reason }] : [];
                   const change = { paths: input.paths };
                   const { ran, formed } = yield* overChange(projectId, caller, place, change, (subject) =>
                     Effect.gen(function* () {
@@ -466,19 +467,26 @@ export const ENFORCEMENT_PAIRS = {
                       };
                     }),
                   );
-                  if (ran !== null) return { ...ran, formed };
+                  if (ran !== null)
+                    return { ...ran, formed, checking: { ...ran.checking, unjudged: [...ran.checking.unjudged, ...unjudged] } };
                   const head = yield* headOf(place.root);
                   const targets = yield* checkTargets({ ...ask, root: place.root }, versionAt(ask, place.root, head));
                   if (ask.inspection !== undefined) {
                     const found = yield* checkHead(ask, targets, { root: place.root, head });
-                    return { head, built: head, paths: [] as readonly string[], formed, checking: { ...found, refuses: false } };
+                    return {
+                      head,
+                      built: head,
+                      paths: [] as readonly string[],
+                      formed,
+                      checking: { ...found, unjudged: [...found.unjudged, ...unjudged], refuses: false },
+                    };
                   }
                   const nothing: Checked = {
                     head,
                     counts: new Map(),
                     violations: [],
                     fingerprints: [],
-                    unjudged: [],
+                    unjudged,
                     rules: [],
                     bodies: {},
                     refuses: false,

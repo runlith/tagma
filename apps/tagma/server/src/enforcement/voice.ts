@@ -11,6 +11,7 @@ import {
   type KeyReading,
   type LandingUnjudged,
   reachSaid,
+  unjudgedSaid,
 } from './contract/wire/enforcement.js';
 import { findingLines } from './contract/wire/findings.js';
 import { authorNote } from './contract/wire/refusals.js';
@@ -32,14 +33,7 @@ type Answered<T> = ({ readonly status: 'ok' } & T) | Refused;
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 const unjudgedLines = (unjudged: readonly LandingUnjudged[] | EnforcementPlan['unjudged']): string[] =>
-  unjudged.length === 0
-    ? []
-    : [
-        `unjudged (${unjudged.length}):`,
-        ...unjudged.map((one) =>
-          'gate' in one ? `  ${one.cause}` : `  ${'rule' in one ? `${one.rule} ` : ''}${one.file}:${one.line} ${one.specifier}`,
-        ),
-      ];
+  unjudged.length === 0 ? [] : [`unjudged (${unjudged.length}):`, ...unjudged.map((one) => `  ${unjudgedSaid(one)}`)];
 
 const entrySaid = (entry: NonNullable<MapModule['entries']>[number]): string =>
   `${entry.at}${entry.for === undefined ? '' : ` for [${entry.for.join(', ')}]`}${entry.role === undefined ? '' : ` as ${entry.role}`}`;
@@ -167,7 +161,7 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
       ? []
       : [
           answer.refuses
-            ? 'submit_work would refuse this change: a rule at gate triggered before it finds a new crossing in the tree it would land, or cannot run'
+            ? 'submit_work would refuse this change: a rule at gate triggered before it finds a new crossing in the tree it would land'
             : 'submit_work would land this change as far as its rules go',
         ]),
     ...(rules.length === 0 ? [] : [`rules (${rules.length}):`, ...rules]),

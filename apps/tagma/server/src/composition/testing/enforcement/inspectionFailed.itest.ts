@@ -79,82 +79,86 @@ const remembering = <A, E>(
     ),
   );
 layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (it) => {
-  it.effect('a worker that cannot answer refuses inspection-failed at gate and lands at watch, named in watched', () =>
+  it.effect('an inspection failure lands unjudged while a real gated crossing still refuses', () =>
     withLanding((gate) =>
       Effect.fnUntraced(function* () {
         const dead = yield* deadFaces(gate);
         yield* gate.wrote(MINE, 'src/core/boot.ts', "import { model } from './model';\nexport const boot = model;\n");
-        const refusal = yield* gate.refused(MINE, { faces: dead });
-        expect(refusal.code).toBe('inspection-failed');
-        expect(refusal.reason).toContain(gate.rule);
-        yield* gate.enforcedAt('watch');
         const receipt = gate.landed(yield* gate.submit(MINE, { faces: dead }));
-        expect(receipt.watched).toEqual([{ rule: gate.rule, cause: 'worker', failed: expect.any(String) }]);
+        expect(receipt.unjudged).toEqual([{ rule: gate.rule, cause: 'worker', failed: expect.any(String) }]);
+        expect(yield* gate.sh(['rev-parse', 'HEAD'])).toBe(receipt.commit);
+        const history = yield* gate.demo.graph.journal.events({ projectId: gate.demo.projectId, ops: ['unjudged'], limit: 10 });
+        expect(history.map((entry) => JSON.parse(entry.payload))).toEqual([
+          expect.objectContaining({ op: 'submit_work', cause: 'worker', failed: expect.any(String) }),
+        ]);
+        yield* gate.wrote(MINE, 'src/core/boot.ts', "import { main } from '../app/main';\nexport const boot = main;\n");
+        expect((yield* gate.refused(MINE)).code).toBe('rule-violated');
       })(),
     ),
   );
 
-  it.effect(
-    'enforce_rule keeps whether the project gates: a graph that does not open refuses after a gate and lands after it is switched off',
-    () =>
-      withLanding((gate) =>
-        Effect.fnUntraced(function* () {
-          const kept = join(yield* gate.demo.fixture.directory('enforced'), 'gated.json');
-          yield* remembering(
-            gate,
-            kept,
-            Effect.flatMap(based({ blockId: gate.rule, strictness: 'gate' }), (full) => perform(bodies.enforce_rule, full, operator)),
-          );
-          yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
-          expect((yield* gate.refused(MINE, { checks: unopened(kept) })).code).toBe('inspection-failed');
-          yield* remembering(
-            gate,
-            kept,
-            Effect.flatMap(based({ blockId: gate.rule, strictness: 'off' }), (full) => perform(bodies.enforce_rule, full, operator)),
-          );
-          expect(gate.landed(yield* gate.submit(MINE, { checks: unopened(kept) })).unjudged).toEqual([
-            { gate: 'unread', cause: expect.any(String) },
-          ]);
-        })(),
-      ),
+  it.effect('an unreadable graph lands unjudged even when enforce_rule last recorded a gate', () =>
+    withLanding((gate) =>
+      Effect.fnUntraced(function* () {
+        const kept = join(yield* gate.demo.fixture.directory('enforced'), 'gated.json');
+        yield* remembering(
+          gate,
+          kept,
+          Effect.flatMap(based({ blockId: gate.rule, strictness: 'gate' }), (full) => perform(bodies.enforce_rule, full, operator)),
+        );
+        yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
+        expect(gate.landed(yield* gate.submit(MINE, { checks: unopened(kept) })).unjudged).toEqual([
+          { gate: 'unread', cause: expect.any(String) },
+        ]);
+        yield* gate.wrote(MINE, 'README.md', 'another change outside the rule’s reach\n');
+        yield* remembering(
+          gate,
+          kept,
+          Effect.flatMap(based({ blockId: gate.rule, strictness: 'off' }), (full) => perform(bodies.enforce_rule, full, operator)),
+        );
+        expect(gate.landed(yield* gate.submit(MINE, { checks: unopened(kept) })).unjudged).toEqual([
+          { gate: 'unread', cause: expect.any(String) },
+        ]);
+      })(),
+    ),
   );
-  it.effect(
-    'a graph that does not open, or a law-bearing declaration that stops reading, refuses the landing of a project last read gating across a restart, and lets one never read gating land unjudged naming its cause',
-    () =>
-      withLanding((gate) =>
-        Effect.fnUntraced(function* () {
-          const gated = join(yield* gate.demo.fixture.directory('vocabulary'), 'gated.json');
-          const read = judged(() => Effect.succeed(withLanes(gate.demo.context, gate.workers)), gated);
-          yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
-          gate.landed(yield* gate.submit(MINE, { checks: read }));
-          yield* gate.wrote(MINE, 'NOTES.md', 'outside the rule’s reach too\n');
-          const head = yield* gate.sh(['rev-parse', 'HEAD']);
-          expect((yield* gate.refused(MINE, { checks: unopened(gated) })).code).toBe('inspection-failed');
-          expect(yield* gate.sh(['rev-parse', 'HEAD'])).toBe(head);
-          const { db } = gate.demo.graph.graphStore;
-          const declared = (yield* db.select().from(block).where(eq(block.projectId, gate.demo.projectId))).find(
-            (row) => row.deletedAt === null && row.tags.includes('tag') && row.fields.id === 'rule',
-          );
-          if (declared === undefined) return yield* Effect.die(new Error('the fixture declares no #rule'));
-          yield* db
-            .update(block)
-            .set({ fields: { ...declared.fields, roles: { ...(declared.fields.roles as object), retired: 'enabled' } } })
-            .where(eq(block.id, declared.id));
-          yield* gate.demo.graph.tags.forget(gate.demo.projectId);
-          const name = yield* gate.demo.nameOf(declared.id);
-          const refusal = yield* gate.refused(MINE, { checks: read });
-          expect(refusal.code).toBe('inspection-failed');
-          expect(refusal.reason).toContain(name);
-          const never = join(yield* gate.demo.fixture.directory('never'), 'gated.json');
-          const receipt = gate.landed(
-            yield* gate.submit(MINE, { checks: judged(() => Effect.succeed(withLanes(gate.demo.context, gate.workers)), never) }),
-          );
-          expect(receipt.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining(name) }]);
-          const ungated = join(yield* gate.demo.fixture.directory('ungated'), 'gated.json');
-          yield* gate.wrote(MINE, 'src/core/boot.ts', "import { main } from '../app/main';\nexport const boot = main;\n");
-          const crossing = gate.landed(yield* gate.submit(MINE, { checks: unopened(ungated) }));
-          expect(crossing.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining('no-checkout') }]);
-        })(),
-      ),
+  it.effect('an unreadable graph or law-bearing declaration lands unjudged regardless of remembered gates', () =>
+    withLanding((gate) =>
+      Effect.fnUntraced(function* () {
+        const gated = join(yield* gate.demo.fixture.directory('vocabulary'), 'gated.json');
+        const read = judged(() => Effect.succeed(withLanes(gate.demo.context, gate.workers)), gated);
+        yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
+        gate.landed(yield* gate.submit(MINE, { checks: read }));
+        yield* gate.wrote(MINE, 'NOTES.md', 'outside the rule’s reach too\n');
+        const head = yield* gate.sh(['rev-parse', 'HEAD']);
+        const unread = gate.landed(yield* gate.submit(MINE, { checks: unopened(gated) }));
+        expect(unread.unjudged).toEqual([{ gate: 'unread', cause: expect.any(String) }]);
+        expect(unread.commit).not.toBe(head);
+        const { db } = gate.demo.graph.graphStore;
+        const declared = (yield* db.select().from(block).where(eq(block.projectId, gate.demo.projectId))).find(
+          (row) => row.deletedAt === null && row.tags.includes('tag') && row.fields.id === 'rule',
+        );
+        if (declared === undefined) return yield* Effect.die(new Error('the fixture declares no #rule'));
+        yield* db
+          .update(block)
+          .set({ fields: { ...declared.fields, roles: { ...(declared.fields.roles as object), retired: 'enabled' } } })
+          .where(eq(block.id, declared.id));
+        yield* gate.demo.graph.tags.forget(gate.demo.projectId);
+        const name = yield* gate.demo.nameOf(declared.id);
+        yield* gate.wrote(MINE, 'NOTES.md', 'a change with an unreadable declaration\n');
+        const unreadLaw = gate.landed(yield* gate.submit(MINE, { checks: read }));
+        expect(unreadLaw.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining(name) }]);
+        yield* gate.wrote(MINE, 'NOTES.md', 'a change with no remembered gate\n');
+        const never = join(yield* gate.demo.fixture.directory('never'), 'gated.json');
+        const receipt = gate.landed(
+          yield* gate.submit(MINE, { checks: judged(() => Effect.succeed(withLanes(gate.demo.context, gate.workers)), never) }),
+        );
+        expect(receipt.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining(name) }]);
+        const ungated = join(yield* gate.demo.fixture.directory('ungated'), 'gated.json');
+        yield* gate.wrote(MINE, 'src/core/boot.ts', "import { main } from '../app/main';\nexport const boot = main;\n");
+        const crossing = gate.landed(yield* gate.submit(MINE, { checks: unopened(ungated) }));
+        expect(crossing.unjudged).toEqual([{ gate: 'unread', cause: expect.stringContaining('no-checkout') }]);
+      })(),
+    ),
   );
 });

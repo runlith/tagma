@@ -139,7 +139,7 @@ layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (i
       ),
   );
   it.effect(
-    'a stored declaration that does not read refuses the landing, read_vocabulary still names it to an agent, and deleting it with its nodes standing lets the landing through',
+    'a stored declaration that does not read leaves a landing unjudged, read_vocabulary names it and deleting it restores judgement',
     () =>
       withLanding((gate) =>
         Effect.fnUntraced(function* () {
@@ -158,12 +158,13 @@ layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (i
             .where(eq(block.id, declared.id));
           yield* graph.tags.forget(projectId);
           yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
-          expect((yield* gate.refused(MINE)).code).toBe('inspection-failed');
+          expect(gate.landed(yield* gate.submit(MINE)).unjudged).toEqual([{ gate: 'unread', cause: expect.any(String) }]);
           const { ask, readVocabulary } = yield* operationGate(gate);
           expect((yield* refusalOf(ask('search_blocks'))).code).toBe('inspection-failed');
           expect(yield* ask('read_tags')).toBe('read_tags');
           expect((yield* readVocabulary).unreadable.map((one) => one.id)).toEqual(['proposal']);
           yield* graph.trash.delete({ id: declared.id });
+          yield* gate.wrote(MINE, 'README.md', 'the declaration is readable again\n');
           gate.landed(yield* gate.submit(MINE));
         })(),
       ),

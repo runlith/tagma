@@ -62,6 +62,7 @@ const SHAPES = {
   }),
   enforce: Schema.Struct({ strictness: Schema.optional(Schema.String), imported: Schema.optional(Schema.Boolean) }),
   remeasure: Schema.Struct({ retired: list, escaped: list, fixed: list }),
+  unjudged: Schema.Struct({ op: Schema.String, cause: Schema.String, failed: Schema.String, base: Schema.String }),
   answer: Schema.Struct({
     by: Schema.optional(Schema.Number),
     commit: Schema.optional(Schema.String),
@@ -107,6 +108,7 @@ export const readJournal = {
   depart: reader(SHAPES.depart),
   enforce: reader(SHAPES.enforce),
   remeasure: reader(SHAPES.remeasure),
+  unjudged: reader(SHAPES.unjudged),
   answer: reader(SHAPES.answer),
 };
 

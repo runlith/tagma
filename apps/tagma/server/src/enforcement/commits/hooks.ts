@@ -68,7 +68,7 @@ const bodies = (cli: HookCli): Readonly<Record<CommitHook, string>> => {
       `[ -z "$${GRANT_VARIABLE}" ] && exit 0`,
       tagma,
       `${standing} || { echo "tagma: no Tagma stands at $entry, and an agent's commit is judged or refused" >&2; exit 1; }`,
-      `[ "$(${check(' --gate')})" = clean ]`,
+      `[ "$(${check(' --gate')})" != refused ]`,
     ].join('\n'),
     'post-commit': landed('post-commit', false),
     'post-merge': landed('post-merge', true),

@@ -96,9 +96,17 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
               }),
             ),
           );
-          expect([enforce.code, landing.refused?.code]).toEqual(['module-map-invalid', 'module-map-invalid']);
+          expect(enforce.code).toBe('module-map-invalid');
+          expect(landing.refused).toBeNull();
           expect(enforce.unblock).toEqual(refusal.unblock);
-          expect(landing.refused?.unblock).toEqual(refusal.unblock);
+          expect(landing.unjudged).toEqual([
+            expect.objectContaining({
+              rule,
+              cause: 'module-map',
+              failed: expect.any(String),
+              ways: refusal.unblock,
+            }),
+          ]);
         }),
       ),
     );

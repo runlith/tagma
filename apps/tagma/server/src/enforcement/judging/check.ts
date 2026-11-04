@@ -199,6 +199,7 @@ export const checkHead = Effect.fn('enforcement.checkHead')(function* (
   for (const target of targets) {
     if (target.inspection === null) {
       collected.rules.push({ ...target.said, ms: 0, reached: false, failed: target.failed ?? undefined });
+      if (target.failed !== null) collected.unjudged.push({ rule: target.name, cause: 'unsupported', failed: target.failed });
       continue;
     }
     if (target.places.length === 0) {
@@ -208,6 +209,7 @@ export const checkHead = Effect.fn('enforcement.checkHead')(function* (
     const { answer, ms } = readings.get(target.name)!;
     if (Result.isFailure(answer)) {
       collected.rules.push({ ...target.said, ms, reached: true, failed: failedOf(answer.failure) });
+      collected.unjudged.push({ rule: target.name, cause: answer.failure.cause, failed: failedOf(answer.failure) });
       continue;
     }
     collected.rules.push({ ...target.said, ms, reached: true });
@@ -243,7 +245,7 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
   const fullRuns = new Map(full.rules.map((run) => [run.rule, run]));
   const locationOf = (one: CheckedViolation) => JSON.stringify([one.rule, one.fingerprint, one.file, one.line]);
   const locations = new Map(collected.violations.map((one, at) => [locationOf(one), at]));
-  let refuses = rechecked.some((target) => target.gatesLanding && fullRuns.get(target.name)?.failed !== undefined);
+  let refuses = false;
   const running = Effect.gen(function* () {
     const binding = { ...change, caller: ask.caller, lane: 'landing' as const };
     const boundRules = targets.flatMap((target): BoundRule[] =>
@@ -336,7 +338,7 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
         const reached =
           paths.length > 0 || fullRuns.has(target.name) || ('anyPath' in target && target.anyPath === true && change.paths.length > 0);
         collected.rules.push({ ...target.said, ms: 0, reached, failed: target.failed });
-        if (reached && target.gatesLanding) refuses = true;
+        if (reached) collected.unjudged.push({ rule: target.name, cause: 'unsupported', failed: target.failed });
         continue;
       }
       const judged = answers.get(target);
@@ -349,7 +351,7 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
       const ms = judged.ms + (fullRun?.ms ?? 0);
       if (Result.isFailure(answer)) {
         collected.rules.push({ ...target.said, ms, reached: true, failed: failedOf(answer.failure) });
-        if (target.gatesLanding) refuses = true;
+        collected.unjudged.push({ rule: target.name, cause: answer.failure.cause, failed: failedOf(answer.failure) });
         continue;
       }
       collected.rules.push({ ...target.said, ms, reached: true, failed: fullRun?.failed });

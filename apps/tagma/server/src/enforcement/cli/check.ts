@@ -63,7 +63,10 @@ const said = (lines: readonly string[]) => (lines.length === 0 ? Effect.void : C
 
 const printed = (json: boolean, value: unknown) => (json ? Console.log(JSON.stringify(value, null, 2)) : Effect.void);
 
-const unjudgedLines = (answer: CheckAnswer): string[] => answer.unjudged.flatMap((one) => ('gate' in one ? [`tagma: ${one.cause}`] : []));
+const unjudgedLines = (answer: CheckAnswer): string[] =>
+  answer.unjudged.flatMap((one) =>
+    'gate' in one ? [`tagma: ${one.cause}`] : 'failed' in one ? [`tagma: ${one.rule}: ${one.failed}`] : [],
+  );
 
 const VERDICT: Readonly<Record<number, string>> = {
   [CHECK_EXIT.clean]: 'clean',
@@ -101,20 +104,10 @@ const staged = Effect.fnUntraced(
       ...unjudgedLines(checked),
       ...(watched.length === 0 ? [] : ['tagma: rules at watch found:', ...crossingLines(watched, 'tagma: ', checked.bodies)]),
     ];
-    const unread = checked.unjudged.some((one) => 'gate' in one);
-    if (checked.refusal === undefined && unread) {
-      yield* said(
-        json
-          ? []
-          : session
-            ? [...notes, "tagma: an agent's commit is judged or refused, so this one is refused"]
-            : [...notes, 'tagma: nothing judged this commit'],
-      );
-      return session ? CHECK_EXIT.refused : CHECK_EXIT.unjudged;
-    }
+    const unjudged = checked.unjudged.length > 0 || checked.rules.some((one) => one.failed !== undefined);
     if (checked.refusal === undefined) {
       yield* said(json ? [] : notes);
-      return CHECK_EXIT.clean;
+      return unjudged ? CHECK_EXIT.unjudged : CHECK_EXIT.clean;
     }
     const refused = told(checked.refusal);
     if (session) {

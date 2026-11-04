@@ -43,6 +43,7 @@ import { judgeBindings, type BoundRule } from '../programs/bindings.js';
 import { covers, enforcedRules, enforcedStatutes, moduleMapOf, runsBefore, afterTriggered, runsOn } from '../rules/reach.js';
 import { attributed, evidenceOf, wireOf } from './excess.js';
 import { type Failed, failedRefusal, MERGE_OP, type Rule, violatedRefusal } from '../contract/wire/refusals.js';
+import type { Act, BlockNames } from '../../graph/contract/service/acts.js';
 
 type Ruled = Rule & { readonly body: string };
 
@@ -156,16 +157,14 @@ const unread = (op: string, failure: Unread, started: number): Judgement => {
 const ungated = (root: string, why: string, started: number): Judgement => ({
   refused: null,
   watched: [],
-  unjudged: [
-    { gate: 'unread', cause: `the graph of ${root} could not be read, and this project was never read enforcing a rule at gate: ${why}` },
-  ],
+  unjudged: [{ gate: 'unread', cause: `the graph of ${root} could not be read: ${why}` }],
   rules: [],
   inspections: 0,
   ms: Math.round(performance.now() - started),
 });
 
 const verdictOf = (judged: Judgement): string =>
-  judged.refused?.code ?? (judged.unjudged.some((one) => 'gate' in one) ? 'unjudged' : judged.watched.length > 0 ? 'watched' : 'clean');
+  judged.refused?.code ?? (judged.unjudged.length > 0 ? 'unjudged' : judged.watched.length > 0 ? 'watched' : 'clean');
 
 const annotated = (op: string, files: number, judged: Judgement): Effect.Effect<Judgement> =>
   Effect.as(
@@ -194,7 +193,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
       return read;
     }),
   );
-  if (Result.isFailure(settled)) return yield* unresolved(op, subject.root, settled.failure, memory, subject.projectId);
+  if (Result.isFailure(settled)) return ungated(subject.root, settled.failure.message, started);
   const rules = settled.success.found;
   const inspections = yield* Inspections;
   const evidence = evidenceOf(subject.root, subject.base, subject.built);
@@ -309,15 +308,13 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
       if (isUnrun(inspection)) {
         const why = unrunReason(document.inspection, inspection);
         runs.push({ rule: rule.name, strictness: document.strictness, on: document.on, ms: 0, reached: true, failed: why });
-        if (gate)
-          failed.push({
-            name: rule.name,
-            title: rule.title,
-            why,
-            cause: inspection.cause ?? 'unsupported',
-            ways: inspection.cause === 'module-map' ? MAP_RECOVERY : unrunWays(rule.name, document.inspection),
-          });
-        else watched.push({ rule: rule.name, cause: inspection.cause ?? 'unsupported', failed: why });
+        failed.push({
+          name: rule.name,
+          title: rule.title,
+          why,
+          cause: inspection.cause ?? 'unsupported',
+          ways: inspection.cause === 'module-map' ? MAP_RECOVERY : unrunWays(rule.name, document.inspection),
+        });
         continue;
       }
       const reach = full.get(rule.name);
@@ -326,8 +323,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
         if (Result.isFailure(reach.answer)) {
           const { cause, reason, ways } = reach.answer.failure;
           reachFailure = `the inspection over the changed description's whole reach failed (${cause}): ${reason}`;
-          if (gate) failed.push({ name: rule.name, title: rule.title, why: reachFailure, cause, ways });
-          else watched.push({ rule: rule.name, cause, failed: reachFailure });
+          failed.push({ name: rule.name, title: rule.title, why: reachFailure, cause, ways });
         } else {
           rechecked.push(...reach.answer.success.violations.filter((one) => one.owed !== true));
           unjudged.push(...reach.answer.success.unjudged);
@@ -350,8 +346,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
         const why = `the inspection failed (${answer.failure.cause}): ${answer.failure.reason}`;
         const { cause, ways } = answer.failure;
         runs.push({ ...said, failed: why });
-        if (gate) failed.push({ name: rule.name, title: rule.title, why, cause, ways });
-        else watched.push({ rule: rule.name, cause, failed: why });
+        failed.push({ name: rule.name, title: rule.title, why, cause, ways });
         continue;
       }
       runs.push({ ...said, failed: reachFailure });
@@ -367,12 +362,8 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
   });
   yield* judging;
   const bodies = bodiesOf(rules, findingRules(crossed, watched, rechecked));
-  const refusal =
-    crossed.length > 0
-      ? violatedRefusal(op, 'tree', crossed, failed, subject.checkout ?? subject.root, bodies)
-      : failed.length > 0
-        ? failedRefusal(op, 'tree', failed)
-        : null;
+  unjudged.push(...failed.map(({ name, why, cause, ways }) => ({ rule: name, cause, failed: why, ways })));
+  const refusal = crossed.length > 0 ? violatedRefusal(op, 'tree', crossed, failed, subject.checkout ?? subject.root, bodies) : null;
   const blocking = new Set([...crossed.map((one) => one.rule), ...failed.map((one) => one.name)]);
   const times = runs.filter((run) => blocking.has(run.rule) && run.reached);
   return {
@@ -496,28 +487,25 @@ export const headJudgement = Effect.fn('enforcement.headJudgement')(function* (o
   } satisfies Judgement;
 });
 
-export type JudgeServices = Effect.Services<ReturnType<typeof judgement>> | Effect.Services<ReturnType<typeof headJudgement>>;
+export type JudgeServices =
+  | Effect.Services<ReturnType<typeof judgement>>
+  | Effect.Services<ReturnType<typeof headJudgement>>
+  | Act
+  | BlockNames;
 
 export type JudgeGraph = (
   projectId: number,
   root: string | null,
 ) => Effect.Effect<Context.Context<JudgeServices>, { readonly message: string }>;
 
-const unbuilt = (op: string, why: string, memory: GateMemory['Service'] | undefined, projectId: number): Effect.Effect<Judgement> =>
-  Effect.map(memory === undefined ? Effect.succeed(true) : memory.gated(projectId), (gated): Judgement => ({
-    refused: gated
-      ? {
-          code: 'inspection-failed',
-          reason: `the tree ${op} would land could not be read from git, so nothing judged it: ${why}`,
-          unblock: ['read what git said and clear it, then commit again'],
-        }
-      : null,
-    watched: [],
-    unjudged: gated ? [] : [{ gate: 'unread', cause: `the tree ${op} would land could not be read from git: ${why}` }],
-    rules: [],
-    inspections: 0,
-    ms: 0,
-  }));
+const unbuilt = (op: string, why: string): Judgement => ({
+  refused: null,
+  watched: [],
+  unjudged: [{ gate: 'unread', cause: `the tree ${op} would land could not be read from git: ${why}` }],
+  rules: [],
+  inspections: 0,
+  ms: 0,
+});
 
 export const unresolved = (
   op: string,
@@ -554,8 +542,7 @@ export const judgingBuilt =
     phase: JudgedPhase,
     caller: TerminalActor | undefined,
   ): Effect.Effect<Built> => {
-    const failed = (failure: Unread) =>
-      Effect.map(unresolved(op, root, failure, memory, projectId), (judged): Built => ({ judged, tree: null }));
+    const failed = (failure: Unread) => Effect.succeed<Built>({ judged: ungated(root, failure.message, performance.now()), tree: null });
     const judged = (built: BuiltTree): Effect.Effect<Built> =>
       Effect.flatMap(Effect.result(graphOf(projectId, root)), (graph) =>
         Result.isFailure(graph)
@@ -569,11 +556,10 @@ export const judgingBuilt =
             }).pipe(Effect.provide(graph.success), Effect.catch(failed)),
       );
     return Effect.provideService(build, Git, git).pipe(
-      Effect.map((tree) => ({ tree })),
-      Effect.catch((failure) => Effect.map(unbuilt(op, failure.message, memory, projectId), (read) => ({ read }))),
-      Effect.flatMap((made): Effect.Effect<Built> =>
-        'read' in made ? Effect.succeed({ judged: made.read, tree: null }) : judged(made.tree),
-      ),
+      Effect.matchEffect({
+        onFailure: (failure) => Effect.succeed<Built>({ judged: unbuilt(op, failure.message), tree: null }),
+        onSuccess: judged,
+      }),
       Effect.flatMap((built) => Effect.as(annotated(op, built.tree?.paths.length ?? 0, built.judged), built)),
     );
   };
@@ -585,9 +571,15 @@ export const judgingOver =
     return Effect.flatMap(Effect.result(graphOf(subject.projectId, root)), (graph) =>
       Result.isSuccess(graph)
         ? Effect.provide(subject.kind === 'tree' ? judgement(op, subject, memory, phase) : headJudgement(op, subject), graph.success).pipe(
-            Effect.catch((failure) => unresolved(op, root ?? `project ${subject.projectId}`, failure, memory, subject.projectId)),
+            Effect.catch((failure) =>
+              subject.kind === 'tree'
+                ? Effect.succeed(ungated(subject.root, failure.message, performance.now()))
+                : unresolved(op, root ?? `project ${subject.projectId}`, failure, memory, subject.projectId),
+            ),
           )
-        : unresolved(op, root ?? `project ${subject.projectId}`, graph.failure, memory, subject.projectId),
+        : subject.kind === 'tree'
+          ? Effect.succeed(ungated(subject.root, graph.failure.message, performance.now()))
+          : unresolved(op, root ?? `project ${subject.projectId}`, graph.failure, memory, subject.projectId),
     ).pipe(Effect.flatMap((judged) => annotated(op, subject.kind === 'tree' ? subject.paths.length : 0, judged)));
   };
 

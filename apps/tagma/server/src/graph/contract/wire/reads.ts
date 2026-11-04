@@ -74,6 +74,7 @@ export const BLOCK_CHANGE_KINDS = [
   'disable',
   'enforce',
   'remeasure',
+  'unjudged',
   'settle',
   'answer',
   'unanswer',

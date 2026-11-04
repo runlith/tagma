@@ -46,6 +46,7 @@ export const CHANGE_TONE: Record<BlockChange['kind'], 'add' | 'remove' | 'plain'
   disable: 'remove',
   enforce: 'plain',
   remeasure: 'plain',
+  unjudged: 'plain',
   settle: 'plain',
   answer: 'add',
   unanswer: 'remove',

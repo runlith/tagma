@@ -296,6 +296,12 @@ function changeOf(entry: ActEntry): Changes {
         label: `Re-measured: ${p.retired?.length ?? 0} debt retired, ${p.escaped?.length ?? 0} escape(s) recorded, ${p.fixed?.length ?? 0} gone`,
         peerId: null,
       }));
+    case 'unjudged':
+      return labelled(readJournal.unjudged(entry), (p) => ({
+        kind: 'unjudged',
+        label: `${p.op} left this rule unjudged (${p.cause}): ${p.failed}`,
+        peerId: null,
+      }));
     case 'settle':
       return plain('settle', 'Settled into a doc');
     case 'answer':

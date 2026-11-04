@@ -206,7 +206,7 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
   );
 
   it.effect(
-    'the operator’s commit_checkout bypasses hooks and records its escape even when another enforced rule’s program cannot judge',
+    'an inspection failure passes the session hooks unjudged, a real crossing still refuses, and the operator commit records its escape',
     () =>
       Effect.gen(function* () {
         const gate = yield* commitCase;
@@ -238,8 +238,17 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
           code: 0,
         });
 
-        const calls = yield* gate.counting(gate.repo);
+        yield* gate.put('crashing.ts', 'export const CRASH = 1;\n');
+        yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
+        const unjudged = yield* gate.world.tagma(['check', '--gate', '--json'], { cwd: gate.repo, env: SESSION });
+        expect(unjudged.code).toBe(2);
+        expect(JSON.parse(unjudged.out)).toMatchObject({ unjudged: [{ rule, cause: 'program', failed: expect.any(String) }] });
+        expect(yield* gate.ran(gate.repo, ['commit', '-qm', 'past an unavailable inspection'], SESSION)).toMatchObject({ code: 0 });
+
         yield* gate.put('crashing.ts', `${FORWARD}export const CRASH = 1;\n`);
+        yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
+        expect(yield* gate.ran(gate.repo, ['commit', '-qm', 'a real crossing still refuses'], SESSION)).toMatchObject({ code: 1 });
+        const calls = yield* gate.counting(gate.repo);
         yield* gate.ran(gate.repo, ['add', 'crashing.ts']);
         const rootId = (
           JSON.parse((yield* op(gate, gate.repo, 'read_checkout', { root: gate.repo })).out) as { checkout: { rootId: string } }

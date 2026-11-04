@@ -1,5 +1,11 @@
 import type { SubmitReceipt, Unrecorded } from './contract/wire/receipt.js';
-import type { LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../enforcement/contract/wire/enforcement.js';
+import {
+  type LandingUnjudged,
+  type RuleBodies,
+  type RuleCrossing,
+  type Watched,
+  unjudgedSaid,
+} from '../enforcement/contract/wire/enforcement.js';
 import { findingLines } from '../enforcement/contract/wire/findings.js';
 
 const NAMED_MEASURED = 6;
@@ -111,8 +117,6 @@ function judgedLines(judged: {
         ]),
     ...findingLines(rechecked, '  ', undefined, bodies),
     ...(unjudged.length === 0 ? [] : [`unjudged (${unjudged.length}):`]),
-    ...unjudged.map((one) =>
-      'gate' in one ? `  the gate did not judge: ${one.cause}` : `  ${one.rule} ${one.file}:${one.line}  ${one.specifier}`,
-    ),
+    ...unjudged.map((one) => `  ${unjudgedSaid(one)}`),
   ];
 }

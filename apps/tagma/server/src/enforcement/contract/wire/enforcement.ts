@@ -287,8 +287,21 @@ export type RuleUnjudged = typeof RuleUnjudged.Type;
 export const GateUnjudged = Schema.Struct({ gate: Schema.Literal('unread'), cause: Schema.String });
 export type GateUnjudged = typeof GateUnjudged.Type;
 
-export const LandingUnjudged = Schema.Union([RuleUnjudged, GateUnjudged]);
+const InspectionUnjudged = Schema.Struct({
+  rule,
+  cause: Schema.Literals([...INSPECTION_FAILURES, 'undecodable']),
+  failed: Schema.String,
+  ways: Schema.optional(Schema.Array(Schema.String)),
+});
+export const LandingUnjudged = Schema.Union([RuleUnjudged, GateUnjudged, InspectionUnjudged]);
 export type LandingUnjudged = typeof LandingUnjudged.Type;
+
+export const unjudgedSaid = (one: LandingUnjudged | Unjudged): string =>
+  'gate' in one
+    ? one.cause
+    : 'failed' in one
+      ? `${one.rule} could not run (${one.cause}): ${one.failed}`
+      : `${'rule' in one ? `${one.rule} ` : ''}${one.file}:${one.line} ${one.specifier}`;
 
 export const JUDGE_REFUSALS = ['rule-violated', 'inspection-failed', 'module-map-invalid'] as const;
 export type JudgeRefusalCode = (typeof JUDGE_REFUSALS)[number];

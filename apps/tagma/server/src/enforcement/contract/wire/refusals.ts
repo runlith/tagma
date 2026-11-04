@@ -152,7 +152,7 @@ export const failedRefusal = (op: string, kind: 'tree' | 'head', failed: readonl
   for (const way of new Set(failed.flatMap((one) => one.ways ?? []))) unblock.push(way);
   return {
     code: 'inspection-failed',
-    reason: `a gated rule could not judge ${actSaid(op, kind)}, and a gate that cannot judge refuses: ${failed.map(failedLine).join('; ')}`,
+    reason: `a gated rule could not judge ${actSaid(op, kind)}: ${failed.map(failedLine).join('; ')}`,
     unblock,
     words: failedWords(failed),
   };

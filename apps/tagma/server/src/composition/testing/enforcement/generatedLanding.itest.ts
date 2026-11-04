@@ -42,7 +42,7 @@ const config = `export default ${JSON.stringify({
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'generated configs at the landing door',
   (it) => {
-    it.effect('a reordered generated config lands semantically, while a stale copy refuses once without attributing source crossings', () =>
+    it.effect('a reordered generated config lands semantically and a stale copy lands unjudged without inventing crossings', () =>
       Effect.gen(function* () {
         const world = yield* DoorFixture;
         const files = yield* FileSystem.FileSystem;
@@ -172,12 +172,14 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect(regenerated).toMatchObject({ refuses: false, violations: [] });
         const repeated = answered(yield* call('check_rules', { over: 'change', paths: repairPaths, limit: 10 }));
         expect(repeated).toMatchObject({ refuses: false, violations: [], head: regenerated.head, paths: regenerated.paths });
-        expect(stale).toMatchObject({ class: 'refusal', code: 'inspection-failed' });
-        expect(answered(staleCheck)).toMatchObject({ refuses: true, rules: [{ failed: expect.any(String) }] });
-        if (stale.class === 'refusal') {
-          expect(stale.reason).toContain('app/kit.json');
-          expect(stale.reason).toContain('app/.gen/tsconfig.json');
-        }
+        expect(answered(stale)).toMatchObject({
+          submitted: { status: 'landed', unjudged: [{ failed: expect.stringContaining('app/kit.json') }] },
+        });
+        expect(answered(staleCheck)).toMatchObject({
+          refuses: false,
+          rules: [{ failed: expect.any(String) }],
+          unjudged: [{ failed: expect.stringContaining('app/.gen/tsconfig.json') }],
+        });
         yield* files.writeFileString(
           join(root, 'app/.gen/tsconfig.json'),
           JSON.stringify({

@@ -35,6 +35,7 @@ export const GRAPH_EVENT_OPS = [
   'disable',
   'enforce',
   'remeasure',
+  'unjudged',
   'answer',
   'unanswer',
 ] as const;

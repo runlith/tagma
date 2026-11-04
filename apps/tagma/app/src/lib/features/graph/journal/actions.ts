@@ -28,6 +28,7 @@ const OP_WORDS: Readonly<Record<GraphEventOp, string>> = {
   disable: 'disabled',
   enforce: 'rule enforced',
   remeasure: 'remeasured',
+  unjudged: 'left unjudged',
   answer: 'answered',
   unanswer: 'answer withdrawn',
 };

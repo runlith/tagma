@@ -1,6 +1,8 @@
 import { statSync } from 'node:fs';
 import { Clock, Effect, Result } from 'effect';
-import type { CommitRecord, RuleCrossing } from '../contract/wire/enforcement.js';
+import { type CommitRecord, type RuleCrossing, unjudgedSaid } from '../contract/wire/enforcement.js';
+import { Act, BlockNames } from '../../graph/contract/service/acts.js';
+import { writes } from '../../platform/contract/service/writes.js';
 import { findingLines, said } from '../contract/wire/findings.js';
 import { type TriggerPhase } from '../../graph/contract/wire/enforcement.js';
 import {
@@ -176,9 +178,7 @@ const SETTLED_GIT: ReadonlySet<string> = new Set(['landed-head', 'landed-missing
 
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-const whyUnjudged = (judged: Checked): string =>
-  judged.refused?.reason ??
-  judged.unjudged.map((one) => ('gate' in one ? one.cause : `${one.rule} ${one.file}:${one.line} ${one.specifier}`)).join('; ');
+const whyUnjudged = (judged: Checked): string => judged.refused?.reason ?? judged.unjudged.map(unjudgedSaid).join('; ');
 
 export type CommitRoad = {
   readonly git: Git['Service'];
@@ -186,7 +186,13 @@ export type CommitRoad = {
   readonly queue: CommitQueue['Service'];
 };
 
-type RefusedAt = { readonly projectId: number; readonly root: string; readonly base: string; readonly branch?: string | null };
+type RefusedAt = {
+  readonly projectId: number;
+  readonly root: string;
+  readonly rulesAt?: string;
+  readonly base: string;
+  readonly branch?: string | null;
+};
 
 type BranchRead = { readonly branch: string | null; readonly unread: string | null };
 
@@ -199,20 +205,55 @@ const branchRead = (standing: JudgeGraph, tree: RefusedAt): Effect.Effect<Branch
           Result.isSuccess(read) ? { branch: read.success, unread: null } : { branch: null, unread: read.failure.message },
       );
 
-const kept = (
+const kept = Effect.fnUntraced(function* (
   standing: JudgeGraph,
   refusals: RefusalRecord | undefined,
   op: string,
   tree: RefusedAt | undefined,
   caller: TerminalActor | undefined,
   judged: Checked,
-): Effect.Effect<Checked> => {
-  const refused = judged.refused;
-  const crossed = judged.crossed ?? [];
+): Effect.fn.Return<Checked> {
+  const failed = judged.unjudged.filter((one) => 'failed' in one);
+  let recorded = judged;
+  if (tree !== undefined && failed.length > 0) {
+    const history = yield* Effect.result(
+      Effect.flatMap(standing(tree.projectId, tree.rulesAt ?? tree.root), (graph) =>
+        Effect.gen(function* () {
+          const act = yield* Act;
+          const names = yield* BlockNames;
+          yield* act.unit(
+            writes('enforcement.unjudged', []),
+            Effect.forEach(
+              failed,
+              (one) =>
+                Effect.flatMap(names.idOfName(one.rule), (id) =>
+                  act.record('unjudged', id, {
+                    op,
+                    base: tree.base,
+                    branch: tree.branch,
+                    actor: caller,
+                    cause: one.cause,
+                    failed: one.failed,
+                  }),
+                ),
+              { discard: true },
+            ),
+          );
+        }).pipe(Effect.provide(graph)),
+      ),
+    );
+    if (Result.isFailure(history))
+      recorded = {
+        ...judged,
+        unjudged: [...judged.unjudged, { gate: 'unread', cause: `the unjudged rules could not be recorded: ${history.failure.message}` }],
+      };
+  }
+  const refused = recorded.refused;
+  const crossed = recorded.crossed ?? [];
   if (refusals === undefined || refused === null || refused.code !== 'rule-violated' || tree === undefined || crossed.length === 0)
-    return Effect.succeed(judged);
+    return recorded;
   const actor = caller === undefined ? null : actorRefOfTerminal(caller);
-  return Effect.gen(function* () {
+  return yield* Effect.gen(function* () {
     const { branch, unread } = yield* branchRead(standing, tree);
     const rows = crossed.map((one) => {
       const what = said(one);
@@ -235,9 +276,9 @@ const kept = (
       ...(unread === null ? [] : [`this refusal was recorded without its branch: ${unread}`]),
       ...(Result.isSuccess(written) ? [] : [`this refusal could not be recorded: ${written.failure.message}`]),
     ];
-    return notes.length === 0 ? judged : { ...judged, refused: { ...refused, reason: [refused.reason, ...notes].join('\n') } };
+    return notes.length === 0 ? recorded : { ...recorded, refused: { ...refused, reason: [refused.reason, ...notes].join('\n') } };
   });
-};
+});
 
 export const ruleChecks = (options: {
   readonly graphOf: JudgeGraph;
@@ -261,7 +302,10 @@ export const ruleChecks = (options: {
       : Effect.matchEffect(options.driver.ready(projectId, root), {
           onSuccess: () => check,
           onFailure: (failure) =>
-            Effect.succeed({ ...UNCHECKED, refused: { code: failure.code, reason: failure.reason, unblock: failure.unblock } }),
+            Effect.map(check, (judged) => ({
+              ...judged,
+              unjudged: [...judged.unjudged, { gate: 'unread' as const, cause: failure.reason }],
+            })),
         });
 
   const owning = (root: string): Effect.Effect<{ readonly unowned: Checked } | { readonly projectId: number }> =>
@@ -313,12 +357,12 @@ export const ruleChecks = (options: {
         });
       }
       const { judged, tree } = yield* recorded(op, projectId, root, Effect.succeed(landing.success), 'landed', caller);
-      const unresolved = judged.watched.flatMap((one) =>
+      const unresolved = judged.unjudged.flatMap((one) =>
         'failed' in one && (one.cause === 'unsupported' || one.cause === 'module-map') ? [`${one.rule}: ${one.failed}`] : [],
       );
       if (tree === null || judged.refused !== null || judged.unjudged.some((one) => 'gate' in one) || unresolved.length > 0)
         return yield* new CommitRecordFailed({ reason: [whyUnjudged(judged), ...unresolved].filter((line) => line !== '').join('; ') });
-      const failed = judged.watched.flatMap((one) => ('failed' in one ? [`${one.rule}: ${one.failed}`] : []));
+      const failed = judged.unjudged.flatMap((one) => ('failed' in one ? [`${one.rule}: ${one.failed}`] : []));
       if (failed.length > 0)
         yield* Effect.logWarning('a landed commit is recorded without the rules that could not judge it; their re-measure judges them', {
           commit,

@@ -48,48 +48,48 @@ const landing = (fx: EnforcementFixture, path: string) =>
   );
 layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
   describe('a tsconfig extending the config of a package the checkout installed', () => {
-    it.effect(
-      'is measured and landed through the installed package, its link followed out of the checkout as TypeScript follows it, and refuses once the package is gone',
-      () =>
-        withEnforcement((fx) =>
-          Effect.fnUntraced(function* () {
-            const files = yield* FileSystem.FileSystem;
-            const store = `../acme-store-${fx.demo.projectId}/node_modules/@acme`;
-            yield* fx.wrote('.gitignore', 'node_modules/\n');
-            yield* fx.wrote('tsconfig.json', JSON.stringify({ extends: '@acme/tsconfig/base.json' }));
-            yield* fx.wrote(`${store}/tsconfig/package.json`, JSON.stringify({ name: '@acme/tsconfig', version: '1.0.0' }));
-            yield* fx.wrote(`${store}/tsconfig/base.json`, JSON.stringify({ extends: '@acme/strict/strict.json' }));
-            yield* fx.wrote(`${store}/strict/package.json`, JSON.stringify({ name: '@acme/strict', version: '1.0.0' }));
-            yield* fx.wrote(
-              `${store}/strict/strict.json`,
-              JSON.stringify({ compilerOptions: { paths: { '$x/*': ['${configDir}/src/app/*'] } } }),
-            );
-            yield* files.makeDirectory(join(fx.demo.demoRoot, 'node_modules/@acme'), { recursive: true });
-            yield* files.symlink(join(fx.demo.demoRoot, store, 'tsconfig'), join(fx.demo.demoRoot, 'node_modules/@acme/tsconfig'));
-            yield* fx.wrote('src/app/shared.ts', 'export const shared = 1;\n');
-            yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared;\n");
-            yield* fx.committed('a config extending an installed package');
-            const rule = yield* fx.created(['rule'], 'Import only downward');
-            const owner = yield* fx.created(['task'], 'Move the core off the app');
-            fx.demo.described.set('installed', ROOTED);
-            const standing = ['app order src/core/peek.ts -> src/app/', 'app order src/core/view.ts -> src/ui/'];
-            yield* fx.enforce({
-              blockId: rule,
-              strictness: 'gate',
-              on: TRIGGERS.landing,
-              inspection: 'installed',
-              owners: Object.fromEntries(standing.map((one) => [one, owner])),
-            });
-            expect((yield* fx.documentOf(rule))?.debt?.map(({ fingerprint }) => fingerprint).sort()).toEqual(standing);
-            yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared + 1;\n");
-            yield* fx.committed('the peek adds one');
-            expect((yield* landing(fx, 'src/core/peek.ts')).refused).toBeNull();
-            yield* files.remove(join(fx.demo.demoRoot, 'node_modules'), { recursive: true });
-            const uninstalled = yield* landing(fx, 'src/core/peek.ts');
-            expect(uninstalled.refused?.code).toBe('inspection-failed');
-            expect(uninstalled.refused?.reason).toContain('`@acme/tsconfig/base.json`');
-          })(),
-        ),
+    it.effect('is measured and landed through the installed package and lands unjudged once the package is gone', () =>
+      withEnforcement((fx) =>
+        Effect.fnUntraced(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const store = `../acme-store-${fx.demo.projectId}/node_modules/@acme`;
+          yield* fx.wrote('.gitignore', 'node_modules/\n');
+          yield* fx.wrote('tsconfig.json', JSON.stringify({ extends: '@acme/tsconfig/base.json' }));
+          yield* fx.wrote(`${store}/tsconfig/package.json`, JSON.stringify({ name: '@acme/tsconfig', version: '1.0.0' }));
+          yield* fx.wrote(`${store}/tsconfig/base.json`, JSON.stringify({ extends: '@acme/strict/strict.json' }));
+          yield* fx.wrote(`${store}/strict/package.json`, JSON.stringify({ name: '@acme/strict', version: '1.0.0' }));
+          yield* fx.wrote(
+            `${store}/strict/strict.json`,
+            JSON.stringify({ compilerOptions: { paths: { '$x/*': ['${configDir}/src/app/*'] } } }),
+          );
+          yield* files.makeDirectory(join(fx.demo.demoRoot, 'node_modules/@acme'), { recursive: true });
+          yield* files.symlink(join(fx.demo.demoRoot, store, 'tsconfig'), join(fx.demo.demoRoot, 'node_modules/@acme/tsconfig'));
+          yield* fx.wrote('src/app/shared.ts', 'export const shared = 1;\n');
+          yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared;\n");
+          yield* fx.committed('a config extending an installed package');
+          const rule = yield* fx.created(['rule'], 'Import only downward');
+          const owner = yield* fx.created(['task'], 'Move the core off the app');
+          fx.demo.described.set('installed', ROOTED);
+          const standing = ['app order src/core/peek.ts -> src/app/', 'app order src/core/view.ts -> src/ui/'];
+          yield* fx.enforce({
+            blockId: rule,
+            strictness: 'gate',
+            on: TRIGGERS.landing,
+            inspection: 'installed',
+            owners: Object.fromEntries(standing.map((one) => [one, owner])),
+          });
+          expect((yield* fx.documentOf(rule))?.debt?.map(({ fingerprint }) => fingerprint).sort()).toEqual(standing);
+          yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared + 1;\n");
+          yield* fx.committed('the peek adds one');
+          expect((yield* landing(fx, 'src/core/peek.ts')).refused).toBeNull();
+          yield* files.remove(join(fx.demo.demoRoot, 'node_modules'), { recursive: true });
+          const uninstalled = yield* landing(fx, 'src/core/peek.ts');
+          expect(uninstalled.refused).toBeNull();
+          expect(uninstalled.unjudged).toEqual([
+            expect.objectContaining({ failed: expect.stringContaining('`@acme/tsconfig/base.json`') }),
+          ]);
+        })(),
+      ),
     );
 
     it.effect('is measured and landed through a package whose link leads into a git submodule of the checkout', () =>

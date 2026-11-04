@@ -40,7 +40,7 @@ const landing = (fx: EnforcementFixture, path: string) =>
 layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
   describe('a tsconfig extending a file the build generates and git ignores', () => {
     it.effect(
-      'is measured, re-drawn and landed through the copy a `built` entry declares outside the module region, refuses without one, and refuses a copy the generated file contradicts until the copy follows it',
+      'is measured and redrawn through a built copy, refuses enforcement without one and leaves a stale copy unjudged at landing',
       () =>
         withEnforcement((fx) =>
           Effect.fnUntraced(function* () {
@@ -92,9 +92,9 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
             );
             yield* fx.committed('the peek multiplies');
             const stale = yield* landing(fx, 'src/core/peek.ts');
-            expect(stale.refused?.code).toBe('inspection-failed');
-            expect(stale.refused?.reason).toContain('`gen.json`');
-            expect(stale.refused?.reason).toContain('`.gen/tsconfig.json`');
+            expect(stale.refused).toBeNull();
+            expect(stale.unjudged).toEqual([expect.objectContaining({ failed: expect.stringContaining('`gen.json`') })]);
+            expect(stale.unjudged).toEqual([expect.objectContaining({ failed: expect.stringContaining('`.gen/tsconfig.json`') })]);
             yield* fx.wrote('gen.json', JSON.stringify(JSON.parse(aliases('../src/core/*')), null, '\t'));
             yield* fx.committed('the copy follows the generated config');
             expect((yield* landing(fx, 'gen.json')).refused).toBeNull();

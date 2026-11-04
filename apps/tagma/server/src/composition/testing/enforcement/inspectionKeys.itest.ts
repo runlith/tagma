@@ -207,7 +207,7 @@ const callsOf = (signature: string): readonly ts.FunctionDeclaration[] => {
 
 layer(enforceFixture(), { excludeTestServices: true })('rules name an inspection key of tagma.config.ts', (it) => {
   it.effect(
-    'read_inspections describes SDK calls separately from builtin params and resolves keys at HEAD with their defaults and rules; read_enforcement answers an enforced rule with its key and function and one followed as text with its title; a config that loses the gated key refuses inspection-failed',
+    'read_inspections describes SDK calls separately from builtin params and resolves keys at HEAD with their defaults and rules; read_enforcement answers an enforced rule with its key and function and one followed as text with its title; a config that loses the gated key lands unjudged',
     () =>
       withCase((scene) =>
         Effect.gen(function* () {
@@ -256,10 +256,11 @@ layer(enforceFixture(), { excludeTestServices: true })('rules name an inspection
           });
 
           yield* scene.wrote('tagma.config.ts', configOf(['@law-lab/ui'], 'domain-pure'));
-          const lost = yield* refusalOf(scene.submitted());
-          expect(lost.code).toBe('inspection-failed');
-          expect(lost.reason).toContain('domain-no-ui');
-          expect(lost.reason).toContain(scene.rule);
+          const lost = yield* scene.submitted();
+          expect(lost).toMatchObject({
+            status: 'landed',
+            unjudged: [{ rule: scene.rule, cause: 'unsupported', failed: expect.stringContaining('domain-no-ui') }],
+          });
         }),
       ),
   );
