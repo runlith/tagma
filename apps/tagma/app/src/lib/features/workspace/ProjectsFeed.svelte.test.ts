@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
-import { makePlatform, makeRouter, makeStorage } from '@runlith/layer/testing';
+import { makeRouter } from '@runlith/layer/testing';
 import { stubSingle } from '@runlith/query/testing';
 import { expect, test } from 'vitest';
 import { waitFor, waitUntil } from '@runlith/testing/flush';
-import { liveFeed } from '$lib/app/testing.js';
+import { liveFeed, readyState } from '$lib/app/testing.js';
 import { ProjectsFeed } from './ProjectsFeed.js';
 import { Workspace } from './Selection.svelte.js';
 
@@ -33,7 +33,7 @@ test('a project registered by another door appears in the open workspace when th
       groups: stubSingle({ loadOrThrow: async () => [], refresh: async () => [] }),
     } as never,
     makeRouter({ params: {} }),
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     failure,
   );
   const feed = liveFeed();

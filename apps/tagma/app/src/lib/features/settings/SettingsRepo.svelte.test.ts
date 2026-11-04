@@ -19,6 +19,8 @@ import { Refusal, RETRIES, retriable } from '$lib/wire/refusal.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SoundChannel } from '$lib/wire/SoundChannel.js';
 import { loadCatalog, TestCatalog, testDoor } from '$lib/wire/testing.js';
+import { readyState } from '$lib/app/testing.js';
+import { AppState } from '$lib/features/workspace/AppState.js';
 import { SettingsRepo } from './SettingsRepo.js';
 
 await loadCatalog();
@@ -77,6 +79,7 @@ test.each([
       Layer.of(Door, door),
       TestCatalog,
       Layer.of(Platform, makePlatform()),
+      Layer.of(AppState, readyState()),
       Layer.of(Router, makeRouter()),
       ServerOrigin.of('http://localhost'),
     ),

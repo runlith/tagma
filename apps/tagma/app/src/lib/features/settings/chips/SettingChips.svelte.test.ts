@@ -9,7 +9,8 @@ import { mount, unmount } from 'svelte';
 import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { Overlays } from '$lib/app/overlays.js';
-import { testAddressing } from '$lib/app/testing.js';
+import { readyState, testAddressing } from '$lib/app/testing.js';
+import { AppState } from '$lib/features/workspace/AppState.js';
 import TestHost from '$lib/app/TestHost.svelte';
 import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -76,6 +77,7 @@ function world(writes: unknown[]) {
     Layer.mergeAll(
       Layer.of(Door, door),
       Layer.of(Platform, makePlatform()),
+      Layer.of(AppState, readyState()),
       ServerOrigin.of('http://localhost'),
       Layer.of(Router, makeRouter({ params: { project: 'demo' }, url: new URL('http://localhost/demo') })),
       Layer.of(Opening, { knows: () => true, tip: () => ({ text: null }) } as never),

@@ -1,18 +1,18 @@
 import type { Group, Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
-import { Platform } from '@runlith/layer/Platform';
 import { asRoutePathname, Router } from '@runlith/layer/Router';
 import { Service } from '@runlith/layer/key';
 import { renamedHref } from './address.js';
+import { AppState, type AppStateStorage } from './AppState.js';
 import { type Entry, EntryProject } from './EntryProject.js';
 import { ProjectsRepo } from './ProjectsRepo.js';
 import { Refusal } from '$lib/wire/refusal.js';
 
-const LAST_PROJECT_KEY = 'tagma.lastProjectId';
+export const LAST_PROJECT_KEY = 'tagma.lastProjectId';
 
 export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }) {
   static *make() {
-    return new Workspace(yield* ProjectsRepo, yield* Router, yield* Platform, yield* Failure, yield* EntryProject.optional());
+    return new Workspace(yield* ProjectsRepo, yield* Router, yield* AppState, yield* Failure, yield* EntryProject.optional());
   }
 
   projects = $state<readonly Project[]>([]);
@@ -33,12 +33,13 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   constructor(
     private readonly repo: ProjectsRepo,
     private readonly router: Router,
-    private readonly platform: Platform,
+    private readonly storage: AppStateStorage,
     private readonly failure: Failure,
     private readonly entry?: Entry,
   ) {
     super();
-    this.remembered = platform.storage.local.getItem(LAST_PROJECT_KEY);
+    this.remembered = storage.getItem(LAST_PROJECT_KEY);
+    storage.watch(LAST_PROJECT_KEY, (value) => (this.remembered = value));
     this.ready = this.read();
     this.ready.catch((error: unknown) => this.failure.report(error));
   }
@@ -93,9 +94,9 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
 
   remember(project: Project): void {
     const id = String(project.id);
-    if (this.remembered === id) return;
+    if (!this.storage.ready || this.storage.getItem(LAST_PROJECT_KEY) === id) return;
     this.remembered = id;
-    this.platform.storage.local.setItem(LAST_PROJECT_KEY, id);
+    this.storage.setItem(LAST_PROJECT_KEY, id);
   }
 
   find(id: number): Project | null {

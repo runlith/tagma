@@ -63,7 +63,7 @@ import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { ThreadsRepo } from '$lib/features/threads/Repo.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
-import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { LAST_PROJECT_KEY, Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Visits, VISITS_KEY } from '$lib/features/workspace/Visits.svelte.js';
 import { AppState } from '$lib/features/workspace/AppState.js';
 import { ServerAppState } from '$lib/features/workspace/ServerAppState.svelte.js';
@@ -227,7 +227,12 @@ export function appLayers(desktop: DesktopApi | undefined) {
     }),
     Layer.provide(AppState, function* () {
       const local = (yield* Platform).storage.local;
-      return new ServerAppState(yield* Door, yield* Live, yield* Scope, yield* Failure, local, [STRIP_KEY, VISITS_KEY, RAIL_KEY]);
+      return new ServerAppState(yield* Door, yield* Live, yield* Scope, yield* Failure, local, [
+        STRIP_KEY,
+        VISITS_KEY,
+        RAIL_KEY,
+        LAST_PROJECT_KEY,
+      ]);
     }),
     Layer.provide(ShellOps, function* () {
       const router = yield* Router;

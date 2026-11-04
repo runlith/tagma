@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { Scope } from '@runlith/layer/Scope';
 import { Failure } from '@runlith/layer/Failure';
-import { makePlatform, makeRouter, makeRouterWithLog } from '@runlith/layer/testing';
+import { makeRouter, makeRouterWithLog } from '@runlith/layer/testing';
 import { single } from '@runlith/query/builders/single';
 import { keyed } from '@runlith/query/builders/keyed';
 import { QueryClient } from '@tanstack/query-core';
@@ -14,7 +14,7 @@ import type { Project, TreeBlock } from '@tagma/server/graph/contract/wire/rows'
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { Refusal } from '$lib/wire/refusal.js';
-import { testAddresses } from '$lib/app/testing.js';
+import { readyState, testAddresses } from '$lib/app/testing.js';
 import { BlockTitles } from './BlockTitles.svelte.js';
 import { blockRefView, type BlockRefPeer } from './blockRefView.js';
 
@@ -77,7 +77,7 @@ function open(
       groups: single({ name: 'groups', scope, queryClient: cache, loader: async () => [] }),
     } as never,
     makeRouter(),
-    makePlatform(),
+    readyState(),
     new Failure((cause) => {
       throw cause;
     }),

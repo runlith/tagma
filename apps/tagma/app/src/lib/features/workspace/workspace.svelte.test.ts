@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
-import { makePlatform, makeRefusingStorage, makeRouter, makeRouterWithLog, makeStorage } from '@runlith/layer/testing';
+import { makeRefusingStorage, makeRouter, makeRouterWithLog, makeSharedStorage, makeStorage } from '@runlith/layer/testing';
 import { stubSingle } from '@runlith/query/testing';
+import { flushSync } from 'svelte';
 import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
+import { readyState } from '$lib/app/testing.js';
 import { Workspace } from './Selection.svelte.js';
 
 const groups = () => stubSingle({ loadOrThrow: async () => [], refresh: async () => [] });
@@ -31,7 +33,7 @@ test('a member of a group stands under the group’s tile, and a thread row carr
       groups: stubSingle({ loadOrThrow: async () => [{ graph: shop, members: [projects[1]!, projects[0]!] }] }),
     } as never,
     makeRouter({ params: { project: 'first' } }),
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     new Failure((error) => {
       throw error;
     }),
@@ -61,7 +63,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
   const workspace = new Workspace(
     { list: stubSingle({ loadOrThrow: async () => projects }), groups: groups() } as never,
     makeRouter(route),
-    makePlatform({ local }),
+    readyState(local),
     failure,
   );
   await waitUntil(() => workspace.loaded);
@@ -74,13 +76,40 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
   expect(workspace.contextProject?.name).toBe('first');
 });
 
+test('two windows standing in different projects record their arrival without trading writes, and each resumes the one entered last', async () => {
+  const shared = makeSharedStorage();
+  const opened = () =>
+    new Workspace(
+      { list: stubSingle({ loadOrThrow: async () => projects }), groups: groups() } as never,
+      makeRouter({ params: {} }),
+      readyState(shared()),
+      new Failure((error) => {
+        throw error;
+      }),
+    );
+  const [here, there] = [opened(), opened()];
+  await waitUntil(() => here.loaded && there.loaded);
+  const at = $state({ here: projects[0]!, there: projects[1]! });
+  const stop = $effect.root(() => {
+    $effect(() => here.remember(at.here));
+    $effect(() => there.remember(at.there));
+  });
+  flushSync();
+  at.here = projects[1]!;
+  flushSync();
+  at.here = projects[0]!;
+  flushSync();
+  expect([here.entryProject()?.name, there.entryProject()?.name]).toEqual(['first', 'first']);
+  stop();
+});
+
 test('the project the composition names is resumed even when only global projects stand; without one such a window resumes nothing', async () => {
   const global: Project = { ...projects[0]!, name: 'global', kind: 'global' };
   const opened = (entry?: { readonly project: string }) =>
     new Workspace(
       { list: stubSingle({ loadOrThrow: async () => [global] }), groups: groups() } as never,
       makeRouter({ params: {} }),
-      makePlatform({ local: makeStorage() }),
+      readyState(),
       new Failure((error) => {
         throw error;
       }),
@@ -107,7 +136,7 @@ test.each([
   const workspace = new Workspace(
     { list: stubSingle({ loadOrThrow: async () => projects, refresh: async () => renamed }), groups: groups() } as never,
     router,
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     new Failure((error) => {
       throw error;
     }),
@@ -141,7 +170,7 @@ test.each([
       groups: groups(),
     } as never,
     router,
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     new Failure((error) => {
       throw error;
     }),
@@ -171,7 +200,7 @@ test('a rename told while an older registry read is still in flight is followed 
   const workspace = new Workspace(
     { list: stubSingle({ loadOrThrow: async () => projects, refresh: () => answers.shift()! }), groups: groups() } as never,
     router,
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     new Failure((error) => {
       throw error;
     }),
@@ -199,7 +228,7 @@ test('a project registered after the registry was read is found by one re-read, 
       groups: groups(),
     } as never,
     makeRouter({ params: {} }),
-    makePlatform({ local: makeStorage() }),
+    readyState(),
     new Failure((error) => {
       throw error;
     }),
