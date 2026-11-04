@@ -545,9 +545,16 @@ export const makeManagedHost = Effect.gen(function* () {
           yield* state.navigation.open(targetId, opening.policy);
           if (url === 'about:blank') return;
           yield* state.navigation.check(targetId, url);
-          const went = yield* service.send('Page.navigate', { url });
-          if (went.errorText !== undefined && went.errorText !== '')
-            yield* Effect.logInfo(`managed browser: page ${opening.page} opened on ${url} with ${went.errorText}`);
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const stream = yield* service.events();
+              const went = yield* service.send('Page.navigate', { url });
+              if (went.errorText !== undefined && went.errorText !== '')
+                return yield* Effect.logInfo(`managed browser: page ${opening.page} opened on ${url} with ${went.errorText}`);
+              if (went.isDownload === true) return;
+              yield* committed(targetId, stream, went.loaderId);
+            }),
+          );
         }).pipe(
           Effect.onError(() => abandon(state, targetId)),
           Effect.catchIf(isCommandFailure, (failure) => Effect.fail(lost(failure))),
