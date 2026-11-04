@@ -16,4 +16,6 @@ The rows step is known by whoever creates them with current code:
 - `ProjectLifecycle.create` and `ensureGlobal` store the latest step (`GraphSteps.last`) in `meta` under `rows-step:<id>` in the same transaction that creates the rows; the lazy switch reads it from there;
 - `add_project` may open the graph at once through `ServedGraphs.birth`, passing the same latest step explicitly.
 
+The same knowledge covers mirror steps (`mirror: true`): the switch writes `graph-step:<id>` for every mirror step at or before the rows step into the fresh mirror, in the transaction that moves the rows, and a virgin birth writes all of them. Without that every born mirror re-ran its mirror steps at its first opening — a full projection, an index pass and a shadow commit at each `add_project` — though rows written by current code already stand in their form.
+
 Retire removes the key together with `switch-started`. If the server was updated between birth and first opening and new steps appeared, the stored step is below the latest, and only the steps after it run.
