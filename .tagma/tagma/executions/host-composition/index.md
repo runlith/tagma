@@ -21,8 +21,7 @@ fields:
         "at": "artifact.ts",
         "for": [
           "921755ee"
-        ],
-        "role": "testing"
+        ]
       }
     ],
     "id": "host-composition"

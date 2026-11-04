@@ -10,7 +10,7 @@ fields:
       "debt": [],
       "escaped": [
         {
-          "commit": "6f575b5ea89f3860e54fabc574158115101ccdfc",
+          "commit": "626c153e8ee432efaa44e9d24fef28545654b066",
           "fingerprint": "@runlith/execution-host -> posix-holder private @ packages/execution-host/src/macosReadings.itest.ts",
           "fix": "Import through an entry `posix-holder` opens to `@runlith/execution-host` (`packages/execution-host/src/posix/testing/`, `packages/execution-host/src/posix/credentials.ts`, `packages/execution-host/src/posix/endpoint.ts`), or open one covering `packages/execution-host/src/posix/macos/processes.ts` with `set_module`.",
           "line": 6,
