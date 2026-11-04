@@ -136,6 +136,7 @@ test('one oxlint process reads both sides, keyed by check and file with the coun
 
 test('every rule oxlint lists is bound by the id it reports, and an alias it would rename is refused naming that id', () => {
   const listed = spawnSync('bun', ['--no-install', cli, '--rules', '--format=json'], { encoding: 'utf8' });
+  expect(listed.status, listed.stderr).toBe(0);
   const shown: Readonly<Record<string, string>> = { jsx_a11y: 'jsx-a11y', react_perf: 'react-perf', nextjs: 'next' };
   const ids = (JSON.parse(listed.stdout) as { scope: string; value: string }[])
     .filter((rule) => rule.scope !== 'import')

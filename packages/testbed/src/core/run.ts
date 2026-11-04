@@ -6,7 +6,8 @@ import { pristine } from './pristine.ts';
 import { MARK, type Processes } from './processes.ts';
 import { runLiveness as ownerLiveness, sweep, type RunLiveness } from './watch.ts';
 
-export const BASE = join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'runlith-test');
+const BASE_ENV = 'RUNLITH_TEST_BASE';
+export const BASE = process.env[BASE_ENV] || join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'runlith-test');
 export const REPORTS = join(BASE, 'reports');
 export const ROOT_ENV = 'RUNLITH_TEST_RUN_ROOT';
 export const REPORT_ENV = 'RUNLITH_TEST_REPORT';
@@ -223,6 +224,7 @@ export const confine = (): Confined => {
   const tools = developerTools(files, real);
   if (tools !== null) env['PATH'] = throughDeveloperTools(real['PATH'] ?? '', tools);
   env['TMPDIR'] = root;
+  env[BASE_ENV] = BASE;
   env[MARK] = real[MARK] === undefined || real[MARK] === '' ? token : `${real[MARK]}:${token}`;
   delete env[ROOT_ENV];
   delete env[REPORT_ENV];

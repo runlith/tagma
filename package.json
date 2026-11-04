@@ -128,7 +128,8 @@
     "@xterm/addon-ligatures@0.11.0-beta.300": "patches/@xterm%2Faddon-ligatures@0.11.0-beta.300.patch",
     "svelte-check@4.7.7": "patches/svelte-check@4.7.7.patch",
     "@effect-vfs/memory@0.9.0": "patches/@effect-vfs%2Fmemory@0.9.0.patch",
-    "@tanstack/virtual-core@3.19.8": "patches/@tanstack%2Fvirtual-core@3.19.8.patch"
+    "@tanstack/virtual-core@3.19.8": "patches/@tanstack%2Fvirtual-core@3.19.8.patch",
+    "oxlint@1.86.0": "patches/oxlint@1.86.0.patch"
   },
   "trustedDependencies": [
     "@opencode/cli"

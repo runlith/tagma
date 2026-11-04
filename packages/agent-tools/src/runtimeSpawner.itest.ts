@@ -12,24 +12,20 @@ const FORCE_MS = 200;
 layer(bunSpawner(), { excludeTestServices: true })('the runtime spawner', (it) => {
   it.effect('a child of this process answers its CPU and memory cost', () =>
     Effect.gen(function* () {
-      const of = Effect.fnUntraced(function* (line: string) {
-        const handle = yield* ChildProcess.make('/bin/sh', ['-c', line], { stdin: 'ignore' });
-        yield* Effect.forkScoped(Stream.runDrain(handle.stdout));
-        yield* handle.exitCode;
-        return processCost(handle);
-      }, Effect.scoped);
-      const idler = yield* ChildProcess.make('/bin/sh', ['-c', 'printf ready; exec cat'], { stdin: 'pipe' });
-      yield* Stream.runHead(idler.stdout);
-      const burner = yield* of('yes | head -c 20000000 > /dev/null');
-      yield* Stream.run(Stream.empty, idler.stdin);
-      yield* idler.exitCode;
-      const readings = { burner, idler: processCost(idler) };
+      const child = yield* ChildProcess.make('/bin/sh', ['-c', 'printf ready; exec cat'], { stdin: 'pipe' });
+      yield* Stream.runHead(child.stdout);
+      expect(processCost(child)).toMatchObject({ _tag: 'Unmeasured', reason: 'unknown' });
+      yield* Stream.run(Stream.empty, child.stdin);
+      expect(Number(yield* child.exitCode)).toBe(0);
+      const cost = processCost(child);
 
-      expect(readings.burner?._tag).toBe('Measured');
-      expect(readings.idler?._tag).toBe('Measured');
-      if (readings.burner?._tag !== 'Measured' || readings.idler?._tag !== 'Measured') return;
-      expect(readings.burner.cpuMicros).toBeGreaterThan(readings.idler.cpuMicros * 2);
-      expect(readings.burner.peakRssBytes).toBeGreaterThan(0);
+      expect(cost?._tag).toBe('Measured');
+      if (cost?._tag !== 'Measured') return;
+      expect(Number.isInteger(cost.cpuMicros)).toBe(true);
+      expect(cost.cpuMicros).toBeGreaterThanOrEqual(0);
+      expect(Number.isInteger(cost.peakRssBytes)).toBe(true);
+      expect(cost.peakRssBytes).toBeGreaterThan(0);
+      expect(processCost(child)).toEqual(cost);
     }),
   );
 

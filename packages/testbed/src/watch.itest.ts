@@ -185,4 +185,5 @@ test('a process left in the root of a dead worker is swept by the next run, howe
   ]);
   expect(next.code, next.output).toBe(0);
   expect(alive(sleeper.pid)).toBe(false);
+  await sleeper.exited;
 });

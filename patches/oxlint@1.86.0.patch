@@ -1,0 +1,12 @@
+diff --git a/dist/cli.js b/dist/cli.js
+index e1b2b73bddde37fcaf5a6cddd6ff4291581aafc5..4763916f037fdc9eeeac40a65949128ea45ba888 100644
+--- a/dist/cli.js
++++ b/dist/cli.js
+@@ -80,6 +80,6 @@ function loadJsConfigsWrapper(paths) {
+ 	return resolvedConfigLoader === null ? import("./js_config.js").then(({ loadJsConfigs, loadVitePlusConfigs }) => (resolvedConfigLoader = process.env.VP_VERSION ? loadVitePlusConfigs : loadJsConfigs, resolvedConfigLoader(paths))) : resolvedConfigLoader(paths);
+ }
+ const args = process.argv.slice(2);
+-process.stdout.isTTY || (process.stdin._handle?.setBlocking?.(!0), process.stdout._handle?.setBlocking?.(!0)), args.includes("--lsp") && (process.stdout.write = process.stderr.write.bind(process.stderr)), await lint(args, loadPluginWrapper, setupRuleConfigsWrapper, lintFileWrapper, createWorkspaceWrapper, destroyWorkspaceWrapper, loadJsConfigsWrapper) || (process.exitCode = 1);
++process.versions.bun || process.stdout.isTTY || (process.stdin._handle?.setBlocking?.(!0), process.stdout._handle?.setBlocking?.(!0)), args.includes("--lsp") && (process.stdout.write = process.stderr.write.bind(process.stderr)), await lint(args, loadPluginWrapper, setupRuleConfigsWrapper, lintFileWrapper, createWorkspaceWrapper, destroyWorkspaceWrapper, loadJsConfigsWrapper) || (process.exitCode = 1);
+ //#endregion
+ export {};
