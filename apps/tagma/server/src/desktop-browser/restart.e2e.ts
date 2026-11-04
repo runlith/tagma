@@ -143,13 +143,9 @@ it.live(
         automation.navigate(page, { kind: 'url', url: next }, THREAD),
       ).pipe(Effect.provide(before));
       expect(navigated.url).toBe(next);
-      yield* probe('navigated', page).pipe(Effect.provide(before));
       yield* click(page).pipe(Effect.provide(before));
-      yield* probe('clicked', page).pipe(Effect.provide(before));
       yield* electron.control({ show: page });
-      yield* probe('shown', page).pipe(Effect.provide(before));
       yield* electron.control({ reload: true });
-      yield* probe('reloaded', page).pipe(Effect.provide(before));
       yield* click(page).pipe(Effect.provide(before));
       yield* probe('clicked-again', page).pipe(Effect.provide(before));
       expect(yield* items(page).pipe(Effect.provide(before))).toBe(2);

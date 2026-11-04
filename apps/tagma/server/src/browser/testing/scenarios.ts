@@ -200,9 +200,20 @@ export const engineScenarios = (input: EngineHost): void => {
     it.effect('a scrolled page clicks flow and fixed refs, focuses by viewport point and names a real cover', () =>
       Effect.gen(function* () {
         const page = yield* open('/scrolled');
+        console.error(
+          `scrolled-probe ${input.name} paint`,
+          JSON.stringify(
+            yield* evaluate(
+              page,
+              'new Promise((done) => { const t = setTimeout(() => done(["no-frame", document.visibilityState, document.hasFocus(), innerWidth, innerHeight]), 3000); requestAnimationFrame(() => { clearTimeout(t); done(["frame", document.visibilityState, innerWidth, innerHeight]); }); })',
+            ),
+          ),
+        );
         const shot = yield* snapshot(page);
         expect(yield* evaluate(page, 'document.getElementById("flow").getBoundingClientRect().top >= innerHeight')).toBe(true);
+        console.error(`scrolled-probe ${input.name} before flow click`);
         const flow = yield* Effect.result(act(page, { action: 'click', ref: refIn(shot, /button "Below the fold"/) }));
+        console.error(`scrolled-probe ${input.name} after flow click`, JSON.stringify(flow));
         const flowed = yield* evaluate(page, '[document.getElementById("flow").dataset.clicked, scrollY > 0]');
         expect(yield* evaluate(page, '(scrollTo(0, 851), scrollY)')).toBe(851);
         const fixed = yield* Effect.result(act(page, { action: 'click', ref: refIn(shot, /button "Close banner"/) }));
