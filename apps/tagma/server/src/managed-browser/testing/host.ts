@@ -6,6 +6,8 @@ import { kind, world } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer } from 'effect';
 import { HttpClient, HttpClientError } from 'effect/http';
 import { ChildProcessSpawner } from 'effect/process';
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
+import { LaunchPlatform } from '../contract/service/launch.js';
 import { type Host, Hosts } from '../../browser/contract/service/hosts.js';
 import { ProfileId } from '../../browser/contract/wire/ids.js';
 import { absentAdapter, browserWorld, type BrowserFixture } from '../../browser/testing/world.js';
@@ -95,6 +97,7 @@ export const managedTestHost = (home: string, options: TestHost = {}) => {
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(ManagedPlace, { builds, profiles: join(home, 'profiles'), downloads: join(home, 'downloads') }),
+        Layer.sync(LaunchPlatform, currentPlatform),
         Layer.effect(Background, makeBackground),
         offline(builds),
         (options.spawner === undefined

@@ -26,6 +26,7 @@ import { type HostEvent, type LivePage, type Navigation, type PageChange } from 
 import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
 import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
+import { LaunchPlatform } from './contract/service/launch.js';
 import { type BuildId, MANAGED, ManagedDocument, type WindowMode } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
@@ -90,6 +91,7 @@ export const makeManagedHost = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const place = yield* ManagedPlace;
+  const platform = yield* LaunchPlatform;
   const spawner = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
   const builds: Readonly<Record<BuildId, Build>> = {
     'chrome-for-testing': yield* makeChromeForTesting,
@@ -321,6 +323,8 @@ export const makeManagedHost = Effect.gen(function* () {
     const document = yield* Schema.decodeUnknownEffect(ManagedDocument)(profile.document).pipe(
       Effect.mapError(() => refused(`profile ${profile.id} carries no document the managed browser reads`)),
     );
+    const preparation = yield* Effect.promise(() => platform.prepare(document.window === 'shown'));
+    if (preparation._tag === 'LaunchRefused') return yield* new HostRefused({ message: preparation.message, unblock: preparation.unblock });
     const build = yield* builds[document.build].launch.pipe(
       Effect.mapError((unavailable) => new HostRefused({ message: unavailable.message, unblock: unavailable.unblock })),
     );
@@ -338,6 +342,7 @@ export const makeManagedHost = Effect.gen(function* () {
           stdin: 'ignore',
           stdout: 'ignore',
           stderr: 'pipe',
+          env: preparation.environment,
           forceKillAfter: STOP_AFTER,
           additionalFds: { fd3: { type: 'input' }, fd4: { type: 'output' } },
         }),
@@ -404,14 +409,10 @@ export const makeManagedHost = Effect.gen(function* () {
     }).pipe(
       Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)),
       Effect.catchTag('HostLost', (failure) =>
-        Effect.flatMap(readDiagnostic, (diagnostic) =>
-          Effect.fail(
-            new HostRefused({
-              message: `the browser did not become ready: ${failure.message}${diagnostic.trim() === '' ? '' : `\n${diagnostic.trim()}`}`,
-              unblock: ['correct the browser startup error above, then open the page again', 'choose a profile using installed Chrome'],
-            }),
-          ),
-        ),
+        Effect.flatMap(readDiagnostic, (diagnostic) => {
+          const refusal = platform.failed(`${failure.message}\n${diagnostic}`.trim());
+          return Effect.fail(new HostRefused({ message: refusal.message, unblock: refusal.unblock }));
+        }),
       ),
     );
     running.set(profile.id, opened);

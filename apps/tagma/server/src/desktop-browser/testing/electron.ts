@@ -1,3 +1,4 @@
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -61,8 +62,16 @@ const bundled = (into: string) =>
 export const launchElectron = Effect.fnUntraced(function* (home: string, url: URL) {
   const folder = join(home, 'desktop');
   mkdirSync(folder, { recursive: true });
+  const platform = currentPlatform();
+  const preparation = yield* Effect.promise(() => platform.prepare(true));
+  if (preparation._tag === 'LaunchRefused')
+    return yield* Effect.die(new Error(`${preparation.problem}: ${preparation.message}\n${preparation.unblock.join('\n')}`));
   const bundle = yield* bundled(folder);
-  const env: Record<string, string | undefined> = { ...process.env, [SERVER_ENV]: url.toString(), [DATA_ENV]: join(folder, 'data') };
+  const env: Record<string, string | undefined> = {
+    ...preparation.environment,
+    [SERVER_ENV]: url.toString(),
+    [DATA_ENV]: join(folder, 'data'),
+  };
   delete env.ELECTRON_RUN_AS_NODE;
   const exited = yield* Deferred.make<string>();
   const acknowledged = new Map<number, Deferred.Deferred<void>>();

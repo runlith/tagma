@@ -97,6 +97,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@runlith/cdp": "workspace:*",
+        "@runlith/chrome-for-testing": "workspace:*",
         "@runlith/desktop-host": "workspace:*",
         "@runlith/desktop-input": "workspace:*",
         "@runlith/window-behavior": "workspace:*",

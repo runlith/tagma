@@ -7,9 +7,18 @@
     "./build": {
       "types": "./src/build.ts",
       "default": "./src/build.ts"
+    },
+    "./launch": {
+      "types": "./src/launch/platform/current.ts",
+      "default": "./src/launch/platform/current.ts"
+    },
+    "./launch/platform": {
+      "types": "./src/launch/contract/platform.ts",
+      "default": "./src/launch/contract/platform.ts"
     }
   },
   "scripts": {
+    "test:integration": "testbed itest --no-isolate",
     "typecheck": "runlith-typecheck"
   },
   "devDependencies": {

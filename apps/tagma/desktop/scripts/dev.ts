@@ -1,3 +1,4 @@
+import { currentPlatform } from '@runlith/chrome-for-testing/launch';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,12 @@ const port = serverPort(CHANNEL, process.env);
 const serverUrl = new URL(`http://127.0.0.1:${port}`);
 const viteUrl = new URL(`http://localhost:${surfaceDevPort(port)}/`);
 const surfaceUrl = process.env.TAGMA_SURFACE_URL?.trim() || viteUrl.toString();
+
+const launchPreparation = await currentPlatform().prepare(true);
+if (launchPreparation._tag === 'LaunchRefused') {
+  console.error(JSON.stringify(launchPreparation));
+  process.exit(1);
+}
 
 await runDev({
   label: 'tagma-desktop-dev',
@@ -50,6 +57,7 @@ await runDev({
     {
       name: 'window',
       command: electronCommand(),
+      env: launchPreparation.environment,
       args: [join(distDir, 'app', 'main.mjs'), `--tagma-surface-url=${surfaceUrl}`],
       cwd: packageRoot,
       restartOn: { dir: join(distDir, 'app'), suffix: '.mjs' },
