@@ -124,15 +124,24 @@ impl Inotify {
 
     fn guard(&self, sink: &Sink, covered: &mut HashSet<String>) -> Result<(), String> {
         let root = Path::new(&sink.scope().root);
+        let mut unreadable: Option<String> = None;
         for below in root.ancestors().take_while(|path| path.parent().is_some()) {
             let (Some(directory), Some(name)) = (below.parent(), below.file_name()) else { continue };
             let directory = directory.to_string_lossy();
             match self.add(&mut locked(&self.table), sink, &directory, Some(&name.to_string_lossy())) {
                 Ok(()) => {
                     covered.insert(directory.into_owned());
+                    unreadable = None;
                 }
                 Err(libc::ENOSPC) => return Err(limit(&directory)),
-                Err(libc::EACCES) => {}
+                Err(libc::EACCES) => {
+                    if let Some(neighbour) = unreadable {
+                        return Err(format!(
+                            "{directory} and {neighbour} cannot be watched: neither can be read, so a move of either would go unheard (grant read access to one of every two adjacent directories above the watched root)"
+                        ));
+                    }
+                    unreadable = Some(directory.into_owned());
+                }
                 Err(errno) => return Err(format!("{directory} cannot be watched: {}", io::Error::from_raw_os_error(errno))),
             }
         }
