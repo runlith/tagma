@@ -70,10 +70,10 @@ it.live('refresh adopts the current definition for the next run and preserves it
     const op = (id: string, input: unknown) => world.op(id, input, query);
     const source = (body: string, capabilities: string, tools = 'read', section = 'writing') =>
       `---\nextends: tagma\ncapabilities: [${capabilities}]\ntools: [${tools}]\nsections:\n  - replace: ${section}\n    text: ${body}-identity\n---\n${body}-overlay\n`;
-    const original = yield* op('save_agent', { name: 'reader', scope: 'project', revision: null, source: source('first', '') });
+    const original = yield* op('save_agent', { name: 'scout', scope: 'project', revision: null, source: source('first', '') });
     expect(original.status).toBe(200);
     const first = yield* Schema.decodeUnknownEffect(agentDefinitionSchema)(original.body);
-    const born = yield* op('create_thread', { type: 'reader', approvalMode: 'bypass' });
+    const born = yield* op('create_thread', { type: 'scout', approvalMode: 'bypass' });
     expect(born.status).toBe(200);
     const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
     const harness = Context.get(world.runtime.owners, ThreadHarness);
@@ -98,14 +98,14 @@ it.live('refresh adopts the current definition for the next run and preserves it
         Effect.flatMap(Effect.fromOption),
       );
     const changed = yield* op('save_agent', {
-      name: 'reader',
+      name: 'scout',
       scope: 'project',
       revision: first.origin.revision,
       source: source('second', 'files'),
     });
     expect(changed.status).toBe(200);
     const definition = yield* Schema.decodeUnknownEffect(agentDefinitionSchema)(changed.body);
-    const preview = yield* op('read_agent', { id: 'reader' });
+    const preview = yield* op('read_agent', { id: 'scout' });
     const current = yield* Schema.decodeUnknownEffect(agentPreviewSchema)(preview.body);
     expect(yield* op('refresh_thread_instructions', { threadId })).toMatchObject({ status: 200, body: { status: 'updated' } });
     expect(yield* op('refresh_thread_instructions', { threadId })).toMatchObject({ status: 200, body: { status: 'current' } });
@@ -116,7 +116,7 @@ it.live('refresh adopts the current definition for the next run and preserves it
     const saved = yield* op('read_thread_agent', { threadId });
     const frozen = (yield* Schema.decodeUnknownEffect(agentPreviewSchema)(saved.body)).prompt.text;
     const expanded = yield* op('save_agent', {
-      name: 'reader',
+      name: 'scout',
       scope: 'project',
       revision: definition.origin.revision,
       source: source('second', 'files', 'read, ls'),
@@ -125,7 +125,7 @@ it.live('refresh adopts the current definition for the next run and preserves it
     const expandedDefinition = yield* Schema.decodeUnknownEffect(agentDefinitionSchema)(expanded.body);
     expect(yield* op('refresh_thread_instructions', { threadId })).toMatchObject({ status: 200, body: { status: 'updated' } });
     const reordered = yield* op('save_agent', {
-      name: 'reader',
+      name: 'scout',
       scope: 'project',
       revision: expandedDefinition.origin.revision,
       source: source('second', 'files', 'ls, read'),
@@ -134,7 +134,7 @@ it.live('refresh adopts the current definition for the next run and preserves it
     const reorderedDefinition = yield* Schema.decodeUnknownEffect(agentDefinitionSchema)(reordered.body);
     expect(yield* op('refresh_thread_instructions', { threadId })).toMatchObject({ status: 200, body: { status: 'current' } });
     const invalid = yield* op('save_agent', {
-      name: 'reader',
+      name: 'scout',
       scope: 'project',
       revision: reorderedDefinition.origin.revision,
       source: source('invalid', '', 'read', 'missing-section'),
@@ -168,7 +168,7 @@ it.live(
       yield* projectLeaving(world, projectId);
       const op = (id: string, input: unknown) => world.op(id, input, `project=${projectId}`);
       const saved = yield* op('save_agent', {
-        name: 'reader',
+        name: 'scout',
         scope: 'project',
         revision: null,
         source: '---\nextends: tagma\n---\nreader-overlay\n',
@@ -192,7 +192,7 @@ it.live(
                 ownerId: 'operator',
                 agentId: HARNESS_AGENT_ID,
                 provider: 'claude-code',
-                profile: { id: 'reader', overlay: { id: 'reader', baseAgentId: 'tagma', description: '' } },
+                profile: { id: 'scout', overlay: { id: 'scout', baseAgentId: 'tagma', description: '' } },
               },
               tx,
             );
@@ -203,7 +203,7 @@ it.live(
       const hosted = yield* seated('claude-code', 'tagma');
       expect(yield* op('refresh_thread_instructions', { threadId: hosted })).toMatchObject({ status: 200, body: { status: 'updated' } });
       const pending = yield* store.systemPromptOf(hosted);
-      expect(pending?.pendingDefinition).toMatchObject({ agentId: HARNESS_AGENT_ID, profile: { id: 'reader' } });
+      expect(pending?.pendingDefinition).toMatchObject({ agentId: HARNESS_AGENT_ID, profile: { id: 'scout' } });
       expect(pending?.pendingSystemPrompt).toContain('reader-overlay');
       expect(yield* op('refresh_thread_instructions', { threadId: hosted })).toMatchObject({ status: 200, body: { status: 'current' } });
       const own = yield* seated('devin', null);

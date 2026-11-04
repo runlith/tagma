@@ -96,6 +96,8 @@ export function parseAgentFile(
     tools: fields.tools,
     model: fields.model,
     sections: sections?.success,
+    audience: fields.audience,
+    budget: fields.budget,
     body,
     revision: createHash('sha256').update(raw).digest('hex'),
     source: raw,

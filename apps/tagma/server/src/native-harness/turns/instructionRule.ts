@@ -14,7 +14,8 @@ import { instructionAudience } from '../agents/effectiveAgent.js';
 const RULE_ID = 'project-instructions';
 export const instructionSource: NativeRuleSource = {
   id: RULE_ID,
-  create: ({ declaration, definitions }) => instructionRule((ctx) => instructionAudience(heldCapabilities(declaration, definitions, ctx))),
+  create: ({ declaration, definitions }) =>
+    instructionRule((ctx) => instructionAudience(heldCapabilities(declaration, definitions, ctx), ctx.thread.profile?.overlay)),
 };
 
 export function instructionRule(audienceOf: (ctx: ThreadContext) => InstructionSet['audience']): AgentRule<ThreadContext> {
@@ -24,6 +25,7 @@ export function instructionRule(audienceOf: (ctx: ThreadContext) => InstructionS
       Effect.gen(function* () {
         if (ctx.hook !== 'beforeStep' || ctx.graphRefused !== undefined) return null;
         const audience = audienceOf(ctx);
+        if (audience === 'reader') return null;
         const told: string[] = [];
         const covers: string[] = [];
         const state: Record<string, InstructionSet> = {};

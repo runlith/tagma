@@ -17,6 +17,8 @@ export function profileOf(capabilities: CapabilityDefinitions, file: AgentFile):
     tools: file.tools,
     model: file.model,
     sections: file.sections,
+    audience: file.audience,
+    budget: file.budget,
   };
 }
 

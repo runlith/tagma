@@ -115,6 +115,7 @@ export type ThreadCompactionResult = {
   summarizer?: ThreadCompactionSummarizer;
   contextWindow: number;
   inputLimit: number | null;
+  premiumAbove: number | null;
   correctedTokens: number;
   basis: ProjectionBasis;
 };
@@ -401,6 +402,7 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
         settlement: pruned,
         contextWindow: capacity.context,
         inputLimit: capacity.input ?? null,
+        premiumAbove: capacity.premiumAbove ?? null,
         basis: projection.basis,
         correctedTokens,
       });
@@ -498,6 +500,7 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
         summarizer: summarizer,
         contextWindow: capacity.context,
         inputLimit: capacity.input ?? null,
+        premiumAbove: capacity.premiumAbove ?? null,
         basis: projection.basis,
         correctedTokens: sized.corrected,
       };

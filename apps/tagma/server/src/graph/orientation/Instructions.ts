@@ -120,6 +120,8 @@ export const instructionsReads = Effect.fnUntraced(function* (law: LawReads) {
     Effect.fn('Orientation.instructions')(function* (input: { projectId: number; audience: InstructionSet['audience'] }) {
       const proj = yield* projects.byId(input.projectId);
       const root = yield* measuredRoot(proj);
+      if (input.audience === 'reader')
+        return { projectId: input.projectId, audience: input.audience, root, complete: true, entries: [] } satisfies InstructionSet;
       const cross = yield* globalLaw(input.projectId);
       const law = cross.rules.map((entry) => scopedInstruction(entry, cross.scope));
       const group = yield* groups.of(input.projectId);

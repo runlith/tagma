@@ -55,7 +55,7 @@ export const ANTHROPIC_SPECS = {
   'claude-haiku-5-5': {
     label: 'Haiku 5.5',
     short: 'Haiku',
-    capacity: { context: 1_000_000, output: 128_000 },
+    capacity: { context: 1_000_000, output: 128_000, premiumAbove: 100_000 },
     capabilities: ['text', 'vision'],
     reasoning: ['low', 'medium', 'high', 'xhigh', 'max'],
     defaultReasoning: 'medium',

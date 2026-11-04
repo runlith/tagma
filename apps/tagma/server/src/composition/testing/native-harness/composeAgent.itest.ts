@@ -58,6 +58,7 @@ import {
   asThreadContext,
 } from '../../../native-harness/testing/doubles.js';
 import { composeAgent as composeWithSections } from '../../../native-harness/testing/doubles.js';
+import { makeBuiltinAgents } from '../../../native-harness/testing/doubles.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { OperationId } from '../../../platform/contract/wire/ids.js';
@@ -639,6 +640,225 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             expect(messages).toContain(law);
             expect(messages).toContain(explanation);
           }
+        }),
+      ),
+    ),
+  );
+  it.effect('a reader-audience thread is told no law and no code rule on a read, only the explanation over the file', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const {
+            composeAgent,
+            scriptedRunner,
+            sandboxWorld,
+            context,
+            input,
+            thread,
+            tree,
+            call,
+            answer,
+            undelegatedThreads,
+            namesOnly,
+            launch,
+          } = yield* makeComposition(demo);
+          const { graph, projectId } = demo;
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.writeFileString(join(demo.demoRoot, 'NOTE.txt'), 'the reader sees this file\n');
+          yield* graph.blocks.create({
+            projectId,
+            parentId: demo.root,
+            tags: ['tag'],
+            title: 'Case',
+            body: 'A fixture declaration.',
+            fields: { id: 'case' },
+          });
+          const law = 'Keep the fixture cursor monotonic.';
+          const explanation = 'Rewinding the cursor would replay the fixture.';
+          for (const [tags, title, body] of [
+            [['rule', 'case'], 'Fixture law', law],
+            [['explanation', 'case'], 'Fixture explanation', explanation],
+          ] as const) {
+            yield* graph.blocks.create({ projectId, parentId: demo.root, tags, title, body, sources: [{ kind: 'file', ref: 'NOTE.txt' }] });
+          }
+          const execution: ThreadExecution['Service'] = {
+            ...namesOnly,
+            touched: (ctx, at, shown) =>
+              graph.touches.touch({ projectId: at.projectId, shown }).pipe(signedBy(ctx.session), Effect.provide(at.graph)),
+          };
+          const read = Effect.fnUntraced(function* (id: string, audience: 'reader' | undefined) {
+            const offered: { tools: string[]; messages: readonly Message[] }[] = [];
+            const runner = yield* scriptedRunner(
+              (turn) => (turn > 1 ? answer(turn, 'Done.') : call(turn, 'read', { path: 'NOTE.txt' })),
+              offered,
+            );
+            const declaration = asAgentDeclaration({ ...tree, capabilities: ['files', 'graph'] });
+            const view: ThreadView = {
+              ...thread,
+              id,
+              agentId: declaration.id,
+              profile: {
+                id,
+                overlay: { id, baseAgentId: declaration.id, description: 'Reads.', capabilities: ['files', 'graph'], audience },
+              },
+            };
+            const world = { ...sandboxWorld(), root: demo.demoRoot, world: machineWorld };
+            const composed = composeAgent(declaration, runner, undelegatedThreads.rows, undelegatedThreads.mandate, execution, () =>
+              Effect.succeed(
+                asThreadContext({ ...context(world), thread: view, graphRoot: demo.demoRoot, session: { harness: 'tagma', key: id } }),
+              ),
+            );
+            const run = yield* launch(composed, input(composed, id, [Message.user('Read the fixture.')], view));
+            yield* run.output.response;
+            return { text: JSON.stringify(offered.at(-1)!.messages), told: instructionSnapshot(offered.at(-1)!.messages, projectId) };
+          });
+          const plain = yield* read('plain', undefined);
+          expect(plain.text).toContain(law);
+          expect(plain.told).toBeDefined();
+          const reading = yield* read('reading', 'reader');
+          expect(reading.text).toContain(explanation);
+          expect(reading.text).not.toContain(law);
+          expect(reading.told).toBeUndefined();
+        }),
+      ),
+    ),
+  );
+  it.effect('the built-in reader thread holds exactly its read tools and a prompt of its own text alone', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const {
+            DEFINITIONS,
+            prompts,
+            composeAgent,
+            scriptedRunner,
+            sandboxWorld,
+            context,
+            input,
+            thread,
+            answer,
+            undelegatedThreads,
+            namesOnly,
+            launch,
+          } = yield* makeComposition(demo);
+          const file = yield* Effect.flatMap(makeBuiltinAgents(DEFINITIONS), (floor) => floor.agentIn(demo.projectId, 'reader'));
+          expect(file).toBeDefined();
+          const offered: { tools: string[]; messages: readonly Message[] }[] = [];
+          const runner = yield* scriptedRunner((turn) => answer(turn, 'Done.'), offered);
+          const base = composeAgent(
+            {
+              id: 'declared',
+              name: 'Declared',
+              description: 'The base a file agent runs as.',
+              identity: 'You are nobody.',
+              capabilities: ['files', 'shell', 'graph'],
+              sources: conversationSources(),
+            },
+            runner,
+            undelegatedThreads.rows,
+            undelegatedThreads.mandate,
+            namesOnly,
+            (view: ThreadView) => Effect.succeed({ ...context(sandboxWorld()), thread: view }),
+          );
+          const overlay = agentFilesOf()(DEFINITIONS).profileOf(file!);
+          const view: ThreadView = { ...thread, id: 'reader', agentId: 'declared', profile: { id: 'reader', overlay } };
+          const run = yield* launch(base, input(base, 'reader', [Message.user('Where does it live?')], view));
+          yield* run.output.response;
+          expect(overlay).toMatchObject({ audience: 'reader', budget: { steps: 25, seconds: 180 }, model: undefined });
+          expect(offered[0]!.tools).toEqual([
+            'ask_user',
+            'glob',
+            'grep',
+            'ls',
+            'read',
+            'read_block',
+            'read_owners',
+            'read_zone',
+            'search_blocks',
+            'tool_search',
+          ]);
+          expect(prompts[0]).toBe(file!.body);
+        }),
+      ),
+    ),
+  );
+  it.effect('a spent prompt budget denies the rest of a step’s calls and ends the run on a step without tools', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const {
+            composeAgent,
+            scriptedRunner,
+            sandboxWorld,
+            context,
+            input,
+            thread,
+            call,
+            answer,
+            undelegatedThreads,
+            namesOnly,
+            launch,
+          } = yield* makeComposition(demo);
+          const offered: { tools: string[]; active?: string[] | undefined; messages: readonly Message[] }[] = [];
+          const twoReads = (turn: number): LLMEvent[] => {
+            const events = call(turn, 'read', { path: 'NOTE.txt' });
+            return [
+              ...events.slice(0, 3),
+              { type: 'tool-input-start', id: `second-${turn}`, name: 'read' },
+              { type: 'tool-call', id: `second-${turn}`, name: 'read', input: { path: 'NOTE.txt' } },
+              ...events.slice(3),
+            ];
+          };
+          const runner = yield* scriptedRunner((turn) => (turn > 1 ? answer(turn, 'Done.') : twoReads(turn)), offered);
+          const base = composeAgent(
+            {
+              id: 'declared',
+              name: 'Declared',
+              description: 'The base a file agent runs as.',
+              identity: 'You are nobody.',
+              capabilities: ['files'],
+              sources: conversationSources(),
+            },
+            runner,
+            undelegatedThreads.rows,
+            undelegatedThreads.mandate,
+            namesOnly,
+            (view: ThreadView) => Effect.succeed({ ...context(sandboxWorld()), thread: view }),
+          );
+          const view: ThreadView = {
+            ...thread,
+            id: 'budgeted',
+            agentId: 'declared',
+            profile: {
+              id: 'budgeted',
+              overlay: {
+                id: 'budgeted',
+                baseAgentId: 'declared',
+                description: 'Reads.',
+                prompt: 'Read.',
+                capabilities: ['files'],
+                budget: { prompt: 30_000 },
+              },
+            },
+          };
+          const run = yield* launch(base, {
+            ...input(base, 'budgeted', [Message.user('Read it.')], view),
+            context: {
+              project: ({ messages, stepNumber }) =>
+                Effect.succeed({
+                  messages,
+                  estimate: { tokens: 5_000 * (stepNumber + 1), contextWindow: 1_000_000, premiumAbove: null, basis: 'none' as const },
+                }),
+              lower: (messages) => Effect.succeed(messages),
+              observe: () => Effect.succeed(undefined),
+            },
+          });
+          yield* run.output.response;
+          expect(offered).toHaveLength(2);
+          expect(offered[0]!.active).not.toEqual([]);
+          expect(offered[1]!.active).toEqual([]);
+          const results = offered[1]!.messages.filter((message) => message.role === 'tool').flatMap((message) => message.content);
+          expect(results.map((part) => JSON.stringify(part).includes('refused[permission-denied]'))).toEqual([false, true]);
         }),
       ),
     ),

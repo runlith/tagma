@@ -25,6 +25,7 @@ import { instructionSource } from './turns/instructionRule.js';
 import { touchSource } from './capabilities/touchRule.js';
 import { explicitSkillSource } from './capabilities/skills.js';
 import { delegationSource } from './turns/delegationRule.js';
+import { budgetSource } from './turns/budgetRule.js';
 import { teamSource } from './turns/teamRule.js';
 import { checkSource } from './capabilities/checkRule.js';
 import { availabilitySource } from './capabilities/availability.js';
@@ -44,6 +45,7 @@ export const nativeHarness = manifest({
     touchSource,
     explicitSkillSource,
     delegationSource,
+    budgetSource,
     teamSource,
     checkSource,
     availabilitySource,

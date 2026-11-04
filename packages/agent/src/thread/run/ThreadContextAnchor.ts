@@ -276,6 +276,7 @@ export const makeThreadContextAnchors = Effect.gen(function* () {
         estimate: {
           tokens: projected.correctedTokens,
           contextWindow: projected.contextWindow,
+          premiumAbove: projected.premiumAbove,
           basis: projected.basis === 'none' && thread.contextReading?.stale ? 'stale' : projected.basis,
         },
       };

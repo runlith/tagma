@@ -37,7 +37,7 @@ import { ThreadLookup } from '../../threads/contract/service/reads.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { CapabilityDefinitions } from '../capabilities/definitions.js';
 import type { AgentDeclaration } from './declaration.js';
-import { agentPrompt, canLoadSkills, instructionAudience } from './effectiveAgent.js';
+import { agentPrompt, canLoadSkills, instructionAudience, isInstructionAudience } from './effectiveAgent.js';
 import { parseAgentFile } from './declared/files.js';
 import type { AgentFile } from '../../threads/contract/wire/agentLibrary.js';
 import { DECLARED_BASE_ID } from './declared/base.js';
@@ -71,6 +71,8 @@ function frontmatter(file: ParsedFile): AgentFrontmatter {
     tools: file.tools,
     model: file.model,
     sections: file.sections,
+    audience: file.audience,
+    budget: file.budget,
   };
 }
 
@@ -320,7 +322,7 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
         ]
       : [];
     const addition = overlay?.instructions?.trim();
-    const { instructions, graph } = yield* orientationParts(projectId, served, selected, 'all');
+    const { instructions, graph } = yield* orientationParts(projectId, served, selected, overlay, 'all');
     const catalog = definitionToolCatalog({
       declaration: base,
       effective,
@@ -397,6 +399,7 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       projectId,
       yield* graphs.graphFor(projectId),
       capabilities.effective(one.base, one.overlay).held,
+      one.overlay,
       moves,
     );
     return startCost({
@@ -411,17 +414,13 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
     projectId: number,
     served: Effect.Success<ReturnType<typeof graphs.graphFor>>,
     selected: readonly Capability[],
+    overlay: AgentProfile | undefined,
     moves: StartMoves | 'all',
   ) {
     const orientation = Context.get(served, Orientation);
-    const instructions =
-      moves === 'graph'
-        ? null
-        : yield* orientation.instructions({ projectId, audience: instructionAudience(selected) }).pipe(Effect.provide(served));
-    const graph =
-      moves !== 'law' && instructionAudience(selected) === 'graph'
-        ? yield* orientation.render({ projectId }).pipe(Effect.provide(served))
-        : null;
+    const audience = instructionAudience(selected, overlay);
+    const instructions = moves === 'graph' ? null : yield* orientation.instructions({ projectId, audience }).pipe(Effect.provide(served));
+    const graph = moves !== 'law' && audience === 'graph' ? yield* orientation.render({ projectId }).pipe(Effect.provide(served)) : null;
     return { instructions, graph };
   });
 
@@ -440,12 +439,11 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       );
     }
     const selected = capabilities.effective(base, definition.profile?.overlay).held;
+    const audience = instructionAudience(selected, definition.profile?.overlay);
     const served = (yield* graphs.graphAt(graph)).context;
     const told = yield* store.toldTailOf(threadId, instructionsTold(projectId));
     const delivered = instructionSnapshot(told ?? [], projectId) ?? null;
-    const current = yield* Context.get(served, Orientation)
-      .instructions({ projectId, audience: instructionAudience(selected) })
-      .pipe(Effect.provide(served));
+    const current = yield* Context.get(served, Orientation).instructions({ projectId, audience }).pipe(Effect.provide(served));
     return { delivered, current };
   });
 
@@ -465,6 +463,8 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       tools: overlay?.tools === undefined ? undefined : overlay.tools,
       model: overlay?.model === undefined ? undefined : overlay.model,
       sections: overlay?.sections,
+      audience: overlay?.audience === undefined || !isInstructionAudience(overlay.audience) ? undefined : overlay.audience,
+      budget: overlay?.budget,
     };
     const body = overlay?.prompt ?? overlay?.instructions ?? '';
     const text = prompt?.systemPrompt ?? '';

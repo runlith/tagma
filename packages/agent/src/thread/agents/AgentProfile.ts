@@ -5,12 +5,21 @@ const sectionId = Schema.String.check(Schema.isMinLength(1));
 
 export const sectionEditSchema = Schema.Union([
   Schema.Struct({ drop: sectionId }),
+  Schema.Struct({ keep: Schema.Array(sectionId) }),
   Schema.Struct({ replace: sectionId, text: Schema.String }),
   Schema.Struct({ add: sectionId, before: sectionId, text: Schema.String }),
   Schema.Struct({ add: sectionId, after: sectionId, text: Schema.String }),
   Schema.Struct({ edit: sectionId, find: Schema.String.check(Schema.isMinLength(1)), with: Schema.String }),
 ]);
 export type SectionEdit = typeof sectionEditSchema.Type;
+
+const budgetLimit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+export const runBudgetSchema = Schema.Struct({
+  prompt: Schema.optional(budgetLimit),
+  steps: Schema.optional(budgetLimit),
+  seconds: Schema.optional(budgetLimit),
+});
+export type RunBudget = typeof runBudgetSchema.Type;
 
 export type AgentProfile = {
   readonly id: string;
@@ -23,6 +32,8 @@ export type AgentProfile = {
   readonly sections?: readonly SectionEdit[];
   readonly capabilities?: readonly string[];
   readonly runtimeSources?: readonly string[];
+  readonly audience?: string;
+  readonly budget?: RunBudget;
 };
 
 export const agentProfileSchema = Schema.Struct({
@@ -41,6 +52,8 @@ export const agentProfileSchema = Schema.Struct({
   sections: Schema.optional(Schema.Array(sectionEditSchema)),
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   runtimeSources: Schema.optional(Schema.Array(Schema.String)),
+  audience: Schema.optional(Schema.String),
+  budget: Schema.optional(runBudgetSchema),
 });
 
 export type ThreadProfileBirth = {

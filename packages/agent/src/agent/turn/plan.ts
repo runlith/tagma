@@ -97,6 +97,8 @@ export const planStep = Effect.fn('planStep')(function* (input: AgentStepPlanInp
         ...(input.opening ? trailingReaderInputs(input.messages) : []),
         ...held.signals.flatMap((signal) => agentReaderInput(signal) ?? []),
       ],
+      contextEstimate:
+        context.estimate === undefined ? undefined : { tokens: context.estimate.tokens, premiumAbove: context.estimate.premiumAbove },
       invocationKey: `step:${input.stepNumber}`,
       ordinal: input.stepNumber + 1,
     }),

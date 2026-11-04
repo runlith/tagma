@@ -232,6 +232,7 @@ const OFFERED: Judge = () => null;
 const CODE_TYPE: Standing = { to: 'agents', what: 'an agent of this server' };
 const HARNESS_TYPE: Standing = { to: 'agents', what: 'a harness of this server' };
 const STANDINGS: Record<AgentFile['origin'], Standing> = {
+  builtin: { to: 'agents', what: 'a built-in agent of this server' },
   personal: { to: 'agents', what: "a file of the operator's personal agents" },
   project: { to: 'operator', what: "a file of this project's agents" },
   app: { to: 'operator', what: "an app's agent" },

@@ -163,17 +163,17 @@ describe('AgentRuntimePolicy', () => {
       expect(agentStepToolPolicy(directives, ['read', 'write'], ['auto', 'tool'])).toEqual({ activeTools: ['read'], toolChoice: null });
     }),
   );
-  test('a soft request never replaces a hard requirement, even on an auto-only model', () => {
-    expect(
-      agentStepToolPolicy(
-        [
-          { type: 'request', tool: 'load', text: 'Load the resource.' },
-          { type: 'require', tool: 'report' },
-        ],
-        ['load', 'report'],
-        ['auto', 'none'],
-      ).toolChoice,
-    ).toEqual({ type: 'tool', toolName: 'report' });
+  test('a card that cannot force a tool leaves a requirement the tool alone under auto, and a forced choice where it can', () => {
+    const directives: AgentDirective[] = [
+      { type: 'request', tool: 'load', text: 'Load the resource.' },
+      { type: 'require', tool: 'report' },
+    ];
+    expect(agentStepToolPolicy(directives, ['load', 'report'], ['auto', 'none'])).toEqual({ activeTools: ['report'], toolChoice: null });
+    expect(agentStepToolPolicy(directives, ['load', 'report'], ['auto', 'tool'])).toEqual({
+      activeTools: null,
+      toolChoice: { type: 'tool', toolName: 'report' },
+    });
+    expect(agentStepToolPolicy(directives, ['load', 'report']).toolChoice).toEqual({ type: 'tool', toolName: 'report' });
   });
   it.effect(
     'a critical rule failure fails the evaluation instead of logging away',

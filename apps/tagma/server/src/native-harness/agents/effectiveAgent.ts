@@ -6,14 +6,14 @@ import type { CapabilityOffers, OfferFacts } from '../contract/service/execution
 import { capabilityInventory } from '../capabilities/inventory.js';
 import { TOOL_SEARCH_TOOL } from '@runlith/agent/AgentDeferredTools';
 import { threadUserQuestionTools } from '@runlith/agent/tools/UserQuestion';
-import { Result } from 'effect';
+import { Result, Schema } from 'effect';
 import { RETRIEVAL_TOOL } from '../tools/outputWords.js';
 import { conversationSources } from './conversationSources.js';
 import { editedPrompt, promptDocument } from './prompt.js';
 import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 import type { SectionRender } from '../../threads/doctrine/render.js';
 import type { PromptDocument } from '../../threads/contract/wire/agentLibrary.js';
-import type { InstructionSet } from '../../graph/contract/wire/instructions.js';
+import { instructionSetSchema, type InstructionSet } from '../../graph/contract/wire/instructions.js';
 import { capabilitySections, type Capability } from '../capabilities/contract.js';
 
 export function guidanceCapabilities(
@@ -99,7 +99,10 @@ function unofferedRefusal(unoffered: ReadonlyMap<string, readonly string[]>, ori
 
 export type EffectiveCapabilities = EffectiveAgent<Capability>;
 
-export function instructionAudience(capabilities: readonly Capability[]): InstructionSet['audience'] {
+export const isInstructionAudience = Schema.is(instructionSetSchema.fields.audience);
+
+export function instructionAudience(capabilities: readonly Capability[], overlay?: AgentProfile): InstructionSet['audience'] {
+  if (overlay?.audience !== undefined && isInstructionAudience(overlay.audience)) return overlay.audience;
   return capabilities.some((capability) => capability.id === 'graph') ? 'graph' : 'executor';
 }
 

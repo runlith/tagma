@@ -21,7 +21,9 @@ export const touchSource: NativeRuleSource = {
   create: ({ declaration, definitions }) =>
     touchRule(touchMarks(), (ctx) => {
       const held = heldCapabilities(declaration, definitions, ctx);
-      return held.some((capability) => capability.id === 'files' || capability.id === 'shell') ? instructionAudience(held) : null;
+      return held.some((capability) => capability.id === 'files' || capability.id === 'shell')
+        ? instructionAudience(held, ctx.thread.profile?.overlay)
+        : null;
     }),
 };
 
@@ -110,6 +112,8 @@ export function touchRule(
                 ...brief,
                 place: home ? brief.place : join(place.root, brief.place),
                 tagPrompts: [],
+                rules: audience === 'reader' ? [] : brief.rules,
+                touches: audience === 'reader' ? [] : brief.touches,
               };
               textBriefs.push({ brief: shownAs, ledger });
               if (deliveredTags === undefined) continue;

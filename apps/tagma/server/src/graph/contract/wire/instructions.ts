@@ -13,7 +13,7 @@ export const instructionSetSchema = Schema.Struct({
   projectId: Schema.Number,
   root: Schema.String,
   complete: Schema.Literal(true),
-  audience: Schema.Literals(['graph', 'executor']),
+  audience: Schema.Literals(['graph', 'executor', 'reader']),
   entries: Schema.Array(instructionSchema),
 });
 export type InstructionSet = typeof instructionSetSchema.Type;

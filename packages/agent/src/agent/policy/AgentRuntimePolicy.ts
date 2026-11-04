@@ -46,8 +46,18 @@ type AgentInvocationFacts = {
   readonly tool?: AgentToolCall;
 };
 
+type AgentContextEstimate = {
+  readonly tokens: number;
+  readonly premiumAbove: number | null;
+};
+
 type AgentHookFacts =
-  | { readonly hook: 'beforeStep'; readonly modelMessages: readonly Message[]; readonly readerInputs?: readonly string[] }
+  | {
+      readonly hook: 'beforeStep';
+      readonly modelMessages: readonly Message[];
+      readonly readerInputs?: readonly string[];
+      readonly contextEstimate?: AgentContextEstimate;
+    }
   | {
       readonly hook: 'beforeClose';
       readonly modelMessages: readonly Message[];
@@ -275,8 +285,8 @@ export function agentStepToolPolicy(
   if (!demand.tool) return { activeTools: active, toolChoice: 'required' };
   if (excluded.has(demand.tool) || !catalog.includes(demand.tool)) return { activeTools: active, toolChoice: null };
   if (active && !active.includes(demand.tool)) active = [...active, demand.tool];
-  if (demand.type === 'request' && toolChoice !== undefined && !toolChoice.includes('tool')) {
-    return { activeTools: active, toolChoice: null };
+  if (toolChoice !== undefined && !toolChoice.includes('tool')) {
+    return { activeTools: demand.type === 'require' ? [demand.tool] : active, toolChoice: null };
   }
   return { activeTools: active, toolChoice: { type: 'tool', toolName: demand.tool } };
 }

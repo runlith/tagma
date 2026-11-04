@@ -23,8 +23,11 @@ capabilities: [files, web] # narrows what extends holds; required without extend
 tools: [read, ls, webfetch] # optional allowlist of tool names inside those capabilities
 # conversation tools (ask_user, read_tool_output, tool_search) stay whatever these two say
 model: { provider: anthropic, model: claude-sonnet-5-5, reasoning: high } # optional start model
+audience: reader           # optional: graph | executor | reader; unset, graph for a graph holder, else executor
+budget: { prompt: 90000, steps: 25, seconds: 180 } # optional bounds of a run; each field optional
 sections:                  # optional edits of the inherited prompt, applied in order
   - drop: holding-a-position
+  - keep: [preamble]        # or: drop every section but these
   - replace: answering
     text: Answer in one paragraph.
   - add: review-lens
@@ -38,6 +41,7 @@ Body.
 \`\`\`
 
 - With \`capabilities\` listed, a name in \`tools\` that no held capability could offer in any world refuses \`agent-invalid\`, naming the capability that offers it; a name the current world merely lacks is kept. \`files\` offers read, write, edit, delete, rename, ls; \`shell\` bash, grep, glob; \`web\` webfetch, websearch; \`graph\` the graph tools; \`read_agent_library\` lists every capability's tools. A held capability with runtime sources (\`mcp\`) can still bring names at birth, so with one held nothing is refused.
+- \`audience: reader\` is for a thread that answers and changes nothing: it is told no law, vocabulary or map, and on a read only the explanations over the file. \`budget\` binds a thread born from the definition: at 70% of any bound it is guided, and at a bound its remaining calls are denied and it answers on one last step. An unset \`prompt\` takes the model's price step where it has one. The built-in \`reader\` definition (read tools, graph first, steps 25, seconds 180) answers one question with its evidence.
 - With \`extends\` the body is appended after the inherited prompt as the section \`overlay\`, and may be empty. Without it the body is the agent's identity and must not be empty.
 - Section ids are those \`read_agent\` prints under \`prompt.sections[].id\`, except \`overlay\` and \`collaboration-source\`, which are added after the edits. \`find\` must stand exactly once in its section. An edit whose section or passage is gone refuses \`agent-invalid\` at \`read_agent\` and fails the thread's first run; sections differ by project and capabilities, so preview in the project that will run it.
 

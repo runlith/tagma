@@ -5,6 +5,7 @@ export type ModelCapacity = {
   readonly context: number;
   readonly input?: number;
   readonly output?: number;
+  readonly premiumAbove?: number;
 };
 
 export const MODEL_CAPABILITIES = ['text', 'vision', 'decision'] as const;

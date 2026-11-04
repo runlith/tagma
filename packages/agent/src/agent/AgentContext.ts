@@ -29,7 +29,12 @@ export type AgentContextInput = {
 
 export type AgentContextProjection = {
   readonly messages: readonly Message[];
-  readonly estimate?: { readonly tokens: number; readonly contextWindow: number | null; readonly basis: ProjectionBasis };
+  readonly estimate?: {
+    readonly tokens: number;
+    readonly contextWindow: number | null;
+    readonly premiumAbove: number | null;
+    readonly basis: ProjectionBasis;
+  };
 };
 
 export type AgentActualRequest = {

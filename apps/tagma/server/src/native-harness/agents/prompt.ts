@@ -94,6 +94,12 @@ export function editedPrompt(
       });
       continue;
     }
+    if ('keep' in edit) {
+      const missing = edit.keep.find((id) => at(id) === -1);
+      if (missing !== undefined) return absent(missing);
+      sections.splice(0, sections.length, ...sections.filter((section) => edit.keep.includes(section.id)));
+      continue;
+    }
     const id = 'drop' in edit ? edit.drop : 'replace' in edit ? edit.replace : edit.edit;
     const position = at(id);
     if (position === -1) return absent(id);

@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { sectionEditSchema, type SectionEdit } from '@runlith/agent/thread/agents/AgentProfile';
+import { runBudgetSchema, sectionEditSchema, type RunBudget, type SectionEdit } from '@runlith/agent/thread/agents/AgentProfile';
 import { instructionSetSchema } from '../../../graph/contract/wire/instructions.js';
 import { startCostSchema } from '../../../platform/contract/wire/start.js';
 
@@ -16,6 +16,8 @@ export const agentFrontmatterSchema = Schema.Struct({
   tools: Schema.optional(Schema.Array(Schema.String)),
   model: Schema.optional(agentModelSchema),
   sections: Schema.optional(Schema.Array(sectionEditSchema)),
+  audience: Schema.optional(instructionSetSchema.fields.audience),
+  budget: Schema.optional(runBudgetSchema),
 });
 export type AgentFrontmatter = typeof agentFrontmatterSchema.Type;
 
@@ -135,6 +137,8 @@ export type AgentFile = {
   readonly tools: readonly string[] | undefined;
   readonly model: AgentFrontmatter['model'];
   readonly sections: readonly SectionEdit[] | undefined;
+  readonly audience?: AgentFrontmatter['audience'];
+  readonly budget?: RunBudget;
   readonly body: string;
   readonly path: string;
   readonly directory: string;
@@ -143,7 +147,7 @@ export type AgentFile = {
   readonly source: string;
 };
 
-export type AgentFileOrigin = AgentFileScope | 'app' | 'plugin';
+export type AgentFileOrigin = AgentFileScope | 'app' | 'plugin' | 'builtin';
 
 export type AgentFloor = { readonly directory: string; readonly origin: AgentFileScope };
 
