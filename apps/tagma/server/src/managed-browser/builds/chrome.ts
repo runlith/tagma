@@ -6,13 +6,12 @@ const ARGS = [
   '--test-type',
   '--no-first-run',
   '--no-default-browser-check',
-  '--window-size=1280,800',
   '--disable-background-timer-throttling',
   '--disable-backgrounding-occluded-windows',
   '--disable-renderer-backgrounding',
 ];
 
-const HIDDEN = ['--headless=new', '--mute-audio'];
+const HIDDEN = ['--headless=new', '--mute-audio', '--window-size=1280,800'];
 
 const SECRET_STORE: Readonly<Record<string, readonly string[]>> = {
   darwin: ['--use-mock-keychain'],
