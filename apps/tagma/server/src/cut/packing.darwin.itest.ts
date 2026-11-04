@@ -15,14 +15,22 @@ const scratched = Effect.acquireRelease(
   (scratch) => Effect.sync(() => rmSync(scratch, { recursive: true, force: true })),
 );
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
-const unwanted = { labels: [], paths: [homedir()], comments: [], root: '' };
+const unwanted = {
+  labels: [
+    { text: 'private-adapter', by: 'the developer package' },
+    { text: 'You are a fixture agent.', by: 'the developer package' },
+  ],
+  paths: [homedir()],
+  comments: ['//! a why this source keeps for itself'],
+  root: '',
+};
 const staged = (scratch: string): string => {
   const root = join(scratch, 'release');
   for (const [path, text] of Object.entries({
     'install.json': '{}\n',
     bun: '#!/bin/sh\n',
     'executions/bun': '#!/bin/sh\n',
-    'bin/server/http.js': 'export {};\n',
+    'bin/server/http.js': 'const scanner = { id: "private-adapter-token" };\nconst other = "private-adapterless";\n',
     'surface/index.html': '<p>Tagma</p>\n',
   })) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
