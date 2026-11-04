@@ -109,7 +109,6 @@ const parameters = (options: SimulatorOptions): TemplateParams => ({
   client: CLIENT_VERSION,
   python: PYTHON_VERSION,
 });
-export const prepareSimulator = (options: SimulatorOptions) => once(templates, parameters(options)).pipe(Effect.asVoid);
 export const holdLane = (): (() => void) => {
   const base = join(Effect.runSync(cacheDirectory()), 'simulators');
   mkdirSync(base, { recursive: true });
@@ -130,28 +129,42 @@ export const prepareTemplate = Effect.fn('e2e.iosTemplateAhead')(function* (opti
   return yield* prepare({ base, params, tools, ...(yield* resolve(params.runtime)) }, Effect.succeed);
 }, Effect.provide(BunFileSystem.layer));
 
-export const simulator = Effect.fn('e2e.iosSimulator')(function* (
+export type Lane = { readonly device: Device; readonly runtime: string; readonly timing: SimulatorTiming };
+const LaneRecord = Schema.fromJsonString(
+  Schema.Struct({
+    device: Schema.Struct({ set: Schema.String, udid: Schema.String }),
+    runtime: Schema.String,
+    timing: Schema.Struct({ clone: Schema.Number, boot: Schema.Number }),
+  }),
+);
+const LENT = 'E2E_IOS_LANE';
+export const lent = (held: Lane): Record<string, string> => ({ [LENT]: JSON.stringify(held) });
+export const borrowing = (): boolean => process.env[LENT] !== undefined;
+
+export const lane = Effect.fn('e2e.iosLane')(function* (
   options: SimulatorOptions,
-): Effect.fn.Return<Simulator, SimulatorUnavailable, Scope.Scope> {
-  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
+): Effect.fn.Return<Lane, SimulatorUnavailable, Scope.Scope> {
+  const borrowed = process.env[LENT];
+  if (borrowed !== undefined)
+    return yield* Schema.decodeUnknownEffect(LaneRecord)(borrowed).pipe(
+      Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the lent iOS lane could not be read', cause })),
+    );
   const template = yield* once(templates, parameters(options));
   const set = template.value.clones;
   const started = yield* Clock.currentTimeMillis;
   let phase = 'clone';
   let device: Device | undefined;
-  let control: Input | undefined;
   let timing: SimulatorTiming | undefined;
   const unhook = onFailure(async (directory) => {
     const results = await Promise.allSettled([
       Bun.write(
-        join(directory, 'ios-startup.json'),
+        join(directory, 'ios-lane.json'),
         JSON.stringify({ phase, device: device ?? null, runtime: template.value.runtime, timing: timing ?? null }),
       ),
-      control === undefined ? Promise.resolve() : Bun.write(join(directory, 'ios-driver.log'), control.diagnostics()),
       device === undefined ? Promise.resolve() : simctl(device.set, 'io', device.udid, 'screenshot', join(directory, 'screenshot.png')),
     ]);
     const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
-    if (failures.length > 0) throw new AggregateError(failures, 'native startup evidence was incomplete');
+    if (failures.length > 0) throw new AggregateError(failures, 'native lane evidence was incomplete');
   });
   yield* Effect.addFinalizer(() => Effect.sync(unhook));
   const udid = yield* Effect.acquireRelease(
@@ -171,19 +184,49 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
   const measured = { clone: cloned - started, boot: booted - cloned };
   timing = measured;
   console.info(`iOS ${template.value.runtime}: clone ${measured.clone} ms, boot ${measured.boot} ms`);
-  phase = 'input';
+  phase = 'booted';
+  return { device: target, runtime: template.value.runtime, timing: measured };
+});
+
+export const simulator = Effect.fn('e2e.iosSimulator')(function* (
+  held: Lane,
+): Effect.fn.Return<Simulator, SimulatorUnavailable, Scope.Scope> {
+  const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
+  const { device: target, runtime, timing } = held;
+  const { set, udid } = target;
+  let phase = 'input';
+  let control: Input | undefined;
+  const unhook = onFailure(async (directory) => {
+    const results = await Promise.allSettled([
+      Bun.write(join(directory, 'ios-startup.json'), JSON.stringify({ phase, device: target, runtime, timing })),
+      control === undefined ? Promise.resolve() : Bun.write(join(directory, 'ios-driver.log'), control.diagnostics()),
+      simctl(set, 'io', udid, 'screenshot', join(directory, 'screenshot.png')),
+    ]);
+    const failures = results.flatMap((one) => (one.status === 'rejected' ? [one.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, 'native startup evidence was incomplete');
+  });
+  yield* Effect.addFinalizer(() => Effect.sync(unhook));
   const driver = yield* input(target, tools);
   control = driver;
+  let launched = false;
+  yield* Effect.addFinalizer(() =>
+    launched
+      ? attempted('MobileSafari did not terminate after its test', () => simctl(set, 'terminate', udid, 'com.apple.mobilesafari')).pipe(
+          Effect.orDie,
+        )
+      : Effect.void,
+  );
   phase = 'device-ready';
   return {
     udid,
     deviceSet: set,
-    runtime: template.value.runtime,
-    timing: measured,
+    runtime,
+    timing,
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
       phase = 'launch';
       console.info('iOS: launching Safari');
+      launched = true;
       const pid = await driver.launch('com.apple.mobilesafari');
       phase = 'quiescence';
       console.info(`iOS: waiting for Safari ${pid} accessibility`);

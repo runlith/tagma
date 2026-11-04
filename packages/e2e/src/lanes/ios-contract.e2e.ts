@@ -1,12 +1,13 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { afterEach, beforeEach, describe, expect } from 'bun:test';
-import { layer } from '@runlith/effect-test';
+import { it } from '@runlith/effect-test';
 import { runRoot } from '@runlith/testbed/fixture';
-import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, type Scope } from 'effect';
+import { Cause, Deferred, Effect, Fiber, FileSystem, type Scope } from 'effect';
 import { join } from 'node:path';
 import { fixtureHooks, onFailure, recordedFixture } from '../artifacts.ts';
+import { iosLane } from './ios.ts';
 import { cacheDirectory } from './iosTools.ts';
-import { prepareSimulator } from './simulator.ts';
+import { lent, type Lane } from './simulator.ts';
 
 type Source = (gate: string) => string;
 type Result = { readonly code: number; readonly output: string };
@@ -50,7 +51,7 @@ ios('held failure', async phone => {
 }, {runtimes:[${JSON.stringify(runtime)}]});
 `;
 
-const nested = Effect.fn('e2e.iosNestedSetup')(function* (name: string, source: Source, artifacts: string) {
+const nested = Effect.fn('e2e.iosNestedSetup')(function* (name: string, source: Source, artifacts: string, lane: Lane) {
   const files = yield* FileSystem.FileSystem;
   const directory = yield* files.makeTempDirectoryScoped({ prefix: 'ios-errors-' });
   const waiting = yield* Deferred.make<void>();
@@ -94,6 +95,7 @@ const nested = Effect.fn('e2e.iosNestedSetup')(function* (name: string, source: 
           cwd: join(import.meta.dir, '../..'),
           env: {
             ...process.env,
+            ...lent(lane),
             E2E_LANES: 'ios',
             E2E_IOS_BUILDS: builds,
             RUNLITH_TEST_RUN_ROOT: root,
@@ -130,7 +132,8 @@ const nested = Effect.fn('e2e.iosNestedSetup')(function* (name: string, source: 
 });
 
 if (process.env.E2E_LANES === undefined || process.env.E2E_LANES.split(',').includes('ios')) {
-  layer(Layer.effectDiscard(prepareSimulator({ runtime })), { excludeTestServices: true })('native page failures', (it) => {
+  const device = iosLane({ runtime });
+  describe('native page failures', () => {
     const scenario = <E>(
       title: string,
       file: string,
@@ -139,18 +142,14 @@ if (process.env.E2E_LANES === undefined || process.env.E2E_LANES.split(',').incl
     ) => {
       describe.serial(() => {
         const fixture = recordedFixture(title, (artifacts) =>
-          nested(file, source, artifacts).pipe(
+          nested(file, source, artifacts, device()).pipe(
             Effect.tap((child) => child.ready),
             Effect.provide(BunFileSystem.layer),
           ),
         );
         const hooks = fixtureHooks(fixture);
         beforeEach(hooks.setup, Infinity);
-        it.effect(
-          title,
-          () => fixture.run((child) => Effect.flatMap(child.run, check).pipe(Effect.provide(BunFileSystem.layer))),
-          Infinity,
-        );
+        it.live(title, () => fixture.run((child) => Effect.flatMap(child.run, check).pipe(Effect.provide(BunFileSystem.layer))), Infinity);
         afterEach(hooks.close, Infinity);
       });
     };
