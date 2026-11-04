@@ -201,7 +201,9 @@ test('the inspection runner compares each version and keeps partial coverage hon
     const late3 = `ask-call:request:${source}/translations/late.ts:ModelAccess.request`;
 
     const unbuilt = attempt(second, first, [`${source}/providers/open.ts`]);
-    expect(unbuilt.status).not.toBe(0);
+    expect(unbuilt.status, unbuilt.stderr.toString()).toBe(0);
+    const unprepared = Schema.decodeUnknownResult(ProgramAnswer)(JSON.parse(unbuilt.stdout.toString()));
+    expect(unprepared._tag === 'Success' ? unprepared.success.unanswered?.map((one) => one.why) : unprepared).toEqual(['unprepared']);
 
     const built = read(first, null, null);
     expect(built.tree.covered).toEqual({ scope: 'reach' });
