@@ -25,6 +25,8 @@ export type Elsewhere = (window: BrowserWindow, panel: string, placed: Placed) =
 
 const HIDDEN_PAINTS = process.platform === 'darwin';
 
+const DISPLAY_CHANGES = ['display-added', 'display-removed', 'display-metrics-changed'] as const;
+
 const beyondScreens = (): { readonly x: number; readonly y: number } => {
   const displays = screen.getAllDisplays().map((display) => display.bounds);
   return {
@@ -45,6 +47,7 @@ export class Placement {
   private readonly where = new Map<WebContentsView, BaseWindow | BrowserWindow>();
   private readonly watched = new WeakSet<BrowserWindow>();
   private readonly placed = new Set<Placed>();
+  private displaysWatched = false;
 
   constructor(private readonly elsewhere: Elsewhere) {}
 
@@ -107,9 +110,10 @@ export class Placement {
     if (placed.contents.isDestroyed()) return;
     const shown = placed.shown;
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
+    const wanted = awake(placed);
     const window =
       placed.shown === null || placed.shown.frozen || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
-    if (window === null) this.park(placed);
+    if (window === null) this.park(placed, wanted);
     else {
       this.move(placed, window);
       const zoom = window.webContents.getZoomFactor();
@@ -121,7 +125,6 @@ export class Placement {
         height: Math.round(rect.height * zoom),
       });
     }
-    const wanted = awake(placed);
     if (!HIDDEN_PAINTS) this.map(placed, wanted);
     if (placed.awake === wanted) return;
     placed.awake = wanted;
@@ -129,36 +132,51 @@ export class Placement {
     placed.view.setVisible(wanted);
   }
 
-  private park(placed: Placed): void {
-    const home = placed.home;
-    if (home !== null && !home.window.isDestroyed()) {
+  private park(placed: Placed, awake: boolean): void {
+    const home = placed.home !== null && !placed.home.window.isDestroyed() ? placed.home : null;
+    if (home !== null && (HIDDEN_PAINTS || !awake || visible(home.window))) {
       this.move(placed, home.window);
       placed.view.setBounds(home.bounds());
       return;
     }
+    const size = home === null ? placed.size : home.bounds();
     if (placed.parking === null || placed.parking.isDestroyed()) {
       placed.parking = new BrowserWindow({
-        ...(HIDDEN_PAINTS ? {} : beyondScreens()),
         show: false,
-        width: placed.size.width,
-        height: placed.size.height,
+        width: size.width,
+        height: size.height,
         focusable: false,
         skipTaskbar: true,
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
       });
     } else {
-      placed.parking.setContentSize(placed.size.width, placed.size.height);
+      placed.parking.setContentSize(size.width, size.height);
     }
     this.move(placed, placed.parking);
-    placed.view.setBounds({ x: 0, y: 0, width: placed.size.width, height: placed.size.height });
+    placed.view.setBounds({ x: 0, y: 0, width: size.width, height: size.height });
   }
 
   private map(placed: Placed, awake: boolean): void {
     const stand = placed.parking;
     if (stand === null || stand.isDestroyed()) return;
     const mapped = awake && this.where.get(placed.view) === stand;
-    if (mapped && !stand.isVisible()) stand.showInactive();
-    else if (!mapped && stand.isVisible()) stand.hide();
+    if (mapped && !stand.isVisible()) {
+      this.watchDisplays();
+      const away = beyondScreens();
+      stand.setPosition(away.x, away.y);
+      stand.showInactive();
+    } else if (!mapped && stand.isVisible()) stand.hide();
+  }
+
+  private watchDisplays(): void {
+    if (this.displaysWatched) return;
+    this.displaysWatched = true;
+    const away = () => {
+      const { x, y } = beyondScreens();
+      for (const { parking } of this.placed)
+        if (parking !== null && !parking.isDestroyed() && parking.isVisible()) parking.setPosition(x, y);
+    };
+    for (const name of DISPLAY_CHANGES) screen.on(name as 'display-added', away);
   }
 
   private move({ view, contents }: Placed, window: BaseWindow | BrowserWindow): void {
