@@ -12,27 +12,10 @@ import { report } from './report';
 const [library, state, HOLDER_PART, STANDING_HOLDER] = process.argv.slice(2) as [string, string, string, string];
 const RUNTIME_PART = 'runtime/bun';
 const HOST_PART = 'host/entry.ts';
-const next: NextBundle = {
-  holder: HOLDER_PART,
-  logic: [join(state, 'bundle', RUNTIME_PART), join(state, 'bundle', HOST_PART), library, state, HOLDER_PART, STANDING_HOLDER],
-};
 const ENTRY = 'holder.entry';
 const ENTERED = 'entered';
 const STALE = 'stale';
 const VERIFYING = 'verifying';
-const entry = (kind: string) =>
-  [
-    `holder ${HOLDER_PART}`,
-    `bundle ${RUNTIME_PART}`,
-    `bundle ${HOST_PART}`,
-    `text ${library}`,
-    `text ${state}`,
-    `text ${HOLDER_PART}`,
-    `text ${STANDING_HOLDER}`,
-    `text ${ENTERED}`,
-    `text ${kind}`,
-    '',
-  ].join('\n');
 const env = [
   { name: 'PATH', value: '/usr/bin:/bin' },
   { name: 'LC_ALL', value: 'C' },
@@ -113,7 +96,7 @@ const candidate = Effect.fn('posix.succession.candidate')(function* (
   if (holder === 'hanging') {
     yield* files.writeFileString(
       yield* part(HOLDER_PART),
-      `#!/bin/sh\nprintf ready > ${join(state, VERIFYING)}\nexec /usr/bin/perl -e 'sleep while 1'\n`,
+      `#!/bin/sh\nprintf ready > ${join(state, VERIFYING)}\nexec /bin/cat >/dev/null\n`,
       {
         mode: 0o755,
       },
@@ -131,8 +114,16 @@ const candidate = Effect.fn('posix.succession.candidate')(function* (
   }
   const runtime = yield* part(RUNTIME_PART);
   if (holder !== 'runtimeless') yield* files.symlink(process.execPath, runtime);
-  yield* files.writeFileString(yield* part(ENTRY), entry(holder));
+  const parts = [RUNTIME_PART, HOST_PART];
+  const args = [library, state, HOLDER_PART, STANDING_HOLDER, ENTERED, holder];
+  const entry = [`holder ${HOLDER_PART}`, ...parts.map((path) => `bundle ${path}`), ...args.map((arg) => `text ${arg}`), ''].join('\n');
+  yield* files.writeFileString(yield* part(ENTRY), entry);
   yield* files.writeFileString(yield* part(HOST_PART), `await import(${JSON.stringify(import.meta.path)});\n`);
+  const next: NextBundle = {
+    holder: HOLDER_PART,
+    logic: [...parts.map((path) => join(state, 'bundle', path)), ...args],
+  };
+  return next;
 });
 
 const visit = Effect.gen(function* () {
@@ -171,7 +162,7 @@ const visit = Effect.gen(function* () {
     });
     yield* readUntil(terminal(shell), 'ready');
     const before = { terminal: yield* exchange(shell, 'one'), stream: yield* exchange(stream, 'one') };
-    yield* candidate('kept');
+    const next = yield* candidate('kept');
     const flagsBefore = yield* flags();
     yield* holder.prepare(next);
     const flagsAfter = yield* flags();
@@ -199,12 +190,11 @@ const visit = Effect.gen(function* () {
     const reap = yield* leaving.reap;
     yield* leaving.release;
     const exchanged = { terminal: yield* exchange(held['terminal']!, 'three'), stream: yield* exchange(held['stream']!, 'three') };
-    yield* candidate('unexecutable');
-    const refused = yield* Effect.result(holder.prepare(next));
-    yield* candidate('misstarting');
-    const misstarted = yield* Effect.result(holder.prepare(next));
-    yield* candidate('runtimeless');
-    yield* holder.prepare(next);
+    const unexecutable = yield* candidate('unexecutable');
+    const refused = yield* Effect.result(holder.prepare(unexecutable));
+    const misstarting = yield* candidate('misstarting');
+    const misstarted = yield* Effect.result(holder.prepare(misstarting));
+    yield* holder.prepare(yield* candidate('runtimeless'));
     yield* holder.activate;
     yield* report(state, {
       phase: 2,
@@ -234,7 +224,7 @@ const visit = Effect.gen(function* () {
       transport: { _tag: 'pipes', stdin: 'pipe' },
       pace: 'full',
     });
-    yield* candidate('hanging');
+    const next = yield* candidate('hanging');
     const verifying = yield* Deferred.make<void>();
     yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -246,7 +236,14 @@ const visit = Effect.gen(function* () {
     );
     const asked = yield* monotonicMs;
     const preparing = yield* Effect.forkChild(Effect.result(holder.prepare(next)));
-    yield* Deferred.await(verifying);
+    yield* Effect.raceFirst(
+      Deferred.await(verifying),
+      Effect.flatMap(Fiber.join(preparing), (verdict) =>
+        verdict._tag === 'Failure'
+          ? Effect.fail(verdict.failure)
+          : Effect.die(new Error('the preparation completed before its verifier entered')),
+      ),
+    );
     yield* ending.closeInput;
     const endingExit = yield* ending.exit;
     const overlapping = yield* Effect.result(holder.prepare(next));
@@ -260,8 +257,7 @@ const visit = Effect.gen(function* () {
       terminal: yield* exchange(held['terminal']!, 'hung'),
       stream: yield* exchange(held['stream']!, 'hung'),
     };
-    yield* candidate('aborting');
-    yield* holder.prepare(next);
+    yield* holder.prepare(yield* candidate('aborting'));
     yield* holder.activate;
     yield* report(state, {
       phase: 3,
@@ -278,8 +274,8 @@ const visit = Effect.gen(function* () {
   }
 
   if (!standing) {
-    yield* candidate('executable');
-    yield* holder.prepare({ holder: HOLDER_PART, logic: [...next.logic, STALE] });
+    const next = yield* candidate('executable');
+    yield* holder.prepare({ ...next, logic: [...next.logic, STALE] });
     process.exit(75);
   }
 

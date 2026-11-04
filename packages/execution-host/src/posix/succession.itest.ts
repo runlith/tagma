@@ -104,7 +104,7 @@ beforeAll(async () => {
     [join(state, 'bundle', HOLDER_PART), state, process.execPath, LOGIC, LIBRARY, state, HOLDER_PART, STANDING_HOLDER],
     {
       cwd: state,
-      stdin: 'ignore',
+      stdin: 'pipe',
       stdout: 'ignore',
       stderr: 'pipe',
     },
@@ -117,6 +117,7 @@ beforeAll(async () => {
     }
   })();
   holderExit = await holder.exited;
+  await holder.stdin.end();
   await said;
   const reported = join(state, 'report.jsonl');
   facts = existsSync(reported)
