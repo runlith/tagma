@@ -37,13 +37,15 @@ ios(${JSON.stringify(path)}, async phone => {
 `;
 
 const held: Source = (gate) => `import { ios } from ${JSON.stringify(import.meta.resolve('@runlith/e2e/ios'))};
-const page = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden}#list{position:absolute;inset:0;overflow:auto}.row{height:80px;border-bottom:1px solid}</style><div id="list"></div><script>const list=document.querySelector("#list");for(let i=0;i<200;i++){const row=document.createElement("div");row.className="row";list.append(row)}list.scrollTop=4000;</script>';
+import { Schema } from ${JSON.stringify(import.meta.resolve('effect'))};
+const page = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden}#list{position:absolute;inset:0;overflow:auto}.row{height:80px;border-bottom:1px solid}</style><div id="list"></div><script>const list=document.querySelector("#list");for(let i=0;i<200;i++){const row=document.createElement("div");row.className="row";list.append(row)}list.scrollTop=4000;window.moved=new Promise(resolve=>list.addEventListener("touchmove",event=>{if(event.isTrusted)resolve()},{once:true,passive:true}));</script>';
 ios('held failure', async phone => {
   ${ready(gate)}
   const server = Bun.serve({hostname:'127.0.0.1',port:0,fetch:() => new Response(page,{headers:{'content-type':'text/html'}})});
   await phone.open(server.url.href);
   await phone.touch.press({x:200,y:600});
   await phone.touch.move({x:200,y:500});
+  await phone.evaluate('window.moved', Schema.Void);
   throw new Error('held failure marker');
 }, {runtimes:[${JSON.stringify(runtime)}]});
 `;
