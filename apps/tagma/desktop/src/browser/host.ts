@@ -378,8 +378,7 @@ export class BrowserHost implements Executor {
         if (!(driven instanceof Driven)) return fail(driven);
         this.sessions.set(call.session, driven);
         page.driving(driven);
-        this.placement.settle(page.placed);
-        return answer();
+        return this.placement.wake(page.placed, answer, () => this.reporter !== reporter);
       }
       case 'profileSession': {
         const service = this.service(call.profile);
