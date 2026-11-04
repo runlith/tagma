@@ -253,6 +253,22 @@ describe('the tail', () => {
     viewport.dispose();
   });
 
+  test('a return to the tail keeps following when rows there grow before the feed reaches them', async () => {
+    const { browser, viewport, sync, settle, read, keys } = await opened();
+    await read(3000);
+    viewport.resume();
+    await settle();
+    expect(viewport.following).toBe(true);
+
+    sync([...keys(), 'row-200']);
+    browser.resize('row-196', 1060);
+    await settle();
+
+    expect(browser.atEnd()).toBe(true);
+    expect(viewport.following).toBe(true);
+    viewport.dispose();
+  });
+
   test('a selection begun while the tail is still being reached holds the feed against later growth', async () => {
     const { browser, viewport, sync, settle, keys } = await opened();
     const text = document.createTextNode('an answer worth copying');
@@ -268,6 +284,33 @@ describe('the tail', () => {
     await settle();
 
     expect(browser.root.scrollTop).toBe(top);
+    window.getSelection()!.removeAllRanges();
+    viewport.dispose();
+  });
+
+  test('a return to the tail ends the hold of the selection standing in the feed, and the next selection holds again', async () => {
+    const { browser, viewport, settle } = await opened();
+    const text = document.createTextNode('an answer still being written');
+    browser.rows.get('row-199')!.inner.append(text);
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    window.getSelection()!.addRange(range);
+    viewport.syncSelection(window.getSelection(), browser.list);
+    expect(viewport.anchored).toBe(false);
+
+    viewport.resume();
+    text.appendData(' and more of it');
+    viewport.syncSelection(window.getSelection(), browser.list);
+    browser.resize('row-199', 400);
+    await settle();
+    expect(browser.atEnd()).toBe(true);
+    expect(viewport.anchored).toBe(true);
+
+    window.getSelection()!.removeAllRanges();
+    viewport.syncSelection(window.getSelection(), browser.list);
+    window.getSelection()!.addRange(range);
+    viewport.syncSelection(window.getSelection(), browser.list);
+    expect(viewport.anchored).toBe(false);
     window.getSelection()!.removeAllRanges();
     viewport.dispose();
   });
@@ -321,37 +364,40 @@ describe('a paused reader', () => {
     viewport.dispose();
   });
 
-  test.each(['pointerup', 'pointercancel', 'blur'])('a scroller press folds its correction once on %s and leaves no hold', async (release) => {
-    const { browser, viewport, settle, read } = await opened(numbered(0, 30));
-    await read(900);
-    const top = browser.root.scrollTop;
-    const anchor = browser.topRow();
-    const seen = browser.screenTop(anchor)!;
-    const range = browser.root.scrollHeight;
-    browser.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
+  test.each(['pointerup', 'pointercancel', 'blur'])(
+    'a scroller press folds its correction once on %s and leaves no hold',
+    async (release) => {
+      const { browser, viewport, settle, read } = await opened(numbered(0, 30));
+      await read(900);
+      const top = browser.root.scrollTop;
+      const anchor = browser.topRow();
+      const seen = browser.screenTop(anchor)!;
+      const range = browser.root.scrollHeight;
+      browser.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
 
-    browser.resize('row-10', 160);
-    await settle();
+      browser.resize('row-10', 160);
+      await settle();
 
-    expect(browser.root.scrollTop).toBe(top);
-    expect(browser.root.scrollHeight).toBe(range);
-    expect(browser.screenTop(anchor)).toBe(seen);
+      expect(browser.root.scrollTop).toBe(top);
+      expect(browser.root.scrollHeight).toBe(range);
+      expect(browser.screenTop(anchor)).toBe(seen);
 
-    window.dispatchEvent(new MouseEvent(release));
-    await settle();
+      window.dispatchEvent(new MouseEvent(release));
+      await settle();
 
-    expect(browser.root.scrollTop).toBe(top + 100);
-    expect(browser.root.scrollHeight).toBe(range + 100);
-    expect(browser.screenTop(anchor)).toBe(seen);
+      expect(browser.root.scrollTop).toBe(top + 100);
+      expect(browser.root.scrollHeight).toBe(range + 100);
+      expect(browser.screenTop(anchor)).toBe(seen);
 
-    window.dispatchEvent(new MouseEvent(release));
-    browser.resize('row-10', 260);
-    await settle();
+      window.dispatchEvent(new MouseEvent(release));
+      browser.resize('row-10', 260);
+      await settle();
 
-    expect(browser.root.scrollTop).toBe(top + 200);
-    expect(browser.screenTop(anchor)).toBe(seen);
-    viewport.dispose();
-  });
+      expect(browser.root.scrollTop).toBe(top + 200);
+      expect(browser.screenTop(anchor)).toBe(seen);
+      viewport.dispose();
+    },
+  );
 
   test('a text-selection drag holds following but leaves measured corrections writable', async () => {
     const { browser, viewport, settle, read } = await opened(numbered(0, 30));

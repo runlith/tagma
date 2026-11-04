@@ -50,7 +50,7 @@ const checked =
         const tree = sideTree(
           root,
           side.commit,
-          await supplied(name, side),
+          await supplied(name, { ...side, paths: side.paths.filter((path) => check.selects(path)) }),
           [''],
           (path) => reach.has(path) && check.selects(path),
           parses,

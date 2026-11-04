@@ -55,6 +55,54 @@ for (const lane of ['chromium', 'webkit'] as const) {
   );
 
   e2e(
+    'a send from history or with the live answer selected lands at the tail and keeps following it',
+    async ({ page }) => {
+      const stream = (chunks: number) => page.evaluate((chunks) => (globalThis as ComposerStandGlobal).feedStand!.stream(chunks), chunks);
+      await page.goto(served.url('/?count=200&loaded=200'));
+      await ready(page);
+      await stream(4);
+      await tail(page);
+      for (const prompt of [
+        'One more thing.',
+        Array.from({ length: 14 }, (_, line) => `Line ${line + 1} of a long dictated prompt that wraps across the bubble.`).join('\n'),
+      ]) {
+        await history(page);
+        await stream(12);
+        await frames(page);
+        expect((await position(page)).gap).toBeGreaterThan(800);
+        await page.locator('textarea').fill(prompt);
+        const streaming = stream(8);
+        await page.locator('textarea').press('Enter');
+        await streaming;
+        await tail(page);
+        await stream(3);
+        await tail(page);
+      }
+
+      await page
+        .locator('[data-timeline-key="stream-answer"] p')
+        .last()
+        .evaluate((text) => {
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          window.getSelection()!.addRange(range);
+        });
+      await page.locator('textarea').evaluate((area: HTMLTextAreaElement) => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+          area,
+          'Dictated while the answer stands selected.',
+        );
+        area.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(await page.evaluate(() => (globalThis as ComposerStandGlobal).feedStand!.send())).toBe(true);
+      await stream(8);
+      expect(await page.evaluate(() => window.getSelection()!.isCollapsed)).toBe(false);
+      await tail(page);
+    },
+    { lanes: [lane], context: { viewport: { width: 1100, height: 800 } } },
+  );
+
+  e2e(
     'a queued composer submission resumes following until the reader moves away again',
     async ({ page }) => {
       await page.goto(served.url('/?count=24&loaded=24'));

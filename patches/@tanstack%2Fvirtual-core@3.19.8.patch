@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca595bff184 100644
+index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..18b86f3a14285cbd119c3a52f98dcef8d9bff893 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -202,6 +202,8 @@ class Virtualizer {
@@ -160,7 +160,18 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca5
          this.itemSizeCacheVersion++;
          let adjustedSync = false;
          if (!this._awaitingCommandReadBack()) {
-@@ -1351,6 +1401,7 @@ class Virtualizer {
+@@ -1195,6 +1245,10 @@ class Virtualizer {
+     this.isAtEnd = (threshold = this.options.scrollEndThreshold) => {
+       return this.getDistanceFromEnd() <= threshold;
+     };
++    this.isScrollingToEnd = () => {
++      var _a;
++      return ((_a = this.scrollState) == null ? void 0 : _a.toEnd) === true;
++    };
+     this.getOffsetForAlignment = (toOffset, align, itemSize = 0) => {
+       if (!this.scrollElement) return 0;
+       const size = this.getSize();
+@@ -1351,6 +1405,7 @@ class Virtualizer {
          { behavior, adjustments },
          this
        );
@@ -168,7 +179,7 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca5
        return write;
      };
      this.getCommandWrittenOffset = () => this.scrollState !== null && this.pendingWrite !== null && !this.pendingWrite.smooth ? this.pendingWrite.target : null;
-@@ -1365,6 +1416,7 @@ class Virtualizer {
+@@ -1365,6 +1420,7 @@ class Virtualizer {
      };
      this.measure = () => {
        this.pendingMin = null;
@@ -177,7 +188,7 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca5
        this.laneAssignments.clear();
        this.itemSizeCacheVersion++;
 diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
-index a997104ee5f27b4d15b5d4ae1ae4ba1f92bed879..2aab0ce8fff2a43ed88558b9ee8dac16071ebd9a 100644
+index a997104ee5f27b4d15b5d4ae1ae4ba1f92bed879..f8aed86011517a1959dfa3fe584a7765c9a7d43b 100644
 --- a/dist/cjs/index.d.cts
 +++ b/dist/cjs/index.d.cts
 @@ -92,6 +92,7 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
@@ -204,8 +215,16 @@ index a997104ee5f27b4d15b5d4ae1ae4ba1f92bed879..2aab0ce8fff2a43ed88558b9ee8dac16
      private _readElementOffset;
      private _canWriteScroll;
      private _flushHoldIfReady;
+@@ -199,6 +202,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private getVirtualDistanceFromEnd;
+     getDistanceFromEnd: () => number;
+     isAtEnd: (threshold?: number) => boolean;
++    isScrollingToEnd: () => boolean;
+     getOffsetForAlignment: (toOffset: number, align: ScrollAlignment, itemSize?: number) => number;
+     getOffsetForIndex: (index: number, align?: ScrollAlignment) => readonly [number, "auto"] | readonly [number, "start" | "end" | "center"] | undefined;
+     scrollToOffset: (toOffset: number, { align, behavior }?: ScrollToOffsetOptions) => void;
 diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
-index d838733d11c3c649212c5174ec22ae9b0ab4935c..80bdd9b80b1b77cfb6a9213efe5e62b1e8e7eba8 100644
+index d838733d11c3c649212c5174ec22ae9b0ab4935c..5b140cce59cef678559c72a09d4a80ca90c229bd 100644
 --- a/dist/esm/index.d.ts
 +++ b/dist/esm/index.d.ts
 @@ -92,6 +92,7 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
@@ -232,8 +251,16 @@ index d838733d11c3c649212c5174ec22ae9b0ab4935c..80bdd9b80b1b77cfb6a9213efe5e62b1
      private _readElementOffset;
      private _canWriteScroll;
      private _flushHoldIfReady;
+@@ -199,6 +202,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private getVirtualDistanceFromEnd;
+     getDistanceFromEnd: () => number;
+     isAtEnd: (threshold?: number) => boolean;
++    isScrollingToEnd: () => boolean;
+     getOffsetForAlignment: (toOffset: number, align: ScrollAlignment, itemSize?: number) => number;
+     getOffsetForIndex: (index: number, align?: ScrollAlignment) => readonly [number, "auto"] | readonly [number, "start" | "end" | "center"] | undefined;
+     scrollToOffset: (toOffset: number, { align, behavior }?: ScrollToOffsetOptions) => void;
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0eb0ff48ee 100644
+index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..0d60bb3456462d39b279f948320f6fe1d23e8f8e 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -201,6 +201,8 @@ class Virtualizer {
@@ -394,7 +421,18 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0e
          this.itemSizeCacheVersion++;
          let adjustedSync = false;
          if (!this._awaitingCommandReadBack()) {
-@@ -1350,6 +1400,7 @@ class Virtualizer {
+@@ -1194,6 +1244,10 @@ class Virtualizer {
+     this.isAtEnd = (threshold = this.options.scrollEndThreshold) => {
+       return this.getDistanceFromEnd() <= threshold;
+     };
++    this.isScrollingToEnd = () => {
++      var _a;
++      return ((_a = this.scrollState) == null ? void 0 : _a.toEnd) === true;
++    };
+     this.getOffsetForAlignment = (toOffset, align, itemSize = 0) => {
+       if (!this.scrollElement) return 0;
+       const size = this.getSize();
+@@ -1350,6 +1404,7 @@ class Virtualizer {
          { behavior, adjustments },
          this
        );
@@ -402,7 +440,7 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0e
        return write;
      };
      this.getCommandWrittenOffset = () => this.scrollState !== null && this.pendingWrite !== null && !this.pendingWrite.smooth ? this.pendingWrite.target : null;
-@@ -1364,6 +1415,7 @@ class Virtualizer {
+@@ -1364,6 +1419,7 @@ class Virtualizer {
      };
      this.measure = () => {
        this.pendingMin = null;
@@ -411,7 +449,7 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0e
        this.laneAssignments.clear();
        this.itemSizeCacheVersion++;
 diff --git a/src/index.ts b/src/index.ts
-index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd148e7d3b 100644
+index 83386f31ee894399bc6731128194ebaf2812f6fa..3a5e6da612ae5e5f77bd1958d1c4e0aba3b1f7f3 100644
 --- a/src/index.ts
 +++ b/src/index.ts
 @@ -391,6 +391,7 @@ export interface VirtualizerOptions<
@@ -593,7 +631,16 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
        this.itemSizeCacheVersion++
  
        // Before a command's read-back, an index or end target is retargeted
-@@ -2625,6 +2691,7 @@ export class Virtualizer<
+@@ -2291,6 +2357,8 @@ export class Virtualizer<
+     return this.getDistanceFromEnd() <= threshold
+   }
+ 
++  isScrollingToEnd = () => this.scrollState?.toEnd === true
++
+   getOffsetForAlignment = (
+     toOffset: number,
+     align: ScrollAlignment,
+@@ -2625,6 +2693,7 @@ export class Virtualizer<
        { behavior, adjustments },
        this,
      )
@@ -601,7 +648,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
      return write
    }
  
-@@ -2674,6 +2741,7 @@ export class Virtualizer<
+@@ -2674,6 +2743,7 @@ export class Virtualizer<
      // Without this, a prior resizeItem() that left pendingMin > 0 would
      // cause the rebuild to preserve stale items before that index.
      this.pendingMin = null

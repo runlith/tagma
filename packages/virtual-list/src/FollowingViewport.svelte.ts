@@ -37,6 +37,8 @@ export class FollowingViewport {
   private scrollFrame: number | undefined;
   private scrollForced = false;
   private readonly holds = new Set<Hold>();
+  private selected = false;
+  private overruled = false;
   private previousTop = 0;
   private readerDirection = 0;
   private anchoredNow = true;
@@ -186,6 +188,7 @@ export class FollowingViewport {
   follow(): void {
     this.cancelScroll();
     this.holds.clear();
+    this.overruled = this.selected;
     this.readerDirection = 0;
     this.setFollowing(true);
   }
@@ -221,7 +224,9 @@ export class FollowingViewport {
   }
 
   syncSelection(selection: Selection | null, content: HTMLElement): void {
-    if (selectionInside(selection, content)) this.hold('selection');
+    this.selected = selectionInside(selection, content);
+    if (!this.selected) this.overruled = false;
+    if (this.selected && !this.overruled) this.hold('selection');
     else this.release('selection');
   }
 

@@ -63,6 +63,8 @@ export const filesAnswer = Effect.fn('enforcement.program.filesRunner')(function
   const inReach = (path: string) => input.keys.some((key) => launch.covers(key, path));
   const sides: FileSide[] = [];
   for (const side of input.sides) {
+    const unread = side.unread?.find((file) => inReach(file.path));
+    if (unread !== undefined) return yield* failed(unread.reason);
     if (side.files !== null) sides.push({ side: side.side, whole: false, files: side.files.filter((file) => inReach(file.path)) });
     else {
       const tree = side.side === 'tree' ? input.tree : input.base;

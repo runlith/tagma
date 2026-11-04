@@ -30,6 +30,7 @@ test('the runner judges effect-style and migrations of the programs module in on
   try {
     git('init', '-q');
     put('src/use.ts', consumer);
+    writeFileSync(join(root, 'src/asset.zip'), new Uint8Array([0x50, 0x4b, 0xff, 0xfe]));
     put('tag.ts', service);
     put('keys/index.ts', service);
     put(
@@ -44,7 +45,7 @@ test('the runner judges effect-style and migrations of the programs module in on
     put(`drizzle/${next}/migration.sql`, "update events set body = 'changed';");
     git('add', '.');
     const tree = git('write-tree');
-    const changed = ['src/use.ts', `drizzle/${next}/migration.sql`];
+    const changed = ['src/use.ts', 'src/asset.zip', `drizzle/${next}/migration.sql`];
     const judged = (whole: boolean) => {
       const side = (name: ProgramSide['side']): ProgramSide => ({
         side: name,
@@ -52,7 +53,7 @@ test('the runner judges effect-style and migrations of the programs module in on
         files: whole
           ? null
           : changed
-              .filter((path) => name === 'tree' || path === 'src/use.ts')
+              .filter((path) => path !== 'src/asset.zip' && (name === 'tree' || path === 'src/use.ts'))
               .map((path) => ({ path, text: git('show', `${name === 'tree' ? tree : base}:${path}`) })),
       });
       const invocation: ProgramInvocation = {
@@ -79,7 +80,7 @@ test('the runner judges effect-style and migrations of the programs module in on
       return answer.readings.map((one) => [one.key, one.side, one.covered, one.findings.map((finding) => finding.path)]);
     };
     expect(judged(false)).toEqual([
-      ['style', 'tree', ['src/use.ts'], []],
+      ['style', 'tree', ['src/use.ts', 'src/asset.zip'], []],
       ['style', 'base', ['src/use.ts'], ['src/use.ts', 'src/use.ts']],
       ['law', 'tree', { scope: 'reach' }, [`drizzle/${next}/migration.sql`]],
       ['law', 'base', { scope: 'reach' }, []],

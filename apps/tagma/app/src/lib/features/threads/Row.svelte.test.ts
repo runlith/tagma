@@ -218,6 +218,17 @@ test('a row carries its address from the press or the focus that opens it, and d
   expect(row.getAttribute('href')).toContain('/chat/thread-1');
 });
 
+test("a row links to its thread in the thread's own project while the window stands in another", () => {
+  const { router } = makeRouterWithLog({ params: { project: 'p2' } });
+  const row = draw(entry({ projectId: 1 }), [], undefined, null, liveFeed(), null, router).querySelector<HTMLAnchorElement>(
+    'a[data-thread]',
+  );
+  if (row === null) throw new Error('The row drew no link.');
+
+  row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  expect(row.getAttribute('href')).toMatch(/^\/p1\/.*\/thread-1/);
+});
+
 test('a harness row waiting on a question shows what it was asked, and shows nothing without one', () => {
   const stopped = draw(asked(standingAsk)).textContent ?? '';
   expect(stopped).toContain('Delete the build directory?');

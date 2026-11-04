@@ -20,6 +20,10 @@
     "resized-positions": {
       "markers": ["_resizedIndexes", "_measuredWith"],
       "tests": [{ "package": "packages/virtual-list", "file": "./src/positions.test.ts" }]
+    },
+    "end-command-state": {
+      "markers": ["isScrollingToEnd"],
+      "tests": [{ "package": "packages/chat-ui", "file": "./src/TranscriptViewport.svelte.test.ts", "names": "rows there grow before the feed reaches them" }]
     }
   }
 }

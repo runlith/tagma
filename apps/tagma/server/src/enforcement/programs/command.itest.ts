@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Effect, FileSystem, Layer, Context } from 'effect';
+import { Effect, FileSystem, Layer, Context, Result } from 'effect';
 import { ProgramRoad, type ProgramLaunch } from '../../executions/contract/service/programs.js';
 import { localRoad } from '../../executions/testing/road.js';
 import type { Programmed } from '../contract/wire/document.js';
@@ -73,7 +73,11 @@ const world = Layer.effect(
   }),
 ).pipe(Layer.provide(BunFileSystem.layer));
 
-const judged = Effect.fnUntraced(function* (checks: readonly Programmed[], launches: ProgramLaunch[]) {
+const judged = Effect.fnUntraced(function* (
+  checks: readonly Programmed[],
+  launches: ProgramLaunch[],
+  sides: GroupSubject['sides'] = [side('tree', built), side('base', base)],
+) {
   const { root, head, lanes } = yield* World;
   const subject: GroupSubject = {
     projectId: 1,
@@ -81,7 +85,7 @@ const judged = Effect.fnUntraced(function* (checks: readonly Programmed[], launc
     tree: head,
     base: 'base',
     caller: { _tag: 'Operator' },
-    sides: [side('tree', built), side('base', base)],
+    sides,
   };
   const bindings: ProgramBinding[] = checks.map((check) => ({
     rule: check.key,
@@ -133,6 +137,17 @@ layer(world, { excludeTestServices: true })('custom inspections and linters from
       );
       expect(found.get('named')).toEqual([['named lib/b.ts', 'lib/b.ts', 2]]);
       expect(found.get('command')).toEqual([['command lib/b.ts', 'lib/b.ts', 2]]);
+      const check: Programmed = {
+        key: 'command',
+        program: { linter: { tool: 'command', argv: ['bun', join(root, 'checks/sarif.ts')], output: 'sarif' }, rule: 'no-debugger' },
+      };
+      const unread = (path: string): GroupSubject['sides'] => [
+        { ...side('tree', built), unread: [{ path, reason: `${path} is not UTF-8 text` }] },
+        side('base', base),
+      ];
+      expect((yield* judged([check], [], unread('assets/logo.zip'))).get('command')).toEqual([['command lib/b.ts', 'lib/b.ts', 2]]);
+      const failed = yield* Effect.result(judged([check], [], unread('lib/b.ts')));
+      expect(Result.isFailure(failed) && failed.failure.reason).toContain('lib/b.ts');
     }),
   );
 });

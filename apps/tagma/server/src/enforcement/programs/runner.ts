@@ -90,12 +90,15 @@ const listing = (commit: string): readonly string[] => {
 const sideOf = (side: ProgramSide, key: ProgramKey): Side => {
   const commit = side.side === 'tree' ? input.tree : (input.base ?? failed('a base side was asked without a base'));
   const given = new Map((side.files ?? []).map((file) => [file.path, file.text]));
+  const unread = new Map((side.unread ?? []).map((file) => [file.path, file.reason]));
   return {
     commit,
     whole: side.paths === null,
     paths: (side.paths ?? listing(commit)).filter((path) => inReach(key, path)),
     facts: input.facts?.sides.find((one) => one.side === side.side) ?? null,
     read: async (path) => {
+      const reason = unread.get(path);
+      if (reason !== undefined) throw new Error(reason);
       const known = given.get(path);
       if (known !== undefined) return known;
       const out = git(['cat-file', 'blob', `${commit}:${path}`]);

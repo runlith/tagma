@@ -39,14 +39,15 @@ export const sideAt = Effect.fn('enforcement.program.sideFiles')(function* (
   const read = [...sources];
   const reads = yield* readsAt(root, tree, read);
   const files: SourceText[] = [];
+  const unread: NonNullable<ProgramSide['unread']>[number][] = [];
+  const present: string[] = [];
   for (const [at, path] of read.entries()) {
     const read = reads[at];
+    if (read?.status === 'absent') continue;
+    present.push(path);
     if (read === undefined || read.status === 'unread')
-      return yield* new InspectionFailed({
-        cause: 'git',
-        reason: `the ${side} input could not read ${path}: ${read?.reason ?? 'no blob answer'}`,
-      });
-    if (read.status === 'text') files.push({ path, text: read.text });
+      unread.push({ path, reason: `the ${side} input could not read ${path}: ${read?.reason ?? 'no blob answer'}` });
+    else files.push({ path, text: read.text });
   }
-  return { side, paths: files.map((file) => file.path), files } satisfies ProgramSide;
+  return { side, paths: present, files, unread: unread.length === 0 ? undefined : unread } satisfies ProgramSide;
 });

@@ -1,6 +1,8 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { MINE } from '../checkoutFixture.js';
 import { refusalOf } from '../graphFixture.js';
@@ -54,6 +56,28 @@ export default {
           { fingerprint: fp('src/b.ts × FORBIDDEN'), file: 'src/b.ts', line: 1, specifier: 'FORBIDDEN' },
           { fingerprint: fp('src/b.ts × FORBIDDEN'), file: 'src/b.ts', line: 2, specifier: 'FORBIDDEN' },
         ]);
+      }),
+    ),
+  );
+  it.effect('a change carrying a binary asset still judges its source and lands the unread asset byte for byte', () =>
+    withProgram((gate) =>
+      Effect.gen(function* () {
+        const files = yield* FileSystem.FileSystem;
+        const asset = 'native/sqlite.zip';
+        yield* files.makeDirectory(join(gate.current().demoRoot, 'native'));
+        yield* files.writeFile(join(gate.current().demoRoot, asset), new Uint8Array([0x50, 0x4b, 0xfe, 0xff]));
+        yield* gate.committed('seed tracked binary asset');
+        yield* gate.enforcedAt('gate');
+        const bytes = new Uint8Array([0x50, 0x4b, 0xff, 0xfe, 0x00]);
+        yield* files.writeFile(join(gate.current().demoRoot, asset), bytes);
+        const paths = [asset, 'src/b.ts'];
+        yield* gate.wrote('src/b.ts', 'export const b = 2; // FORBIDDEN two\n');
+        const refused = yield* refusalOf(gate.landing(paths));
+        expect(refused.code).toBe('rule-violated');
+        expect(refused.reason).toContain('src/b.ts:1');
+        yield* gate.wrote('src/b.ts', 'export const b = 2;\n');
+        expect((yield* gate.landing(paths)).status).toBe('landed');
+        expect(yield* gate.revision(`HEAD:${asset}`)).toBe(createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'));
       }),
     ),
   );

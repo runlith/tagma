@@ -13,7 +13,11 @@ import { Inspections } from '../workers/inspectionLanes.js';
 import { localRoad } from '../../executions/testing/road.js';
 import { judgeBindings } from './bindings.js';
 
-const checker = `export default { migrations: () => ({ tree: { covered: 'reach', findings: [] }, base: { covered: 'reach', findings: [] } }) };`;
+const checker = `const read = async (side) => {
+  await Promise.all(side.paths.map((path) => side.read(path)));
+  return { covered: 'paths', findings: [] };
+};
+export default { migrations: async ({ tree, base }) => ({ tree: await read(tree), base: base === null ? undefined : await read(base) }) };`;
 
 const unused = () => Effect.die('a program binding runs no builtin inspection');
 

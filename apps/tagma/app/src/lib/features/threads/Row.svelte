@@ -98,8 +98,7 @@
 
   const catalog = ProviderCatalog.use();
   const row = $derived(node.row);
-  const home = $derived(host === null || row.projectId === host.projectId ? null : row.projectId);
-  const homeName = $derived(home === null ? undefined : workspace.find(home)?.name);
+  const homeName = $derived(workspace.find(row.projectId)?.name);
   const mark = $derived(host === null ? null : workspace.markOf(row.projectId, host.projectId));
   const isRoot = $derived(row.parentThreadId === null);
   const label = $derived(isRoot ? row.title.trim() || 'Untitled' : (row.name ?? row.agentId));
@@ -176,7 +175,7 @@
     ) {
       event.preventDefault();
       void shell.openThread(address, 'beside');
-    } else if (home !== null && homeName === undefined) {
+    } else if (homeName === undefined) {
       event.preventDefault();
       void shell.openThread({ projectId: row.projectId, threadId: row.id }, 'main');
     } else if (event.detail > 0) threadPeeks.press(peekKey);
@@ -217,7 +216,7 @@
     ></span>
   {/if}
   <a
-    href={armed && (home === null || homeName !== undefined) ? addresses.thread(row.id, homeName) : undefined}
+    href={armed && homeName !== undefined ? addresses.thread(row.id, homeName) : undefined}
     role={armed ? undefined : 'link'}
     tabindex="0"
     onpointerdown={arm}

@@ -40,6 +40,7 @@ export const ProgramSide = Schema.Struct({
   side: Schema.Literals(['tree', 'base']),
   paths: Schema.NullOr(Schema.Array(path)),
   files: Schema.NullOr(Schema.Array(Schema.Struct({ path, text: Schema.String }))),
+  unread: Schema.optional(Schema.Array(Schema.Struct({ path, reason: Schema.String }))),
 });
 export type ProgramSide = typeof ProgramSide.Type;
 
