@@ -25,7 +25,7 @@ export const graphSyncOf =
     pool.resolve({ projectId, cwd: checkout }).pipe(
       Effect.flatMap((served): Effect.Effect<GraphSync, GateRefusal<OpenRefusal>> =>
         served.layout.mode === 'team'
-          ? Effect.as(served.settled(), { status: 'carried' as const })
+          ? Effect.as(served.settled(true), { status: 'carried' as const })
           : Effect.map(pool.freshnessGate.topology(served.layout.treeRoot), (synced): GraphSync =>
               synced === null
                 ? { status: 'unread', reason: 'the served graph of this checkout keeps no branch twins' }
