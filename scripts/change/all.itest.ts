@@ -139,6 +139,25 @@ test('a cut native suite stays pending and its CPU survives a successful resume'
   }
 });
 
+test('a package script finds the binaries its own package installs, as its package manager would', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'own-bin-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    mkdirSync(join(root, 'pkg/node_modules/.bin'), { recursive: true });
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['pkg'] }));
+    writeFileSync(join(root, 'pkg/package.json'), JSON.stringify({ scripts: { test: 'own-runner' } }));
+    writeFileSync(join(root, 'pkg/node_modules/.bin/own-runner'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--jobs', '1', '--report', join(root, 'reading.json')],
+      { stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect(code, stdout + stderr).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('all suites resume without replay and report an unconfigured workspace failure by file', async () => {
   const root = mkdtempSync(join(tmpdir(), 'all-suites-'));
   try {

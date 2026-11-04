@@ -170,7 +170,7 @@ try {
           ...process.env,
           RUNLITH_TEST_REPORT: ledgerOf(suite),
           ...(jobs === undefined ? {} : { TESTBED_JOBS: String(jobs) }),
-          PATH: `${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
+          PATH: `${join(root, suite.directory, 'node_modules/.bin')}:${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
         },
       })),
     {
