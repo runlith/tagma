@@ -18,6 +18,7 @@ export type FixtureSystem = {
   readonly priorities: (full: string) => { readonly low: string; readonly lowest: string };
   readonly background: (pid: number) => Effect.Effect<boolean, ChannelFailed>;
   readonly distinct: (holder: string, label: string) => Effect.Effect<void, HolderUnavailable>;
+  readonly processWorker: () => Worker;
   readonly isolated: (
     command: readonly string[],
   ) => Effect.Effect<

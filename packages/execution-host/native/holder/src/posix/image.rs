@@ -1,4 +1,4 @@
-use super::sys;
+use super::{backend::Backend, sys};
 use sha2::{Digest, Sha256};
 use std::ffi::{CStr, CString};
 use std::fs::{File, OpenOptions};
@@ -16,38 +16,6 @@ pub struct Image {
 
 fn failure(error: std::io::Error) -> String { error.to_string() }
 
-#[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn _dyld_get_image_header(index: u32) -> *const u8;
-}
-
-#[cfg(target_os = "macos")]
-fn uuid(bytes: &[u8]) -> Option<[u8; 16]> {
-    if bytes.get(..4)? != [0xcf, 0xfa, 0xed, 0xfe] { return None; }
-    let count = u32::from_le_bytes(bytes.get(16..20)?.try_into().ok()?);
-    let length = u32::from_le_bytes(bytes.get(20..24)?.try_into().ok()?) as usize;
-    let commands = bytes.get(32..32usize.checked_add(length)?)?;
-    let mut at = 0usize;
-    for _ in 0..count {
-        let command = u32::from_le_bytes(commands.get(at..at.checked_add(4)?)?.try_into().ok()?);
-        let size = u32::from_le_bytes(commands.get(at.checked_add(4)?..at.checked_add(8)?)?.try_into().ok()?) as usize;
-        if size < 8 { return None; }
-        let entry = commands.get(at..at.checked_add(size)?)?;
-        if command == 0x1b { return entry.get(8..24)?.try_into().ok(); }
-        at = at.checked_add(size)?;
-    }
-    None
-}
-
-#[cfg(target_os = "macos")]
-fn current_uuid() -> Option<[u8; 16]> {
-    let header = unsafe { _dyld_get_image_header(0) };
-    if header.is_null() { return None; }
-    let bytes = unsafe { std::slice::from_raw_parts(header, 32) };
-    let length = u32::from_le_bytes(bytes.get(20..24)?.try_into().ok()?) as usize;
-    uuid(unsafe { std::slice::from_raw_parts(header, 32usize.checked_add(length)?) })
-}
-
 fn unused(directory: &Path, kept: &Path) -> Result<(), String> {
     for entry in std::fs::read_dir(directory).map_err(failure)? {
         let path = entry.map_err(failure)?.path();
@@ -64,12 +32,9 @@ fn unused(directory: &Path, kept: &Path) -> Result<(), String> {
 }
 
 impl Image {
-    pub fn open(state: &Path) -> Result<Self, String> {
-        #[cfg(target_os = "macos")]
-        let source = std::env::current_exe().map_err(failure)?;
-        #[cfg(target_os = "linux")]
-        let source = std::path::PathBuf::from("/proc/self/exe");
-        match Self::pin(state, &source) {
+    pub fn open<B: Backend>(state: &Path) -> Result<Self, String> {
+        let source = B::image_source()?;
+        match Self::pin::<B>(state, &source) {
             Ok(image) => Ok(image),
             Err(detail) => {
                 eprintln!("execution-holder: launch image could not be pinned ({detail}); using {}", source.display());
@@ -79,13 +44,9 @@ impl Image {
         }
     }
 
-    fn pin(state: &Path, source: &Path) -> Result<Self, String> {
+    fn pin<B: Backend>(state: &Path, source: &Path) -> Result<Self, String> {
         let bytes = std::fs::read(source).map_err(failure)?;
-        #[cfg(target_os = "macos")]
-        {
-            let loaded = current_uuid().ok_or("the running image has no readable UUID")?;
-            if uuid(&bytes) != Some(loaded) { return Err("the source is not the running image".into()); }
-        }
+        B::verify_image(&bytes)?;
         let digest = Sha256::digest(&bytes);
         let directory = state.join("launch-images");
         std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&directory).map_err(failure)?;
@@ -106,10 +67,7 @@ impl Image {
                 .custom_flags(libc::O_CLOEXEC).open(&pending).map_err(failure)?;
             file.write_all(&bytes).map_err(failure)?;
             file.set_permissions(std::fs::Permissions::from_mode(0o700)).map_err(failure)?;
-            #[cfg(target_os = "macos")]
-            if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_FULLFSYNC) } < 0 { return Err(format!("sync launch image: errno {}", sys::errno())); }
-            #[cfg(target_os = "linux")]
-            file.sync_all().map_err(failure)?;
+            B::sync_image(&file)?;
             std::fs::rename(&pending, &path).map_err(failure)?;
             drop(file);
             File::open(&path).map_err(failure)?

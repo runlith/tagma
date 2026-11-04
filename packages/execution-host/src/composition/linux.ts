@@ -12,4 +12,5 @@ export const system = composePosix({
   evidence: evidenceProbe,
   usage: (path) => openUsage(path, processWorker),
   fileHolders,
+  worker: processWorker,
 });

@@ -91,7 +91,7 @@ const channel = (loss: Loss): Link => {
     pipe: () => {
       throw new Error('the uncertain launch delivers no usable pipe');
     },
-    workState: () => 'unmeasured',
+    workState: () => Effect.succeed('unmeasured'),
     prepare: (launch) => Effect.succeed(launch),
   };
 };

@@ -3,6 +3,7 @@ import { getPriority } from 'node:os';
 import { Effect } from 'effect';
 import { HolderUnavailable } from '../../../holder-client/Connection';
 import { ChannelFailed } from '../../../holder/Holder';
+import { processWorker } from '../processes';
 import type { FixtureSystem } from '../../testing/System';
 
 const CAP_SYS_NICE = 23n;
@@ -25,5 +26,6 @@ export const system: FixtureSystem = {
       try: () => appendFileSync(holder, `\n${label}`),
       catch: (error) => new HolderUnavailable({ detail: `the distinct holder could not be written: ${String(error)}` }),
     }),
+  processWorker,
   isolated: () => Effect.succeed(undefined),
 };

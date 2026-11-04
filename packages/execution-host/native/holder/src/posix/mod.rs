@@ -2,32 +2,20 @@ macro_rules! eprintln {
     ($($message:tt)*) => { crate::posix::output::message(format_args!($($message)*)) };
 }
 
+pub(crate) mod backend;
 mod output;
-#[cfg(target_os = "macos")]
-#[path = "../macos/events.rs"]
-mod events;
-#[cfg(target_os = "linux")]
-#[path = "../linux/events.rs"]
-mod events;
-#[cfg(target_os = "macos")]
-#[path = "../macos/spawner.rs"]
-mod spawner;
-#[cfg(target_os = "linux")]
-#[path = "../linux/spawner.rs"]
-mod spawner;
 mod signals;
 mod image;
 mod rescue;
 mod spawn;
 mod succession;
-mod sys;
+pub(crate) mod sys;
 
 use crate::frames::{Action, Launch, Reason, Target};
 use crate::platform::{Event, Failure, Inheritance, Io, Launching, Opened, Part, Platform, Spawned, Timer};
 use crate::table::{Exit, Pace, Prepared, Transport, Usage};
-use events::Queue;
+use backend::{Backend, Events};
 use succession::Mode;
-#[cfg(target_os = "linux")]
 use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString, c_int};
 use std::fs::OpenOptions;
@@ -47,8 +35,8 @@ const CAPABILITIES: [&str; 7] = [
     "holder-replaces-itself",
 ];
 
-pub struct Posix {
-    queue: Queue,
+pub struct Posix<B: Backend> {
+    queue: B::Queue,
     claim: Rc<OwnedFd>,
     handle_limit: u64,
     child_nofile: libc::rlim_t,
@@ -90,7 +78,10 @@ fn program(launch: &Launch) -> Result<spawn::Program, Failure> {
     })
 }
 
-fn deliver(pid: i32, target: Target, signal: c_int, exited: impl FnOnce() -> bool) -> Result<(), Failure> {
+fn deliver<B: Backend>(pid: i32, target: Target, signal: c_int, mut exited: impl FnMut() -> bool) -> Result<(), Failure> {
+    if B::ZOMBIE_SIGNAL_SUCCEEDS && matches!(target, Target::Work) && exited() && B::led_alone(pid).map_err(|errno| sys::failure(errno, "the work could not be measured"))? {
+        return Err(Failure::new(Reason::Gone, format!("the work of {pid} has no member but its exited leader")));
+    }
     let aim = match target {
         Target::Leader => pid,
         Target::Work => -pid,
@@ -99,10 +90,10 @@ fn deliver(pid: i32, target: Target, signal: c_int, exited: impl FnOnce() -> boo
         return Ok(());
     }
     let errno = sys::errno();
-    if errno == libc::EPERM && matches!(target, Target::Work) && exited() && sys::led_alone(pid) {
+    if errno == libc::EPERM && matches!(target, Target::Work) && exited() && B::led_alone(pid).map_err(|errno| sys::failure(errno, "the work could not be measured"))? {
         return Err(Failure::new(Reason::Gone, format!("the work of {pid} has no member but its exited leader")));
     }
-    Err(sys::failure(errno, &format!("kill {aim} {}", signals::name(signal))))
+    Err(sys::failure(errno, &format!("kill {aim} {}", signals::name::<B>(signal))))
 }
 
 fn rights(fd: RawFd, bytes: &[u8], fds: &[Rc<OwnedFd>]) -> isize {
@@ -148,13 +139,13 @@ fn dispositions() {
     }
 }
 
-fn descriptor_room() -> Result<(u64, libc::rlim_t), String> {
+fn descriptor_room<B: Backend>() -> Result<(u64, libc::rlim_t), String> {
     let mut limit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } < 0 {
         return Err(format!("getrlimit RLIMIT_NOFILE: errno {}", sys::errno()));
     }
     let inherited = limit.rlim_cur;
-    let wanted = limit.rlim_max.min(sys::OPEN_MAX);
+    let wanted = limit.rlim_max.min(B::OPEN_MAX);
     if wanted > limit.rlim_cur {
         limit.rlim_cur = wanted;
         if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) } < 0 {
@@ -164,16 +155,16 @@ fn descriptor_room() -> Result<(u64, libc::rlim_t), String> {
     Ok((limit.rlim_cur, inherited))
 }
 
-fn ground(state: &Path) -> Result<(u64, libc::rlim_t, Vec<&'static str>), String> {
+fn ground<B: Backend>(state: &Path) -> Result<(u64, libc::rlim_t, Vec<&'static str>), String> {
     if !state.is_dir() {
         return Err(format!("{} is not a directory", state.display()));
     }
     standard_descriptors()?;
-    let room = descriptor_room()?;
+    let room = descriptor_room::<B>()?;
     dispositions();
     session()?;
-    sys::ground()?;
-    let raises = sys::pace_raises().map_err(|errno| format!("the scheduling capability could not be read: errno {errno}"))?;
+    B::ground()?;
+    let raises = B::pace_raises().map_err(|errno| format!("the scheduling capability could not be read: errno {errno}"))?;
     let capabilities = CAPABILITIES.into_iter().filter(|capability| *capability != "pace-raise" || raises).collect();
     Ok((room.0, room.1, capabilities))
 }
@@ -207,15 +198,15 @@ fn claim(state: &Path) -> Result<Option<OwnedFd>, String> {
     Ok(Some(fd))
 }
 
-impl Platform for Posix {
+impl<B: Backend> Platform for Posix<B> {
     type Handle = OwnedFd;
     type Channel = OwnedFd;
     type Process = Child;
     type Status = Status;
     type Token = RawFd;
 
-    const TERMINAL_EXPENSE: u8 = spawn::TERMINAL_DESCRIPTOR_EXPENSE;
-    const PIPE_EXPENSE: u8 = spawn::PIPE_DESCRIPTOR_EXPENSE;
+    const TERMINAL_EXPENSE: u8 = B::TERMINAL_EXPENSE;
+    const PIPE_EXPENSE: u8 = B::PIPE_EXPENSE;
 
     fn open() -> Result<Opened<Self>, String> {
         let all: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -223,28 +214,28 @@ impl Platform for Posix {
         if mode == Some(OsStr::new("--launch")) {
             return Ok(Opened::Entered(spawn::enter()));
         }
-        output::install()?;
+        output::install::<B>()?;
         let carrying = [succession::SUCCESSOR, succession::RETURNED, succession::VERIFY];
         if mode.is_some_and(|mode| carrying.iter().any(|carried| mode == OsStr::new(carried))) {
             let inherited = succession::inherited(&all)?;
             if inherited.mode == Mode::Activated {
-                rescue::arm(&inherited);
+                rescue::arm::<B>(&inherited);
             }
             let attempt = (|| {
-                let (handle_limit, _, capabilities) = ground(&inherited.state)?;
+                let (handle_limit, _, capabilities) = ground::<B>(&inherited.state)?;
                 let table = inherited.table()?;
                 if inherited.mode == Mode::Verifying {
-                    Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
+                    <B::Queue as Events>::new().map_err(|e| format!("event queue: errno {e}"))?;
                     return Ok(Err(table));
                 }
-                let image = image::Image::open(&inherited.state)?;
-                let queue = Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
+                let image = image::Image::open::<B>(&inherited.state)?;
+                let queue = <B::Queue as Events>::new().map_err(|e| format!("event queue: errno {e}"))?;
                 Ok::<_, String>(Ok((handle_limit, capabilities, table, image, queue)))
             })();
             let (handle_limit, capabilities, table, image, queue) = match attempt {
                 Ok(Ok(taken)) => taken,
                 Ok(Err(table)) => return Ok(Opened::Verifying(table)),
-                Err(detail) => return Err(inherited.retreat(&[], &detail, false)),
+                Err(detail) => return Err(inherited.retreat::<B>(&[], &detail, false)),
             };
             let carried = Inheritance { table, activated: inherited.mode == Mode::Activated };
             let output = output::Capture::open(&queue)?;
@@ -272,12 +263,12 @@ impl Platform for Posix {
         if !logic.first().is_some_and(|program| Path::new(program).is_absolute()) {
             return Err("the logic program must be named by an absolute path".into());
         }
-        let (handle_limit, child_nofile, capabilities) = ground(state)?;
+        let (handle_limit, child_nofile, capabilities) = ground::<B>(state)?;
         let Some(claim) = claim(state)? else {
             return Ok(Opened::Held(state.display().to_string()));
         };
-        let image = image::Image::open(state)?;
-        let queue = Queue::new().map_err(|e| format!("event queue: errno {e}"))?;
+        let image = image::Image::open::<B>(state)?;
+        let queue = <B::Queue as Events>::new().map_err(|e| format!("event queue: errno {e}"))?;
         let pid = std::process::id();
         let output = output::Capture::open(&queue)?;
         let platform = Self { queue, claim: Rc::new(claim), handle_limit, child_nofile, capabilities, image, pid, state: state.to_path_buf(), inherited: None, output };
@@ -316,12 +307,11 @@ impl Platform for Posix {
         if argv.is_empty() {
             return Err("no logic program is named".into());
         }
-        let (ours, theirs) = sys::socket_pair().map_err(|e| format!("socketpair: errno {e}"))?;
+        let (ours, theirs) = sys::socket_pair(B::socket_nosigpipe).map_err(|e| format!("socketpair: errno {e}"))?;
         sys::nonblocking(ours.as_raw_fd()).map_err(|e| format!("fcntl O_NONBLOCK: errno {e}"))?;
         sys::nonblocking(theirs.as_raw_fd()).map_err(|e| format!("fcntl O_NONBLOCK: errno {e}"))?;
         self.queue.read(ours.as_raw_fd()).map_err(|e| format!("event queue: errno {e}"))?;
-        let pid = spawn::logic(&argv, &theirs, self.output.as_ref().map(output::Capture::writer)).map_err(|(_, detail)| detail)?;
-        #[cfg(target_os = "linux")]
+        let pid = spawn::logic::<B>(&argv, &theirs, self.output.as_ref().map(output::Capture::writer)).map_err(|(_, detail)| detail)?;
         if let Err(errno) = self.queue.child(pid) {
             unsafe { libc::kill(pid, libc::SIGKILL) };
             return Err(format!("the logic could not be watched: errno {errno}"));
@@ -392,12 +382,12 @@ impl Platform for Posix {
     }
 
     fn now_ms(&self) -> u64 {
-        sys::monotonic_ms()
+        B::monotonic_ms()
     }
 
     fn launch(&mut self, launch: &Launch) -> Result<Launching<Self>, (Failure, Option<Child>)> {
         let program = program(launch).map_err(|failure| (failure, None))?;
-        let started = spawn::child(self.image.path(), &program, &launch.shape, launch.pace, self.child_nofile)
+        let started = spawn::child::<B>(self.image.path(), &program, &launch.shape, launch.pace, self.child_nofile)
             .map_err(|((errno, detail), born)| (Failure::new(sys::classify(errno), detail), born.map(|pid| Child { pid })))?;
         let token = started.status.as_raw_fd();
         let spawned = Spawned {
@@ -408,7 +398,6 @@ impl Platform for Posix {
             pace: started.pace,
             transport: started.transport,
         };
-        #[cfg(target_os = "linux")]
         if let Err(errno) = self.queue.child(started.pid) {
             spawn::abandon(started.pid);
             return Err((sys::failure(errno, "the launch could not be watched"), Some(spawned.process)));
@@ -462,27 +451,22 @@ impl Platform for Posix {
     }
 
     fn observe(&mut self, process: &Child) -> Option<Exit> {
-        #[cfg(target_os = "linux")]
-        if let Err(errno) = self.queue.child(process.pid) { eprintln!("execution-holder: pidfd watch of {} failed: errno {errno}", process.pid); }
+        if let Err(errno) = self.queue.child(process.pid) { eprintln!("execution-holder: child watch of {} failed: errno {errno}", process.pid); }
         let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
         let found = unsafe { libc::waitid(libc::P_PID, process.pid as libc::id_t, &mut info, libc::WEXITED | libc::WNOHANG | libc::WNOWAIT) };
-        #[cfg(target_os = "macos")]
-        let (pid, status) = (info.si_pid, info.si_status);
-        #[cfg(target_os = "linux")]
-        let (pid, status) = unsafe { (info.si_pid(), info.si_status()) };
+        let backend::ChildInfo { pid, status } = B::child_info(&info);
         if found < 0 || pid != process.pid {
             return None;
         }
         match info.si_code {
             sys::CLD_EXITED => Some(Exit::Code(status)),
-            sys::CLD_KILLED | sys::CLD_DUMPED => Some(Exit::Signal(signals::name(status))),
+            sys::CLD_KILLED | sys::CLD_DUMPED => Some(Exit::Signal(signals::name::<B>(status))),
             _ => None,
         }
     }
 
     fn reap(&mut self, process: &mut Child) -> Result<Option<(Exit, Usage)>, Failure> {
-        #[cfg(target_os = "linux")]
-        self.queue.child(process.pid).map_err(|errno| sys::failure(errno, "pidfd watch"))?;
+        self.queue.child(process.pid).map_err(|errno| sys::failure(errno, "child watch"))?;
         let mut status: c_int = 0;
         let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
         let reaped = unsafe { libc::wait4(process.pid, &mut status, libc::WNOHANG, &mut usage) };
@@ -492,18 +476,12 @@ impl Platform for Posix {
         if reaped == 0 {
             return Ok(None);
         }
-        let exit = if libc::WIFEXITED(status) { Exit::Code(libc::WEXITSTATUS(status)) } else { Exit::Signal(signals::name(libc::WTERMSIG(status))) };
-        #[cfg(target_os = "linux")]
+        let exit = if libc::WIFEXITED(status) { Exit::Code(libc::WEXITSTATUS(status)) } else { Exit::Signal(signals::name::<B>(libc::WTERMSIG(status))) };
         self.queue.reaped(process.pid);
-        #[cfg(target_os = "macos")]
-        let rss_unit = 1;
-        #[cfg(target_os = "linux")]
-        let rss_unit = 1024;
-        let usage = Usage { user_micros: micros(usage.ru_utime), system_micros: micros(usage.ru_stime), peak_rss_bytes: usage.ru_maxrss.max(0) as u64 * rss_unit };
+        let usage = Usage { user_micros: micros(usage.ru_utime), system_micros: micros(usage.ru_stime), peak_rss_bytes: usage.ru_maxrss.max(0) as u64 * B::RSS_UNIT };
         Ok(Some((exit, usage)))
     }
 
-    #[cfg(target_os = "linux")]
     fn sweep(&mut self, owned: &HashSet<u64>) -> Result<(), String> {
         self.queue.sweep(owned).map_err(|errno| format!("errno {errno}"))
     }
@@ -523,14 +501,14 @@ impl Platform for Posix {
             Action::Terminate => libc::SIGTERM,
             Action::Kill => libc::SIGKILL,
         };
-        deliver(process.pid, target, signal, || self.observe(process).is_some())
+        deliver::<B>(process.pid, target, signal, || self.observe(process).is_some())
     }
 
     fn signal(&mut self, process: &mut Child, target: Target, name: &str) -> Result<(), Failure> {
-        let Some(signal) = signals::number(name) else {
+        let Some(signal) = signals::number::<B>(name) else {
             return Err(Failure::new(Reason::Invalid, format!("{name} is not a signal of this platform")));
         };
-        deliver(process.pid, target, signal, || self.observe(process).is_some())
+        deliver::<B>(process.pid, target, signal, || self.observe(process).is_some())
     }
 
     fn abandon(&mut self, process: &mut Child) {
@@ -538,7 +516,7 @@ impl Platform for Posix {
     }
 
     fn pace(&mut self, pid: u32, birth: &str, initial: Pace, next: Pace) -> Result<bool, Failure> {
-        sys::tempo(pid as i32, birth, initial, next).map_err(|errno| sys::failure(errno, &format!("tempo of {pid}")))
+        B::tempo(pid as i32, birth, initial, next).map_err(|errno| sys::failure(errno, &format!("tempo of {pid}")))
     }
 
     fn handle_value(handle: &OwnedFd) -> u64 {
@@ -572,7 +550,7 @@ impl Platform for Posix {
     fn retreat(&mut self, handles: &[u64], why: &str) -> String {
         let Some(inherited) = &self.inherited else { return why.to_string() };
         let handles: Vec<RawFd> = handles.iter().map(|value| *value as RawFd).collect();
-        inherited.retreat(&handles, why, true)
+        inherited.retreat::<B>(&handles, why, true)
     }
 
     fn adopt_process(value: u64) -> Result<Child, String> {
@@ -593,21 +571,20 @@ impl Platform for Posix {
 
     fn prepare(&mut self, holder: &str, table: &[u8], handles: &[Rc<OwnedFd>]) -> Result<Child, Failure> {
         let handles: Vec<RawFd> = handles.iter().map(|handle| handle.as_raw_fd()).collect();
-        let pid = succession::verify(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, &handles)?;
-        #[cfg(target_os = "linux")]
-        if let Err(errno) = self.queue.child(pid) { eprintln!("execution-holder: pidfd watch of verifier {pid} failed: errno {errno}"); }
+        let pid = succession::verify::<B>(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, &handles)?;
+        if let Err(errno) = self.queue.child(pid) { eprintln!("execution-holder: child watch of verifier {pid} failed: errno {errno}"); }
         Ok(Child { pid })
     }
 
     fn rotate(&mut self) -> Result<(), Failure> {
-        succession::rotate(&self.state)
+        succession::rotate::<B>(&self.state)
     }
 
     fn restore(&mut self) -> Result<(), Failure> {
-        succession::restore(&self.state)
+        succession::restore::<B>(&self.state)
     }
 
     fn replace(&mut self, holder: &str, table: &[u8], handles: &[Rc<OwnedFd>]) -> Failure {
-        succession::replace(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, handles)
+        succession::replace::<B>(&self.state, holder, self.claim.as_raw_fd(), self.child_nofile, table, handles)
     }
 }

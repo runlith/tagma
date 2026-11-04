@@ -3,7 +3,7 @@
 import { constants } from 'node:os';
 import type { ProcessCounters, ProcessProgram, UsageDemand, UsageRead } from '../UsageReader';
 import type { ProcessAbi } from './ProcessAbi';
-import { baseName, type ProgramProcess } from './programs';
+import { baseName, commandLine, type ProgramProcess } from './programs';
 import type { NativeCounters, UsageAbi } from './UsageAbi';
 
 export type RefusedCounter = { readonly micros: number; readonly residentBytes: number };
@@ -24,7 +24,6 @@ type Described = {
   readonly settled: boolean;
 };
 
-const COMMAND_CHARS = 240;
 //! a child read between fork and exec still shows its parent's program, so its facts are kept only once it has had time to exec
 const SETTLED_MS = 2_000;
 const REFUSED = new Set([constants.errno.EPERM, constants.errno.EACCES]);
@@ -68,13 +67,11 @@ export class Sampler {
       const facts = this.processes.processFacts(fresh.map((row) => row.pid));
       if (!('refusal' in facts))
         for (const one of facts.processes) {
-          const args = one.args._tag === 'Read' ? one.args.value.join(' ') : undefined;
           const invoked = one.args._tag === 'Read' && one.args.value[0] !== '' ? one.args.value[0] : undefined;
           learned.set(key(one), {
             executable: one.executable._tag === 'Read' ? one.executable.value : invoked,
             invoked,
-            command:
-              args === undefined || args === '' ? undefined : args.length > COMMAND_CHARS ? `${args.slice(0, COMMAND_CHARS)}…` : args,
+            command: one.args._tag === 'Read' ? commandLine(one.args.value) : undefined,
             settled: false,
           });
         }

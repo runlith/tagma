@@ -10,8 +10,6 @@ use std::rc::Rc;
 pub const CONTROL_FD: RawFd = 3;
 pub const CONTROL_VARIABLE: &str = "EXECUTION_HOLDER_FD";
 const STATUS_FD: RawFd = 4;
-pub const TERMINAL_DESCRIPTOR_EXPENSE: u8 = 4;
-pub const PIPE_DESCRIPTOR_EXPENSE: u8 = 8;
 
 pub struct Program {
     pub path: CString,
@@ -30,13 +28,11 @@ pub struct Started {
     pub environment: Vec<u8>,
 }
 
-pub type Failure = (i32, String);
+use super::backend::{Backend, Spawn, SpawnFailure as Failure};
 
 fn failed(errno: i32, what: &str) -> Failure {
     (errno, format!("{what}: {}", std::io::Error::from_raw_os_error(errno)))
 }
-
-use super::spawner::Spawner;
 
 pub fn abandon(pid: i32) {
     unsafe {
@@ -63,20 +59,20 @@ fn terminal(rows: u16, cols: u16) -> Result<(OwnedFd, OwnedFd, CString), Failure
     Ok((pair.0, pair.1, name))
 }
 
-pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, soft_nofile: libc::rlim_t) -> Result<Started, (Failure, Option<i32>)> {
+pub fn child<B: Backend>(image: &CStr, program: &Program, shape: &Shape, requested: Pace, soft_nofile: libc::rlim_t) -> Result<Started, (Failure, Option<i32>)> {
     let mut born = None;
     let attempted = (|| -> Result<Started, Failure> {
-        let mut flags = sys::SPAWN_SETSID | sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK;
+        let mut flags = B::SPAWN_SETSID | B::SPAWN_CLOEXEC_DEFAULT | B::SPAWN_SETSIGDEF | B::SPAWN_SETSIGMASK;
         if matches!(requested, Pace::Lowest) {
-            flags |= sys::SPAWN_START_SUSPENDED;
+            flags |= B::SPAWN_START_SUSPENDED;
         }
-        let mut spawner = Spawner::new(flags)?;
+        let mut spawner = <B::Spawner as Spawn>::new(flags)?;
         let mut pace = Pace::Full;
         if spawner.pace(matches!(requested, Pace::Low)) {
             pace = Pace::Low;
         }
         let mut child_ends: Vec<OwnedFd> = Vec::new();
-        let (reader, writer) = sys::socket_pair().map_err(|e| failed(e, "startup socketpair"))?;
+        let (reader, writer) = sys::socket_pair(B::socket_nosigpipe).map_err(|e| failed(e, "startup socketpair"))?;
         sys::nonblocking(reader.as_raw_fd()).map_err(|e| failed(e, "nonblocking startup socket"))?;
         spawner.duplicate(writer.as_raw_fd(), STATUS_FD)?;
         child_ends.push(writer);
@@ -150,12 +146,12 @@ pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, so
                     }
                     if let Some(stdin) = stdin {
                         sys::nonblocking(stdin.as_raw_fd()).map_err(|e| failed(e, "fcntl O_NONBLOCK"))?;
-                        sys::no_sigpipe(stdin.as_raw_fd()).map_err(|e| failed(e, "fcntl F_SETNOSIGPIPE"))?;
+                        B::no_sigpipe(stdin.as_raw_fd()).map_err(|e| failed(e, "pipe SIGPIPE policy"))?;
                     }
                 }
             }
             if matches!(requested, Pace::Lowest) {
-                if sys::lower(pid).is_ok() {
+                if B::lower(pid).is_ok() {
                     pace = Pace::Lowest;
                 }
                 if unsafe { libc::kill(pid, libc::SIGCONT) } < 0 {
@@ -166,7 +162,7 @@ pub fn child(image: &CStr, program: &Program, shape: &Shape, requested: Pace, so
             if group < 0 {
                 return Err(failed(sys::errno(), "getpgid"));
             }
-            Ok((sys::birth(pid).map_err(|e| failed(e, "process birth"))?, group))
+            Ok((B::birth(pid).map_err(|e| failed(e, "process birth"))?, group))
         })();
         let (birth, group) = prepared?;
         Ok(Started { pid, group, birth, pace, transport, status: reader, environment })
@@ -295,13 +291,13 @@ fn environment() -> Vec<CString> {
     vars
 }
 
-pub fn logic(argv: &[CString], control: &OwnedFd, output: Option<RawFd>) -> Result<i32, Failure> {
+pub fn logic<B: Backend>(argv: &[CString], control: &OwnedFd, output: Option<RawFd>) -> Result<i32, Failure> {
     let moved = unsafe { libc::fcntl(control.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 10) };
     if moved < 0 {
         return Err(failed(sys::errno(), "fcntl F_DUPFD_CLOEXEC"));
     }
     let moved = unsafe { OwnedFd::from_raw_fd(moved) };
-    let mut spawner = Spawner::new(sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK)?;
+    let mut spawner = <B::Spawner as Spawn>::new(B::SPAWN_CLOEXEC_DEFAULT | B::SPAWN_SETSIGDEF | B::SPAWN_SETSIGMASK)?;
     for fd in 0..=2 {
         if fd != 0 && let Some(output) = output {
             spawner.duplicate(output, fd)?;

@@ -1,4 +1,4 @@
-use super::{check, errno};
+use crate::posix::sys::{check, errno};
 use crate::table::Pace;
 use std::ffi::{c_char, c_int};
 use std::os::fd::RawFd;

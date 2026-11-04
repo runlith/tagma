@@ -14,7 +14,7 @@ pub fn home() -> Result<CString, Refusal> {
     Ok(home.to_owned())
 }
 
-fn refusal(error: io::Error) -> Refusal {
+pub(crate) fn refusal(error: io::Error) -> Refusal {
     match error.raw_os_error() {
         Some(libc::EAGAIN) | Some(libc::EINTR) => Refusal::WouldBlock,
         Some(libc::EBADF) => Refusal::Closed,
@@ -168,15 +168,9 @@ pub fn group(group: i32, leader: i32, leader_exited: bool) -> Result<Group, Refu
 
 #[cfg(target_os = "linux")]
 pub fn group(group: i32, leader: i32, leader_exited: bool) -> Result<Group, Refusal> {
-    for pid in crate::procfs::pids().map_err(|code| Refusal::Failed(io::Error::from_raw_os_error(code).to_string()))? {
-        if pid == leader && leader_exited { continue; }
-        match crate::procfs::stat(pid) {
-            Ok(read) if read.group == group as u32 && !read.zombie => return Ok(Group::Standing),
-            Ok(_) | Err(libc::ESRCH) => {},
-            Err(_) => return Ok(Group::Unmeasured),
-        }
-    }
-    Ok(Group::Ended)
+    crate::procfs::group_standing(group, leader_exited.then_some(leader))
+        .map(|standing| if standing { Group::Standing } else { Group::Ended })
+        .map_err(|code| Refusal::Failed(io::Error::from_raw_os_error(code).to_string()))
 }
 
 pub fn resize(fd: i32, rows: i32, cols: i32) -> Result<(), Refusal> {
@@ -203,21 +197,6 @@ pub fn foreground(fd: i32) -> Result<[u64; 3], Refusal> {
         return Err(Refusal::Failed("the terminal's foreground changed while its process was read".into()));
     }
     Ok([pid as u64, identity.seconds, identity.micros])
-}
-
-pub fn interrupt(fd: i32) -> Result<usize, Refusal> {
-    let mut pending: libc::c_int = 0;
-    #[cfg(target_os = "macos")]
-    let queued = libc::TIOCOUTQ;
-    #[cfg(target_os = "linux")]
-    let queued = libc::FIONREAD;
-    if unsafe { libc::ioctl(fd, queued, &mut pending) } < 0 {
-        return Err(refusal(io::Error::last_os_error()));
-    }
-    if unsafe { libc::ioctl(fd, libc::TIOCSIG as libc::c_ulong, libc::SIGINT) } < 0 {
-        return Err(refusal(io::Error::last_os_error()));
-    }
-    Ok(pending.max(0) as usize)
 }
 
 pub fn terminal(fd: i32, pid: i32) -> Result<[u64; 13], Refusal> {

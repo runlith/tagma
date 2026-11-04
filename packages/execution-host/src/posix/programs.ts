@@ -11,6 +11,13 @@ export type ProgramProcess = {
 
 export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1) || path;
 
+const COMMAND_CHARS = 240;
+
+export const commandLine = (args: readonly string[]): string | undefined => {
+  const joined = args.join(' ');
+  return joined === '' ? undefined : joined.length > COMMAND_CHARS ? `${joined.slice(0, COMMAND_CHARS)}…` : joined;
+};
+
 export const ownProgram = (placed: ProgramProcess): ProcessProgram =>
   placed.executable === undefined
     ? { key: `name:${placed.name}`, name: placed.name }

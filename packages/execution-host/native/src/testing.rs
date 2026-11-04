@@ -155,12 +155,13 @@ fn resource_abi_reports_process_and_machine_counters_in_platform_units() {
         assert_eq!(machine[10], 2);
         assert_eq!(own[5], 0);
         let ticks = abi::execution_platform_clock_ticks();
-        let boot = abi::execution_platform_boot_nanos();
-        assert!(ticks > 0 && boot > 0);
+        let mut boot = [0; 2];
+        assert_eq!(unsafe { abi::execution_platform_boot_nanos(boot.as_mut_ptr()) }, 0);
+        assert!(ticks > 0 && boot[0] > 0 && boot[0] <= boot[1]);
         let after = crate::procfs::stat(std::process::id() as i32).unwrap();
         assert!(crate::clock::micros(before.own, ticks) <= own[7] && own[7] <= crate::clock::micros(after.own, ticks));
         assert!(crate::clock::micros(before.children, ticks) <= own[8] && own[8] <= crate::clock::micros(after.children, ticks));
-        let started = boot / 1_000_000 + own[4] * 1000 / ticks;
+        let started = boot[0] / 1_000_000 + own[4] * 1000 / ticks;
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
         assert!(started <= now);
         assert_eq!(unsafe { crate::usage::execution_usage_gpu(std::ptr::null_mut(), 0) }, -libc::ENOTSUP);

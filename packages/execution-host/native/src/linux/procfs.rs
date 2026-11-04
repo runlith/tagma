@@ -51,3 +51,22 @@ pub fn pids() -> Result<Vec<i32>, i32> {
     }).collect()
 }
 
+pub fn group_standing(group: i32, ignored: Option<i32>) -> Result<bool, i32> {
+    for pid in pids()? {
+        if Some(pid) == ignored { continue; }
+        let membership = unsafe { libc::getpgid(pid) };
+        if membership < 0 {
+            let code = error(io::Error::last_os_error());
+            if code == libc::ESRCH { continue; }
+            return Err(code);
+        }
+        if membership != group { continue; }
+        match stat(pid) {
+            Ok(read) if read.group == group as u32 && !read.zombie => return Ok(true),
+            Ok(_) | Err(libc::ESRCH) => {},
+            Err(code) => return Err(code),
+        }
+    }
+    Ok(false)
+}
+

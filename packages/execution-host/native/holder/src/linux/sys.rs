@@ -1,4 +1,4 @@
-use super::check;
+use crate::posix::sys::check;
 use crate::table::Pace;
 use std::ffi::c_char;
 use std::os::fd::RawFd;
@@ -21,17 +21,8 @@ pub fn ground() -> Result<(), String> {
 pub fn no_sigpipe(_: RawFd) -> Result<(), i32> { Ok(()) }
 pub fn socket_nosigpipe(_: RawFd) -> Result<(), i32> { Ok(()) }
 
-pub fn led_alone(group: i32) -> bool {
-    let Ok(pids) = crate::procfs::pids() else { return false; };
-    for pid in pids {
-        if pid == group { continue; }
-        match crate::procfs::stat(pid) {
-            Ok(read) if read.group == group as u32 && !read.zombie => return false,
-            Ok(_) | Err(libc::ESRCH) => {},
-            Err(_) => return false,
-        }
-    }
-    true
+pub fn led_alone(group: i32) -> Result<bool, i32> {
+    crate::procfs::group_standing(group, Some(group)).map(|standing| !standing)
 }
 
 pub fn birth(pid: i32) -> Result<String, i32> { crate::procfs::stat(pid).map(|read| format!("{}:0", read.started)) }

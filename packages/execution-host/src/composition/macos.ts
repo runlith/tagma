@@ -13,4 +13,5 @@ export const system = composePosix({
   evidence: evidenceProbe({ ...MACHINE_PROBE_LIMITS, probeMs: 2_000 }),
   usage: (path) => openUsage(path, processWorker),
   fileHolders,
+  worker: processWorker,
 });

@@ -4,14 +4,6 @@ use std::ffi::c_int;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd, RawFd};
 
-#[cfg(target_os = "macos")]
-#[path = "../macos/sys.rs"]
-mod native;
-#[cfg(target_os = "linux")]
-#[path = "../linux/sys.rs"]
-mod native;
-pub use native::*;
-
 pub const CLD_EXITED: c_int = 1;
 pub const CLD_KILLED: c_int = 2;
 pub const CLD_DUMPED: c_int = 3;
@@ -36,11 +28,11 @@ pub fn pipe() -> Result<(OwnedFd, OwnedFd), i32> {
     Ok(pair)
 }
 
-pub fn socket_pair() -> Result<(OwnedFd, OwnedFd), i32> {
+pub fn socket_pair(nosigpipe: impl Fn(RawFd) -> Result<(), i32>) -> Result<(OwnedFd, OwnedFd), i32> {
     let mut ends = [0 as c_int; 2];
     check(unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, ends.as_mut_ptr()) })?;
     let pair = unsafe { (OwnedFd::from_raw_fd(ends[0]), OwnedFd::from_raw_fd(ends[1])) };
-    for fd in ends { cloexec(fd)?; socket_nosigpipe(fd)?; }
+    for fd in ends { cloexec(fd)?; nosigpipe(fd)?; }
     Ok(pair)
 }
 

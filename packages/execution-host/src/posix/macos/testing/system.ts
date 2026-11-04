@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import { HolderUnavailable } from '../../../holder-client/Connection';
 import { background } from './tempo';
 import { isolatedProcess } from './isolated';
+import { processWorker } from '../processes';
 import type { FixtureSystem } from '../../testing/System';
 
 export const system: FixtureSystem = {
@@ -22,5 +23,6 @@ export const system: FixtureSystem = {
         ? Effect.void
         : Effect.fail(new HolderUnavailable({ detail: `the distinct holder could not be signed: ${signed.stderr.toString()}` }));
     }),
+  processWorker,
   isolated: isolatedProcess,
 };

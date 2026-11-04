@@ -1,9 +1,9 @@
-import { CString, dlopen, FFIType } from 'bun:ffi';
+import { CString, dlopen, FFIType, ptr } from 'bun:ffi';
 import { ProcessesUnreadable } from '../../ProcessReader';
 
 const symbols = {
   execution_platform_clock_ticks: { args: [], returns: FFIType.u64 },
-  execution_platform_boot_nanos: { args: [], returns: FFIType.u64 },
+  execution_platform_boot_nanos: { args: [FFIType.ptr], returns: FFIType.i32 },
   execution_platform_error: { args: [], returns: FFIType.ptr },
 } as const;
 
@@ -21,30 +21,32 @@ const ticksOf = (birth: string): bigint | ProcessesUnreadable => {
 export class BirthClock {
   private constructor(
     private readonly frequency: bigint,
-    private readonly boot: bigint,
+    private readonly bootFrom: bigint,
+    private readonly bootUntil: bigint,
   ) {}
 
   static load(path: string): BirthClock {
     const library = dlopen(path, symbols);
     try {
       const frequency = BigInt(library.symbols.execution_platform_clock_ticks());
-      const boot = BigInt(library.symbols.execution_platform_boot_nanos());
-      if (frequency <= 0n || boot <= 0n) {
+      const boot = new BigUint64Array(2);
+      const status = library.symbols.execution_platform_boot_nanos(ptr(boot));
+      if (frequency <= 0n || status !== 0 || boot[0]! <= 0n || boot[1]! < boot[0]!) {
         const error = library.symbols.execution_platform_error();
         throw new Error(error === null ? 'the kernel clock metadata could not be read' : new CString(error).toString());
       }
-      return new BirthClock(frequency, boot);
+      return new BirthClock(frequency, boot[0]!, boot[1]!);
     } finally {
       library.close();
     }
   }
 
   private earliest(ticks: bigint): bigint {
-    return this.boot + (ticks * SECOND) / this.frequency;
+    return this.bootFrom + (ticks * SECOND) / this.frequency;
   }
 
   private before(ticks: bigint): bigint {
-    return this.boot + ((ticks + 1n) * SECOND + this.frequency - 1n) / this.frequency;
+    return this.bootUntil + ((ticks + 1n) * SECOND + this.frequency - 1n) / this.frequency;
   }
 
   startedAt(first: bigint, _second: bigint): number {

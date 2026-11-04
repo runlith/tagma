@@ -3,7 +3,7 @@ use std::ffi::{CStr, CString, c_char, c_int};
 use std::os::fd::RawFd;
 use std::ptr;
 
-pub type Failure = (i32, String);
+use crate::posix::backend::{Spawn, SpawnFailure as Failure};
 fn failed(errno: i32, what: &str) -> Failure { (errno, format!("{what}: {}", std::io::Error::from_raw_os_error(errno))) }
 fn outcome(code: c_int, what: &str) -> Result<(), Failure> { if code == 0 { Ok(()) } else { Err(failed(code, what)) } }
 
@@ -67,4 +67,15 @@ impl Drop for Spawner {
             if !self.attr.is_null() { libc::posix_spawnattr_destroy(&mut self.attr); }
         }
     }
+}
+
+impl Spawn for Spawner {
+    fn new(flags: i32) -> Result<Self, Failure> { Spawner::new(flags) }
+    fn duplicate(&mut self, from: RawFd, to: RawFd) -> Result<(), Failure> { Spawner::duplicate(self, from, to) }
+    fn inherit(&mut self, fd: RawFd) -> Result<(), Failure> { Spawner::inherit(self, fd) }
+    fn open(&mut self, fd: RawFd, path: &CStr, flags: i32) -> Result<(), Failure> { Spawner::open(self, fd, path, flags) }
+    fn placeholder(&mut self, fd: RawFd) -> Result<(), Failure> { Spawner::placeholder(self, fd) }
+    fn chdir(&mut self, path: &CStr) -> Result<(), Failure> { Spawner::chdir(self, path) }
+    fn pace(&mut self, low: bool) -> bool { Spawner::pace(self, low) }
+    fn spawn(&self, path: &CStr, argv: &[CString], env: &[CString]) -> Result<i32, Failure> { Spawner::spawn(self, path, argv, env) }
 }

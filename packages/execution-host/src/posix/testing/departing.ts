@@ -3,6 +3,7 @@ import { Cause, Clock, Effect, FileSystem, Schema } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { CONTROL_VARIABLE, openHolder } from '../PosixHolder';
 import { report } from './report';
+import { testSystem } from '../../composition/testing/system';
 
 const [library, state] = process.argv.slice(2) as [string, string];
 const DEPARTED = join(state, 'departed');
@@ -21,7 +22,7 @@ const alive = (pid: number) => {
 const depart = Effect.scoped(
   Effect.gen(function* () {
     const files = yield* FileSystem.FileSystem;
-    const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+    const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
     const child = yield* holder.launch({
       id: 'held',
       path: '/bin/sh',
@@ -51,7 +52,7 @@ const follow = Effect.scoped(
       try: () => alive(departed.logic),
       catch: (cause) => new Cause.UnknownError(cause, String(cause)),
     });
-    const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]));
+    const holder = yield* openHolder(library, Number(process.env[CONTROL_VARIABLE]), (yield* testSystem).processWorker);
     const held = holder.held.map((execution) => execution.pid);
     yield* report(state, {
       phase: 2,

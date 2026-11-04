@@ -7,6 +7,10 @@ mod handover;
 mod holder;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod posix;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "linux")]
 #[path = "../../src/linux/procfs.rs"]
 mod procfs;
@@ -15,8 +19,10 @@ mod table;
 #[cfg(test)]
 mod testing;
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-type Native = posix::Posix;
+#[cfg(target_os = "macos")]
+type Native = posix::Posix<macos::Kernel>;
+#[cfg(target_os = "linux")]
+type Native = posix::Posix<linux::Kernel>;
 
 fn main() {
     std::process::exit(match holder::run::<Native>() {

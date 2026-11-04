@@ -1,7 +1,7 @@
-import { Effect, Exit, Scope, Semaphore } from 'effect';
+import { Effect, type Scope } from 'effect';
 import { ProcessesUnreadable, type ProcessReader, type ProcessProbe } from '../ProcessReader';
 import type { LoadedLibrary } from './Library';
-import { openProcessWorker, type ProcessWorker, type WorkerUnanswered } from './ProcessWorker';
+import { leaseProcessWorker, type WorkerUnanswered } from './ProcessWorker';
 import type { Refused } from './refusal';
 
 type ProcessSystem = {
@@ -19,31 +19,12 @@ const answered = <A extends object>(read: A | Refused): Effect.Effect<A, Process
 
 const unreadable = (failure: WorkerUnanswered) => new ProcessesUnreadable({ detail: failure.detail });
 
-type Held = { readonly worker: ProcessWorker; readonly scope: Scope.Closeable };
-
 export const processReader = Effect.fnUntraced(function* (
   library: LoadedLibrary,
   system: ProcessSystem,
 ): Effect.fn.Return<ProcessReader, never, Scope.Scope> {
   const { compareBirth, bornBetween } = system;
-  const scope = yield* Effect.scope;
-  const opening = yield* Semaphore.make(1);
-  let held: Held | undefined;
-  const current = () => held;
-  const worker = opening.withPermit(
-    Effect.gen(function* () {
-      const standing = current();
-      if (standing !== undefined && !standing.worker.lost()) return standing.worker;
-      if (standing !== undefined) yield* Scope.close(standing.scope, Exit.void);
-      const own = yield* Scope.fork(scope);
-      const opened = yield* openProcessWorker(library.path, system.worker).pipe(
-        Scope.provide(own),
-        Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(own, exit) : Effect.void)),
-      );
-      held = { worker: opened, scope: own };
-      return opened;
-    }),
-  );
+  const worker = yield* leaseProcessWorker(library.path, system.worker);
   const scan = (request: ProcessProbe) =>
     Effect.flatMap(worker, (one) => one.scan(request)).pipe(
       Effect.mapError(unreadable),

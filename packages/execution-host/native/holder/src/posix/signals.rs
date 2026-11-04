@@ -1,3 +1,4 @@
+use super::backend::Backend;
 use std::ffi::c_int;
 
 const SIGNALS: &[(&str, c_int)] = &[
@@ -7,8 +8,6 @@ const SIGNALS: &[(&str, c_int)] = &[
     ("SIGILL", libc::SIGILL),
     ("SIGTRAP", libc::SIGTRAP),
     ("SIGABRT", libc::SIGABRT),
-    #[cfg(target_os = "macos")]
-    ("SIGEMT", libc::SIGEMT),
     ("SIGBUS", libc::SIGBUS),
     ("SIGFPE", libc::SIGFPE),
     ("SIGKILL", libc::SIGKILL),
@@ -31,19 +30,13 @@ const SIGNALS: &[(&str, c_int)] = &[
     ("SIGPROF", libc::SIGPROF),
     ("SIGWINCH", libc::SIGWINCH),
     ("SIGIO", libc::SIGIO),
-    #[cfg(target_os = "macos")]
-    ("SIGINFO", libc::SIGINFO),
-    #[cfg(target_os = "linux")]
-    ("SIGPWR", libc::SIGPWR),
-    #[cfg(target_os = "linux")]
-    ("SIGSTKFLT", libc::SIGSTKFLT),
     ("SIGSYS", libc::SIGSYS),
 ];
 
-pub fn number(name: &str) -> Option<c_int> {
-    SIGNALS.iter().find(|(known, _)| *known == name).map(|(_, number)| *number)
+pub fn number<B: Backend>(name: &str) -> Option<c_int> {
+    SIGNALS.iter().chain(B::EXTRA_SIGNALS.iter()).find(|(known, _)| *known == name).map(|(_, number)| *number)
 }
 
-pub fn name(number: c_int) -> String {
-    SIGNALS.iter().find(|(_, known)| *known == number).map_or_else(|| format!("signal {number}"), |(name, _)| (*name).to_string())
+pub fn name<B: Backend>(number: c_int) -> String {
+    SIGNALS.iter().chain(B::EXTRA_SIGNALS.iter()).find(|(_, known)| *known == number).map_or_else(|| format!("signal {number}"), |(name, _)| (*name).to_string())
 }

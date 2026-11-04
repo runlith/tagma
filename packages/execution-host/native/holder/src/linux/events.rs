@@ -1,4 +1,4 @@
-use super::sys;
+use crate::posix::{backend::Events, sys};
 use crate::platform::{Event, Timer};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -119,4 +119,15 @@ impl Queue {
         }
         Ok(())
     }
+}
+
+impl Events for Queue {
+    fn new() -> Result<Self, i32> { Queue::new() }
+    fn read(&self, fd: RawFd) -> Result<(), i32> { Queue::read(self, fd) }
+    fn write(&self, fd: RawFd, on: bool) -> Result<(), i32> { Queue::write(self, fd, on) }
+    fn child(&self, pid: i32) -> Result<(), i32> { Queue::child(self, pid) }
+    fn reaped(&self, pid: i32) { Queue::reaped(self, pid) }
+    fn timer(&self, timer: Timer, ms: u64) -> Result<(), i32> { Queue::timer(self, timer, ms) }
+    fn sweep(&self, owned: &HashSet<u64>) -> Result<(), i32> { Queue::sweep(self, owned) }
+    fn wait(&self, out: &mut Vec<Event<RawFd>>) -> Result<(), i32> { Queue::wait(self, out) }
 }

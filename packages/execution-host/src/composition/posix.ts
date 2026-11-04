@@ -27,6 +27,7 @@ type PosixSystem = {
   readonly evidence: Effect.Effect<EvidenceProbe, never, Processes | FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner>;
   readonly usage: (path: string) => Effect.Effect<UsageReader, UsageUnavailable, Scope.Scope>;
   readonly fileHolders: (file: string) => Effect.Effect<FileHolders, never, FileSystem.FileSystem>;
+  readonly worker: () => Worker;
 };
 
 export const composePosix = (system: PosixSystem) => {
@@ -37,7 +38,7 @@ export const composePosix = (system: PosixSystem) => {
   return {
     nativePlatform: system,
     holderLayer: (path: string) =>
-      heldLayer(path).pipe(
+      heldLayer(path, system.worker).pipe(
         Layer.catchTag('HolderUnavailable', (error) =>
           Layer.effect(Holder, Effect.fail(new BootRefused({ detail: `the holder could not be reached: ${error.detail}` }))),
         ),

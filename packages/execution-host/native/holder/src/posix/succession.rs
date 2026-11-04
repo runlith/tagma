@@ -1,4 +1,4 @@
-use super::spawner::Spawner;
+use super::backend::{Backend, Spawn};
 use super::sys;
 use crate::frames::Reason;
 use crate::platform::Failure;
@@ -156,12 +156,12 @@ impl Inherited {
         unsafe { libc::close(self.table) };
     }
 
-    pub fn retreat(&self, handles: &[RawFd], why: &str, stay: bool) -> String {
+    pub fn retreat<B: Backend>(&self, handles: &[RawFd], why: &str, stay: bool) -> String {
         if self.mode != Mode::Activated {
             return why.to_string();
         }
         super::rescue::disarm();
-        let restored = restore(&self.state);
+        let restored = restore::<B>(&self.state);
         let image = match &restored {
             Ok(()) => standing(&self.state, &self.part),
             Err(failure) if stay => return format!("{why}; the prior bundle could not be restored ({})", failure.detail),
@@ -179,7 +179,7 @@ impl Inherited {
             Err(detail) => detail,
         };
         if restored.is_ok() {
-            if let Err(failure) = rotate(&self.state) {
+            if let Err(failure) = rotate::<B>(&self.state) {
                 eprintln!("execution-holder: the activated bundle could not be put back: {}", failure.detail);
             }
         }
@@ -214,8 +214,8 @@ fn environment() -> Vec<CString> {
         .collect()
 }
 
-fn inheriting(flags: c_int, kept: &[RawFd]) -> Result<Spawner, Failure> {
-    let mut spawner = Spawner::new(flags | sys::SPAWN_CLOEXEC_DEFAULT | sys::SPAWN_SETSIGDEF | sys::SPAWN_SETSIGMASK)
+fn inheriting<B: Backend>(flags: c_int, kept: &[RawFd]) -> Result<B::Spawner, Failure> {
+    let mut spawner = <B::Spawner as Spawn>::new(flags | B::SPAWN_CLOEXEC_DEFAULT | B::SPAWN_SETSIGDEF | B::SPAWN_SETSIGMASK)
         .map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))?;
     for fd in (0..=2).chain(kept.iter().copied()) {
         spawner.inherit(fd).map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))?;
@@ -223,23 +223,23 @@ fn inheriting(flags: c_int, kept: &[RawFd]) -> Result<Spawner, Failure> {
     Ok(spawner)
 }
 
-pub fn verify(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], handles: &[RawFd]) -> Result<i32, Failure> {
+pub fn verify<B: Backend>(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], handles: &[RawFd]) -> Result<i32, Failure> {
     let file = written(state, bytes)?;
     let image = part(state, holder);
     let checked = Inherited { claim, table: file.as_raw_fd(), child_nofile, part: holder.to_string(), state: state.to_path_buf(), mode: Mode::Verifying };
     let argv = checked.argv(&image, VERIFY)?;
-    let mut spawner = inheriting(0, &[file.as_raw_fd()])?;
+    let mut spawner = inheriting::<B>(0, &[file.as_raw_fd()])?;
     for fd in std::iter::once(claim).chain(handles.iter().copied()) {
         spawner.placeholder(fd).map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))?;
     }
     spawner.spawn(&argv[0], &argv, &environment()).map_err(|(errno, detail)| Failure::new(sys::classify(errno), detail))
 }
 
-pub fn replace(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], handles: &[Rc<OwnedFd>]) -> Failure {
+pub fn replace<B: Backend>(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], handles: &[Rc<OwnedFd>]) -> Failure {
     let mut kept: Vec<RawFd> = handles.iter().map(|handle| handle.as_raw_fd()).collect();
     kept.push(claim);
-    let failure = match replacing(state, holder, claim, child_nofile, bytes, &kept) {
-        Ok(_) => Failure::new(Reason::Os, "posix_spawn returned after replacing the image"),
+    let failure = match replacing::<B>(state, holder, claim, child_nofile, bytes, &kept) {
+        Ok(_) => Failure::new(Reason::Os, "the spawning adapter returned after replacing the image"),
         Err(failure) => failure,
     };
     for fd in kept {
@@ -250,7 +250,7 @@ pub fn replace(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rli
     failure
 }
 
-fn replacing(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], kept: &[RawFd]) -> Result<i32, Failure> {
+fn replacing<B: Backend>(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_t, bytes: &[u8], kept: &[RawFd]) -> Result<i32, Failure> {
     let file = written(state, bytes)?;
     let image = text(&standing(state, holder))?;
     let mut kept = kept.to_vec();
@@ -258,7 +258,7 @@ fn replacing(state: &Path, holder: &str, claim: RawFd, child_nofile: libc::rlim_
     for fd in &kept {
         sys::inheritable(*fd).map_err(|errno| sys::failure(errno, &format!("descriptor {fd} could not be carried")))?;
     }
-    let spawner = inheriting(sys::SPAWN_SETEXEC, &kept)?;
+    let spawner = inheriting::<B>(B::SPAWN_SETEXEC, &kept)?;
     let argv = [
         image.clone(),
         CString::new(SUCCESSOR).unwrap(),
@@ -314,9 +314,9 @@ fn exists(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok()
 }
 
-fn swap(from: &Path, to: &Path) -> Result<(), Failure> {
+fn swap<B: Backend>(from: &Path, to: &Path) -> Result<(), Failure> {
     let (from_text, to_text) = (text(from)?, text(to)?);
-    sys::check(unsafe { sys::exchange(from_text.as_ptr(), to_text.as_ptr()) })
+    sys::check(unsafe { B::exchange(from_text.as_ptr(), to_text.as_ptr()) })
         .map_err(|errno| sys::failure(errno, &format!("swap {} and {}", from.display(), to.display())))
 }
 
@@ -327,23 +327,23 @@ fn rename(from: &Path, to: &Path) -> Result<(), Failure> {
     })
 }
 
-pub fn rotate(state: &Path) -> Result<(), Failure> {
+pub fn rotate<B: Backend>(state: &Path) -> Result<(), Failure> {
     let (standing, next, prior) = (state.join(STANDING), state.join(NEXT), state.join(PRIOR));
     if exists(&prior) {
         std::fs::remove_dir_all(&prior).map_err(|error| {
             sys::failure(error.raw_os_error().unwrap_or(libc::EIO), &format!("remove {}", prior.display()))
         })?;
     }
-    swap(&next, &standing)?;
+    swap::<B>(&next, &standing)?;
     if let Err(failure) = rename(&next, &prior) {
-        swap(&next, &standing)?;
+        swap::<B>(&next, &standing)?;
         return Err(failure);
     }
     Ok(())
 }
 
-pub fn restore(state: &Path) -> Result<(), Failure> {
+pub fn restore<B: Backend>(state: &Path) -> Result<(), Failure> {
     let (standing, next, prior) = (state.join(STANDING), state.join(NEXT), state.join(PRIOR));
-    swap(&prior, &standing)?;
+    swap::<B>(&prior, &standing)?;
     rename(&prior, &next)
 }

@@ -699,7 +699,7 @@ layer(fixture)("a command's deadline", (it) => {
         const key = keyOf('deadline-none-revised');
         const execution = yield* accept(open, key, { witness, admission: unbounded() });
         yield* running(witness);
-        yield* until(open.hostCommands.command(execution), (row) => row?.deadline.armed !== undefined);
+        yield* until(open.hostCommands.command(execution), (row) => row?.deadline.elapsedMs !== undefined);
         yield* TestClock.adjust(Duration.seconds(10));
         expect(yield* revise(open, keyOf('revise-none'), execution, 0, { _tag: 'Remaining', remainingMs: 5_000 })).toMatchObject({
           _tag: 'Revised',

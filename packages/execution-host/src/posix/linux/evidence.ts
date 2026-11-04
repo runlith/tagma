@@ -10,6 +10,7 @@ import type {
 import { sameProcess } from '@runlith/executions/protocol/evidence';
 import { EvidenceReader, type Measured } from '../../EvidenceScans';
 import { Processes, type ProcessRow } from '../../ProcessReader';
+import { commandLine } from '../programs';
 import { linksOf, statusOf } from './proc';
 
 type Socket = { readonly inode: string; readonly address: string; readonly port: number };
@@ -109,7 +110,6 @@ export const evidenceProbe = Effect.gen(function* () {
           });
           continue;
         }
-        const args = one.args._tag === 'Read' ? one.args.value.join(' ') : undefined;
         if (one.args._tag === 'Unreadable')
           unmeasured.push({ region: `the arguments of pid ${one.pid}`, reason: 'refused', detail: one.args.detail });
         found.push({
@@ -123,7 +123,7 @@ export const evidenceProbe = Effect.gen(function* () {
           work: one.work || undefined,
           terminal: request._tag === 'Terminal' ? request.terminal : undefined,
           state: status.success.state,
-          command: args === '' ? undefined : args,
+          command: one.args._tag === 'Read' ? commandLine(one.args.value) : undefined,
         });
       }
       return { observedAt, found, unmeasured, completeness: complete(unmeasured) };

@@ -1,8 +1,9 @@
-use super::sys;
+use super::sys as kernel;
+use crate::posix::sys;
 use std::ffi::{CStr, CString, c_char};
 use std::os::fd::{AsRawFd, RawFd};
 
-pub type Failure = (i32, String);
+use crate::posix::backend::{Spawn, SpawnFailure as Failure};
 enum Action { Duplicate(RawFd, RawFd), Inherit(RawFd), Open(RawFd, CString, i32), Chdir(CString) }
 pub struct Spawner { flags: i32, actions: Vec<Action>, low: bool }
 
@@ -19,7 +20,7 @@ impl Spawner {
 
     fn enter(&self, descriptors: &[RawFd], path: &CStr, argv: &[*const c_char], env: &[*const c_char]) -> i32 {
         for &fd in descriptors { if let Err(errno) = sys::cloexec(fd) { return errno; } }
-        if self.flags & sys::SPAWN_SETEXEC == 0 { unsafe {
+        if self.flags & kernel::SPAWN_SETEXEC == 0 { unsafe {
             let mut mask: libc::sigset_t = std::mem::zeroed();
             libc::sigemptyset(&mut mask);
             if libc::sigprocmask(libc::SIG_SETMASK, &mask, std::ptr::null_mut()) < 0 { return sys::errno(); }
@@ -27,7 +28,7 @@ impl Spawner {
                 if signal == libc::SIGKILL || signal == libc::SIGSTOP || signal == 32 || signal == 33 { continue; }
                 if libc::signal(signal, libc::SIG_DFL) == libc::SIG_ERR { return sys::errno(); }
             }
-            if self.flags & sys::SPAWN_SETSID != 0 && libc::setsid() < 0 { return sys::errno(); }
+            if self.flags & kernel::SPAWN_SETSID != 0 && libc::setsid() < 0 { return sys::errno(); }
         } }
         for action in &self.actions {
             let done = match action {
@@ -45,8 +46,8 @@ impl Spawner {
             if let Err(errno) = done { return errno; }
         }
         if self.low {
-            let priority = match sys::priority(0) { Ok(priority) => priority, Err(errno) => return errno };
-            if priority < sys::LOW_PRIORITY && unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, sys::LOW_PRIORITY) } < 0 { return sys::errno(); }
+            let priority = match kernel::priority(0) { Ok(priority) => priority, Err(errno) => return errno };
+            if priority < kernel::LOW_PRIORITY && unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, kernel::LOW_PRIORITY) } < 0 { return sys::errno(); }
         }
         unsafe { libc::execve(path.as_ptr(), argv.as_ptr(), env.as_ptr()) };
         sys::errno()
@@ -63,7 +64,7 @@ impl Spawner {
             .collect::<Result<Vec<_>, _>>()?.into_iter()
             .filter_map(|entry| entry.file_name().to_str().and_then(|name| name.parse::<RawFd>().ok())).collect::<Vec<_>>();
         let descriptors = descriptors.into_iter().filter(|fd| *fd > 2 && unsafe { libc::fcntl(*fd, libc::F_GETFD) } >= 0).collect::<Vec<_>>();
-        if self.flags & sys::SPAWN_SETEXEC != 0 { return Err(failed(self.enter(&descriptors, path, &args, &vars), "exec holder")); }
+        if self.flags & kernel::SPAWN_SETEXEC != 0 { return Err(failed(self.enter(&descriptors, path, &args, &vars), "exec holder")); }
         let pid = unsafe { libc::fork() };
         if pid < 0 { return Err(failed(sys::errno(), "fork")); }
         if pid == 0 {
@@ -97,4 +98,15 @@ impl Spawner {
             return Err(failed(errno, &format!("exec {}", path.to_string_lossy())));
         }
     }
+}
+
+impl Spawn for Spawner {
+    fn new(flags: i32) -> Result<Self, Failure> { Spawner::new(flags) }
+    fn duplicate(&mut self, from: RawFd, to: RawFd) -> Result<(), Failure> { Spawner::duplicate(self, from, to) }
+    fn inherit(&mut self, fd: RawFd) -> Result<(), Failure> { Spawner::inherit(self, fd) }
+    fn open(&mut self, fd: RawFd, path: &CStr, flags: i32) -> Result<(), Failure> { Spawner::open(self, fd, path, flags) }
+    fn placeholder(&mut self, fd: RawFd) -> Result<(), Failure> { Spawner::placeholder(self, fd) }
+    fn chdir(&mut self, path: &CStr) -> Result<(), Failure> { Spawner::chdir(self, path) }
+    fn pace(&mut self, low: bool) -> bool { Spawner::pace(self, low) }
+    fn spawn(&self, path: &CStr, argv: &[CString], env: &[CString]) -> Result<i32, Failure> { Spawner::spawn(self, path, argv, env) }
 }

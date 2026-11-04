@@ -28,10 +28,23 @@ fn nanos(clock: libc::clockid_t) -> Result<i128, i32> {
 }
 
 #[cfg(target_os = "linux")]
-pub fn boot_nanos() -> Result<u64, i32> {
-    let wall = nanos(libc::CLOCK_REALTIME)?;
-    let since = nanos(libc::CLOCK_BOOTTIME)?;
-    u64::try_from(wall - since).map_err(|_| libc::EOVERFLOW)
+pub fn boot_nanos() -> Result<[u64; 2], i32> {
+    let sample = || -> Result<[u64; 2], i32> {
+        let before = nanos(libc::CLOCK_BOOTTIME)?;
+        let wall = nanos(libc::CLOCK_REALTIME)?;
+        let after = nanos(libc::CLOCK_BOOTTIME)?;
+        if after < before { return Err(libc::EIO); }
+        Ok([
+            u64::try_from(wall - after).map_err(|_| libc::EOVERFLOW)?,
+            u64::try_from(wall - before).map_err(|_| libc::EOVERFLOW)?,
+        ])
+    };
+    let mut best = sample()?;
+    for _ in 1..3 {
+        let next = sample()?;
+        if next[1] - next[0] < best[1] - best[0] { best = next; }
+    }
+    Ok(best)
 }
 
 #[cfg(test)]

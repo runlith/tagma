@@ -1,6 +1,7 @@
 import { CString, dlopen, FFIType, ptr, toArrayBuffer, type Pointer } from 'bun:ffi';
 import { constants } from 'node:os';
 import type { KernelLimit } from '@runlith/executions/protocol/capacity';
+import type { WorkState } from '../holder/Holder';
 import { birthOf } from './birth';
 import { refusalOf, type NativeStatus, type Refused } from './refusal';
 import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../ProcessReader';
@@ -13,6 +14,7 @@ const SYMBOLS = {
   execution_platform_error: { args: [], returns: FFIType.ptr },
   execution_platform_uptime_nanos: { args: [], returns: FFIType.u64 },
   execution_platform_limits: { args: [FFIType.ptr], returns: FFIType.i32 },
+  execution_platform_terminal_control_descriptors: { args: [], returns: FFIType.i32 },
   execution_platform_process_table: {
     args: [FFIType.i32, FFIType.ptr, FFIType.i32, FFIType.ptr, FFIType.ptr, FFIType.ptr],
     returns: FFIType.i32,
@@ -21,6 +23,7 @@ const SYMBOLS = {
   execution_platform_processes_release: { args: [FFIType.ptr, FFIType.u64], returns: FFIType.i32 },
   execution_platform_process_identity: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_process_descriptors: { args: [FFIType.i32], returns: FFIType.i32 },
+  execution_platform_group_state: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
 } as const;
 
 type Library = ReturnType<typeof dlopen<typeof SYMBOLS>>;
@@ -34,7 +37,9 @@ export interface ProcessAbi {
   identity(): string;
   uptimeNanos(): bigint;
   limits(): NativeLimits | Refused;
+  terminalControlDescriptors(): number;
   descriptors(pid: number): { readonly count: number } | Refused;
+  groupState(group: number, leader: number, leaderExited: boolean): WorkState | Refused;
   processTable(request: ProcessProbe): ReadonlyArray<ProcessRow> | Refused;
   processFacts(pids: ReadonlyArray<number>): ProcessReading | Refused;
   processIdentity(pid: number): ProcessIdentity | Refused;
@@ -86,10 +91,20 @@ export class Abi implements ProcessAbi {
     return { openFiles, processes, terminals };
   }
 
+  terminalControlDescriptors(): number {
+    return this.library.symbols.execution_platform_terminal_control_descriptors();
+  }
+
   descriptors(pid: number): { readonly count: number } | Refused {
     if (!addressable(pid)) return invalidPid;
     const code = this.library.symbols.execution_platform_process_descriptors(pid);
     return code < 0 ? this.refused(code) : { count: code };
+  }
+
+  groupState(group: number, leader: number, leaderExited: boolean): WorkState | Refused {
+    if (!addressable(group) || !addressable(leader)) return invalidPid;
+    const code = this.library.symbols.execution_platform_group_state(group, leader, Number(leaderExited));
+    return code < 0 ? this.refused(code) : code === 0 ? 'ended' : code === 1 ? 'standing' : 'unmeasured';
   }
 
   processTable(request: ProcessProbe): ReadonlyArray<ProcessRow> | Refused {

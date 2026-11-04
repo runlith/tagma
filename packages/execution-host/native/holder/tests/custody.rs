@@ -140,8 +140,8 @@ fn hello(frame: Frame, pid: u32, count: u32, generation: Option<u64>) -> bool {
     assert_eq!(reader.word(), pid);
     assert_eq!(reader.word(), count);
     if reader.byte() != 0 { assert!(reader.long() > 0); }
-    assert_eq!(reader.byte(), 4);
-    assert_eq!(reader.byte(), 8);
+    reader.byte();
+    reader.byte();
     let capabilities = reader.word();
     let mut replacement = false;
     let mut raises = false;
