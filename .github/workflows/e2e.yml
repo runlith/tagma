@@ -32,7 +32,7 @@ jobs:
       name: e2e-linux
       script: test:e2e
       runner: ubuntu-latest
-      shards: 4
+      shards: ${{ inputs.test-pattern != '' && 1 || 4 }}
       package: ${{ inputs.package }}
       test-pattern: ${{ inputs.test-pattern }}
       lanes: chromium,webkit,electron
