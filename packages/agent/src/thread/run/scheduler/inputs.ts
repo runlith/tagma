@@ -297,7 +297,7 @@ export const makeInputs = Effect.fnUntraced(function* ({
     const text = turn.text.trim();
     if (!text && !refs?.length) return Effect.fail(new ThreadCallBroke({ cause: new Error('Message is empty.') }));
     const words = { text, id: turn.inputId, attachments: refs?.length ? refs : undefined, admitted: turn.admitted };
-    return speak(thread, words, mode === 'send' && text ? 'step' : 'turn');
+    return speak(thread, words, mode === 'send' ? 'step' : 'turn');
   };
   const steer = Effect.fnUntraced(function* (
     thread: ThreadMetadataRow,
