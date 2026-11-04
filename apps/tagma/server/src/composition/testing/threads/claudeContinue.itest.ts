@@ -31,7 +31,10 @@ layer(
         stream: (input) =>
           Stream.fromIterable<LLMEvent>(
             JSON.stringify(input.messages).includes('continue-worker') &&
-              !input.messages.some((message) => message.role === 'tool' && message.id === 'resume-worker')
+              !input.messages.some(
+                (message) =>
+                  message.role === 'tool' && message.content.some((part) => part.type === 'tool-result' && part.id === 'resume-worker'),
+              )
               ? [
                   { type: 'tool-input-start', id: 'resume-worker', name: 'continue_agent' },
                   { type: 'tool-call', id: 'resume-worker', name: 'continue_agent', input: { threadId: 'kit' } },
