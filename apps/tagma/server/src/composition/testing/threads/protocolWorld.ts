@@ -43,7 +43,11 @@ const makeProtocolWorld = Effect.fn('testing.protocolWorld')(function* <E, R>({ 
         else process.env.PATH = stood;
       }),
   );
-  const world = yield* makeDoorWorld({ own, vendorWire, models });
+  const world = yield* makeDoorWorld({
+    own: own ?? 'captures this fixture’s controlled PATH and machine model preferences',
+    vendorWire,
+    models,
+  });
   if (prepare !== undefined) yield* prepare(world);
   const checkout = yield* world.directory(`${name}-project`);
   const projectId = yield* world.stealthProject(checkout);

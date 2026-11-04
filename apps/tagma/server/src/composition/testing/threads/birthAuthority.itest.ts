@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { Settings } from '../../../settings/contract/service/values.js';
-import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
+import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 import { birthsOf, adjustmentsOf, evidenceOf } from '../../../threads/testing/doubles.js';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { APPROVAL_WAIT_HEADER } from '../../../invocation/contract/wire/headers.js';
@@ -10,13 +10,8 @@ import { grantFor } from '../../../platform/testing/grants.js';
 import { harnessRefusal } from '../../../threads/refusals.js';
 import { threadWireSnapshotPayloadSchema } from '../../../threads/contract/wire/snapshot.js';
 
-const fixture = doorFixture();
-const setup = Effect.gen(function* () {
-  const world = yield* DoorFixture;
-  const projectId = yield* world.stealthProject();
-  yield* projectLeaving(world, projectId);
-  return { world, projectId };
-});
+const fixture = protocolWorld({ name: 'birth-authority' });
+const setup = Effect.map(ProtocolWorld, ({ world, projectId }) => ({ world, projectId }));
 
 class World extends Context.Service<World, Effect.Success<typeof setup>>()('testing/BirthAuthorityWorld') {}
 

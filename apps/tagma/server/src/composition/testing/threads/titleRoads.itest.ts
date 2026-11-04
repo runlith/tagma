@@ -7,10 +7,12 @@ import { Settings } from '../../../settings/contract/service/values.js';
 import { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
 import { birthsOf, inboxOf, listOf, titlesOf } from '../../../threads/testing/doubles.js';
-import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
+import { projectLeaving } from '../doorFixture.js';
+import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 import { subscriptionLogin } from '../claudeLogin.js';
 
-const fixture = doorFixture({
+const fixture = protocolWorld({
+  name: 'title-roads',
   models: (standing) => ({
     ...standing,
     request: () => ({
@@ -36,7 +38,7 @@ const fixture = doorFixture({
 });
 
 const external = Effect.fnUntraced(function* (projectId: number, harness: string) {
-  const world = yield* DoorFixture;
+  const { world } = yield* ProtocolWorld;
   const threadId = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null, type: `harness:${harness}` }))
     .thread.id;
   yield* inboxOf(world.runtime.owners).put({
@@ -53,7 +55,7 @@ const external = Effect.fnUntraced(function* (projectId: number, harness: string
 layer(fixture, { excludeTestServices: true })('external thread naming', (it) => {
   it.effect('a CLI with no ask path refuses, while a connected provider names a thread from its reader words during the turn', () =>
     Effect.gen(function* () {
-      const world = yield* DoorFixture;
+      const { world } = yield* ProtocolWorld;
       const projectId = yield* world.plainProject();
       yield* projectLeaving(world, projectId);
       yield* Context.get(world.runtime.graph, Settings).write({ key: 'threads.harnessTitle', value: false, scope: 'project', projectId });

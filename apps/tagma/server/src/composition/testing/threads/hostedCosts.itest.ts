@@ -2,7 +2,8 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { CostLedger } from '@runlith/performance/CostLedger';
 import { ActivityStore } from '@runlith/activity/store';
-import { Context, Effect, Fiber, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
+import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
+import type { ThreadState } from '@runlith/agent/thread/state';
 import { THREAD_TOOL_CONFIRM_VALUE, USER_QUESTION_TOOL_NAME } from '@runlith/agent/transcript/parts';
 import { coreEntry } from '@runlith/agent/transcript/kinds';
 import type { CallEvent } from '@runlith/agent/callProgress';
@@ -20,6 +21,7 @@ import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { suiteGit } from '../suiteGit.js';
 import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
+import type { DoorFixture } from '../doorFixture.js';
 
 const called = Schema.Struct({ failed: Schema.Boolean });
 
@@ -221,10 +223,28 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
 
   it.effect('a forgotten thread rests after its stopped turn admits a follow-up', () =>
     Effect.gen(function* () {
+      const stopped = yield* Deferred.make<ThreadState>();
+      let followId: string | null = null;
       const result = yield* Effect.scoped(
         Effect.gen(function* () {
           const context = yield* Layer.build(
-            protocolWorld({ name: 'hosted-costs-teardown', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }),
+            protocolWorld({
+              name: 'hosted-costs-teardown',
+              prepare: Effect.fnUntraced(function* (world: DoorFixture['Service']) {
+                yield* claudeLogin(world);
+                yield* hostedDefaults(world);
+                const kernel = Context.get(world.runtime.owners, ThreadHarness);
+                yield* Effect.acquireRelease(
+                  Effect.sync(() =>
+                    kernel.reads.subscribeStates((state) => {
+                      if (state.latestRun?.id === followId && state.activeRun === null && state.latestRun.settledNotifiedAt !== null)
+                        Deferred.doneUnsafe(stopped, Exit.succeed(state));
+                    }),
+                  ),
+                  (unsubscribe) => Effect.sync(unsubscribe),
+                );
+              }),
+            }),
           );
           const fixture = Context.get(context, ProtocolWorld);
           const { world, projectId, agent, birth } = fixture;
@@ -266,13 +286,14 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
             report,
             changes,
           );
+          followId = follow;
           fixture.forget(threadId);
-          return { world, threadId, follow };
+          return { follow };
         }),
       );
-      const kernel = Context.get(result.world.runtime.owners, ThreadHarness);
-      const state = yield* kernel.reads.snapshot(result.threadId);
-      const follow = yield* kernel.runs.ledger().runById(result.follow);
+      const state = yield* Deferred.await(stopped);
+      const follow = state.latestRun;
+      expect(follow?.id).toBe(result.follow);
       expect(state.activeRun).toBeNull();
       expect(state.pendingInput.queued).toEqual([]);
       expect(state.pendingInput.steers).toEqual([]);
