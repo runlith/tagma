@@ -25,19 +25,19 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       expect(row.operation).toBe('none');
       expect(row.coverage).toEqual({ untracked: 'all', paths: null });
       expect(row.entries.staged).toEqual({
-        entries: [{ path: 'held.txt', status: 'modified', lines: { added: 1, removed: 0 } }],
+        entries: [{ path: 'held.txt', status: 'modified', oldPath: undefined, lines: { added: 1, removed: 0 }, mark: 1 }],
         added: 1,
         removed: 0,
       });
       expect(row.entries.unstaged).toEqual({
-        entries: [{ path: 'kept.txt', status: 'modified', lines: { added: 1, removed: 0 } }],
+        entries: [{ path: 'kept.txt', status: 'modified', oldPath: undefined, lines: { added: 1, removed: 0 }, mark: 1 }],
         added: 1,
         removed: 0,
       });
       expect(row.entries.untracked).toEqual({
         entries: [
-          { path: 'alone.txt', status: 'untracked', lines: { added: 1, removed: 0 } },
-          { path: 'fresh.txt', status: 'untracked', lines: { added: 3, removed: 0 } },
+          { path: 'alone.txt', status: 'untracked', lines: { added: 1, removed: 0 }, mark: 1 },
+          { path: 'fresh.txt', status: 'untracked', lines: { added: 3, removed: 0 }, mark: 1 },
         ],
         added: 4,
         removed: 0,
@@ -47,7 +47,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
         base: 'base',
         mergeBase,
         head,
-        entries: [{ path: 'kept.txt', status: 'modified', lines: { added: 1, removed: 0 } }],
+        entries: [{ path: 'kept.txt', status: 'modified', oldPath: undefined, lines: { added: 1, removed: 0 } }],
         added: 1,
         removed: 0,
       });

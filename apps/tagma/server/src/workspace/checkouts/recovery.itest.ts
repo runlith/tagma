@@ -26,7 +26,17 @@ rowTests('checkout reading recovery', (it) => {
       const fresh = yield* Fiber.join(refreshing);
       expect(fresh.entries.untracked.entries.map((entry) => entry.path)).toContain('later.txt');
       expect(fresh.stale).toBe(false);
-      expect(yield* status.refresh(rootId)).toMatchObject({ head: fresh.head, entries: fresh.entries, stale: false });
+      const refreshed = yield* status.refresh(rootId);
+      expect(refreshed).toMatchObject({ head: fresh.head, stale: false });
+      for (const area of ['staged', 'unstaged', 'untracked', 'unmerged'] as const) {
+        expect(refreshed.entries[area]).toEqual({
+          ...fresh.entries[area],
+          entries: fresh.entries[area].entries.map((entry) => ({ ...entry, mark: expect.any(Number) })),
+        });
+        for (const [index, entry] of fresh.entries[area].entries.entries()) {
+          expect(refreshed.entries[area].entries[index]!.mark).toBeGreaterThan(entry.mark!);
+        }
+      }
       door.refuseListing();
       expect((yield* Effect.flip(status.refresh(rootId)))._tag).toBe('GitRefused');
     }),

@@ -105,7 +105,11 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       if (updated._tag === 'None') return yield* Effect.die('the refreshed checkout row was missing');
       expect(updated.value.head).toBe(mergeBase);
       expect(updated.value.entries.staged.entries.map((entry) => entry.path)).toEqual(['held.txt', 'kept.txt']);
-      expect(updated.value.entries.unstaged).toEqual(initial.value.entries.unstaged);
+      expect(updated.value.entries.unstaged).toEqual({
+        ...initial.value.entries.unstaged,
+        entries: initial.value.entries.unstaged.entries.map((entry) => ({ ...entry, mark: expect.any(Number) })),
+      });
+      expect(updated.value.entries.unstaged.entries[0]!.mark).toBeGreaterThan(initial.value.entries.unstaged.entries[0]!.mark!);
       expect(updated.value.compare?.entries).toEqual([]);
       expect(door.counts.readings).toBe(1);
       expect(notifications).toEqual([[rootId, undefined]]);
