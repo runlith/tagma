@@ -107,6 +107,7 @@ let needsHost: string | null = null;
 let stalled: Stalled | null = null;
 let holder: ReturnType<typeof Bun.spawn> | null = null;
 let changes: EventEmitter;
+let broken: string | null = null;
 let observed: FSWatcher;
 const loaders: SurfaceLoader[] = [];
 
@@ -257,6 +258,7 @@ const windowOf = (bundle: string, agrees = false): Seen => {
     },
     show: (state) => {
       seen.shown.push(state);
+      if (state.why === 'unknown') broken ??= state.detail;
       changed();
     },
     offer: async () => false,
@@ -290,12 +292,16 @@ const windowOf = (bundle: string, agrees = false): Seen => {
 };
 
 async function until(reached: () => boolean): Promise<void> {
-  while (!reached()) await once(changes, 'changed');
+  while (!reached()) {
+    if (broken !== null) throw new Error(`the window stood on an opening that failed: ${broken}`);
+    await once(changes, 'changed');
+  }
 }
 
 beforeEach(async () => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-window-')));
   changes = new EventEmitter();
+  broken = null;
   const events = changes;
   installRoot = join(base, 'install');
   env = {
