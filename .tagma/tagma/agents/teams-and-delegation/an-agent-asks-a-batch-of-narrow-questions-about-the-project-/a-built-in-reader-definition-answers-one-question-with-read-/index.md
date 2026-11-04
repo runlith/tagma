@@ -12,7 +12,7 @@ fields:
 
 **Instruction audience `reader`.** Beside `graph` and `executor` (`InstructionSet.audience`, chosen by `instructionAudience` in `native-harness/agents/effectiveAgent.ts`), a third audience carries no `prompt` law, no vocabulary and no map, and on reads delivers `#explanation` notes but not code rules. Reason: law binds work — writing, committing, testing — and a reader changes nothing; the caller, which carries the law, acts on the answer. Explanations are what a reader answers from. A definition selects the audience; it is not inferred from tools.
 
-**Built-in definition `reader`.** Capabilities `files`, `shell`, `graph`; tools `read`, `grep`, `glob`, `ls`, `read_owners`, `search_blocks`, `read_block`, `read_zone`, `answer`; every inherited section dropped; audience `reader`; no model of its own (the call picks). Its body, about a thousand characters, says:
+**Built-in definition `reader`.** Capabilities `files`, `shell`, `graph`; tools `read`, `grep`, `glob`, `ls`, `read_owners`, `search_blocks`, `read_block`, `read_zone` (`answer` is granted by the call that births a reader, not listed here); every inherited section dropped; audience `reader`; no model of its own (the call picks). Its body, about a thousand characters, says:
 - answer the one question asked and stop as soon as it is answered: a digest, not a survey of the area;
 - graph first — `read_owners` for a named path, `search_blocks` for words, `read_block` for what they return; the code when no block owns the place or the block does not answer;
 - read the lines that answer, never whole files or areas;
@@ -21,5 +21,5 @@ fields:
 
 **Acceptance.**
 - `read_agent` of `reader` in this checkout composes under 20k characters at start, its own prompt under 1.5k, with no law, vocabulary or map.
-- Its tool catalog is exactly the tools above plus the conversation tools every definition keeps.
+- Its tool catalog is exactly the tools above plus the conversation tools every definition keeps; a reader born by `ask` holds `answer` besides.
 - A read by a `reader` thread delivers the explanation notes over that file and none of its code rules.

@@ -17,7 +17,7 @@ edges:
 
 **Wait.** The call waits on each reader's fact — its answer, its forced partial answer, or the diagnosis a failed run reports — through the same collection workflow steps use. It has no deadline of its own: the readers' budgets bound them, and a wait ends on a fact, never on a clock. Stopping the caller's run stops its readers.
 
-**`answer`.** The reader's final answer: `text`, `evidence` (a path with lines, or a block name, each), `complete`, and `missing` when incomplete. It closes the reader's report obligation as `send_message` with `final` does, and the collected report carries these fields.
+**`answer`.** The reader's final answer: `text`, `evidence` (a path with lines, or a block name, each), `complete`, and `missing` when incomplete. It closes the reader's report obligation as `send_message` with `final` does, and the collected report carries these fields. The call grants `answer` to every reader it births, whatever its definition lists, so any definition — the built-in reader or one a user wrote — can serve `ask` and the budget gate always has the tool to force.
 
 **Result.** One entry per question, in question order: `answered`, `partial` or `failed`, the text, evidence, what is missing, and the reader's thread id — rendered compact for the caller's context.
 

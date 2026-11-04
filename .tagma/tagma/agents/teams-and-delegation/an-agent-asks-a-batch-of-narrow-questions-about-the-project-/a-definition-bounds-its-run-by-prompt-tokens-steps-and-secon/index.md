@@ -20,8 +20,10 @@ edges:
 **The gate.** One agent runtime rule, contributed by native-harness like the other turn rules, reads the run's last context reading (`ThreadContextAnchor`), the estimate of what joins the next request (`estimateThreadTokens`), the steps taken (`AgentRunState`) and the run's clock:
 - at 70% of any budget, one `guide`: what is used, and to answer with what it has unless one more read decides the question;
 - `beforeTool`: when the step's results would carry the next request past the prompt budget, or the steps or seconds are spent, every call of the step is denied with one short line, so the pending calls get results without content;
-- `beforeStep` after that: `restrict` to `answer` and `require` it;
-- `beforeClose`: a text-only finish without `answer` is required once to call `answer`; a second text-only finish is taken as the answer, marked partial.
+- `beforeStep` after that: `restrict` to `answer` and `require` it where the run's catalog holds `answer`; otherwise `restrict` to no tool, so the final step is text alone and that text is the run's answer;
+- `beforeClose`: a text-only finish without `answer`, in a run holding it, is required once to call `answer`; a second text-only finish is taken as the answer, marked partial.
+
+A budget binds any thread whose definition sets one, a child born by `spawn_agent` included, whose final text then reaches its parent as the fallback report does today.
 
 The forced request's prompt is the current context, the last output and the short denials: under the budget by construction. Changing `tool_choice` invalidates only the messages cache (Anthropic prompt caching), so the forced request re-writes that part as a cache write — on Haiku 5.5 at 99k about $0.012.
 
