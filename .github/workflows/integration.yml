@@ -1,5 +1,5 @@
 name: integration
-run-name: integration ${{ inputs.package || 'all packages' }} on ${{ inputs.runner || 'macos-latest' }}
+run-name: ${{ inputs.script || 'test:integration' }} ${{ inputs.package || 'all packages' }} on ${{ inputs.runner || 'macos-latest' }}
 
 on:
   workflow_dispatch:
@@ -12,6 +12,14 @@ on:
         description: The machine every shard runs on
         required: false
         default: macos-latest
+      script:
+        description: The package script every suite runs
+        required: false
+        default: test:integration
+        type: choice
+        options:
+          - test:integration
+          - test:native
 
 permissions:
   contents: read
@@ -20,8 +28,8 @@ jobs:
   integration:
     uses: ./.github/workflows/tests.yml
     with:
-      name: integration-${{ inputs.runner || 'macos-latest' }}
-      script: test:integration
+      name: ${{ inputs.script == 'test:native' && 'native' || 'integration' }}-${{ inputs.runner || 'macos-latest' }}
+      script: ${{ inputs.script || 'test:integration' }}
       runner: ${{ inputs.runner || 'macos-latest' }}
-      shards: 5
+      shards: ${{ inputs.script == 'test:native' && 1 || 5 }}
       package: ${{ inputs.package }}
