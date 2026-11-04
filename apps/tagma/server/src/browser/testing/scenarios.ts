@@ -205,7 +205,7 @@ export const engineScenarios = (input: EngineHost): void => {
           JSON.stringify(
             yield* evaluate(
               page,
-              'new Promise((done) => { const t = setTimeout(() => done(["no-frame", document.visibilityState, document.hasFocus(), innerWidth, innerHeight]), 3000); requestAnimationFrame(() => { clearTimeout(t); done(["frame", document.visibilityState, innerWidth, innerHeight]); }); })',
+              'new Promise((done) => { let frames = 0; const tick = () => { frames += 1; requestAnimationFrame(tick); }; requestAnimationFrame(tick); setTimeout(() => done(["frames in 2s", frames, document.visibilityState, innerWidth, innerHeight]), 2000); })',
             ),
           ),
         );

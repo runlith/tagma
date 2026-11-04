@@ -166,8 +166,11 @@ export const boxOf = Effect.fn('browser.box')(function* (
       before.box.localCenter.y !== box.localCenter.y ||
       before.offset.points.some((point, index) => point.x !== after.offset.points[index]!.x || point.y !== after.offset.points[index]!.y))
   ) {
+    yield* Effect.logInfo(`box-probe ${located.ref} paint start`);
     yield* attached.pictures.paint;
+    yield* Effect.logInfo(`box-probe ${located.ref} paint end`);
   }
+  yield* Effect.logInfo(`box-probe ${located.ref} measured`);
   return box;
 });
 
