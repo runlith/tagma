@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import { kindOf, runsAs } from '@runlith/testbed/kinds';
 import { shardOf } from '@runlith/testbed/timings';
-import type { Package } from './packages.ts';
+import { runsOn, type Package } from './packages.ts';
 import { vitestConfigsOf } from './vitestConfigs.ts';
 
 const VITEST = join(dirname(Bun.resolveSync('vitest/package.json', import.meta.dir)), 'vitest.mjs');
@@ -66,6 +66,7 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
     });
   }
   for (const pkg of [...packages].sort((a, b) => a.dir.localeCompare(b.dir))) {
+    if (!runsOn(pkg)) continue;
     for (const script of SCRIPTS) {
       const source = pkg.scripts[script];
       if (source === undefined || (script === 'test' && vitest.has(pkg.dir))) continue;

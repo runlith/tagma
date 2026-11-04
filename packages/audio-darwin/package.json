@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "macOS audio helper, LaunchServices launcher and local socket channel.",
+  "os": [
+    "darwin"
+  ],
   "type": "module",
   "exports": {
     "./channel": {

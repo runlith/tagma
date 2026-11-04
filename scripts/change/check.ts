@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { Graph, testFile } from './graph.ts';
-import { workspacePaths } from './packages.ts';
+import { runsOn, workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Loads, type Load } from './loads.ts';
 import { Records } from './records.ts';
@@ -110,6 +110,7 @@ if (value('--package') !== undefined && !graph.packages.some((pkg) => pkg.dir ==
 const selected = tests
   .flatMap((file) => {
     const pkg = graph.package(file);
+    if (!runsOn(pkg)) return [];
     const why = all
       ? 'full package layers requested'
       : global !== undefined

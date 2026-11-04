@@ -19,7 +19,11 @@ export type Package = {
   readonly externalInputs: Readonly<Record<string, string>>;
   readonly loads: Readonly<Record<string, readonly string[]>>;
   readonly scripts: Readonly<Record<string, string>>;
+  readonly os: readonly string[] | undefined;
 };
+
+export const runsOn = (pkg: Package, platform: string = process.platform): boolean =>
+  pkg.os === undefined || (!pkg.os.includes(`!${platform}`) && (pkg.os.includes(platform) || pkg.os.every((one) => one.startsWith('!'))));
 
 export const packagesOf = (paths: readonly string[], read: (path: string) => string): Package[] => {
   const root = JSON.parse(read('package.json')) as { readonly workspaces?: readonly string[] | { readonly packages: readonly string[] } };
@@ -29,6 +33,7 @@ export const packagesOf = (paths: readonly string[], read: (path: string) => str
     .filter((path) => path === 'package.json' || patterns.some((pattern) => new Bun.Glob(pattern).match(dirname(path))))
     .map((manifest) => {
       const parsed = JSON.parse(read(manifest)) as {
+        readonly os?: readonly string[];
         readonly scripts?: Readonly<Record<string, string>>;
         readonly changeCheck?: {
           readonly externalInputs?: Readonly<Record<string, string>>;
@@ -39,6 +44,7 @@ export const packagesOf = (paths: readonly string[], read: (path: string) => str
         dir: manifest === 'package.json' ? '' : dirname(manifest),
         manifest,
         scripts: parsed.scripts ?? {},
+        os: parsed.os,
         externalInputs: parsed.changeCheck?.externalInputs ?? {},
         loads: parsed.changeCheck?.loads ?? {},
         runner: /\bvitest\b/.test(parsed.scripts?.test ?? '') ? ('vitest' as const) : ('bun' as const),

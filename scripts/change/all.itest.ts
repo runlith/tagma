@@ -55,6 +55,22 @@ test('a package script is one suite whose runner gets every file it selects, how
   expect(plan[0]!.stages).toEqual([expect.stringMatching(/ itest --no-isolate --randomize --seed=7$/)]);
 });
 
+test('a package whose `os` leaves out this platform runs no suite here', () => {
+  const other = process.platform === 'linux' ? 'darwin' : 'linux';
+  const files = new Map([
+    ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
+    ['packages/here/package.json', JSON.stringify({ scripts: { 'test:integration': 'testbed itest' } })],
+    ['packages/there/package.json', JSON.stringify({ os: [other], scripts: { 'test:integration': 'testbed itest' } })],
+    ['packages/not/package.json', JSON.stringify({ os: [`!${process.platform}`], scripts: { 'test:integration': 'testbed itest' } })],
+  ]);
+  const plan = suitesOf(
+    packagesOf([...files.keys()], (path) => files.get(path)!),
+    [...files.keys()],
+    { root: '/', jobs: undefined, seed: undefined, randomize: false, reports: '/reports', combineVitest: false },
+  );
+  expect(plan.map((suite) => suite.id)).toEqual(['packages/here:test:integration']);
+});
+
 test('test:all refuses its plan while an integration file stands where no package run discovers it', () => {
   const root = mkdtempSync(join(tmpdir(), 'unrun-itests-'));
   try {

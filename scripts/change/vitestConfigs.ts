@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { Package } from './packages.ts';
+import { runsOn, type Package } from './packages.ts';
 
 export type VitestConfig = {
   readonly directory: string;
@@ -9,7 +9,7 @@ export type VitestConfig = {
 export function vitestConfigsOf(packages: readonly Package[], paths: readonly string[]): VitestConfig[] {
   const files = new Set(paths);
   return packages
-    .filter((pkg) => pkg.dir.startsWith('packages/') && pkg.runner === 'vitest')
+    .filter((pkg) => pkg.dir.startsWith('packages/') && pkg.runner === 'vitest' && runsOn(pkg))
     .sort((left, right) => left.dir.localeCompare(right.dir))
     .flatMap((pkg) => {
       const configs = new Set<string>();
