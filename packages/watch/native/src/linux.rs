@@ -137,7 +137,7 @@ impl Inotify {
                 Err(libc::EACCES) => {
                     if let Some(neighbour) = unreadable {
                         return Err(format!(
-                            "{directory} and {neighbour} cannot be watched: neither can be read, so a move of either would go unheard (grant read access to one of every two adjacent directories above the watched root)"
+                            "{neighbour} and {directory} cannot be watched: neither can be read, so moving {neighbour} within {directory} cannot be observed (grant read access to one of every two adjacent directories above the watched root)"
                         ));
                     }
                     unreadable = Some(directory.into_owned());
