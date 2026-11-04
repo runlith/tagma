@@ -8,12 +8,21 @@ on:
         description: Workspace directory to run alone; empty runs every package
         required: false
         default: ''
+      platform:
+        description: Platform to check
+        type: choice
+        options:
+          - all
+          - linux
+          - ios
+        default: all
 
 permissions:
   contents: read
 
 jobs:
   linux:
+    if: inputs.platform != 'ios'
     uses: ./.github/workflows/tests.yml
     with:
       name: e2e-linux
@@ -24,6 +33,7 @@ jobs:
       lanes: chromium,webkit,electron
 
   ios:
+    if: inputs.platform != 'linux'
     uses: ./.github/workflows/tests.yml
     with:
       name: e2e-ios
