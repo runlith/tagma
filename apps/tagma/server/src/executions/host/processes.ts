@@ -37,7 +37,7 @@ const hosts = Effect.fn('FixtureProcesses.hosts')(function* (root: string) {
       commands.split('\n').flatMap((line) => {
         const [pid, group, program, ...args] = line.trim().split(/\s+/);
         if (program === undefined || !args.some((arg) => arg.includes(root))) return [];
-        const holder = basename(program) === 'execution-holder' && args[0]?.includes(root) === true;
+        const holder = basename(program) === 'execution-holder';
         const logic = args.some((arg) => arg.endsWith('/host/host.js') || arg.endsWith('/src/main.ts'));
         if (!holder && !logic) return [];
         const identity = Number(pid);
