@@ -175,13 +175,13 @@ export const screencastScenarios = (input: CastHost): void => {
         yield* Fiber.join(earlier);
         yield* Fiber.join(later);
         expect(yield* evaluate(page, 'window.entered')).toBe('привет мир');
-        const copied = yield* screencast.input(page, viewing.viewer, 4, [
+        yield* screencast.input(page, viewing.viewer, 4, [
           { kind: 'key', type: 'down', key: 'a', code: 'KeyA', modifiers: 4 },
           { kind: 'key', type: 'up', key: 'a', code: 'KeyA', modifiers: 4 },
-          { kind: 'copy' },
         ]);
+        const copied = yield* screencast.input(page, viewing.viewer, 5, [{ kind: 'copy' }]);
         expect(copied.copied).toBe('привет мир');
-        yield* screencast.input(page, viewing.viewer, 5, click(170 / 400, 170 / 300));
+        yield* screencast.input(page, viewing.viewer, 6, click(170 / 400, 170 / 300));
         let asked = yield* viewing.next;
         while (asked.type !== 'chooser') asked = yield* viewing.next;
         expect(asked.multiple).toBe(false);

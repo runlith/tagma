@@ -1,16 +1,7 @@
 import { TEXT_CHUNK } from '@runlith/cdp/input';
 import { keyOf, MODIFIERS } from '@runlith/cdp/keys';
 import { castFrame, sliceData } from '@runlith/cdp/screencast';
-import {
-  type CdpEvent,
-  type CommandFailure,
-  eventParams,
-  isCommandFailure,
-  type Method,
-  type SendArgs,
-  type Session,
-  type SessionEnded,
-} from '@runlith/cdp/session';
+import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, type SessionEnded } from '@runlith/cdp/session';
 import { Cause, Clock, Deferred, Effect, Exit, FileSystem, Path, Scope, Semaphore, Stream } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
@@ -506,11 +497,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     const frame = cast.last?.event;
     let copied: string | null = null;
     let operated = false;
-    const copying = events.some((event) => event.kind === 'copy');
-    const dispatch = <M extends Method>(method: M, ...args: SendArgs<M>) =>
-      copying
-        ? session.send(method, ...args).pipe(Effect.asVoid, Effect.catchIf(isCommandFailure, settle(cast.page)))
-        : session.post(method, ...args);
     for (const event of events) {
       if (!operated && operates(event, viewer.buttons)) {
         operated = true;
@@ -522,7 +508,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
           const at = { x: event.x * frame.width, y: event.y * frame.height, modifiers: event.modifiers };
           const bit = BUTTON_BITS[event.button];
           if (event.type === 'move') {
-            yield* dispatch('Input.dispatchMouseEvent', {
+            yield* session.post('Input.dispatchMouseEvent', {
               ...at,
               type: 'mouseMoved',
               button: pressed(viewer.buttons),
@@ -531,7 +517,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
             break;
           }
           viewer.buttons = event.type === 'down' ? viewer.buttons | bit : viewer.buttons & ~bit;
-          yield* dispatch('Input.dispatchMouseEvent', {
+          yield* session.post('Input.dispatchMouseEvent', {
             ...at,
             type: event.type === 'down' ? 'mousePressed' : 'mouseReleased',
             button: event.button,
@@ -542,7 +528,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         }
         case 'wheel':
           if (frame === undefined) break;
-          yield* dispatch('Input.dispatchMouseEvent', {
+          yield* session.post('Input.dispatchMouseEvent', {
             type: 'mouseWheel',
             x: event.x * frame.width,
             y: event.y * frame.height,
@@ -562,7 +548,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
               : editing
                 ? EDITING[event.code]
                 : undefined;
-          yield* dispatch('Input.dispatchKeyEvent', {
+          yield* session.post('Input.dispatchKeyEvent', {
             type: event.type === 'up' ? 'keyUp' : text !== undefined ? 'keyDown' : 'rawKeyDown',
             key: event.key,
             code: event.code,
@@ -578,11 +564,12 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         case 'text': {
           const glyphs = Array.from(event.text);
           for (let at = 0; at < glyphs.length; at += TEXT_CHUNK) {
-            yield* dispatch('Input.insertText', { text: glyphs.slice(at, at + TEXT_CHUNK).join('') });
+            yield* session.post('Input.insertText', { text: glyphs.slice(at, at + TEXT_CHUNK).join('') });
           }
           break;
         }
         case 'copy':
+          yield* session.posted;
           copied = yield* selection(attached).pipe(Effect.catchIf(isCommandFailure, settle(cast.page)));
           break;
         case 'view':

@@ -7,8 +7,7 @@ import { parsed, type PayloadUnreadable } from './payload.js';
 export type Method = keyof ProtocolMapping.Commands;
 export type Params<M extends Method> = ProtocolMapping.Commands[M]['paramsType'][0];
 export type Result<M extends Method> = ProtocolMapping.Commands[M]['returnType'];
-export type SendArgs<M extends Method> =
-  undefined extends Params<M> ? [params?: Params<M>, child?: string] : [params: Params<M>, child?: string];
+type SendArgs<M extends Method> = undefined extends Params<M> ? [params?: Params<M>, child?: string] : [params: Params<M>, child?: string];
 export type EventName = keyof ProtocolMapping.Events;
 export type EventParams<E extends EventName> = ProtocolMapping.Events[E][0];
 
@@ -51,6 +50,7 @@ export interface Session {
   send<M extends Method>(method: M, ...args: SendArgs<M>): Effect.Effect<Result<M>, CommandFailure>;
   reply<M extends Method>(method: M, ...args: SendArgs<M>): Effect.Effect<string, CommandRefused | SessionEnded>;
   post<M extends Method>(method: M, ...args: SendArgs<M>): Effect.Effect<void>;
+  readonly posted: Effect.Effect<void>;
   events(wanted?: (method: string) => boolean): Effect.Effect<Stream.Stream<CdpEvent>, never, Scope.Scope>;
   readonly ended: Effect.Effect<SessionEnd>;
 }
@@ -70,6 +70,7 @@ type Owner = {
   readonly ended: Deferred.Deferred<SessionEnd>;
   readonly children: Set<string>;
   readonly pending: Set<number>;
+  readonly posted: Set<number>;
   end: SessionEnd | null;
 };
 
@@ -79,6 +80,8 @@ type Waiting = {
   readonly method: string;
   readonly to: string | undefined;
 };
+
+type Posted = { readonly done: Deferred.Deferred<void>; readonly owner: Owner; readonly to: string | undefined };
 
 const EVENT_TRIM = 64 * 1024;
 
@@ -105,6 +108,7 @@ const refusalOf = (method: string, text: string): CommandRefused => {
 export const connect = Effect.fnUntraced(function* (transport: Transport) {
   const owners = new Map<string, Owner>();
   const waiting = new Map<number, Waiting>();
+  const posts = new Map<number, Posted>();
   const lost = yield* Deferred.make<SessionEnd>();
   let next = 0;
 
@@ -115,6 +119,7 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
       ended: yield* Deferred.make<SessionEnd>(),
       children: new Set(),
       pending: new Set(),
+      posted: new Set(),
       end: null,
     };
     if (id !== undefined) owners.get(id)?.children.delete(id);
@@ -134,6 +139,15 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
       if (held !== undefined) yield* Deferred.fail(held.answered, failure);
     }
     owner.pending.clear();
+    for (const id of [...owner.posted]) yield* landed(id);
+  });
+
+  const landed = Effect.fnUntraced(function* (id: number) {
+    const post = posts.get(id);
+    if (post === undefined) return;
+    posts.delete(id);
+    post.owner.posted.delete(id);
+    yield* Deferred.succeed(post.done, undefined);
   });
 
   const targetSession = (text: string): string | undefined => {
@@ -149,7 +163,7 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
     const head = header(text);
     if (head.id !== undefined) {
       const held = waiting.get(head.id);
-      if (held === undefined) return;
+      if (held === undefined) return yield* landed(head.id);
       waiting.delete(head.id);
       held.owner.pending.delete(head.id);
       if (head.error) yield* Deferred.fail(held.answered, refusalOf(held.method, text));
@@ -186,6 +200,7 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
             held.pending.delete(id);
             yield* Deferred.fail(sent.answered, failure);
           }
+          for (const id of [...held.posted]) if (posts.get(id)?.to === gone) yield* landed(id);
         }
       }
     }
@@ -221,10 +236,27 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
         Effect.suspend(() => {
           if (owner.end !== null) return Effect.void;
           const [params, child] = args as [object | undefined, string | undefined];
+          const id = ++next;
+          posts.set(id, { done: Deferred.makeUnsafe<void>(), owner, to: child ?? owner.id });
+          owner.posted.add(id);
           return transport
-            .send(commandText(++next, method, params, child ?? owner.id))
-            .pipe(Effect.catchTag('TransportLost', (gone) => Effect.logDebug(`cdp: ${method} was not posted: ${gone.message}`)));
+            .send(commandText(id, method, params, child ?? owner.id))
+            .pipe(
+              Effect.catchTag('TransportLost', (gone) =>
+                Effect.andThen(landed(id), Effect.logDebug(`cdp: ${method} was not posted: ${gone.message}`)),
+              ),
+            );
         }),
+      posted: Effect.suspend(() =>
+        Effect.forEach(
+          [...owner.posted].flatMap((id) => {
+            const post = posts.get(id);
+            return post === undefined ? [] : [post.done];
+          }),
+          Deferred.await,
+          { discard: true },
+        ),
+      ),
       send: <M extends Method>(method: M, ...args: SendArgs<M>) => Effect.flatMap(reply(method, ...args), (text) => resultOf<M>(text)),
       events: (wanted = every) =>
         Effect.map(
