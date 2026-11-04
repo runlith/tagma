@@ -673,6 +673,7 @@ export function describeThreadHosting<TTx, TWrite extends TTx = TTx, R = never>(
         yield* Effect.forkScoped(run.ask());
         const asked = yield* run.asked();
         expect(asked.approver).toBe(parent);
+        yield* until(() => Effect.succeed(approvers.notices.length > 0));
         expect(approvers.notices.at(-1)?.prompts).toMatchObject([{ id: asked.questions[0]!.id, prompt: 'Which colour?', multiple: false }]);
         const secret = yield* hostedTurn(undefined, undefined, approvers.port);
         const token = { questions: [{ prompt: 'Which token?', secret: true }] };
