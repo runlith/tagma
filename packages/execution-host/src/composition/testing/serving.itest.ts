@@ -20,5 +20,6 @@ servingContracts(
     'terminal-foreground',
     'screen-point',
     'screen-settled',
+    'prevent-stop',
   ]),
 );
