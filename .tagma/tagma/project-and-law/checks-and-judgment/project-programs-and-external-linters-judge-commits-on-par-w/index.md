@@ -25,7 +25,7 @@ sources:
 - A program may ask for code facts — imports, declarations — which the server computes itself.
 - Findings outside the reach are discarded. An incremental program can explicitly cover unchanged paths in its affected frontier, comparing them against the same base paths without replacing unrelated debt.
 - A linter qualifies from the minimal version with the API or output format the driver needs; a newer version alone doesn't hinder judgement.
-- An inspection failure makes the `check_rules` report incomplete: the successful checks' findings stay beside the cause, but a clean result is not declared. On a program error or an unavailable command, the refusal names the checkout environment and the declared argv, if any; gate and measurement refusal carries the exit through preparation of the existing checkout and `worktrees.setupRun` for future worktrees. The setup command stays the project's own command: one lockfile doesn't define its environment, system tools, and code generation.
+- An inspection failure makes the `check_rules` report incomplete: the successful checks' findings stay beside the cause, but a clean result is not declared. On a program error or an unavailable command, a landing names the rule unjudged with the failure in its answer and graph history. An enforcement measurement still refuses; its recovery names the checkout environment, the declared argv when present, preparation of the existing checkout and `worktrees.setupRun` for future worktrees. The setup command stays the project's own command: one lockfile doesn't define its environment, system tools, and code generation.
 - Each side of a commit is judged by the description from its own version, so a config edit is also a change the gate judges.
 
 **Limits.**

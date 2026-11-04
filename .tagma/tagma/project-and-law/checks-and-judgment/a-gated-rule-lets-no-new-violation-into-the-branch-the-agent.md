@@ -37,4 +37,4 @@ sources:
 - A changed enforced-key description measures the whole reach in the landing tree; the `rechecked` answer names findings outside debt. Standing code violating only the new description doesn't refuse the landing by itself; check_rules over the same change shows it together with debt. A later remeasure records standing findings as escapes with their origin.
 - Every refusal is recorded and visible on the rule page.
 
-**Limits.** An inspection that failed to run refuses the landing instead of letting it through. Violations the landing let through on others' lines become their holders' escapes after it.
+**Limits.** An inspection that cannot judge leaves the landing unjudged with its failure; successful inspections still refuse real gated crossings. Each failed rule is recorded as unjudged in its graph history; an unreadable graph or tree names the gate's failure instead. Violations the landing let through become escapes after it.

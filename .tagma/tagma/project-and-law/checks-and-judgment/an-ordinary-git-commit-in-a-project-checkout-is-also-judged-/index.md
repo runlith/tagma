@@ -26,7 +26,7 @@ sources:
 
 **Behaviour.**
 - The operator's commit is judged by the same court as a landing and refused on a new gated-rule violation; an explicit environment variable lets it through, and every let-through violation is recorded as an escape behind the operator.
-- An agent's commit, running with a thread's authority, passes only if the court is clean; an unjudged agent commit is refused.
+- An agent's commit, running with a thread's authority, refuses a real gated crossing. An inspection that cannot judge passes the commit as unjudged with its failure, recorded in the rule's graph history; an unanswered server still refuses the agent's commit.
 - A refusal that stopped an agent's or the operator's commit is recorded like a landing refusal and visible on the rule page under "Commits blocked" as `git commit` — with the agent or operator, branch, and commit it was judged against; a commit the operator explicitly let through isn't recorded as a refusal. A manual `tagma check` writes nothing.
 - If Tagma isn't where the hook points, the operator's commit passes with a warning, and the agent's commit is refused.
 - After the commit, the server queues it, judges it against the parents, and records the missed as the committer's escapes; rules triggered after `submit_work` run over it.
