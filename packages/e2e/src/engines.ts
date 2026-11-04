@@ -53,7 +53,7 @@ const launch = async (lane: Exclude<Lane, 'electron'>, home: string): Promise<Br
     headless: true,
     ignoreDefaultArgs: lane === 'chromium' ? ['--hide-scrollbars'] : undefined,
     timeout: 0,
-    args: lane === 'chromium' ? ['--use-mock-keychain', '--password-store=basic'] : [],
+    args: lane === 'chromium' ? ['--use-mock-keychain', '--password-store=basic'] : ['--enable-smooth-scrolling=false'],
     env: { ...process.env, BREAKPAD_DUMP_LOCATION: join(home, 'crashes') },
   });
   const browser = context.browser();
