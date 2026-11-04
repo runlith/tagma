@@ -445,7 +445,19 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
       current = landed.channel;
     },
     evaluate: async (expression, schema) => decode(schema, await evaluateChannel(expression)),
-    swipe: held.swipe,
+    swipe: async (gesture) => {
+      await evaluateChannel(`void (window.__runlithSwipePressed = new Promise(resolve => {
+        const pressed = event => {
+          if (!event.isTrusted) return;
+          document.removeEventListener('touchstart', pressed, true);
+          resolve();
+        };
+        document.addEventListener('touchstart', pressed, { capture: true, passive: true });
+      }))`);
+      await held.swipe(gesture, async () => {
+        await evaluateChannel('window.__runlithSwipePressed');
+      });
+    },
     tap: held.tap,
     pagePoint: async (point) => (await mapping())(point),
     screenshot: held.screenshot,
@@ -456,6 +468,23 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
       fixture.screenshot(join(directory, 'screenshot.png')),
       Bun.write(join(directory, 'ios-driver.log'), held.diagnostics()),
       Bun.write(join(directory, 'console.log'), console.join('\n')),
+      current === undefined
+        ? Promise.resolve()
+        : fixture
+            .evaluate(
+              `(() => {
+        const active = document.activeElement;
+        const view = visualViewport;
+        return {
+          href: location.href, ready: document.readyState,
+          active: active === null ? null : { tag: active.tagName, id: active.id },
+          viewport: view === null ? null : { width: view.width, height: view.height, top: view.offsetTop, scale: view.scale },
+          layout: { width: innerWidth, height: innerHeight }
+        };
+      })()`,
+              Schema.Unknown,
+            )
+            .then((value) => Bun.write(join(directory, 'ios-page.json'), JSON.stringify(value))),
       current === undefined
         ? Promise.resolve()
         : evaluateChannel('window.__runlithIOSRecording').then((value) =>

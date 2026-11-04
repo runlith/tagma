@@ -33,15 +33,18 @@ async def events():
         command = json.loads(line)
         phase = command["phase"]
         if phase == "swipe":
-            start, end = command["from"], command["to"]
-            origin, target = (start["x"], start["y"]), (end["x"], end["y"])
+            end = command["to"]
+            origin, target = last, (end["x"], end["y"])
             resolution = math.ceil(math.dist(origin, target) / command["delta"])
             cadence = math.floor(command["duration"] / INTERVAL)
             steps = max(2, min(resolution, cadence))
             interval = command["duration"] / steps
-            yield sample(*origin)
+            loop = asyncio.get_running_loop()
+            began = loop.time()
             for index in range(1, steps + 1):
-                yield HIDDelay(duration=interval)
+                remaining = began + interval * index - loop.time()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
                 fraction = index / steps
                 yield sample(
                     origin[0] + (target[0] - origin[0]) * fraction,

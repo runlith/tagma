@@ -8,9 +8,10 @@ import type { Point, Swipe } from './ios.ts';
 import type { Tools } from './iosTools.ts';
 
 export type NativeTouch = (phase: TouchPhase, point: Point) => Promise<void>;
-export type NativeInput = { readonly touch: NativeTouch; readonly swipe: (gesture: Swipe) => Promise<void> };
+export type NativeSwipe = (gesture: Swipe, pressed: () => Promise<void>) => Promise<void>;
+export type NativeInput = { readonly touch: NativeTouch; readonly swipe: NativeSwipe };
 type Contact = { readonly phase: TouchPhase; readonly x: number; readonly y: number };
-type Gesture = { readonly phase: 'swipe'; readonly from: Point; readonly to: Point; readonly duration: number; readonly delta: number };
+type Gesture = { readonly phase: 'swipe'; readonly to: Point; readonly duration: number; readonly delta: number };
 type Command = Contact | Gesture;
 type HIDOptions = { readonly tools: Tools; readonly port: number };
 type Submission = { readonly resolve: () => void; readonly reject: (cause: unknown) => void };
@@ -110,10 +111,12 @@ export const nativeInput = Effect.fn('e2e.nativeTouch')(function* (options: HIDO
       await stream.send({ phase, x: point.x, y: point.y });
       if (phase === 'release') stream = undefined;
     },
-    swipe: async ({ from, to, duration = 0.15, delta = 5 }) => {
+    swipe: async ({ from, to, duration = 0.15, delta = 5 }, pressed) => {
       if (stream !== undefined) throw new TouchFailed({ message: 'the native touch stream already holds a finger' });
       stream = new TouchStream(options);
-      await stream.send({ phase: 'swipe', from, to, duration, delta });
+      await stream.send({ phase: 'press', x: from.x, y: from.y });
+      await pressed();
+      await stream.send({ phase: 'swipe', to, duration, delta });
       stream = undefined;
     },
   };

@@ -9,9 +9,9 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
 import { attempted, boot, decode, empty, launchSafari, remove, simctl, SimulatorUnavailable } from './device.ts';
-import type { NativeTouch } from './hid.ts';
+import type { NativeSwipe, NativeTouch } from './hid.ts';
 import { input, tap } from './input.ts';
-import type { Point, Swipe, SimulatorOptions, SimulatorTiming } from './ios.ts';
+import type { Point, SimulatorOptions, SimulatorTiming } from './ios.ts';
 import { cacheDirectory, cachedTools, COMPANION_VERSION, CLIENT_VERSION, PYTHON_VERSION } from './iosTools.ts';
 import { prepare, resolve, type Preparation, type TemplateParams } from './template.ts';
 
@@ -24,7 +24,7 @@ export type Simulator = {
   readonly socket: () => Promise<string>;
   readonly launchSafari: () => Promise<number>;
   readonly screenshot: (path: string) => Promise<void>;
-  readonly swipe: (gesture: Swipe) => Promise<void>;
+  readonly swipe: NativeSwipe;
   readonly tap: (point: Point) => Promise<void>;
   readonly touch: NativeTouch;
   readonly webFrame: (title: string, pid: number) => Promise<Rect>;
@@ -159,8 +159,11 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     timing,
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
+      console.info('iOS: launching Safari');
       const pid = await launchSafari(device);
+      console.info(`iOS: waiting for Safari ${pid} accessibility`);
       await control.quiet(pid);
+      console.info(`iOS: acquiring Safari ${pid} native geometry`);
       await readAX(device, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
       console.info(`iOS native accessibility ready for Safari ${pid}`);
       return pid;
