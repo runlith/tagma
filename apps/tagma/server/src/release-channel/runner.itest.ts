@@ -21,7 +21,7 @@ import { releasePlaces } from './places.js';
 import { type ChannelPlace, makeReleaseChannel } from './runner.js';
 import { releaseFeed } from './settings.js';
 import { CHANNELS } from '../installation/contract/wire/channel.js';
-import { macPlatform } from '../installation/setup/macos.js';
+import type { MachinePlatform } from '../installation/contract/service/platform.js';
 import { carriedIn, packRelease, serverless, syntheticReleaseEffect, trustedApplications, type Packed } from './testing/release.js';
 
 const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
@@ -33,7 +33,8 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
   const places = releasePlaces(data);
   const executable = Bun.which('bun');
   if (executable === null) return yield* Effect.die('the release fixture needs a native bun on PATH');
-  const native = { platform: yield* macPlatform.current, executable };
+  const native = { platform: { os: process.platform, arch: process.arch }, executable };
+  const machine: MachinePlatform = { current: Effect.succeed(native.platform) };
   const platformKey = `${native.platform.os}-${native.platform.arch}`;
 
   let feed: Feed | null = null;
@@ -115,7 +116,7 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     runsFrom: servingFrom(serving),
     places,
     applications,
-    machine: macPlatform,
+    machine,
     downgrade,
     restart: Effect.sync(() => {
       restarts.push(running);
@@ -518,9 +519,9 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           const { fourth, releaseOf, standing, channel, placed, until } = world;
           const newest = releaseOf('0.7.0', fourth, false);
           world.feed = {
-            releases: [{ ...newest, platforms: { 'linux-x64': Object.values(newest.platforms)[0]! } }, releaseOf('0.6.0', fourth, false)],
+            releases: [{ ...newest, platforms: { foreign: Object.values(newest.platforms)[0]! } }, releaseOf('0.6.0', fourth, false)],
           };
-          const denied = yield* channel({ ...placed('0.5.0', standing()), machine: macPlatform }, (next) =>
+          const denied = yield* channel(placed('0.5.0', standing()), (next) =>
             Effect.gen(function* () {
               yield* until(next, (frame) => frame.issue?.code === 'platform-unavailable');
               return { reading: yield* next.reading, install: yield* Effect.result(next.install('0.7.0', null, null)) };

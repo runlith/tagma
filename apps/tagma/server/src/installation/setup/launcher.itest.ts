@@ -237,7 +237,9 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('the world of the inst
       const { bin } = yield* fakeInstall(yield* homeOf);
       const repaired = ensuredPath(staleEntry, bin);
       expect(repaired).toBe(`${bin}:${staleEntry}`);
-      expect((yield* resolved(staleEntry)).code).toBe(1);
+      const missing = yield* resolved(staleEntry);
+      expect(missing.code).not.toBe(0);
+      expect(missing.out).toBe('');
       const proving = yield* resolved(repaired ?? '');
       expect(proving.code).toBe(0);
       expect(proving.out).toBe(join(bin, 'tagma'));
@@ -270,7 +272,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('the world of the inst
       yield* files.makeDirectory(childDir, { recursive: true });
       yield* files.writeFileString(join(childDir, 'tagma'), '#!/bin/sh\necho foreign-cwd-tagma\n', { mode: 0o755 });
       const stale = `:${bin}:/usr/bin:/bin`;
-      expect(resolve((yield* resolved(stale, childDir)).out)).toBe(join(childDir, 'tagma'));
+      expect(resolve(childDir, (yield* resolved(stale, childDir)).out)).toBe(join(childDir, 'tagma'));
       const repaired = ensuredPath(stale, bin);
       const proving = yield* resolved(repaired ?? stale, childDir);
       expect(proving.code).toBe(0);
