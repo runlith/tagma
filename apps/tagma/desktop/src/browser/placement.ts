@@ -1,4 +1,4 @@
-import { type BaseWindow, BrowserWindow, type Rectangle, type WebContents, type WebContentsView } from 'electron';
+import { type BaseWindow, BrowserWindow, type Rectangle, screen, type WebContents, type WebContentsView } from 'electron';
 
 export const VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -22,6 +22,16 @@ export type Placed = {
 };
 
 export type Elsewhere = (window: BrowserWindow, panel: string, placed: Placed) => void;
+
+const HIDDEN_PAINTS = process.platform === 'darwin';
+
+const beyondScreens = (): { readonly x: number; readonly y: number } => {
+  const displays = screen.getAllDisplays().map((display) => display.bounds);
+  return {
+    x: Math.max(...displays.map((bounds) => bounds.x + bounds.width)),
+    y: Math.max(...displays.map((bounds) => bounds.y + bounds.height)),
+  };
+};
 
 const visible = (window: BaseWindow): boolean => !window.isDestroyed() && window.isVisible() && !window.isMinimized();
 
@@ -112,6 +122,7 @@ export class Placement {
       });
     }
     const wanted = awake(placed);
+    if (!HIDDEN_PAINTS) this.map(placed, wanted);
     if (placed.awake === wanted) return;
     placed.awake = wanted;
     placed.contents.setBackgroundThrottling(!wanted);
@@ -127,6 +138,7 @@ export class Placement {
     }
     if (placed.parking === null || placed.parking.isDestroyed()) {
       placed.parking = new BrowserWindow({
+        ...(HIDDEN_PAINTS ? {} : beyondScreens()),
         show: false,
         width: placed.size.width,
         height: placed.size.height,
@@ -134,12 +146,19 @@ export class Placement {
         skipTaskbar: true,
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
       });
-      if (process.platform === 'linux') placed.parking.showInactive();
     } else {
       placed.parking.setContentSize(placed.size.width, placed.size.height);
     }
     this.move(placed, placed.parking);
     placed.view.setBounds({ x: 0, y: 0, width: placed.size.width, height: placed.size.height });
+  }
+
+  private map(placed: Placed, awake: boolean): void {
+    const stand = placed.parking;
+    if (stand === null || stand.isDestroyed()) return;
+    const mapped = awake && this.where.get(placed.view) === stand;
+    if (mapped && !stand.isVisible()) stand.showInactive();
+    else if (!mapped && stand.isVisible()) stand.hide();
   }
 
   private move({ view, contents }: Placed, window: BaseWindow | BrowserWindow): void {

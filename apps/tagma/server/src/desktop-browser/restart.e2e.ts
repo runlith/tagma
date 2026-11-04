@@ -121,14 +121,6 @@ it.live(
         yield* automation.act(page, [{ kind: 'click', aim: { ref: refIn(shot.text, /button "Add"/) } }], THREAD);
       });
 
-      const probe = (label: string, page: PageId) =>
-        Effect.flatMap(Automation, (automation) =>
-          automation.evaluate(
-            page,
-            'JSON.stringify((() => { const b = document.getElementById("add").getBoundingClientRect(); const hit = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return { w: innerWidth, h: innerHeight, vis: document.visibilityState, focus: document.hasFocus(), items: document.querySelectorAll("li").length, origin: performance.timeOrigin, href: location.href, button: [b.x, b.y, b.width, b.height], hit: hit === null ? null : hit.id || hit.tagName }; })())',
-            THREAD,
-          ),
-        ).pipe(Effect.tap((answer) => Effect.sync(() => console.error(`restart-probe ${label}`, JSON.stringify(answer)))));
       const first = yield* Scope.fork(yield* Effect.scope);
       const before = yield* Scope.provide(world, first);
       const electron = yield* launchElectron(home, new URL(`http://127.0.0.1:${port}`));
@@ -147,7 +139,6 @@ it.live(
       yield* electron.control({ show: page });
       yield* electron.control({ reload: true });
       yield* click(page).pipe(Effect.provide(before));
-      yield* probe('clicked-again', page).pipe(Effect.provide(before));
       expect(yield* items(page).pipe(Effect.provide(before))).toBe(2);
       yield* Scope.close(first, Exit.void);
 
