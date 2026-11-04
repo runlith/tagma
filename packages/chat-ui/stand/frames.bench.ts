@@ -315,8 +315,8 @@ const program = Effect.gen(function* () {
     const traced = yield* attempted(`${name}: tracing the scenario failed`, () =>
       capture(cdp, page, () =>
         item.kind === 'control'
-          ? recordControl(page, cdp, prepared!, name)
-          : runScenario(page, cdp, item.name, { jump: 'jumpToLatest', thumb, held }),
+          ? recordControl(page, { cdp, touch }, prepared!, name)
+          : runScenario(page, { cdp, touch }, item.name, { jump: 'jumpToLatest', thumb, held }),
       ),
     );
     if (values.traces !== undefined)

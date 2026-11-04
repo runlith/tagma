@@ -121,7 +121,7 @@ for (const lane of ['chromium', 'webkit'] as const)
             const save = () => writeFile(join(artifacts, `controls-${branch}.json`), JSON.stringify({ lane, branch, source, measured }));
             const stop = onFailure(save);
             try {
-              measured = await controls(page, cdp, served.url(), source, (reading) => {
+              measured = await controls(page, { cdp, touch }, served.url(), source, (reading) => {
                 measured = reading;
               });
               const envelope = measured.envelope;
@@ -151,7 +151,7 @@ for (const lane of ['chromium', 'webkit'] as const)
           let recording: Recording;
           let failure: string | undefined;
           try {
-            recording = await runScenario(page, cdp, name, options);
+            recording = await runScenario(page, { cdp, touch }, name, options);
           } catch (error) {
             if (error instanceof CalibrationFailure) {
               await writeFile(join(artifacts, thumbFile), JSON.stringify({ lane, branch, control: error.control, trial: error.trial }));
