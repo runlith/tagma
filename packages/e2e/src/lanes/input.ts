@@ -9,12 +9,14 @@ import type { Tools } from './iosTools.ts';
 
 export type Input = NativeInput & {
   readonly run: (...args: string[]) => Promise<string>;
+  readonly launch: (bundleId: string) => Promise<number>;
   readonly quiet: (pid: number) => Promise<void>;
   readonly diagnostics: () => string;
 };
 const Verdict = Schema.fromJsonString(
   Schema.Struct({ retry: Schema.Literals(['safe', 'safe_after_reread', 'unsafe']), retry_reason: Schema.String }),
 );
+const Launched = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)) }));
 const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -112,6 +114,19 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
     });
   const control: Input = {
     run: (...args) => command(tools.client, ['--companion', `localhost:${port}`, ...args, '--udid', device.udid]),
+    launch: async (bundleId) =>
+      decode(
+        Launched,
+        await command(tools.client, [
+          '--companion',
+          `localhost:${port}`,
+          'launch',
+          '--foreground-if-running',
+          '--udid',
+          device.udid,
+          bundleId,
+        ]),
+      ).pid,
     quiet: async (pid) => {
       while (!(await answered(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
     },

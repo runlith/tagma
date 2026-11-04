@@ -3,19 +3,7 @@ import { Effect, Exit, Fiber, FileSystem, Option, Schema } from 'effect';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ButtonType, DisabledTrait, elementsOf, PositionedFrame, readAX } from './accessibility.ts';
-import {
-  attempted,
-  boot,
-  command,
-  decode,
-  empty,
-  launchSafari,
-  remove,
-  simctl,
-  SimulatorUnavailable,
-  stateOf,
-  type Device,
-} from './device.ts';
+import { attempted, boot, command, decode, empty, remove, simctl, SimulatorUnavailable, stateOf, type Device } from './device.ts';
 import { input, tap, type Input } from './input.ts';
 import type { Tools } from './iosTools.ts';
 
@@ -92,7 +80,7 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
         await server.stop(true);
       }),
   );
-  const pid = yield* attempted('MobileSafari did not launch', () => launchSafari(device));
+  const pid = yield* attempted('MobileSafari did not launch', () => control.launch('com.apple.mobilesafari'));
   const systemPID = yield* attempted('the native system UI process is unavailable', () => readSystemPID(device));
   const navigation = yield* Effect.forkScoped(
     Effect.tryPromise({

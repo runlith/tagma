@@ -20,7 +20,6 @@ export const attempted = <A>(message: string, work: () => Promise<A>) =>
   Effect.tryPromise({ try: work, catch: (cause) => new SimulatorUnavailable({ message, cause }) });
 export const decode = <A>(schema: Schema.Decoder<A>, value: unknown): A => Schema.decodeUnknownSync(schema)(value);
 
-const SafariLaunch = Schema.String.check(Schema.isPattern(/^com\.apple\.mobilesafari:\s*\d+$/u));
 const Devices = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.Array(Schema.Struct({ udid: Schema.String, name: Schema.String, state: Schema.String }))),
 });
@@ -54,7 +53,3 @@ export const boot = Effect.fn('e2e.iosBoot')(function* (device: Device) {
     catch: (cause) => new SimulatorUnavailable({ message: `iOS device ${device.udid} did not boot`, cause }),
   });
 });
-export const launchSafari = async (device: Device): Promise<number> => {
-  const launched = decode(SafariLaunch, await simctl(device.set, 'launch', device.udid, 'com.apple.mobilesafari'));
-  return Number(launched.slice(launched.indexOf(':') + 1));
-};

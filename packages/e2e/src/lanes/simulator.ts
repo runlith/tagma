@@ -8,7 +8,7 @@ import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
-import { attempted, boot, decode, empty, launchSafari, remove, simctl, SimulatorUnavailable } from './device.ts';
+import { attempted, boot, decode, empty, remove, simctl, SimulatorUnavailable } from './device.ts';
 import type { NativeSwipe, NativeTouch } from './hid.ts';
 import { input, tap } from './input.ts';
 import type { Point, SimulatorOptions, SimulatorTiming } from './ios.ts';
@@ -160,7 +160,7 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
       console.info('iOS: launching Safari');
-      const pid = await launchSafari(device);
+      const pid = await control.launch('com.apple.mobilesafari');
       console.info(`iOS: waiting for Safari ${pid} accessibility`);
       await control.quiet(pid);
       console.info(`iOS: acquiring Safari ${pid} native geometry`);
