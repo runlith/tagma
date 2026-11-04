@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { Deferred, Effect, Exit, Fiber, Stream } from 'effect';
 import type { Caller } from '../../platform/contract/wire/caller.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { Hosts } from '../contract/service/hosts.js';
 import { Pages } from '../contract/service/pages.js';
@@ -9,6 +10,20 @@ import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import { allowedDomains, blockedDomains } from '../contract/wire/settings.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { calling, OPERATOR, refIn, refusalOf, Seeded } from './world.js';
+
+const denied = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>, blocked: Effect.Effect<unknown>) {
+  const action = yield* Effect.forkChild(
+    Effect.result(work).pipe(
+      Effect.flatMap((outcome) =>
+        outcome._tag === 'Failure' && (!(outcome.failure instanceof GateRefusal) || outcome.failure.code !== 'domain-blocked')
+          ? Effect.fail(outcome.failure)
+          : Effect.succeed(outcome),
+      ),
+    ),
+  );
+  const [, outcome] = yield* Effect.all([blocked, Fiber.join(action)], { concurrency: 'unbounded' });
+  return outcome;
+});
 
 export const domainFixture = () => {
   const visits: string[] = [];
@@ -72,6 +87,12 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   const click = (ref: string) => calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', ref }] }, undefined, caller));
   const forbidden = url.replace('127.0.0.1', 'blocked.localhost').replace('/domains', '/domain-forbidden');
   const before = visits.length;
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      const remaining = yield* pages.list(seeded.id, { closed: false, limit: 100, after: null }).pipe(Effect.orDie);
+      for (const popup of remaining.pages) if (popup.opener === page) yield* pages.close(popup.id).pipe(Effect.orDie);
+    }),
+  );
   const opened = yield* pages.changes(seeded.id);
   yield* calling(
     PAGE.evaluate_in_page.body.execute(
@@ -103,23 +124,21 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   const host = yield* (yield* Hosts).reach(record.adapter);
   const reusedEvents = yield* host.pages.events;
   const reusedBlock = Stream.runHead(Stream.filter(reusedEvents, (event) => event.kind === 'navigation-blocked' && event.page === page));
-  const reuse = yield* Effect.forkScoped(
-    Effect.result(
-      calling(
-        PAGE.evaluate_in_page.body.execute(
-          {
-            page,
-            expression: `window.open(${JSON.stringify(forbidden)}, 'retained'); true`,
-          },
-          undefined,
-          caller,
-        ),
+  const reuseOutcome = yield* denied(
+    calling(
+      PAGE.evaluate_in_page.body.execute(
+        {
+          page,
+          expression: `window.open(${JSON.stringify(forbidden)}, 'retained'); true`,
+        },
+        undefined,
+        caller,
       ),
     ),
+    Effect.raceFirst(Effect.as(reusedBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded')).pipe(
+      Effect.tap((reused) => Effect.sync(() => expect(reused).toBe('blocked'))),
+    ),
   );
-  const reused = yield* Effect.raceFirst(Effect.as(reusedBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded'));
-  expect(reused).toBe('blocked');
-  const reuseOutcome = yield* Fiber.join(reuse);
   const reuseFailure =
     reuseOutcome._tag === 'Failure'
       ? reuseOutcome.failure
@@ -134,23 +153,21 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   const ancestorBlock = Stream.runHead(
     Stream.filter(ancestorEvents, (event) => event.kind === 'navigation-blocked' && event.page === retained.value.id),
   );
-  const ancestor = yield* Effect.forkScoped(
-    Effect.result(
-      calling(
-        PAGE.evaluate_in_page.body.execute(
-          {
-            page: retained.value.id,
-            expression: `window.open(${JSON.stringify(forbidden)}, 'source'); true`,
-          },
-          undefined,
-          caller,
-        ),
+  const ancestorCall = yield* denied(
+    calling(
+      PAGE.evaluate_in_page.body.execute(
+        {
+          page: retained.value.id,
+          expression: `window.open(${JSON.stringify(forbidden)}, 'source'); true`,
+        },
+        undefined,
+        caller,
       ),
     ),
+    Effect.raceFirst(Effect.as(ancestorBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded')).pipe(
+      Effect.tap((outcome) => Effect.sync(() => expect(outcome).toBe('blocked'))),
+    ),
   );
-  const ancestorOutcome = yield* Effect.raceFirst(Effect.as(ancestorBlock, 'blocked'), Effect.as(Deferred.await(input.reached), 'loaded'));
-  expect(ancestorOutcome).toBe('blocked');
-  const ancestorCall = yield* Fiber.join(ancestor);
   const ancestorFailure =
     ancestorCall._tag === 'Failure'
       ? ancestorCall.failure
@@ -169,9 +186,7 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
     const events = yield* host.pages.events;
     const blocked = Stream.runHead(Stream.filter(events, (event) => event.kind === 'navigation-blocked' && event.page === page));
     const shot = yield* snapshot;
-    const action = yield* Effect.forkScoped(Effect.result(click(refIn(shot, new RegExp(`(?:button|link) "${label}"`)))));
-    yield* blocked;
-    const outcome = yield* Fiber.join(action);
+    const outcome = yield* denied(click(refIn(shot, new RegExp(`(?:button|link) "${label}"`))), blocked);
     const failure =
       outcome._tag === 'Failure'
         ? outcome.failure
@@ -198,6 +213,4 @@ export const domainScenario = Effect.fnUntraced(function* (input: {
   yield* write(allowedDomains.id, [], 'user');
   yield* write(allowedDomains.id, [], 'project');
   yield* navigate(url.replace('/domains', '/form'), OPERATOR);
-  const remaining = yield* pages.list(seeded.id, { closed: false, limit: 100, after: null });
-  for (const popup of remaining.pages) if (popup.opener === page) yield* pages.close(popup.id);
 });

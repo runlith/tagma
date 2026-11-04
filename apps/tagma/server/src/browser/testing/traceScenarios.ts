@@ -1,10 +1,9 @@
 import { afterAll, expect } from 'bun:test';
-import { watch } from 'node:fs';
 import { dirname } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Queue } from 'effect';
+import { Context, Effect, FileSystem, Layer, Stream } from 'effect';
 import { Pages } from '../contract/service/pages.js';
 import { Hosts } from '../contract/service/hosts.js';
 import { Profiles } from '../contract/service/profiles.js';
@@ -184,19 +183,12 @@ export const traceScenarios = (input: EngineHost): void => {
         yield* calling(PAGE.emulate_page.body.execute({ page, cpu: 1 }, undefined, agent));
         expect(slowed.conditions).toContain('cpu 4×');
         const begun = yield* started(page);
-        const changes = yield* Queue.unbounded<void>();
-        yield* Effect.acquireRelease(
-          Effect.sync(() => watch(dirname(begun.path), () => Queue.offerUnsafe(changes, undefined))),
-          (watcher) => Effect.sync(() => watcher.close()),
-        );
+        const pages = yield* Pages;
+        const moves = yield* pages.moves(page);
         yield* (yield* RunEnds).end('agent');
-        const summary = yield* Effect.gen(function* () {
-          for (;;) {
-            const result = yield* Effect.result(read({ trace: begun.trace }));
-            if (result._tag === 'Success') return result.success;
-            yield* Queue.take(changes);
-          }
-        });
+        if (pages.live(page)?.trace !== null)
+          yield* Stream.runHead(Stream.filter(moves, (move) => move.signal === 'closed' || move.live.trace === null));
+        const summary = yield* read({ trace: begun.trace });
         expect(summary).toMatchObject({ status: 'summary', trace: begun.trace, path: begun.path });
       }),
     );

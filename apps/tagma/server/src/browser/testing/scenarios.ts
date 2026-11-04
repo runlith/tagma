@@ -24,7 +24,7 @@ import { domainScenario } from './domains.js';
 
 const ABSENT = ProfileId.make('absent-agent');
 
-class EnginePage extends Context.Service<EnginePage, { current: PageId | undefined }>()('testing/EnginePage') {}
+class EnginePage extends Context.Service<EnginePage, { current: Map<Scope.Scope, PageId> }>()('testing/EnginePage') {}
 
 export type EngineHost = {
   readonly name: string;
@@ -42,25 +42,29 @@ export const engineScenarios = (input: EngineHost): void => {
       const record = yield* (yield* Profiles).record(input.profile);
       const host = yield* (yield* Hosts).reach(record.adapter);
       yield* host.profiles.prepare(record);
-      const pages = yield* Pages;
-      const held = EnginePage.of({ current: undefined });
-      yield* Effect.addFinalizer(() =>
-        held.current === undefined || pages.live(held.current) === undefined ? Effect.void : pages.close(held.current).pipe(Effect.orDie),
-      );
-      return held;
+      return EnginePage.of({ current: new Map() });
     }),
   ).pipe(Layer.provideMerge(input.fixture()), Layer.provideMerge(BunFileSystem.layer));
   const agent = agentIn(home);
   const open = Effect.fnUntraced(function* (path: string) {
     const held = yield* EnginePage;
     const pages = yield* Pages;
-    if (held.current !== undefined && pages.live(held.current) !== undefined) {
-      yield* calling(PAGE.navigate_page.body.execute({ page: held.current, url: at(path) }, undefined, agent));
-      return held.current;
+    const scope = yield* Effect.scope;
+    const current = held.current.get(scope);
+    if (current !== undefined && pages.live(current) !== undefined) {
+      yield* calling(PAGE.navigate_page.body.execute({ page: current, url: at(path) }, undefined, agent));
+      return current;
     }
     const opened = yield* calling(PAGE.open_page.body.execute({ url: at(path), profile: input.profile }, undefined, agent));
-    held.current = opened.page.id;
-    return opened.page.id;
+    const page = opened.page.id;
+    held.current.set(scope, page);
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        held.current.delete(scope);
+        if (pages.live(page) !== undefined) yield* pages.close(page).pipe(Effect.orDie);
+      }),
+    );
+    return page;
   });
   const loaded = Effect.fnUntraced(function* (page: PageId) {
     const pages = yield* Pages;
@@ -122,6 +126,7 @@ export const engineScenarios = (input: EngineHost): void => {
       () =>
         Effect.gen(function* () {
           const page = yield* open('/domains');
+          yield* slowed(page);
           yield* domainScenario({
             page,
             profile: input.profile,
