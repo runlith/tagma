@@ -6,6 +6,16 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 import { servedTree } from '../../composition/testing/servedTree.fixture.js';
 import { FileWatcher } from '../../platform/contract/service/watch.js';
 
+const markingAt = (marking: FileWatcher['Service']['marking']) => (inner: FileWatcher['Service']) =>
+  FileWatcher.of({
+    ...inner,
+    marking,
+    mark: (at, file, ignore, lasting) => {
+      const filed = marking === 'refresh' || lasting;
+      return inner.mark(at, filed ? file : null, ignore, filed);
+    },
+  });
+
 layer(demoGraphLayer({ repos: ['topology'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'served tree marks',
   (it) => {
@@ -16,7 +26,7 @@ layer(demoGraphLayer({ repos: ['topology'] }).pipe(Layer.provideMerge(BunFileSys
           withDemo((demo) =>
             Effect.scoped(
               Effect.gen(function* () {
-                const tree = yield* servedTree(demo, (inner) => FileWatcher.of({ ...inner, marking }));
+                const tree = yield* servedTree(demo, markingAt(marking));
                 yield* tree.release;
                 yield* tree.edit('Edited while nobody served the tree');
                 const from = tree.statuses.length;
