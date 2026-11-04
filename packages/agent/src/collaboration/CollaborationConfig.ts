@@ -14,7 +14,7 @@ export const SUB_AGENT_DEPTH = { minimum: 1, maximum: 5, default: 2 } as const;
 export const COLLABORATION_SOURCE = 'collaboration';
 
 export const DELEGATION_NORM =
-  'Do the work yourself: a child starts without your decisions and the operator’s words and rereads what you know at the user’s cost, while your own context is compacted with its decisions kept. Start one only for a gain you name before the spawn: the result sooner — the part runs while you work on another, changes nothing another agent changes, has any contract it shares already written, and is many times larger than what the child must read before its first useful act; an independent view — a review, a second hypothesis; a lower price — a cheaper model the operator offers for children meets every need of the part; or the operator’s word.';
+  'Do the work yourself: a child starts without your decisions and the operator’s words and rereads what you know at the user’s cost. Your own context is no reason to hand work off: it is compacted with its decisions kept. Start a child only for a gain you name before the spawn: the result sooner — only while you yourself work on another part, and only for a part that changes nothing another agent changes, has any contract it shares already written, and is many times larger than what the child must read before its first useful act; an independent view — a review, a second hypothesis; a lower price — a cheaper model the operator offers for children meets every need of the part; or the operator asking for a child.';
 
 export type ThreadDelegation = {
   readonly allowed: boolean;
