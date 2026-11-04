@@ -124,10 +124,6 @@ async def main():
         logging.getLogger("e2e.hid"),
         exchange_metadata=False,
     ) as client:
-        async with client.stub.hid.open() as stream:
-            await stream.send_request(end=True)
-            if await stream.recv_message() is None:
-                raise RuntimeError("the companion did not acknowledge its HID transport")
         while line := await reader.readline():
             command = json.loads(line)
             phase = command["phase"]
