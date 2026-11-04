@@ -132,12 +132,13 @@ describe('a running server whose execution host left', () => {
         const { boot, home } = yield* Fixture;
         const server = yield* boot;
         const host = Context.get(server.executions, HostManagement);
-        expect((yield* until(host.standing, (now) => now.custodian)).boot._tag).toBe('Raised');
+        yield* until(host.standing, (now) => now.custodian);
         const first = yield* started(server.executions, 'before-leaving');
         const standing = yield* hostsUnder(home);
         expect(standing.length).toBeGreaterThan(0);
         yield* endHosts(home);
         const after = yield* started(server.executions, 'after-leaving');
+        expect((yield* host.standing).boot._tag).toBe('Raised');
         expect(after.incarnation).toBeGreaterThan(first.incarnation);
         const raised = yield* hostsUnder(home);
         expect(raised.some((pid) => standing.includes(pid))).toBe(false);

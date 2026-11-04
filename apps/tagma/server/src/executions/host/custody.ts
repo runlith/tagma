@@ -375,16 +375,20 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
     }),
     ensure,
     release: Effect.gen(function* () {
-      const standing = yield* Ref.get(custody);
-      const session = yield* Ref.get(welcome);
-      if (
-        standing?.holder === undefined ||
-        standing.holder.connection !== session?.connection ||
-        standing.holder.incarnation !== session.incarnation
-      )
-        return;
+      if ((yield* Ref.get(custody))?.holder === undefined) return;
       const answer = yield* Effect.result(
-        executions.release({ installation, operation: HostRequestKey.make(`host-release-${randomUUID()}`) }, standing),
+        Effect.gen(function* () {
+          yield* executions.generation();
+          const standing = yield* Ref.get(custody);
+          const session = yield* Ref.get(welcome);
+          if (
+            standing?.holder === undefined ||
+            standing.holder.connection !== session?.connection ||
+            standing.holder.incarnation !== session.incarnation
+          )
+            return undefined;
+          return yield* executions.release({ installation, operation: HostRequestKey.make(`host-release-${randomUUID()}`) }, standing);
+        }),
       );
       if (answer._tag === 'Failure') {
         yield* Effect.logWarning('host custody could not be released before closing; the host must settle the disconnected connection', {
@@ -393,6 +397,7 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
         });
         return;
       }
+      if (answer.success === undefined) return;
       if (answer.success._tag === 'Held') return yield* remember(answer.success.custody);
       yield* Effect.logWarning('host custody was not released before closing; the host must settle the disconnected connection', {
         answer: answer.success._tag,

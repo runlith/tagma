@@ -794,6 +794,63 @@ it.live('a host that answers nothing leaves custody undecided without taking', (
   ),
 );
 
+it.live('departure releases the custody accepted by a connection reopened during departure', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      let standing = vacant(0, 0);
+      let disconnected = false;
+      const welcome = yield* Ref.make<SessionWelcome | undefined>(welcomed('floor-1', standing));
+      const initial = scripted({
+        status: [Effect.sync(() => statusOf(standing, 0))],
+        take: [
+          Effect.sync(() => {
+            standing = heldBy('floor-1', 0, 1, 1);
+            return takeHeld(standing);
+          }),
+        ],
+      });
+      const connected = Effect.gen(function* () {
+        if (!disconnected) return 0;
+        disconnected = false;
+        standing = vacant(2, 1);
+        const session = welcomed('floor-2', standing);
+        yield* Ref.set(welcome, session);
+        yield* custody.opened(session, () =>
+          Effect.sync(() => {
+            standing = heldBy('floor-2', 0, 3, 2);
+            return takeHeld(standing);
+          }),
+        );
+        return 0;
+      });
+      const host: ScriptedPort = {
+        ...initial,
+        port: {
+          ...initial.port,
+          generation: () => connected,
+          release: (_operation, presented) =>
+            Effect.andThen(
+              connected,
+              Effect.sync<AuthorityAnswer>(() => {
+                if (presented.holder?.connection !== standing.holder?.connection || presented.revision !== standing.revision) {
+                  return { _tag: 'Refused', refusal: { _tag: 'Unauthorized', reason: 'the release names another connection' } };
+                }
+                standing = vacant(4, 2);
+                return takeHeld(standing);
+              }),
+            ),
+        },
+      };
+      const custody = yield* owner(registration, host, { welcome });
+      expect((yield* custody.ensure())._tag).toBe('Held');
+      disconnected = true;
+      yield* custody.release;
+      expect(standing).toEqual(vacant(4, 2));
+    }),
+  ),
+);
+
 it.live('a malformed host answer refuses the start with the decoder detail', () =>
   run(
     Effect.gen(function* () {
