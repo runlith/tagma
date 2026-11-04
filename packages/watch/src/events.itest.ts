@@ -167,6 +167,23 @@ it.live(
     }),
 );
 
+it.live('a root whose ancestor is renamed away or deleted ends its watch though nothing inside it changed', () =>
+  Effect.gen(function* () {
+    const { tree, place } = yield* world();
+    const client = yield* makeWatchClient({ dir: place, lifetime: 'with-client' });
+    const watch = Effect.fnUntraced(function* (ancestor: string, leave: () => Promise<void>) {
+      yield* Effect.promise(() => mkdir(join(tree, ancestor, 'middle', 'root'), { recursive: true }));
+      const heard = yield* hearing;
+      yield* client.subscribe(join(tree, ancestor, 'middle', 'root'), TREE, heard.into);
+      yield* Effect.promise(leave);
+      return yield* Queue.take(heard.heard);
+    });
+    const renamed = yield* watch('renamed', () => rename(join(tree, 'renamed'), join(tree, 'renamed-away')));
+    const deleted = yield* watch('deleted', () => rm(join(tree, 'deleted'), { recursive: true }));
+    expect([renamed, deleted]).toEqual([{ ended: expect.any(String) }, { ended: expect.any(String) }]);
+  }),
+);
+
 it.live('two subscriptions on one root with different exclusions each hear their own, and one closing leaves the other hearing', () =>
   Effect.gen(function* () {
     const { tree, place } = yield* world();
