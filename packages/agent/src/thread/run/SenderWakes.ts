@@ -1,3 +1,4 @@
+import { CurrentCost, rootCost } from '@runlith/performance/CostLedger';
 import { Context, Deferred, Effect, Layer } from 'effect';
 import { ThreadInbox, ThreadLeaseRhythm, ThreadStore } from '../ThreadPorts';
 import { RunScheduler } from './scheduler/RunScheduler';
@@ -63,7 +64,7 @@ export const senderWakesLayer = Layer.effect(
     yield* Effect.forkScoped(
       Effect.forever(
         Effect.gen(function* () {
-          yield* drain();
+          yield* rootCost('SenderWakes.drain', drain()).pipe(Effect.provideService(CurrentCost, null));
           yield* Effect.raceFirst(Deferred.await(kicked), Effect.sleep(rhythm.heartbeatIntervalMs));
           kicked = yield* Deferred.make<void>();
         }),
