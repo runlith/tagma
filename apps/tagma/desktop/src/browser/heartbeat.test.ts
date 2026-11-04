@@ -9,7 +9,7 @@ import { TestClock } from 'effect/testing';
 
 const GROUP = RpcGroup.make(rpcOf(ATTACH_FEED));
 
-it.effect('a tape without heartbeat keeps its attach feed through a minute in which the server answers no ping', () =>
+it.effect('a tape without a ping timeout keeps its attach feed through a minute in which the server answers no ping', () =>
   Effect.gen(function* () {
     const written = yield* Queue.unbounded<string>();
     const incoming = yield* Queue.unbounded<string>();
@@ -24,7 +24,7 @@ it.effect('a tape without heartbeat keeps its attach feed through a minute in wh
       }),
     });
     const protocol = yield* Layer.build(
-      RpcClient.layerProtocolSocket({ heartbeat: false }).pipe(Layer.provide([Layer.succeed(Socket.Socket, silent), liveSerialization])),
+      RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(Layer.provide([Layer.succeed(Socket.Socket, silent), liveSerialization])),
     );
     const client = yield* Effect.provide(RpcClient.make(GROUP), protocol);
     const orders = yield* Queue.unbounded<Order>();

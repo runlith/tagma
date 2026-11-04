@@ -19,7 +19,7 @@ const wsAt = (url: URL, path: string): URL => {
 
 export const fakeHost = Effect.fnUntraced(function* (url: URL) {
   const protocol = yield* Layer.build(
-    RpcClient.layerProtocolSocket({ heartbeat: false }).pipe(
+    RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
       Layer.provide(Socket.layerWebSocket(wsAt(url, TAGMA_SOCKET_PATH).toString(), { openTimeout: Duration.infinity })),
       Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
     ),

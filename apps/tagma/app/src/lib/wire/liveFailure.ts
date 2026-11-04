@@ -35,16 +35,8 @@ export function failureOf(error: unknown): LiveFailure {
         code: reason.code,
         reason: reason.closeReason,
       };
-    case 'SocketOpenError': {
-      const cause = messageOf(reason.cause);
-      return {
-        kind: 'connection',
-        message:
-          cause === 'ping timeout'
-            ? 'The live connection to the Tagma server stopped answering heartbeats.'
-            : `The live connection to the Tagma server did not open: ${cause}`,
-      };
-    }
+    case 'SocketOpenError':
+      return { kind: 'connection', message: `The live connection to the Tagma server did not open: ${messageOf(reason.cause)}` };
     case 'SocketReadError':
       return { kind: 'connection', message: 'The live connection to the Tagma server could not be read.' };
     case 'SocketWriteError':

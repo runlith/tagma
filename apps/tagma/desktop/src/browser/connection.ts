@@ -115,7 +115,7 @@ const generation = (served: Served) =>
   Effect.scoped(
     Effect.gen(function* () {
       const protocol = yield* Layer.build(
-        RpcClient.layerProtocolSocket({ heartbeat: false }).pipe(
+        RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
           Layer.provide(Socket.layerWebSocket(socketUrl(served.surface, TAGMA_SOCKET_PATH).toString(), { openTimeout: Duration.infinity })),
           Layer.provide([liveSerialization, Socket.layerWebSocketConstructorGlobal]),
         ),

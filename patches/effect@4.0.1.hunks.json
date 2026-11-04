@@ -6,8 +6,11 @@
       "tests": [{ "package": "packages/sqlite-process", "file": "./src/telemetry.itest.ts" }]
     },
     "rpc-socket-heartbeat": {
-      "markers": ["options?.heartbeat === false", "const unwatched", "readonly heartbeat?: boolean | undefined"],
-      "tests": [{ "package": "apps/tagma/desktop", "file": "./src/browser/heartbeat.test.ts" }]
+      "markers": ["options?.pingTimeout !== false", "!recievedPong && pingTimeout", "(writePing, pingTimeout)", "pingTimeout: boolean", "readonly pingTimeout?: boolean | undefined"],
+      "tests": [
+        { "package": "apps/tagma/desktop", "file": "./src/browser/heartbeat.test.ts" },
+        { "package": "apps/tagma/app", "file": "./src/lib/wire/liveStall.test.ts" }
+      ]
     }
   }
 }

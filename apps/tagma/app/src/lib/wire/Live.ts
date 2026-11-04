@@ -13,7 +13,7 @@ import { Platform, type PlatformSocket } from '@runlith/layer/Platform';
 import type { Point } from '@runlith/layer/Point';
 import { Scope as AppScope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { Cause, Context, Data, Deferred, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
+import { Cause, Context, Data, Deferred, Duration, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
 import { RpcClient, RpcClientError } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { AccessHint, type AccessHintShape, hinted } from './access.js';
@@ -173,7 +173,7 @@ export class LiveConnection {
     const attempt: Effect.Effect<void> = Effect.suspend(() => {
       if (this.paused || this.refused || this.streams.size === 0 || this.connection !== null) return Effect.void;
       return Effect.flatMap(
-        Effect.zip(Effect.exit(this.connected()), Effect.sleep(LiveConnection.CONNECT_DEADLINE_MS), { concurrent: true }),
+        Effect.zip(Effect.exit(this.connected()), Effect.sleep(LiveConnection.REOPEN_GAP_MS), { concurrent: true }),
         ([answered]) => {
           if (Exit.isSuccess(answered)) return Effect.void;
           if (Cause.hasInterruptsOnly(answered.cause)) return Effect.void;
@@ -471,9 +471,9 @@ export class LiveConnection {
 
   private static readonly FEED_REOPEN_MS = 1000;
 
-  private static readonly CONNECT_DEADLINE_MS = 10_000;
+  private static readonly REOPEN_GAP_MS = 10_000;
 
-  //! Two periods of the socket protocol's 5 s pinger, which offers no ping on demand: away longer, the OS may have killed the socket.
+  //! Away longer, the OS may have dropped the socket under the frozen page, and a ping into it waits on TCP's own timeout.
   private static readonly AWAY_MS = 10_000;
 
   private connected(): Effect.Effect<ServerClient, LiveGone> {
@@ -505,7 +505,6 @@ export class LiveConnection {
         }),
         Effect.map((context) => Context.getUnsafe(context, LiveClient)),
         Effect.tap(() => Deferred.await(opened)),
-        Effect.timeout(LiveConnection.CONNECT_DEADLINE_MS),
         Effect.tap((client) =>
           Effect.sync(() => {
             if (this.socketOpen === opened) this.socketOpen = null;
@@ -543,8 +542,8 @@ export class LiveConnection {
       );
       return live;
     });
-    return RpcClient.layerProtocolSocket().pipe(
-      Layer.provide(Socket.layerWebSocket(this.origin.socket(TAGMA_SOCKET_PATH))),
+    return RpcClient.layerProtocolSocket({ pingTimeout: false }).pipe(
+      Layer.provide(Socket.layerWebSocket(this.origin.socket(TAGMA_SOCKET_PATH), { openTimeout: Duration.infinity })),
       Layer.provide([liveSerialization, socket]),
       Layer.provide(
         Layer.succeed(RpcClient.ConnectionHooks)({
