@@ -44,15 +44,8 @@ export async function ready(page: Page): Promise<void> {
   await page.locator('[data-timeline-key]').first().waitFor({ state: 'attached' });
 }
 
-export async function fling(
-  page: Page,
-  { cdp, touch }: EngineInput,
-  source: 'touch' | 'wheel',
-  distance = 5000,
-  speed = 2200,
-  afterRelease?: () => Promise<void>,
-): Promise<void> {
-  const { x, y, bottom, pixel } = await page.evaluate(() => {
+const contact = (page: Page) =>
+  page.evaluate(() => {
     const port = (globalThis as StandGlobal).feedStand!;
     return {
       ...port.point(),
@@ -60,6 +53,22 @@ export async function fling(
       pixel: 1 / (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio,
     };
   });
+
+async function travelOf(page: Page, source: MotionSource, distance: number): Promise<number> {
+  if (source !== 'touch') return distance;
+  const { y, bottom, pixel } = await contact(page);
+  return Math.min(distance, bottom - y - pixel);
+}
+
+export async function fling(
+  page: Page,
+  { cdp, touch }: EngineInput,
+  source: MotionSource,
+  distance = 5000,
+  speed = 2200,
+  afterRelease?: () => Promise<void>,
+): Promise<void> {
+  const { x, y } = await contact(page);
   const declare = (travel: number) =>
     page.evaluate(({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false), {
       distance: travel,
@@ -67,7 +76,7 @@ export async function fling(
     });
   if (source === 'touch') {
     if (touch === undefined) throw new Error('A touch fling requires a Chromium context with touch');
-    const travel = Math.min(distance, bottom - y - pixel);
+    const travel = await travelOf(page, source, distance);
     if (travel <= 0) throw new Error('The contact has no path inside the feed viewport');
     const steps = Math.max(2, Math.ceil(travel / (speed / FRAME_RATE)));
     await frames(page, 2);
@@ -154,7 +163,8 @@ export async function runScenario(
     return trial.recording;
   }
   if (['streaming-paused', 'latest', 'width', 'keyboard'].includes(name) || name.startsWith('disclosure-')) await pause(page);
-  if (name === 'page-mid-fling') await approach(page, FLING_DISTANCE);
+  const paged = name === 'page-mid-fling' ? await travelOf(page, motionSource(name, cdp), FLING_DISTANCE) : 0;
+  if (name === 'page-mid-fling') await approach(page, paged);
   if (!name.startsWith('disclosure-')) await start(page, name);
   if (name === 'open-tail') {
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.remount());
@@ -167,7 +177,7 @@ export async function runScenario(
   if (name === 'page-mid-fling') {
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.pageLatency(20));
     let loaded = true;
-    await fling(page, input, motionSource(name, cdp), FLING_DISTANCE, 2200, async () => {
+    await fling(page, input, motionSource(name, cdp), paged, 2200, async () => {
       loaded = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.loadOlder());
     });
     if (!loaded) return refuse(page, 'The scripted older page did not land after touch release');
