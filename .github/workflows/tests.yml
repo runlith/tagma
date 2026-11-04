@@ -100,6 +100,13 @@ jobs:
         run: bun -e "require('electron/install.js')"
         working-directory: packages/e2e
       - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
+        name: Chromium sandbox helper
+        working-directory: packages/e2e
+        run: |
+          sandbox="$(bun -e 'const path = require("node:path"); console.log(path.join(path.dirname(require("electron")), "chrome-sandbox"))')"
+          sudo install -o root -g root -m 4755 "$sandbox" "$RUNNER_TEMP/chrome-devel-sandbox"
+          printf 'CHROME_DEVEL_SANDBOX=%s\n' "$RUNNER_TEMP/chrome-devel-sandbox" >> "$GITHUB_ENV"
+      - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
         name: Virtual display for Electron
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - if: contains(inputs.lanes, 'ios')
