@@ -53,6 +53,7 @@ type Entry = typeof Entry.Type;
 const Snapshot = Schema.Struct({ snapshot: Schema.Struct({ transcript: Schema.Array(Entry), before: Schema.NullOr(Schema.Int) }) });
 const Page = Schema.Struct({ entries: Schema.Array(Entry), before: Schema.NullOr(Schema.Int) });
 const Created = Schema.Struct({ block: Schema.Struct({ name: Schema.String }) });
+const Roots = Schema.Struct({ blocks: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String })) });
 
 const PAGE_ENTRY = join(REPO_ROOT, 'packages', 'chat-ui', 'stand', 'appPage.ts');
 const CROSSING_CHECK = 4;
@@ -198,7 +199,10 @@ const seed = Effect.fnUntraced(function* () {
   const tenant = yield* served.tenant;
   const thread = yield* tenant.thread({ title: 'Feed corpus' });
   const other = yield* tenant.thread({ title: 'Referenced thread' });
-  const { block } = yield* Schema.decodeUnknownEffect(Created)(yield* tenant.perform('create_block', { title: 'Feed reference block' }));
+  const roots = yield* Schema.decodeUnknownEffect(Roots)(yield* tenant.perform('list_root_blocks', {}));
+  const { block } = yield* Schema.decodeUnknownEffect(Created)(
+    yield* tenant.perform('create_block', { title: 'Feed reference block', parentId: roots.blocks[0].name }),
+  );
   const scripts = yield* Queue.unbounded<Script>();
   const image = png(640, 360);
   const started = yield* Clock.currentTimeMillis;
