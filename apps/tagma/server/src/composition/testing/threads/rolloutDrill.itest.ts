@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
+import { zstdDecompressSync } from 'node:zlib';
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { WIRE_ENTRY_MAX_BYTES } from '@runlith/agent/protocol/cap';
 import { eq } from 'drizzle-orm';
@@ -113,6 +114,8 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
         expect((yield* evidenceOf(runtime.owners).shape(cold, projectId)).shape.entries).toBe(1);
         expect(yield* events(cold)).toEqual([]);
         expect(yield* restOf(db, cold)).not.toBeNull();
+        const packed = yield* files.readFile(`${path}.zst`);
+        yield* files.writeFile(path, yield* Effect.try(() => zstdDecompressSync(packed)));
         yield* files.writeFileString(
           path,
           `${JSON.stringify({ kind: 'event', row: { threadId: cold, position: 2, id: `ev2-${cold}`, kind: 'message', payload: { entry: { type: 'message', id: `ev2-${cold}`, role: 'user', text: 'said after the thaw' } } } })}\n`,
