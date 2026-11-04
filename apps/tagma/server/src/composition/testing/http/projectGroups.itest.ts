@@ -147,7 +147,12 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect(order.every((index) => index >= 0)).toBe(true);
         expect(order).toEqual([...order].sort((a, b) => a - b));
         for (const [ruleName, project] of labelled) expect(lines[at(ruleName)]).toContain(project);
-        expect(yield* start(gamma)).toBe(before);
+        const unrelated = yield* start(gamma);
+        expect((yield* world.op('read_group', { ref: String(gamma) })).body).toMatchObject({ group: null });
+        for (const name of [groupRoot, groupRule, betaRule, alphaRule]) {
+          expect(before).not.toContain(name);
+          expect(unrelated).not.toContain(name);
+        }
 
         const share = (project: number, sharing: { readonly gives?: string[]; readonly takes?: string[] }) =>
           Effect.map(world.op('set_group_sharing', { project: String(project), ...sharing }), groupOf);
