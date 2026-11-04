@@ -374,6 +374,31 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
       }
     }),
     ensure,
+    release: Effect.gen(function* () {
+      const standing = yield* Ref.get(custody);
+      const session = yield* Ref.get(welcome);
+      if (
+        standing?.holder === undefined ||
+        standing.holder.connection !== session?.connection ||
+        standing.holder.incarnation !== session.incarnation
+      )
+        return;
+      const answer = yield* Effect.result(
+        executions.release({ installation, operation: HostRequestKey.make(`host-release-${randomUUID()}`) }, standing),
+      );
+      if (answer._tag === 'Failure') {
+        yield* Effect.logWarning('host custody could not be released before closing; the host must settle the disconnected connection', {
+          reason: answer.failure._tag,
+          detail: answer.failure.message,
+        });
+        return;
+      }
+      if (answer.success._tag === 'Held') return yield* remember(answer.success.custody);
+      yield* Effect.logWarning('host custody was not released before closing; the host must settle the disconnected connection', {
+        answer: answer.success._tag,
+        refusal: answer.success._tag === 'Refused' ? answer.success.refusal : undefined,
+      });
+    }).pipe(Effect.withSpan('TerminalHostCustody.release')),
     ready: Effect.andThen(ready, Effect.asVoid(ensure())),
     guarded: (): HostPort => ({
       ...served,

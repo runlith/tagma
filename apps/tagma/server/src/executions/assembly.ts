@@ -282,12 +282,6 @@ export const executionsLayer: Layer.Layer<
     const executions = host.direct;
     type YieldStage = 'idle' | 'armed' | 'yielding';
     const yielding = yield* Ref.make<YieldStage>('idle');
-    yield* Effect.addFinalizer(() =>
-      Effect.flatMap(
-        Ref.modify(yielding, (stage): [boolean, YieldStage] => (stage === 'armed' ? [true, 'yielding'] : [false, stage])),
-        (armed) => (armed ? yieldPlace(executions, files, registrations, address.state, address.installation, claim) : Effect.void),
-      ),
-    );
     const swap = swapBundle(files, address.state, claim);
     const offering = Effect.map(hostRaisable(files, hostBundleNext(address.state)), (waiting) =>
       waiting ? hostBundleNext(address.state) : bundle,
@@ -367,6 +361,17 @@ export const executionsLayer: Layer.Layer<
       ready: takenAfter === undefined ? undefined : Deferred.await(takenOver),
       successor: Effect.suspend(() => successor),
     });
+    yield* Effect.addFinalizer(() =>
+      Effect.flatMap(
+        Ref.getAndUpdate(yielding, (stage): YieldStage => (stage === 'armed' ? 'yielding' : stage)),
+        (stage) =>
+          stage === 'armed'
+            ? yieldPlace(executions, files, registrations, address.state, address.installation, claim)
+            : stage === 'idle'
+              ? custody.release
+              : Effect.void,
+      ),
+    );
     yield* Ref.set(host.opened, custody.opened);
     const floorDetail = (boot: HostBoot, assurance: CustodyAssurance, state: string): string =>
       assurance._tag === 'Held'

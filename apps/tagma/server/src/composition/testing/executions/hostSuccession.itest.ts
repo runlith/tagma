@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Effect, Exit, Fiber, FileSystem, Layer, Schedule, Scope } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
+import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { REGISTRATION_FILE } from '@runlith/executions/protocol/registration';
@@ -23,7 +24,7 @@ import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { HostManagement, HostOffering, LogicYield } from '../../../executions/contract/service/host.js';
 import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
-import { endHosts, hostsUnder } from '../../../executions/testing/doubles.js';
+import { endHosts, executionWireLimits, hostsUnder } from '../../../executions/testing/doubles.js';
 import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated } from './fixture.js';
 
 const withheld = LogicYield.of({ ask: () => Effect.succeed({ _tag: 'Unasked', detail: 'this fixture withholds the yield signal' }) });
@@ -165,7 +166,14 @@ describe('a running server whose execution host left', () => {
         const after = yield* started(server.executions, 'after-stopping');
         expect(after.incarnation).toBeGreaterThan(wedged.incarnation);
         expect((yield* host.standing).custodian).toBe(true);
+        const observer = yield* ExecutionClient.make({
+          address: host.connection.address,
+          role: 'recovery',
+          limits: executionWireLimits(),
+        }).pipe(Effect.provide(HostRegistration.layer), Effect.provide(endpointConnection));
+        expect((yield* observer.status()).custody.holder).toBeDefined();
         yield* server.leave;
+        expect((yield* observer.status()).custody.holder).toBeUndefined();
       }),
     );
 
@@ -179,7 +187,11 @@ describe('a running server whose execution host left', () => {
         const direct = host.connection.direct;
         const logic = yield* logicOf(host.connection.address.state);
         if (logic === undefined) return yield* Effect.die(new Error('the host registration names no logic'));
-        const holder = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(logic)]).toString().trim());
+        const holder = Number(
+          execFileSync('ps', ['-o', 'ppid=', '-p', String(logic)])
+            .toString()
+            .trim(),
+        );
         expect(holder).toBeGreaterThan(1);
         signalled(holder);
         yield* until(Effect.result(direct.status()), (seen) => seen._tag === 'Success' && seen.success.incarnation > running.incarnation);
