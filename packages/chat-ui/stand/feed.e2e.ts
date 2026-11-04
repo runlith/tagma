@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import { e2e } from '@runlith/e2e/browser';
+import { onFailure } from '@runlith/e2e/artifacts';
 import { stand } from '@runlith/e2e/stand';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import type { Recording } from './recording';
 import { CalibrationFailure } from './thumb';
 import { controlSource, ready, runScenario, ScenarioFailure, type ScenarioOptions } from './scenarios';
 import { chromiumOnly, scenarioNames, type ScenarioName } from './scenario';
-import { controls, heldControls } from './controls';
+import { controls, heldControls, type Controls } from './controls';
 import { displacement, type ControlEnvelope } from './displacement';
 import { TouchCalibrationFailure, type HeldTouch } from './held';
 import { observeInput, readInput } from './input.fixture';
@@ -116,11 +117,20 @@ for (const lane of ['chromium', 'webkit'] as const)
           const source = controlSource(name, cdp);
           const controlKey = source === undefined ? undefined : `${lane}:${branch}:${source}`;
           if (source !== undefined && controlKey !== undefined && !envelopes.has(controlKey)) {
-            const measured = await controls(page, cdp, served.url(), source);
-            const envelope = measured.envelope;
-            envelopes.set(controlKey, envelope);
-            await writeFile(join(artifacts, `controls-${branch}.json`), JSON.stringify({ lane, branch, source, measured, envelope }));
-            console.log(JSON.stringify({ lane, branch, source, controls: envelope.controls, discarded: envelope.discarded }));
+            let measured: Controls | undefined;
+            const save = () => writeFile(join(artifacts, `controls-${branch}.json`), JSON.stringify({ lane, branch, source, measured }));
+            const stop = onFailure(save);
+            try {
+              measured = await controls(page, cdp, served.url(), source, (reading) => {
+                measured = reading;
+              });
+              const envelope = measured.envelope;
+              envelopes.set(controlKey, envelope);
+              await save();
+              console.log(JSON.stringify({ lane, branch, source, controls: envelope.controls, discarded: envelope.discarded }));
+            } finally {
+              stop();
+            }
           }
           let held: HeldTouch | undefined;
           if (name === 'drag-page-landing') {

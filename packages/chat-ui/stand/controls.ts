@@ -9,16 +9,18 @@ import { browserStand } from './standPage';
 
 export type Controls = { recordings: Recording[]; discarded: { name: string; reason: string }[]; reach: number; envelope: ControlEnvelope };
 export type ControlRegion = { measured: MeasuredControl; reach: number };
+export type ControlObserver = (reading: Controls) => void;
 
 export async function controls(
   page: Page,
   cdp: CDPSession | undefined,
   url: string,
   source: 'touch' | 'wheel' = cdp === undefined ? 'wheel' : 'touch',
+  observe?: ControlObserver,
 ): Promise<Controls> {
   await page.goto(new URL('?loaded=10000', url).href);
   await ready(page);
-  return measureControls(page, cdp, source);
+  return measureControls(page, cdp, source, observe);
 }
 
 export async function prepareControls(page: Page): Promise<ControlRegion> {
@@ -66,6 +68,7 @@ export async function measureControls(
   page: Page,
   cdp: CDPSession | undefined,
   source: 'touch' | 'wheel' = cdp === undefined ? 'wheel' : 'touch',
+  observe?: ControlObserver,
 ): Promise<Controls> {
   const region = await prepareControls(page);
   const recordings: Recording[] = [];
@@ -84,6 +87,7 @@ export async function measureControls(
     recordings.push(recording);
     if (!outOfRange) candidates.push(recording);
     envelope = controlEnvelope(candidates);
+    observe?.({ recordings, discarded, reach: region.reach, envelope });
   }
   return { recordings, discarded, reach: region.reach, envelope };
 }
