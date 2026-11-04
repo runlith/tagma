@@ -20,6 +20,10 @@ on:
           - linux
           - ios
         default: all
+      lanes:
+        description: Linux engine lanes to provision and run
+        required: false
+        default: chromium,webkit,electron
 
 permissions:
   contents: read
@@ -35,7 +39,7 @@ jobs:
       shards: ${{ inputs.test-pattern != '' && 1 || 4 }}
       package: ${{ inputs.package }}
       test-pattern: ${{ inputs.test-pattern }}
-      lanes: chromium,webkit,electron
+      lanes: ${{ inputs.lanes }}
 
   ios:
     if: inputs.platform != 'linux'
