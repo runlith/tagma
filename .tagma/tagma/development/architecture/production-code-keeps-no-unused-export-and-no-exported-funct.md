@@ -15240,14 +15240,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/macos/artifact.ts#artifact",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/macos/facts.ts#platformIdentity",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/macos/holders.ts#FileHolders",
           "owner": "5a3bed29"
         },
