@@ -54,7 +54,7 @@ export const pluginsLayer: Layer.Layer<
     });
     const shelf = yield* makeShelf({ home });
     const digests = yield* makeDigests;
-    const installs = yield* makeInstalls({ shelf, home, points, processes: () => reader, changed });
+    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => reader, changed });
     const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);

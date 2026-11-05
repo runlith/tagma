@@ -20,7 +20,8 @@ const answered = async (ask: DigestAsk): Promise<DigestAnswer> => {
   if (measures.includes(MISSING)) return { id: ask.id, stamp, digest: null };
   const hash = createHash('sha256');
   for (const path of ask.paths) {
-    const bytes = await readFile(join(ask.root, path));
+    const bytes = await readFile(join(ask.root, path)).catch(() => null);
+    if (bytes === null) return { id: ask.id, stamp: '', digest: null };
     hash.update(`${path}\u0000${bytes.byteLength}\u0000`);
     hash.update(bytes);
   }

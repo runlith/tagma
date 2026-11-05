@@ -82,6 +82,7 @@ const plugin: PluginRow = {
   components: [{ kind: 'skill', name: 'greeter-hello' }],
   ignored: [],
   options: [],
+  outdated: false,
 };
 
 test('a plugin page previews its entry, and adding sends the prepared revision for this project', async () => {

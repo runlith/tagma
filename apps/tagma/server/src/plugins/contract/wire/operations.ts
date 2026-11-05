@@ -43,6 +43,7 @@ export const PLUGIN_ROWS = {
       fallback: 'x'.repeat(40),
     })),
     process: { state: 'starting', tools: 100, restarts: 1000, failure: 'x'.repeat(1_000), refused: 'x'.repeat(300) },
+    outdated: true,
     refused: 'x'.repeat(300),
   })),
 };
@@ -93,7 +94,7 @@ export const PLUGIN_OPERATIONS = {
     meaning:
       'Read the plugins installed on this machine: what each one gives the agent here, what Tagma ignores in it and why, the options it asks for, whether this project runs it and the state of its process.',
     grammar:
-      'A page of rows by id with the total; `next` continues the walk, null on the last page. A component is offered as `<plugin>-<name>`. A refused row says why its directory as it stands now cannot be read; a failed `process` carries the end of what its process wrote.',
+      'A page of rows by id with the total; `next` continues the walk, null on the last page. A component is offered as `<plugin>-<name>`. A refused row says why its directory as it stands now cannot be read; a failed `process` carries the end of what its process wrote; an `outdated` row runs a build older than its sources, and building the plugin again brings them in.',
     input: Schema.Struct({ project: projectField, limit: limitOf(PLUGIN_ROWS), cursor: placedCursor }),
     refusals: [...LIST_REFUSALS, 'bad-cursor', 'cursor-stale'],
     page: PLUGIN_ROWS,

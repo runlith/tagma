@@ -15,14 +15,16 @@ const plugin = (overrides: Partial<PluginRow>): PluginRow => ({
   components: [],
   ignored: [],
   options: [],
+  outdated: false,
   ...overrides,
 });
 
 const process = (state: PluginProcessRow['state']): PluginProcessRow => ({ state, tools: 2, restarts: 0 });
 
-test('a plugin in Tagma’s format is marked by its process: broken is failing, starting is connecting, working is quiet', () => {
+test('a plugin in Tagma’s format is marked by its process: broken is failing, starting is connecting, working and asleep are quiet', () => {
   expect(pluginState(plugin({ process: process('failed') }), [], null)).toBe('fails');
   expect(pluginState(plugin({ process: process('starting') }), [], null)).toBe('connecting');
   expect(pluginState(plugin({ process: process('running') }), [], null)).toBe('ok');
+  expect(pluginState(plugin({ process: process('idle') }), [], null)).toBe('ok');
   expect(pluginState(plugin({ enabled: false, process: process('failed') }), [], null)).toBe('off');
 });

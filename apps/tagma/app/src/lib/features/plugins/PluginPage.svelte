@@ -168,6 +168,9 @@
         note={row.refused}
       />
     {/if}
+    {#if row.outdated}
+      <Callout tone="plain" title="This plugin was changed after it was last built, so it still runs the earlier version" />
+    {/if}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
     {#if row.process !== undefined || (row.enabled && item.servers.length > 0)}

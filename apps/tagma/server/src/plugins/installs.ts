@@ -21,6 +21,7 @@ import {
   pluginsOptions,
 } from './contract/wire/settings.js';
 import { componentsOf, consentOf } from './consent.js';
+import type { Digests } from './digests.js';
 import { type Enabling, enablingIn } from './enabling.js';
 import { collision, hosted, type NamesCollide, namesOf, type Read } from './reader.js';
 import { type Bound, SECRET_KIND, type Shelf } from './shelf.js';
@@ -100,12 +101,13 @@ const shownOf = (read: Read, bound: Bound) => ({
 
 export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
+  readonly digests: Digests;
   readonly home: string;
   readonly points: PluginPoints['Service'];
   readonly processes: () => PluginProcessReader;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
 }) {
-  const { shelf, home, points, processes, changed } = input;
+  const { shelf, digests, home, points, processes, changed } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const owners = yield* SecretOwners;
@@ -163,6 +165,12 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
 
   const processOf = (id: string, pkg: PluginPackage): PluginProcessRow | undefined =>
     hosted(pkg) ? (processes()(id) ?? { state: 'stopped', tools: 0, restarts: 0 }) : undefined;
+
+  const outdatedOf = Effect.fnUntraced(function* (root: string, pkg: PluginPackage) {
+    const build = pkg.build;
+    if (build === null) return false;
+    return (yield* digests.digest(root, build.sources, 'sources').pipe(Effect.orDie)) !== build.hash;
+  });
 
   const boundOf = Effect.fnUntraced(function* (read: Read, root: string, projectId: number) {
     return yield* shelf
@@ -287,6 +295,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         ignored: [],
         options: [],
         process: processes()(install.id),
+        outdated: false,
         refused: reading.failure.message,
       } satisfies PluginRow;
     }
@@ -300,6 +309,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       format: read.format,
       ...shownOf(read, bound),
       process: processOf(install.id, pkg),
+      outdated: yield* outdatedOf(install.root, pkg),
     } satisfies PluginRow;
   });
 
@@ -560,6 +570,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
             if (there.off.includes(id)) yield* listed(pluginsDisabled, 'project', project.id, id, false);
           }
           shelf.forget(install.root);
+          digests.forget(install.root);
           yield* changed(null);
           return { ...answer, enabled: false, everywhere: false };
         }),

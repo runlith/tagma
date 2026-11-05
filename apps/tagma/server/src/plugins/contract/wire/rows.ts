@@ -117,6 +117,9 @@ export const pluginRowSchema = Schema.Struct({
   process: Schema.optional(pluginProcessSchema).annotate({
     description: 'Its process on this machine, for a plugin that runs one or contributes to Tagma; it runs while any project enables it.',
   }),
+  outdated: Schema.Boolean.annotate({
+    description: 'Whether a source its build lists changed or went missing after that build, so what runs is the earlier build.',
+  }),
   refused: Schema.optional(Schema.String).annotate({
     description: 'Why its directory as it stands now cannot be read; a refused plugin contributes nothing.',
   }),
