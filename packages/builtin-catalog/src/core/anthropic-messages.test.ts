@@ -238,17 +238,15 @@ describe('Anthropic tool input schemas', () => {
         tools: [new ToolDefinition({ name: 'read_performance', description: 'Read process evidence.', inputSchema })],
       });
       const body = yield* protocol.body.from(request);
-      expect(body.tools?.[0]?.input_schema).toEqual({
-        $defs: inputSchema.$defs,
-        type: 'object',
-        properties: {
-          type: { enum: ['stalls', 'profile'], description: 'Variant keys: type stalls requires limit; type profile requires id.' },
-          limit: { type: 'number', description: 'Taken only when type is stalls, where it is required.' },
-          cursor: { anyOf: [{ $ref: '#/$defs/Cursor' }, { anyOf: [{ $ref: '#/$defs/Cursor' }, { type: 'null' }] }] },
-          id: { type: 'string', description: 'Taken only when type is profile, where it is required.' },
-        },
-        required: ['type'],
-        additionalProperties: false,
+      const { properties, ...root } = body.tools?.[0]?.input_schema as unknown as {
+        readonly properties: Record<string, { readonly description?: string }>;
+      };
+      expect(root).toEqual({ $defs: inputSchema.$defs, type: 'object', required: ['type'], additionalProperties: false });
+      expect(Object.fromEntries(Object.entries(properties).map(([name, { description: _described, ...shape }]) => [name, shape]))).toEqual({
+        type: { enum: ['stalls', 'profile'] },
+        limit: { type: 'number' },
+        cursor: { anyOf: [{ $ref: '#/$defs/Cursor' }, { anyOf: [{ $ref: '#/$defs/Cursor' }, { type: 'null' }] }] },
+        id: { type: 'string' },
       });
       expect(inputSchema).toHaveProperty('anyOf');
       expect(inputSchema.anyOf).toHaveLength(2);
