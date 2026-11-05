@@ -67,7 +67,7 @@ Slots inside the chat, composer and sidebar take native plugins only, because a 
 
 The reason is what the iframe costs today: no key forwarding to the window, menus clipped at the frame, no drag bridge, about 60 CSS variables in place of components, and no way to mount a real thread. What it buys is small for a plugin with a process, which already holds all the operator's OS rights. The price of the module is real: a hung plugin hangs the window, a leak lives until reload, a plugin without a process or a third-party widget in the window holds operator rights, and whatever modules we promise become a versioned public contract. Answers to carry into the spec: load lazily, start Tagma without plugins on demand, warn at install, keep the promised list short, as `hostModules` already does for adapters.
 
-**Three depths on the agent layer, in this order.**
+**Three depths on the agent layer.** The operator agreed all three are needed, built in this order.
 
 1. A plugin builds its own chat over threads. Today a process can create a thread with its own agent and tools, send turns and read them. Missing: a live event stream (`thread.subscribe` is the operator's), answering approvals, listing models. The same work opens the way for a separate program beside Tagma.
 2. A plugin reuses our thread. `chat-ui` becomes a component of the SDK over its `ChatConnection` port.
@@ -77,7 +77,6 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 
 ## Open
 
-- Whether all three depths are needed: the operator allows that one may be excess.
 - What exactly is promised to a plugin: which modules, which slots, which `tagma.*` calls.
 - One consent rule at install. A process runs as the operator with no question today; a marketplace plugin asks.
 - Whether an unreviewed plugin without a process shows its interface in an iframe; this is part of the consent rule.
