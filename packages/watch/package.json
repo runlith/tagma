@@ -5,6 +5,11 @@
   "description": "File watching in a process of its own over a Rust engine: one native stream per watched root, reached through a socket by any client.",
   "type": "module",
   "exports": {
+    "./cookie": {
+      "types": "./src/cookie.ts",
+      "bun": "./src/cookie.ts",
+      "default": "./src/cookie.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "bun": "./src/client.ts",

@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import { HoldCut, HoldStalled } from '@runlith/held/failures';
 import type { GitNotAdmitted } from '@runlith/git/Git';
+import { isCookie } from '@runlith/watch/cookie';
 import { troubleOf, type GitAnswerInvalid, type GitRefused, type GitUnreadable } from '@runlith/git/repository';
 import type { Unblock } from '../../platform/contract/wire/refusal.js';
 import { admissionSaid } from '../../platform/git/ownGit.js';
@@ -38,7 +39,7 @@ export const pathsOf = (reading: CheckoutState, areas: readonly (keyof CheckoutS
 
 export const underGraph = (path: string): boolean => path === CHECKOUT_DIRECTORY || path.startsWith(`${CHECKOUT_DIRECTORY}/`);
 
-export const leftBehind = (path: string): boolean => (path.split('/').at(-1) ?? '').startsWith('.merge_file_');
+export const leftBehind = (path: string): boolean => (path.split('/').at(-1) ?? '').startsWith('.merge_file_') || isCookie(path);
 
 export const ownWork = (path: string): boolean => !leftBehind(path) && !inGraphTree(path);
 

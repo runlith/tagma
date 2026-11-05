@@ -6,6 +6,7 @@ import { headOnDisk, type IndexEntries, indexMoved, indexOnDisk } from '@runlith
 import { Git } from '@runlith/git/Git';
 import { commitOf } from '@runlith/git/repository';
 import { pathspecFits } from '@runlith/git/status';
+import { isCookie } from '@runlith/watch/cookie';
 import type { ChangeSource, Heard } from './changeSource';
 import { type CheckoutFrontier, checkoutState, type Head, messageOf, quoted, type Seen, type StateReading } from './checkoutState';
 import type { ResolvedToolOptions } from './workspace';
@@ -39,8 +40,6 @@ const places = new Map<string, { readonly place: GitPlace; readonly configs: str
 const KEPT_HEARD = 4096;
 
 const GIT = '.git';
-
-const COOKIE = /^\.watch-cookie-\d+-\d+$/;
 
 const GITIGNORE = '.gitignore';
 
@@ -130,7 +129,7 @@ const scopeOf = Effect.fn('CheckoutBaselines.cursorScope')(function* (
   if (changed === null) return whole(false);
   let rulesMoved = false;
   for (const change of changed) {
-    if (change.path === GIT || change.path.startsWith(`${GIT}/`) || COOKIE.test(change.path)) continue;
+    if (change.path === GIT || change.path.startsWith(`${GIT}/`) || isCookie(change.path)) continue;
     if (ruleMoved(change.path)) rulesMoved = true;
     paths.add(change.path);
     if (change.heard === null) continue;

@@ -3,6 +3,7 @@ import { basename, join, resolve } from 'node:path';
 import { Clock, Data, Effect } from 'effect';
 import { isStaging } from './atomicFile.js';
 import type { Git } from '@runlith/git/Git';
+import { isCookie } from '@runlith/watch/cookie';
 import { OwnGitFailed, gitAnswer, runGit, runGitBytes } from '../../platform/git/ownGit.js';
 import { publish } from '../../platform/git/publish.js';
 import { AGENT_PERSON, personOf } from '../../platform/contract/wire/commits.js';
@@ -50,7 +51,8 @@ export const captureTree = (
       const files = new Map<string, CapturedFile>();
       const gone = new Set<string>();
       const take = async (relative: string): Promise<void> => {
-        if (relative === GIT || relative.startsWith(`${GIT}/`) || isStaging(basename(relative)) || excluded(relative)) return;
+        if (relative === GIT || relative.startsWith(`${GIT}/`) || isStaging(basename(relative)) || isCookie(relative) || excluded(relative))
+          return;
         const abs = join(treeRoot, relative);
         const found = await lstat(abs).catch((cause: unknown) => (absent(cause) ? null : Promise.reject(cause)));
         if (found === null) {

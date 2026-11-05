@@ -5,6 +5,7 @@ import type { workingAt, Working } from '@runlith/files/working';
 import { Git } from '@runlith/git/Git';
 import { contentDigest, streamedDigest } from '@runlith/files/content';
 import { isStagingFile } from '@runlith/files/replace';
+import { isCookie } from '@runlith/watch/cookie';
 import type { Heard } from './changeSource';
 import type { ResolvedToolOptions } from './workspace';
 import { within } from './workspace/paths';
@@ -50,7 +51,7 @@ export const messageOf = (cause: unknown): string => (cause instanceof Error ? c
 
 export type Listing = { readonly names: Set<string>; readonly untracked: readonly string[] };
 
-const TRANSIENT = /^(?:\.merge_file_[A-Za-z0-9]{6}|\.watch-cookie-\d+-\d+)$/;
+const MERGE_SIDE = /^\.merge_file_[A-Za-z0-9]{6}$/;
 
 export function porcelainListing(listing: string): Listing | null {
   if (listing !== '' && !listing.includes('\0')) return null;
@@ -61,7 +62,7 @@ export function porcelainListing(listing: string): Listing | null {
     const record = fields[index] ?? '';
     if (record.length < 4) continue;
     const name = record.slice(3);
-    if (record.startsWith('??') && !name.endsWith('/') && (TRANSIENT.test(name) || isStagingFile(name))) continue;
+    if (record.startsWith('??') && !name.endsWith('/') && (MERGE_SIDE.test(name) || isCookie(name) || isStagingFile(name))) continue;
     if (!name.endsWith('/')) names.add(name);
     else if (record.startsWith('??')) untracked.push(name);
     if (record[0] === 'R' || record[0] === 'C' || record[1] === 'R' || record[1] === 'C') {

@@ -537,6 +537,7 @@
         "@runlith/ripgrep": "workspace:*",
         "@runlith/source-comments": "workspace:*",
         "@runlith/utils": "workspace:*",
+        "@runlith/watch": "workspace:*",
         "effect": "catalog:",
         "htmlparser2": "catalog:",
         "minimatch": "^10.2.6",

@@ -17,6 +17,7 @@ import {
 import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { closeOnExec, lockExclusive, unlock } from '@runlith/file-lock/flock';
+import { cookieName, isCookie } from './cookie.js';
 import { type EngineHearing, openEngine } from './engine.js';
 import {
   CHANGES_PER_LINE,
@@ -41,8 +42,6 @@ const DETACHED_MS = 10 * 60_000;
 const ALONE_MS = 60 * 60_000;
 
 const SWEEP_EVERY_MS = 60_000;
-
-const COOKIE = '.watch-cookie-';
 
 const COOKIE_EVERY_MS = 20;
 
@@ -117,7 +116,7 @@ const tell = (native: Native, said: (id: number) => WatchSaid): void => {
 const reasonOf = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 
 const uncookied = (changes: readonly WatchChange[]): WatchChange[] =>
-  changes.filter((change) => !change.path.startsWith(COOKIE) || change.path.includes('/'));
+  changes.filter((change) => change.path.includes('/') || !isCookie(change.path));
 
 const recorded = (native: Native, changes: readonly WatchChange[]): void => {
   const moved = native.moved;
@@ -293,7 +292,7 @@ const cursorOf = (at: string, ignore: readonly string[]): string | null => {
 const settled = async (at: string, ignore: readonly string[]): Promise<boolean> => {
   const native = recording(at, ignore);
   if (native === null) return false;
-  const name = `${COOKIE}${process.pid}-${++cookies}`;
+  const name = cookieName(process.pid, ++cookies);
   let unheard = false;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const seen = new Promise<boolean>((resolve) => {
@@ -341,7 +340,7 @@ const movedSince = (at: string, cursor: string): WatchChange[] | null => {
 
 const settledSince = async (root: string, snapshot: string, ignore: readonly string[]): Promise<WatchChange[] | null> => {
   if (!existsSync(snapshot)) return null;
-  const name = `${COOKIE}${process.pid}-${++cookies}`;
+  const name = cookieName(process.pid, ++cookies);
   try {
     writeFileSync(join(root, name), '');
   } catch (cause) {

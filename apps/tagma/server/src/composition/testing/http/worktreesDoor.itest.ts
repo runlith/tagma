@@ -68,6 +68,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       });
       const made = (yield* op('create_worktree', { operationId: 'repair' })).body as { operation: WorktreeIntent };
       yield* files.writeFileString(join(destination, 'left.txt'), 'unfinished\n');
+      yield* files.writeFileString(join(destination, '.watch-cookie-4242-7'), '');
 
       expect(yield* op('delete_worktree', { rootId: made.operation.rootId }, { 'x-tagma-caller': 'app:core-pin' })).toMatchObject({
         status: 200,

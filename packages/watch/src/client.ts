@@ -86,7 +86,7 @@ export const retainedPaths = (memory: number = totalmem()): number =>
 const buildOf = (): string => {
   if (crateStands()) buildEngine();
   const hash = createHash('sha256').update(readFileSync(WATCHER));
-  for (const beside of ['protocol.ts', 'engine.ts']) {
+  for (const beside of ['protocol.ts', 'engine.ts', 'cookie.ts']) {
     const path = join(dirname(WATCHER), beside);
     if (existsSync(path)) hash.update(readFileSync(path));
   }

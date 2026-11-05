@@ -144,6 +144,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* fs.writeFileString(join(w.treeRoot, WORKFLOWS_DIRECTORY, 'review.json'), '{"mode":"run"}\n');
         yield* w.wrote('standing.md', 'the block, rewritten\n');
         yield* w.wrote('born.md', 'a block that did not exist\n');
+        yield* fs.writeFileString(join(w.treeRoot, '.watch-cookie-4242-7'), '');
         expect(yield* w.commits.commit).toMatchObject({ kind: 'committed', files: 2 });
         expect(yield* w.run(['log', '-1', '--format=%an <%ae>|%cn <%ce>|%s'])).toBe(
           'Tagma <agent@tagma.dev>|Tagma <agent@tagma.dev>|Sync graph files',
@@ -152,7 +153,11 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
           `${CHECKOUT_DIRECTORY}/demo/born.md`,
           `${CHECKOUT_DIRECTORY}/demo/standing.md`,
         ]);
-        expect((yield* w.run(['status', '--porcelain'])).split('\n').sort()).toEqual([' M .tagma/workflows/review.json', 'MM src/a.ts']);
+        expect((yield* w.run(['status', '--porcelain'])).split('\n').sort()).toEqual([
+          ' M .tagma/workflows/review.json',
+          '?? .tagma/.watch-cookie-4242-7',
+          'MM src/a.ts',
+        ]);
         expect(yield* w.run(['show', 'HEAD:src/a.ts'])).toBe('export const a = 1;');
         expect(yield* fs.exists(heard)).toBe(false);
       }),
