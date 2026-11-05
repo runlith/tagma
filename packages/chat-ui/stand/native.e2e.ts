@@ -30,6 +30,8 @@ type Swipe = { start: number; end: number; duration: number };
 type Fling = { concurrent?: () => Promise<void>; navigation?: boolean; swipe?: Swipe };
 const control: Swipe = { start: 0.25, end: 0.75, duration: 0.2 };
 const calibrated = new Map<string, Controls>();
+const approaches = new Map<string, number>();
+const runtimes = { runtimes: ['26', '27'] };
 const long: Swipe = { start: 0.1, end: 0.9, duration: 0.1 };
 
 const frames = (phone: IOSSession, count = 2): Promise<void> => act(phone, (port, count) => port.frames(count), count);
@@ -301,25 +303,23 @@ function momentumWrites(capture: Capture): ScrollWrite[] {
   return (capture.recording.writes ?? []).filter((write) => write.time > release.t && write.time <= last.t && write.to !== write.from);
 }
 
-function scenarios(phone: IOSTest) {
-  const reds: { scenario: string; error: string }[] = [];
-  return {
-    async attempt(scenario: string, run: () => Promise<void>): Promise<void> {
-      try {
-        await run();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        reds.push({ scenario, error: message });
-        await save(phone, `${scenario}-red`, { scenario, error: message });
-        await open(phone);
-      }
-    },
-    verdict(): void {
-      console.log(JSON.stringify({ reds }));
-      expect(reds).toEqual([]);
-    },
-  };
+function measuredOf(phone: IOSTest): Controls {
+  const measured = calibrated.get(phone.runtime);
+  if (measured === undefined) throw new Error('The measured controls of this runtime did not complete; this scenario has no envelope');
+  return measured;
 }
+
+function approachOf(phone: IOSTest): number {
+  const approach = approaches.get(phone.runtime);
+  if (approach === undefined) throw new Error('No unmeasured-history fling of this runtime measured the approach distance');
+  return approach;
+}
+
+const away = (phone: IOSSession) =>
+  act(phone, async (port) => {
+    const state = port.state();
+    await port.position(Math.max(0, state.height - state.viewport * 4));
+  });
 
 async function pageFling(phone: IOSTest, controls: Controls, name: string, approach: number, swipe: Swipe): Promise<Capture> {
   await open(phone, 120);
@@ -377,85 +377,132 @@ function assertMomentum(capture: Capture, controls: Controls): void {
 }
 
 ios(
-  'native feed: measured controls, unmeasured history and a page during momentum',
+  'native feed: measured controls',
   async (phone) => {
     await save(phone, 'coverage', { runtime: phone.runtime, udid: phone.udid, timing: phone.timing, unavailable });
-    const measured = await controls(phone);
-    calibrated.set(phone.runtime, measured);
-    const red = scenarios(phone);
-    await open(phone);
-    await red.attempt('open-tail', async () => {
-      const tail = await quiet(phone, 'open-tail', (port) => port.remount(), measured.envelope);
-      expect(tail.frames.at(-1)?.anchor?.kind).toBe('following');
-    });
-    let history: Capture | undefined;
-    await red.attempt('unmeasured-history', async () => {
-      history = await fling(phone, 'unmeasured-history');
-      const began = history.scroll.touches.find((touch) => touch.type === 'touchstart' && touch.trusted)!.t;
-      expect(history.recording.frames.some((frame) => frame.time > began && frame.unmeasured > 0)).toBe(true);
-      const unpaged = await call(phone, (port) => port.paging(), paging, undefined);
-      expect(unpaged.requested).toBe(0);
-      expect(unpaged.landed).toBe(0);
-      assertMomentum(history, measured);
-    });
-    await red.attempt('streaming-paused', async () => {
-      const paused = await quiet(phone, 'streaming-paused', (port) => port.stream(24), measured.envelope);
-      expect(paused.frames.every((frame) => frame.anchor?.kind === 'paused')).toBe(true);
-    });
-    await red.attempt('width', async () => {
-      const original = await targets(phone);
-      await quiet(
-        phone,
-        'width',
-        async (port, host) => {
-          await port.resize(host.width * 0.8, host.height);
-          await port.frames(20);
-          await port.resize(host.width, host.height);
-          await port.frames(20);
-        },
-        measured.envelope,
-        original.host,
-      );
-    });
-    const approach = history === undefined ? undefined : motion(history.scroll, momentumWrites(history)[0]?.time).distance / 2;
-    await red.attempt('page-mid-fling', async () => {
-      if (approach === undefined) throw new Error('No unmeasured-history fling measured the approach distance');
-      assertMomentum(await pageFling(phone, measured, 'page-mid-fling', approach, control), measured);
-    });
-    await red.attempt('page-long-fling', async () => {
-      if (approach === undefined) throw new Error('No unmeasured-history fling measured the approach distance');
-      await pageFling(phone, measured, 'page-long-fling', approach, long);
-    });
-    red.verdict();
+    calibrated.set(phone.runtime, await controls(phone));
   },
-  { runtimes: ['26', '27'] },
+  runtimes,
 );
 
 ios(
-  'native feed: a page under the finger, rail, latest, disclosures and the keyboard',
+  'native feed: open-tail',
   async (phone) => {
-    const measured = calibrated.get(phone.runtime);
-    if (measured === undefined)
-      throw new Error('The measured controls of this runtime did not complete; the second native group has no envelope');
-    const away = () =>
-      act(phone, async (port) => {
-        const state = port.state();
-        await port.position(Math.max(0, state.height - state.viewport * 4));
-      });
-    const red = scenarios(phone);
+    const measured = measuredOf(phone);
     await open(phone);
-    await away();
-    await red.attempt('rail', () => rail(phone, measured));
-    await red.attempt('latest', async () => {
-      await away();
-      await latest(phone, measured.envelope);
-    });
-    await red.attempt('disclosures', async () => {
-      await away();
-      await disclosures(phone, measured.envelope);
-    });
-    await red.attempt('keyboard', () => keyboard(phone, measured.envelope));
-    red.verdict();
+    const tail = await quiet(phone, 'open-tail', (port) => port.remount(), measured.envelope);
+    expect(tail.frames.at(-1)?.anchor?.kind).toBe('following');
   },
-  { runtimes: ['26', '27'] },
+  runtimes,
+);
+
+ios(
+  'native feed: unmeasured-history',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    const history = await fling(phone, 'unmeasured-history');
+    approaches.set(phone.runtime, motion(history.scroll, momentumWrites(history)[0]?.time).distance / 2);
+    const began = history.scroll.touches.find((touch) => touch.type === 'touchstart' && touch.trusted)!.t;
+    expect(history.recording.frames.some((frame) => frame.time > began && frame.unmeasured > 0)).toBe(true);
+    const unpaged = await call(phone, (port) => port.paging(), paging, undefined);
+    expect(unpaged.requested).toBe(0);
+    expect(unpaged.landed).toBe(0);
+    assertMomentum(history, measured);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: streaming-paused',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    const paused = await quiet(phone, 'streaming-paused', (port) => port.stream(24), measured.envelope);
+    expect(paused.frames.every((frame) => frame.anchor?.kind === 'paused')).toBe(true);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: width',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    const original = await targets(phone);
+    await quiet(
+      phone,
+      'width',
+      async (port, host) => {
+        await port.resize(host.width * 0.8, host.height);
+        await port.frames(20);
+        await port.resize(host.width, host.height);
+        await port.frames(20);
+      },
+      measured.envelope,
+      original.host,
+    );
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: page-mid-fling',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    assertMomentum(await pageFling(phone, measured, 'page-mid-fling', approachOf(phone), control), measured);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: page-long-fling',
+  async (phone) => {
+    await pageFling(phone, measuredOf(phone), 'page-long-fling', approachOf(phone), long);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: rail',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    await away(phone);
+    await rail(phone, measured);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: latest',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    await away(phone);
+    await latest(phone, measured.envelope);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: disclosures',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    await away(phone);
+    await disclosures(phone, measured.envelope);
+  },
+  runtimes,
+);
+
+ios(
+  'native feed: keyboard',
+  async (phone) => {
+    const measured = measuredOf(phone);
+    await open(phone);
+    await away(phone);
+    await keyboard(phone, measured.envelope);
+  },
+  runtimes,
 );
