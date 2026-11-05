@@ -14,7 +14,7 @@ export const CLAUDE_CODE_PROVIDER = 'claude-code';
 
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-5-5';
 
-export const ANTHROPIC_LIGHT_MODEL: ModelSelection = { model: 'claude-haiku-4-5', rung: null };
+export const ANTHROPIC_LIGHT_MODEL: ModelSelection = { model: 'claude-haiku-5-5', rung: 'low' };
 
 const ANTHROPIC_CONSOLE_CACHE_TTL_SECONDS = 300;
 
