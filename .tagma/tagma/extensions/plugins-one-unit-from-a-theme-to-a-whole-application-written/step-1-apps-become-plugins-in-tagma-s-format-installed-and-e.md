@@ -34,4 +34,6 @@ Step 1 of [[d2b5f488]]: apps become plugins in Tagma's format, installed and ena
 - Settings → Apps → Secrets goes; secrets stand as options on the plugin card.
 - `features/tagma-apps` keeps drawing views under plugin names.
 
+**At merge into main:** remove the `TagmaApp` exception from the global rule eeaf88ec; the global graph has no branch, so it changes when this code reaches main (931cfbf1 already changed in this branch).
+
 **Done when** a plugin directory holding `tagma-plugin.json` installs from its folder through `install_plugin` and is enabled in a project through `enable_plugin`. Its process then runs, its tools stand in an agent's catalog as `plugin__<id>__<tool>`, its view opens, and its secret is set on its card. None of the app operations, settings or directories remain.

@@ -8,9 +8,9 @@ edges:
     to: 01a12306-efba-7a0e-94d7-05ecc0602266
 sources:
   - kind: file
-    ref: apps/tagma/server/src/tagma-apps/contract/wire/settings.ts
+    ref: apps/tagma/server/src/plugin-host/contract/wire/settings.ts
   - kind: file
-    ref: apps/tagma/server/src/tagma-apps/installs.ts
+    ref: apps/tagma/server/src/plugin-host/installs.ts
 ---
 Installation is a user setting `apps.installed` (`{id, source, enabled}`), enabling is per-project `apps.enabled`; both are written only by app operations (`managed`). So an installation record survives its project being deleted, and enablings leave with their settings, with no table of their own needed for that.
 

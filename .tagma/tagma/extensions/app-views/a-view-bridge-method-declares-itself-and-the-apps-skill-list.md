@@ -5,7 +5,7 @@ ord: 8
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/methods.ts
+    ref: apps/tagma/app/src/lib/features/plugin-views/methods.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/skills/bridgeMethods.ts
   - kind: file

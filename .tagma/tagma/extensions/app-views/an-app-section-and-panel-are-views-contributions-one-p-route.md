@@ -5,9 +5,9 @@ ord: 2
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/panes.ts
+    ref: apps/tagma/app/src/lib/features/plugin-views/panes.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/SectionPage.svelte
+    ref: apps/tagma/app/src/lib/features/plugin-views/SectionPage.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/surface.ts
   - kind: file

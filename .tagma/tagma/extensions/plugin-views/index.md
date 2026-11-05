@@ -1,6 +1,6 @@
 ---
 id: 01a174f2-3d7f-7ca2-9e04-eb039cc7259f
-title: Apps
+title: Plugin views
 ord: 36
 tags: ["module"]
 fields:
@@ -10,7 +10,7 @@ fields:
         "at": "."
       }
     ],
-    "id": "app-tagma-apps",
+    "id": "app-plugin-views",
     "kind": "product"
   }
 edges:
@@ -48,6 +48,6 @@ edges:
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/tagma-apps
+    ref: apps/tagma/app/src/lib/features/plugin-views
 ---
-A Tagma app is an application running inside Tagma, and the module embeds it in the window: app panels and windows, their settings sections, launchers and actions. The app's own interface renders inside the view frame.
+A plugin may contribute views, and the module embeds them in the window: plugin sections, panes and windows, their launchers and actions. The plugin's own interface renders inside the view frame.

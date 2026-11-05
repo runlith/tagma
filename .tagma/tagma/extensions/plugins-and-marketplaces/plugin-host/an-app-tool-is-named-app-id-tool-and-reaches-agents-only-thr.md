@@ -10,7 +10,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/native-harness/capabilities/tagmaApps.ts
   - kind: file
-    ref: apps/tagma/server/src/tagma-apps/toolPoint.ts
+    ref: apps/tagma/server/src/plugin-host/toolPoint.ts
 ---
 An agent sees an app tool as `app__<id>__<tool>`, not `mcp__…`: it does not enter the project MCP palette and does not collide with an MCP server of the same name.
 

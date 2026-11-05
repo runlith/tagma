@@ -13,7 +13,7 @@ edges:
     to: 01a1227f-7522-78e3-a658-79b7a0a16218
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/tagma-apps
+    ref: apps/tagma/server/src/plugin-host
 ---
 On the spec's “Manifest”, “Process”, “Where it lies and what it stores”, “Tools and agents” (audience) sections.
 

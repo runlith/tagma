@@ -14,11 +14,11 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09415a61526
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/tagma-apps/windows
+    ref: apps/tagma/app/src/lib/features/plugin-views/windows
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/panes.ts
+    ref: apps/tagma/app/src/lib/features/plugin-views/panes.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/SectionPage.svelte
+    ref: apps/tagma/app/src/lib/features/plugin-views/SectionPage.svelte
   - kind: file
     ref: apps/tagma/app/src/routes/_desktop/view/[project]/[app]/[view]/+page.svelte
   - kind: file
