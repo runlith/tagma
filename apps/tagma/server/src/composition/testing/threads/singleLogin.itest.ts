@@ -28,32 +28,50 @@ const TRIAGE = {
   questions: { addressed: { type: 'noul' as const, instructions: 'Is action needed?' } },
 };
 
+const Content = Schema.Union([Schema.String, Schema.Array(Schema.Struct({ text: Schema.optional(Schema.String) }))]);
+const Messages = Schema.Array(Schema.Struct({ role: Schema.optional(Schema.String), content: Schema.optional(Content) }));
+
 const Frame = Schema.Struct({
   model: Schema.String,
   instructions: Schema.optional(Schema.String),
-  input: Schema.Array(
-    Schema.Struct({
-      role: Schema.optional(Schema.String),
-      content: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.Struct({ text: Schema.optional(Schema.String) }))])),
-    }),
-  ),
+  input: Schema.optional(Messages),
+  system: Schema.optional(Content),
+  messages: Schema.optional(Messages),
   tools: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.optional(Schema.String) }))),
 });
 
+const textOf = (content: typeof Content.Type | undefined): string[] =>
+  typeof content === 'string' ? [content] : (content ?? []).flatMap((part) => part.text ?? []);
+
+const events = (stream: readonly { readonly type: string; readonly [field: string]: unknown }[]): Response =>
+  new Response(stream.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), {
+    headers: { 'content-type': 'text/event-stream' },
+  });
+
 const reply = (sent: Sent): Response => {
   const request = Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(sent.text);
-  const input = request.input
-    .flatMap((message) =>
-      typeof message.content === 'string' ? [message.content] : (message.content ?? []).flatMap((part) => part.text ?? []),
-    )
-    .join('\n');
+  const anthropic = request.messages !== undefined;
+  const input = (request.input ?? request.messages ?? []).flatMap((message) => textOf(message.content)).join('\n');
   const object = request.tools?.some((tool) => tool.name === 'generate_object') === true;
   const sections = [...input.matchAll(/^@@ (\d+)\n([\s\S]*?)\n(?=@@ |\s*$)/gmu)];
-  const text = /name conversations/u.test(`${request.instructions ?? ''}\n${input}`)
+  const text = /name conversations/u.test(`${[request.instructions ?? '', ...textOf(request.system)].join('\n')}\n${input}`)
     ? 'TITLE: Wire title'
     : sections.length > 0
       ? sections.map(([, id, part]) => `@@ ${id}\n«ru» ${part!.toUpperCase()}`).join('\n')
       : 'Ready.';
+  if (anthropic)
+    return events([
+      { type: 'message_start', message: { id: 'msg_single', usage: { input_tokens: 100 } } },
+      object
+        ? { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'answer', name: 'generate_object' } }
+        : { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      object
+        ? { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify({ addressed: true }) } }
+        : { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: object ? 'tool_use' : 'end_turn' }, usage: { output_tokens: 20 } },
+      { type: 'message_stop' },
+    ]);
   const answer = object
     ? {
         type: 'response.output_item.done',
@@ -238,10 +256,26 @@ layer(Layer.effect(SingleLoginFixture, makeFixture).pipe(Layer.provideMerge(BunF
             },
             {
               provider: 'claude-code',
-              path: 'program',
-              bearer: null,
+              path: 'request',
+              bearer: 'Bearer lent-token',
               connect: claudeLogin(world, { restore: false }).pipe(
                 Effect.tap((account) => Effect.addFinalizer(() => directories.remove('claude-code', account).pipe(Effect.orDie))),
+                Effect.tap((account) =>
+                  Effect.gen(function* () {
+                    const lent = (yield* directories.of('claude-code')).find((row) => row.key === account)!.directory!;
+                    yield* files.writeFileString(
+                      join(lent, 'credential.json'),
+                      JSON.stringify({
+                        accessToken: 'lent-token',
+                        refreshToken: 'refresh',
+                        expiresAt: (yield* Clock.currentTimeMillis) + 3_600_000,
+                        scope: 'user:inference',
+                        account: { uuid: 'fixture-account', email: 'fixture@example.com' },
+                        organization: { uuid: 'fixture-org', name: 'Fixture' },
+                      }),
+                    );
+                  }),
+                ),
               ),
             },
             { provider: CLI, path: 'program', bearer: null, connect: keep(CLI) },
