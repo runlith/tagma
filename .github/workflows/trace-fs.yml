@@ -35,6 +35,7 @@ jobs:
           FILES: ${{ inputs.files }}
           ROUNDS: ${{ inputs.rounds }}
         run: |
+          bun ../../../packages/testbed/src/cli.ts bun test --no-isolate $FILES 2>&1 | tail -5 || true
           : > /tmp/fs-trace.log
           for round in $(seq 1 "$ROUNDS"); do
             echo "=== round $round"
