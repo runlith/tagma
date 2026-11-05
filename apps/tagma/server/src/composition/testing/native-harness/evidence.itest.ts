@@ -1383,4 +1383,63 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
       expect((listed.body as { threads: { id: string }[] }).threads.map((row) => row.id)).toEqual([active]);
     }),
   );
+
+  it.effect('entries of a branch read at the cost of its source: an inherited log is no slower to read than an own one', () =>
+    Effect.gen(function* () {
+      const { call, projectId } = yield* Evidence;
+      const tool = (callId: string, toolName: string, toolState: string, occurredAt: string) => ({
+        id: crypto.randomUUID(),
+        kind: 'tool',
+        payload: {
+          entry: {
+            type: 'tool',
+            id: `tool:${callId}`,
+            runId: 'run-1',
+            toolCallId: callId,
+            toolName,
+            toolState,
+            occurredAt,
+            toolInput: { at: callId },
+          },
+        },
+      });
+      const source = yield* thread(projectId);
+      yield* append(source, [
+        ...Array.from({ length: 1500 }, (_, index) => tool(`read-${index}`, 'read', 'output-available', '2026-11-05T09:00:00.000Z')),
+        tool('opened', 'open_page', 'input-available', '2026-11-05T11:00:00.000Z'),
+      ]);
+      const branchOf = (threadId: string) =>
+        Effect.map(call(`/api/op/branch_thread?project=${projectId}`, { method: 'POST', body: { threadId } }), (branched) => {
+          expect(branched.status).toBe(200);
+          return String((branched.body as { threadId: string }).threadId);
+        });
+      const settled = yield* branchOf(source);
+      yield* append(settled, [tool('opened', 'open_page', 'output-available', '2026-11-05T11:00:00.000Z')]);
+      const branch = yield* branchOf(settled);
+      yield* append(branch, [tool('acted', 'act_on_page', 'input-available', '2026-11-05T12:00:00.000Z')]);
+      const browsing = Effect.fnUntraced(function* (threadId: string) {
+        const started = performance.now();
+        const answered = yield* query(projectId, {
+          select: 'entries',
+          threads: [threadId],
+          where: [
+            { field: 'toolName', op: 'in', value: ['open_page', 'navigate_page', 'act_on_page'] },
+            { field: 'occurredAt', op: 'gte', value: '2026-11-05T10:00:00Z' },
+          ],
+          fields: ['threadId', 'occurredAt', 'toolName', 'entry.toolInput'],
+          limit: 80,
+        });
+        return { ms: performance.now() - started, rows: answered.answer.rows.map((row) => [row.toolName, row['entry.toolInput']]) };
+      });
+
+      const own = yield* browsing(source);
+      const inherited = yield* browsing(branch);
+      expect(own.rows).toEqual([['open_page', { at: 'opened' }]]);
+      expect(inherited.rows).toEqual([
+        ['open_page', { at: 'opened' }],
+        ['act_on_page', { at: 'acted' }],
+      ]);
+      expect(inherited.ms).toBeLessThan(own.ms * 4 + 250);
+    }),
+  );
 });

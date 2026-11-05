@@ -113,6 +113,8 @@ export const threadEventIdentity = (payload: AnySQLiteColumn | SQL): SQL => sql`
     else ${payloadField(payload, 'entry.id')}
   end`;
 
+export const THREAD_EVENT_ENTRY_INDEX = 'thread_event_entry_idx';
+
 export const threadEvent = sqliteTable(
   'thread_event',
   {
@@ -127,7 +129,7 @@ export const threadEvent = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.threadId, table.position] }),
     uniqueIndex('thread_event_id_unique').on(table.id),
-    index('thread_event_entry_idx')
+    index(THREAD_EVENT_ENTRY_INDEX)
       .on(table.threadId, threadEventIdentity(table.payload), table.position)
       .where(sql`${payloadField(table.payload, 'entry.id')} is not null`),
   ],

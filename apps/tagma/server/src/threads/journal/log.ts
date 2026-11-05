@@ -16,7 +16,7 @@ import { atUnitEnd } from '../../platform/store/life.js';
 import { bindQuery } from '../../platform/store/queries.js';
 import { thread, threadEntry } from '../store/kernel.js';
 import { recordFacts } from '../../thread-record/facts.js';
-import { journalProjectOf, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
+import { journalProjectOf, THREAD_EVENT_ENTRY_INDEX, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
 import { payloadField } from '../store/fields.js';
 import { foldedBody, foldedEntryId, restoredFact } from './foldedFacts.js';
 import { RolloutWriterFailed, RolloutWriting } from './rolloutWriter.js';
@@ -373,7 +373,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
     revisionsAsOf: (threadId: string, window: ThreadRecordWindow, tx?: Unit<'machine'>) => {
       const identity = threadEventIdentity(threadEvent.payload);
       const lastIn = (arm: EventArm) => sql`not exists (
-            select 1 from ${threadEvent} as later
+            select 1 from ${threadEvent} as later indexed by ${sql.identifier(THREAD_EVENT_ENTRY_INDEX)}
              where ${arm.on(sql`later.thread_id`, sql`later.position`)}
                and later.position > ${threadEvent.position}
                and later.position <= ${window.head}
