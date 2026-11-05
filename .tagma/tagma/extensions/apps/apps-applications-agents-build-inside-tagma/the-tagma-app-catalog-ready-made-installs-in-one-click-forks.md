@@ -15,6 +15,8 @@ edges:
 ---
 **Question.** Make a place in Tagma holding ready apps, where each app supports three one-action things: install it; fork it into your own and reshape it with one agent request; ask an agent to build a new one from a prompt. Then Tagma is not only the environment where apps are built but a marketplace and a collection of ready ones.
 
+In the terms of spec [[d2b5f488]] the catalog's unit is the plugin, shown in the Plugins screen's marketplaces.
+
 **Why.** A newcomer need not know what an app process or manifest is: they take a ready one. An experienced user starts from a fork, not an empty directory. Authors get a showcase.
 
 **What exists and what is missing.** An app is a directory with `tagma-app.json`, and editing its files restarts the process live. So a fork is mechanically a directory copy under a new id into the project's `.tagma-apps/` or personal apps plus an agent request. Install is `install_app` and `enable_app`. Three parts are missing:

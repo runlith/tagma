@@ -5,7 +5,7 @@ ord: 14
 tags: ["feature"]
 fields:
   {
-    "state": "live"
+    "state": "partial"
   }
 edges:
   - kind: relates
@@ -38,4 +38,4 @@ sources:
 
 **Behaviour.** The step back closes commit-queue admission and makes sure it is empty, then records which release it leaves for which; it never moves the selected installation itself. The restart that applies it starts the leaving build once more, before its server loads: under the data directory lock it copies aside each store it is about to change and returns every SQLite store — machine, activity, evidence, module stores, graph mirrors and idle execution hosts — onto the previous installation's own migration chain, so the older build finds exactly the schema and ledger it wrote, with every row it can hold. Only then does the previous installation become current and take over, as an update attempt of its own. A failure on either side puts the copies back, the leaving build serves again, and the chip says why. A running execution host returns its store itself as it yields to the older host. A restart onto a selected installation that cannot open the data becomes this same step back through the running build. The window follows the choice, and reopening the new copy asks whether to update again.
 
-**Limits.** This is a return to the neighbouring saved installation, not a choice of any release from history. What only the leaving build could hold — its own tables, columns and values — stays behind, and the log counts the rows of each table left out. A value a newer migration rewrote comes back in the older shape only where that migration carries a script reversing it. A first installation has nothing to return to.
+**Limits.** This is a return to the neighbouring saved installation, not a choice of any release from history. What only the leaving build could hold — its own tables, columns and values — stays behind, and the log counts the rows of each table left out. A value a newer migration rewrote comes back in the older shape only where that migration carries a script reversing it. A thread journal the newer build already reshaped stays in its newer form, and the older build cannot open that thread until the newer one stands again. A first installation has nothing to return to.

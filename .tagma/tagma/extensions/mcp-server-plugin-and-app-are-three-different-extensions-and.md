@@ -10,3 +10,5 @@ Tagma names three ways to extend what agents and people can do. Each word means 
 - **App** is a product inside Tagma: its own process, interface, data and agents, with access to Tagma's graph, threads and agents. An app may use plugins, including those that reach a service. Its declaration is Tagma's own and follows no outside standard. The interface calls it an app, the outside world a Tagma App. In code it is `TagmaApp`: a bare `app` already names the Tagma client, and "MCP App" is the protocol's tool window.
 
 These are separate words because each answers a different question. An MCP server is what an agent calls, a plugin says how the agent works and which services it reaches, and an app is what a person uses inside Tagma. Fitting apps into the plugin package format would tie them to a standard made for agent configuration. Calling them plugins would give the word a meaning different from every neighbouring tool.
+
+Spec [[d2b5f488]] replaces the split between plugin and app: one plugin in Tagma's own format, with foreign formats translated into it, and the MCP server staying the wire. Until it is built, both stand in the code as described above.

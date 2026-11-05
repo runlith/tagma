@@ -5,7 +5,7 @@ ord: 1
 tags: ["idea"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
