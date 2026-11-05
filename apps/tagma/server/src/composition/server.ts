@@ -62,6 +62,7 @@ import {
   type ProcessBirth,
   ServerProcess,
   Succession,
+  type SuccessionPreparation,
   SuccessionRefused,
   type SuccessorFailed,
   SuccessorUnfit,
@@ -90,7 +91,8 @@ import { databasePath, databasePathIn, installationRoot, installationRootIn } fr
 import { expectsRelease, replaced, serving, standBy, type StoodBy } from '../installation/process/standBy.js';
 import { successionLayer } from '../installation/process/succession.js';
 import { attemptOf, startFailure } from './attempt.js';
-import { stepBackSettledAt } from './returning.js';
+import { journalsServed, stepBackSettledAt } from './returning.js';
+import { ThreadRollouts } from '../threads/contract/service/rollouts.js';
 import { successorPlan } from './successorPlan.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { migrationsFolder, refusalDetail } from '../installation/closure/read.js';
@@ -373,9 +375,9 @@ export const serve = async (build: Build): Promise<void> => {
   );
   const born: ProcessBirth = { startedAt, replacedPid: predecessor ?? null };
   const restartExit = await Effect.runPromise(Deferred.make<void>());
-  const succession: Succession['Service'] = Context.get(
-    await Effect.runPromise(
-      Scope.provide(
+  const successionWith = (preparation?: SuccessionPreparation, steps?: Effect.Effect<SuccessionSteps['Service']>) =>
+    Scope.provide(
+      Effect.map(
         Layer.build(
           successionLayer(
             installation,
@@ -388,21 +390,26 @@ export const serve = async (build: Build): Promise<void> => {
             },
             launch,
             restartRecord,
-            successorPlan(
-              (work) => tagma.runtime.runPromise(work),
-              () => Context.get(tagma.bindings, StoreSnapshots),
-              storePath,
-            ),
-            Effect.sync(() => Context.get(tagma.executions, SuccessionSteps)),
+            preparation,
+            steps,
             undefined,
             userEnvironment.handoff,
             processChain,
           ),
         ),
-        successionScope,
+        (built) => Context.get(built, Succession),
       ),
+      successionScope,
+    );
+  const succession = await Effect.runPromise(
+    successionWith(
+      successorPlan(
+        (work) => tagma.runtime.runPromise(work),
+        () => Context.get(tagma.bindings, StoreSnapshots),
+        storePath,
+      ),
+      Effect.sync(() => Context.get(tagma.executions, SuccessionSteps)),
     ),
-    Succession,
   );
   const memoryCeiling: ProcessVitals.MemoryCeiling = {
     bytes: totalmem() * MEMORY_CEILING_SHARE,
@@ -499,6 +506,53 @@ export const serve = async (build: Build): Promise<void> => {
     ),
   );
   attempt.trial?.closing(Effect.asVoid(closed));
+  const left = Effect.fnUntraced(
+    function* (leaving: Succession['Service'], handed: boolean, exit: Exit.Exit<unknown, unknown>) {
+      const { runOwnersDisposed, failures } = yield* closed;
+      if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) yield* ended(exit.cause);
+      const unclosed =
+        failures.length > 0
+          ? `pid ${process.pid} failed to close ${failures.length} writer owner(s): ${failures.map(String).join('; ')}`
+          : runOwnersDisposed
+            ? null
+            : `pid ${process.pid} did not finish closing its thread owners`;
+      if (unclosed === null) restartRecord.point('owners-closed');
+      if (unclosed === null || (yield* leaving.leaving)) {
+        releaseActive();
+        yield* dataLock.release;
+        yield* leaving.release(unclosed).pipe(Effect.orDie);
+        yield* leaving.settle.pipe(Effect.orDie);
+        if (handed && notified && launch === undefined) yield* serving(true);
+      }
+      if (failures.length > 0) {
+        return yield* Effect.sync(() => {
+          throw new AggregateError(failures, `Tagma failed to dispose ${failures.length} writer owner(s).`);
+        });
+      }
+    },
+    (effect, _leaving, _handed, exit) => Effect.ensuring(effect, Scope.close(successionScope, exit)),
+  );
+  const handoff =
+    installation === undefined
+      ? null
+      : await tagma.runtime.runPromise(
+          journalsServed({
+            installRoot: installations,
+            release: installation.root,
+            handoff: successionWith(),
+            modules: parts.modules,
+            rollouts: Context.get(tagma.owners, ThreadRollouts),
+            launch,
+            notified,
+          }),
+        );
+  if (handoff !== null)
+    return BunRuntime.runMain(
+      Deferred.await(restartExit).pipe(
+        Effect.ensuring(Scope.close(localScope, Exit.void)),
+        Effect.onExit((exit) => left(handoff, true, exit)),
+      ),
+    );
   await tagma.runtime.runPromise(bootServer().pipe(Effect.provide(observations), Effect.tapCause(ended)));
 
   const pool = tagma.pool;
@@ -746,30 +800,7 @@ export const serve = async (build: Build): Promise<void> => {
 
   BunRuntime.runMain(
     Effect.raceFirst(Layer.launch(Layer.mergeAll(served, announced, logBound, remote)), Deferred.await(restartExit)).pipe(
-      Effect.onExit((exit) =>
-        Effect.gen(function* () {
-          const { runOwnersDisposed, failures } = yield* closed;
-          if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) yield* ended(exit.cause);
-          const unclosed =
-            failures.length > 0
-              ? `pid ${process.pid} failed to close ${failures.length} writer owner(s): ${failures.map(String).join('; ')}`
-              : runOwnersDisposed
-                ? null
-                : `pid ${process.pid} did not finish closing its thread owners`;
-          if (unclosed === null) restartRecord.point('owners-closed');
-          if (unclosed === null || (yield* succession.leaving)) {
-            releaseActive();
-            yield* dataLock.release;
-            yield* succession.release(unclosed).pipe(Effect.orDie);
-            yield* succession.settle.pipe(Effect.orDie);
-          }
-          if (failures.length > 0) {
-            return yield* Effect.sync(() => {
-              throw new AggregateError(failures, `Tagma failed to dispose ${failures.length} writer owner(s).`);
-            });
-          }
-        }).pipe(Effect.ensuring(Scope.close(successionScope, exit))),
-      ),
+      Effect.onExit((exit) => left(succession, false, exit)),
     ),
   );
 };

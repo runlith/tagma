@@ -294,7 +294,6 @@ export const stagedRollout = Effect.fnUntraced(function* (
   sources: FormSource,
   aside: boolean,
 ): Effect.fn.Return<RolloutForm | RolloutStaged, RolloutUnreadable | StoreFailure> {
-  const suffix = aside ? '.staging' : '.forming';
   const done = yield* rolloutFormOf(db, threadId);
   if (done === undefined && kinds.last === null) return FORMED;
   const state = yield* rolloutStateOf(path);
@@ -326,25 +325,48 @@ export const stagedRollout = Effect.fnUntraced(function* (
   if (state === null) return FORMED;
   const hasRow = (yield* db.select({ id: threadRecord.id }).from(threadRecord).where(eq(threadRecord.id, threadId)).get()) !== undefined;
   const stepping = rested || !hasRow || mark !== null;
-  const pending = stepping ? kinds.after(mark) : [];
-  const step = stepping ? kinds.last : null;
+  return yield* stagedPass(db, write, threadId, path, kinds, stage, sources, aside, state, {
+    pending: stepping ? kinds.after(mark) : [],
+    step: stepping ? kinds.last : null,
+    back: false,
+  });
+});
 
+type Pass = { readonly pending: readonly ThreadFormStep[]; readonly step: string | null; readonly back: boolean };
+
+const stagedPass = Effect.fnUntraced(function* (
+  db: StoreDb<'machine'>,
+  write: RolloutFormWrite,
+  threadId: string,
+  path: string,
+  kinds: ThreadEntryReader,
+  stage: StageRollout,
+  sources: FormSource,
+  aside: boolean,
+  state: NonNullable<Effect.Success<ReturnType<typeof rolloutStateOf>>>,
+  { pending, step, back }: Pass,
+): Effect.fn.Return<RolloutForm | RolloutStaged, RolloutUnreadable | StoreFailure> {
+  const suffix = aside ? '.staging' : '.forming';
   const basis = yield* basisOf(db, threadId, path);
   const wanted = new Set([basis.cursor, basis.refused].filter((bytes): bytes is number => bytes !== undefined && bytes > 0));
   const clear = Effect.tryPromise({ try: () => cleared(path, suffix), catch: io(path) });
   const unmarked = (unit: WriteUnit<'machine'>) => unit.run(db.delete(threadRolloutForm).where(eq(threadRolloutForm.threadId, threadId)));
   const refuse = (failure: RolloutUnformable) =>
     Effect.as(
-      write(
-        FORMING,
-        Effect.fnUntraced(function* (unit) {
-          yield* unmarked(unit);
-          if ((yield* heldThread(db, unit, threadId)) === undefined) return;
-          yield* unit.run(
-            db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: failure.reason }),
-          );
-        }),
-      ),
+      back
+        ? Effect.void
+        : write(
+            FORMING,
+            Effect.fnUntraced(function* (unit) {
+              yield* unmarked(unit);
+              if ((yield* heldThread(db, unit, threadId)) === undefined) return;
+              yield* unit.run(
+                db
+                  .insert(threadRolloutForm)
+                  .values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: failure.reason }),
+              );
+            }),
+          ),
       { kind: 'refused', refusal: failure } as const,
     );
   const unmoved = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A | typeof MOVED, E | RolloutUnreadable | StoreFailure> =>
@@ -353,7 +375,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
     );
 
   const attempt = yield* Effect.result(
-    stage(rolloutFiles(path), { form: state.form, wanted: [...wanted], steps: pending.map((one) => one.name), suffix }).pipe(
+    stage(rolloutFiles(path), { form: state.form, wanted: [...wanted], steps: pending.map((one) => one.name), back, suffix }).pipe(
       Effect.provideService(ThreadEntryKinds, kinds),
       Effect.mapError((failure) => (failure._tag === 'WorkerUnavailable' ? io(path)(failure) : failure)),
       Effect.flatMap((file) =>
@@ -440,5 +462,62 @@ export const formRollout = Effect.fnUntraced(function* (
     if (staging.kind !== 'staged') return staging;
     const outcome = yield* staging.commit(false);
     if (outcome.kind !== 'moved') return outcome;
+  }
+});
+
+const markedOnto = Effect.fnUntraced(function* (
+  db: StoreDb<'machine'>,
+  write: RolloutFormWrite,
+  threadId: string,
+  path: string | undefined,
+  kinds: ThreadEntryReader,
+  steps: readonly ThreadFormStep[],
+  onto: string | null,
+) {
+  const marked = yield* Effect.result(
+    write(
+      FORMING,
+      Effect.fnUntraced(function* (unit) {
+        if ((yield* heldThread(db, unit, threadId)) === undefined) return;
+        yield* unit.run(db.delete(threadRolloutForm).where(eq(threadRolloutForm.threadId, threadId)));
+        yield* unit.run(db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), step: onto }));
+        yield* formStoredIn(db, unit, threadId, kinds, steps);
+      }),
+    ),
+  );
+  if (Result.isSuccess(marked)) return FORMED;
+  if (marked.failure._tag !== 'ThreadFormRefused') return yield* marked.failure;
+  return { kind: 'refused', refusal: new RolloutUnformable({ threadId, path: path ?? threadId, reason: marked.failure.message }) } as const;
+});
+
+//! Runs inside the thread's journal lane, as formRollout does; `steps` are the reversed steps, newest first.
+export const returnedRollout = Effect.fnUntraced(function* (
+  db: StoreDb<'machine'>,
+  write: RolloutFormWrite,
+  threadId: string,
+  path: string | undefined,
+  kinds: ThreadEntryReader,
+  stage: StageRollout,
+  sources: FormSource,
+  steps: readonly ThreadFormStep[],
+  onto: string | null,
+): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
+  for (;;) {
+    if (path === undefined) return yield* markedOnto(db, write, threadId, path, kinds, steps, onto);
+    const done = yield* rolloutFormOf(db, threadId);
+    if (done?.publishing != null && (yield* publishedHere(path, done.publishing)))
+      yield* settledWith(db, write, threadId, path, done.publishing, sources);
+    const state = yield* rolloutStateOf(path);
+    if (state === null) return yield* markedOnto(db, write, threadId, path, kinds, steps, onto);
+    const staging = yield* stagedPass(db, write, threadId, path, kinds, stage, sources, false, state, {
+      pending: steps,
+      step: onto,
+      back: true,
+    });
+    if (staging.kind !== 'staged') return staging;
+    const outcome = yield* staging.commit(false);
+    if (outcome.kind === 'moved') continue;
+    if (outcome.kind === 'formed') yield* Effect.tryPromise({ try: () => rm(transcriptOf(path), { force: true }), catch: io(path) });
+    return outcome;
   }
 });

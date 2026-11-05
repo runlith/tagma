@@ -1,17 +1,15 @@
-import { join } from 'node:path';
 import { Cause, Deferred, Effect, Exit, Result } from 'effect';
-import { ACTIVITY_DATABASE } from '../activity/contract/service/place.js';
 import { readAttempt } from '../installation/closure/attempt.js';
 import { holdingProcess } from '../installation/closure/leases.js';
 import type { InstallHeld } from '../installation/closure/moves.js';
 import { databasePathIn, installationRootIn } from '../installation/paths.js';
 import { arrive, enterTrial, rollBack, type Trial, type TrialPlace, wordsOf } from '../installation/process/trial.js';
 import { ATTEMPT_STARTS } from '../installation/contract/wire/attempt.js';
-import { PERFORMANCE_DATABASE } from '../performance/contract/service/place.js';
 import { ownStoreDirectory } from '../platform/contract/service/ownStore.js';
 import { storeDirectory } from '../platform/contract/service/store.js';
 import { lockDataDirectory } from '../platform/lock/dataDirectory.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
+import { copiedStores } from './dataStores.js';
 
 export type AttemptPlace = {
   readonly installRoot: string;
@@ -22,7 +20,7 @@ export type AttemptPlace = {
 const trialPlace = ({ installRoot, release, storePath }: AttemptPlace): TrialPlace => ({
   installRoot,
   release,
-  files: [storePath, join(storeDirectory(storePath), ACTIVITY_DATABASE), join(storeDirectory(storePath), PERFORMANCE_DATABASE)],
+  files: copiedStores(storePath).map((store) => store.path),
   stores: ownStoreDirectory(storePath),
 });
 

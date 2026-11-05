@@ -1,18 +1,18 @@
 import { Effect } from 'effect';
 import { Command } from 'effect/cli';
 import { noting } from '../../platform/cli/verb.js';
-import type { Channel } from '../../installation/contract/wire/channel.js';
+import type { Build } from '../build.js';
 
-export const serveCommand = (channel: Channel, server: () => Promise<unknown>) =>
+export const serveCommand = (build: Build, server: () => Promise<unknown>) =>
   Command.make('serve', {}, () =>
     Effect.promise(() => Promise.all([import('../attempt.js'), import('../returning.js')])).pipe(
       Effect.flatMap(([{ arrival, beforeDoor }, { returnedBeforeServing }]) =>
-        Effect.andThen(returnedBeforeServing(channel), Effect.andThen(arrival(channel), beforeDoor(Effect.promise(server)))),
+        Effect.andThen(returnedBeforeServing(build), Effect.andThen(arrival(build.channel), beforeDoor(Effect.promise(server)))),
       ),
       Effect.asVoid,
     ),
   ).pipe(
-    Command.withDescription(`start the ${channel.name} server on port ${channel.port} (TAGMA_PORT overrides)`),
+    Command.withDescription(`start the ${build.channel.name} server on port ${build.channel.port} (TAGMA_PORT overrides)`),
     noting(`ONE process owns a data directory — its database, its thread rollouts and the event
 positions it mints from memory — so a second server over the one another
 process already holds refuses at exit 1, naming the pid that holds it.

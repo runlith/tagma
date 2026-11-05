@@ -6,7 +6,7 @@ import { Transform, type Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
 import { Data } from 'effect';
-import { ThreadFormRefused, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
+import { reversed, ThreadFormRefused, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import type { ReadRollout } from '../contract/service/rolloutReads.js';
 import type { RolloutFiles } from '../contract/service/rested.js';
 import { rolloutStream } from './rolloutFile.js';
@@ -16,6 +16,7 @@ export type RolloutStage = {
   readonly form: 'plain' | 'compressed';
   readonly wanted: readonly number[];
   readonly steps: readonly string[];
+  readonly back: boolean;
   readonly suffix: string;
 };
 
@@ -62,12 +63,12 @@ const recordForm = (kinds: ThreadEntryReader, steps: readonly ThreadFormStep[]):
   },
 });
 
-const named = (kinds: ThreadEntryReader, names: readonly string[]): readonly ThreadFormStep[] => {
+const named = (kinds: ThreadEntryReader, names: readonly string[], back: boolean): readonly ThreadFormStep[] => {
   const held = new Map(kinds.after(null).map((step) => [step.name, step]));
   return names.map((name) => {
     const step = held.get(name);
     if (step === undefined) throw new Error(`the entry reader carries no form step ${name}`);
-    return step;
+    return back ? reversed(step) : step;
   });
 };
 
@@ -206,7 +207,7 @@ export async function stageRolloutFile(
   kinds: ThreadEntryReader,
   read: ReadRollout,
 ): Promise<StagedFile> {
-  const lines = recordForm(kinds, named(kinds, stage.steps));
+  const lines = recordForm(kinds, named(kinds, stage.steps, stage.back));
   try {
     const { formed, staged: at, published } = await staged(rollout, stage.form, new Set(stage.wanted), lines, read, stage.suffix);
     return { kind: 'staged', changed: formed.changed, moved: [...formed.moved], sha256: formed.sha256, staged: at, published };

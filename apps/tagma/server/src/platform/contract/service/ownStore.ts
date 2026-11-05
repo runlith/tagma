@@ -1,12 +1,16 @@
 import { join } from 'node:path';
 import type { Context } from 'effect';
+import type { ChainFill } from '@runlith/sqlite-process/chainReturn';
 import { IN_MEMORY, type Store, storeDirectory } from './store.js';
+
+export type IndexFill = { readonly table: string; readonly fill: ChainFill };
 
 export type OwnStore = {
   readonly id: string;
   readonly key: Context.Key<any, Store<any>>;
   readonly migrations: string;
   readonly adopts?: readonly string[];
+  readonly indexFills?: readonly IndexFill[];
 };
 
 export const ownStoreDirectory = (storePath: string): string => join(storeDirectory(storePath), 'stores');

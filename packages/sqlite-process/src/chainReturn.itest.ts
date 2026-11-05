@@ -234,9 +234,68 @@ test('a child the leaving build kept without its foreign key comes back without 
   expect(read(path, (db) => db.query('select id from child').all())).toEqual([{ id: 1 }]);
 });
 
+test('a table an unknown migration left and the leaving chain creates again goes, so going forward never meets it standing', () => {
+  const elsewhere = step('1500_elsewhere', 'CREATE TABLE later (id integer PRIMARY KEY)', `ALTER TABLE thread ADD \`seen\` text`);
+  const leaving = step('2000_later', 'CREATE TABLE later (id integer PRIMARY KEY)');
+  const path = store([BASE, elsewhere], (db) => void db.run(`INSERT INTO thread (id, title) VALUES ('a', 'first')`));
+  const answer = returnToChain(path, { steps: [BASE] }, { steps: [BASE, leaving], folder: null });
+  expect(answer.returned).toBe(true);
+  expect(read(path, shapeOf)).toEqual(fresh([BASE]));
+  forward(path, leaving);
+  expect(read(path, shapeOf)).toEqual(fresh([BASE, leaving]));
+  expect(read(path, (db) => db.query('select id, title from thread').all())).toEqual([{ id: 'a', title: 'first' }]);
+});
+
+test('a full-text index the return recreates comes back holding its rows: its own content copied, a contentless one filled by its owner, and one with no fill is named', () => {
+  const base = step(
+    '1000_base',
+    'CREATE TABLE note (id integer PRIMARY KEY, body text NOT NULL)',
+    'CREATE VIRTUAL TABLE note_words USING fts5(body)',
+    `CREATE VIRTUAL TABLE note_find USING fts5(body, content='', contentless_delete=1)`,
+    `CREATE VIRTUAL TABLE note_lost USING fts5(body, content='', contentless_delete=1)`,
+  );
+  const leaving = step(
+    '2000_trigram',
+    'DROP TABLE note_words',
+    `CREATE VIRTUAL TABLE note_words USING fts5(body, tokenize='trigram')`,
+    'DROP TABLE note_find',
+    `CREATE VIRTUAL TABLE note_find USING fts5(body, content='', contentless_delete=1, tokenize='trigram')`,
+    'DROP TABLE note_lost',
+    `CREATE VIRTUAL TABLE note_lost USING fts5(body, content='', contentless_delete=1, tokenize='trigram')`,
+  );
+  const path = store([base, leaving], (db) => {
+    db.run(`INSERT INTO note (id, body) VALUES (1, 'alpha words'), (2, 'beta words')`);
+    for (const table of ['note_words', 'note_find', 'note_lost'])
+      db.run(`INSERT INTO ${table} (rowid, body) VALUES (1, 'alpha words'), (2, 'beta words')`);
+  });
+  const answer = returnToChain(
+    path,
+    { steps: [base] },
+    { steps: [base, leaving], folder: null },
+    new Map([['note_find', (db: Database) => void db.run('INSERT INTO note_find (rowid, body) SELECT id, body FROM note')]]),
+  );
+  expect(answer.unfilled).toEqual([{ table: 'note_lost', reason: 'no fill is declared for it' }]);
+  expect(read(path, shapeOf)).toEqual(fresh([base]));
+  const found = (table: string) =>
+    read(path, (db) =>
+      db
+        .query<{ rowid: number }, []>(`select rowid from ${table} where ${table} match 'alpha'`)
+        .all()
+        .map((row) => row.rowid),
+    );
+  expect(found('note_words')).toEqual([1]);
+  expect(found('note_find')).toEqual([1]);
+  forward(path, leaving);
+  expect(read(path, shapeOf)).toEqual(fresh([base, leaving]));
+});
+
 test('a store whose ledger the target already holds is left untouched', () => {
   const later = step('2000_later', 'CREATE TABLE later (id integer PRIMARY KEY)');
   const path = store([BASE], () => undefined);
-  expect(returnToChain(path, { steps: [BASE, later] }, { steps: [BASE, later], folder: null })).toEqual({ returned: false, lost: [] });
+  expect(returnToChain(path, { steps: [BASE, later] }, { steps: [BASE, later], folder: null })).toEqual({
+    returned: false,
+    lost: [],
+    unfilled: [],
+  });
   expect(ledger(path)).toEqual([BASE.name!]);
 });

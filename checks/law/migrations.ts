@@ -5,7 +5,7 @@ import { Database } from 'bun:sqlite';
 import type { Finding } from '@runlith/tagma/rules';
 import { Option, Schema } from 'effect';
 import { migrationIssues, unreturnedIssues } from '../../apps/tagma/server/src/platform/store/migrationLaw';
-import { BACK_SCRIPT } from '../../packages/sqlite-process/src/chainReturn';
+import { BACK_SCRIPT } from '@runlith/sqlite-process/chainReturn';
 import type { Declaration } from './declarations';
 import { blobTexts, changedBetween, type Entry, entriesAt, git, mentioning, present } from './git';
 

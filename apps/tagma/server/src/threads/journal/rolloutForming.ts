@@ -6,12 +6,13 @@ import { MachineUnits, type Unit } from '../../platform/contract/service/units.j
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ReentrantCall } from '@runlith/held/failures';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
-import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { ThreadEntryKinds, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import { threadPublishedSource, threadRolloutForm } from '../store/journal.js';
 import {
   formRollout,
   type FormSource,
   olderRollout,
+  returnedRollout,
   rolloutFormOf,
   RolloutUnformable,
   settledRollout,
@@ -106,6 +107,8 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
 
   return {
     formedHere,
+    returnedHere: (threadId: string, path: string | undefined, steps: readonly ThreadFormStep[], onto: string | null) =>
+      returnedRollout(db, write, threadId, path, kinds, stage, sources, steps, onto),
     reformedHere: (threadId: string, path: string): Effect.Effect<void, RolloutFormFailure> =>
       units
         .write(UNREFUSING, (unit) =>

@@ -5,6 +5,14 @@ import type { HarnessFailure } from './failure.js';
 import type { ThreadGate } from '../../list/store.js';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 
+export type ReturnPlan = { readonly carried: ReadonlySet<string>; readonly since: Date };
+
+export type JournalsReturned = {
+  readonly threads: number;
+  readonly kept: readonly string[];
+  readonly unreturned: readonly { readonly threadId: string; readonly reason: string }[];
+};
+
 export class ThreadRollouts extends Context.Service<
   ThreadRollouts,
   {
@@ -31,5 +39,6 @@ export class ThreadRollouts extends Context.Service<
     repair(threadId: string, projectId: number): Effect.Effect<RolloutRepair, HarnessFailure>;
     report(threadId: string, projectId: number, records?: number): Effect.Effect<ThreadRolloutDisagreement, HarnessFailure>;
     rewritten(follower: (threadId: string) => Effect.Effect<void>): () => void;
+    returnOnto(plan: ReturnPlan): Effect.Effect<JournalsReturned, HarnessFailure>;
   }
 >()('tagma/threads/ThreadRollouts') {}

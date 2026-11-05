@@ -1,92 +1,64 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Data, Deferred, Effect, Exit, Layer, Result } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
-import { ACTIVITY_DATABASE } from '../activity/contract/service/place.js';
 import { idleStates } from '../executions/host/idle.js';
-import { mirrorsHome } from '../graph/storage/layout.js';
 import { holdingProcess } from '../installation/closure/leases.js';
+import type { PendingUnreadable } from '../installation/closure/pending.js';
 import { releaseAt } from '../installation/closure/manifests.js';
-import { Succession } from '../installation/contract/service/succession.js';
-import type { Channel } from '../installation/contract/wire/channel.js';
+import { Succession, type SuccessorLaunch } from '../installation/contract/service/succession.js';
 import { HOST_REPLACE, HOST_STATE } from '../installation/contract/wire/launch.js';
 import { SERVE_LOG, serveLogPath } from '../installation/contract/wire/layout.js';
-import {
-  ACTIVITY_MIGRATIONS,
-  EVIDENCE_MIGRATIONS,
-  EXECUTIONS,
-  MIGRATIONS,
-  STORE_MIGRATIONS,
-} from '../installation/contract/wire/manifest.js';
 import { RESTART_ID, RESTART_RECORD } from '../installation/contract/wire/restart.js';
 import { databasePathIn, installationRootIn } from '../installation/paths.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { makeProcessRestart } from '../installation/process/record.js';
 import {
+  installedSince,
+  JOURNAL_STARTS,
+  journalsDeferred,
+  journalsMarked,
   type ReturnPlace,
   stepBackAsked,
   stepBackCarried,
+  stepBackDecided,
   stepBackHanded,
   stepBackPassed,
   stepBackSettled,
   stepBackUnlisted,
-  type StoreFile,
+  stepsCarried,
   storeUnfit,
 } from '../installation/process/returning.js';
+import type { StepBack } from '../installation/contract/wire/stepBack.js';
 import { expectsRelease, replaced, serving, standBy, type StoodBy } from '../installation/process/standBy.js';
 import { successionLayer } from '../installation/process/succession.js';
-import { PERFORMANCE_DATABASE } from '../performance/contract/service/place.js';
-import { ownStoreDirectory } from '../platform/contract/service/ownStore.js';
+import type { Manifest } from '../platform/contract/service/manifest.js';
 import { storeDirectory } from '../platform/contract/service/store.js';
 import { type DataDirectoryLock, lockDataDirectory } from '../platform/lock/dataDirectory.js';
+import type { ThreadRollouts } from '../threads/contract/service/rollouts.js';
+import type { Build } from './build.js';
+import { dataStores, fillsOf, type StoreFills } from './dataStores.js';
 import { claimHoldersLayer } from './hostClaims.js';
 
-const DATABASE = '.sqlite';
-
-const databasesUnder = (directory: string): readonly string[] =>
-  !existsSync(directory)
-    ? []
-    : readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-        const at = join(directory, entry.name);
-        return entry.isDirectory() ? databasesUnder(at) : entry.name.endsWith(DATABASE) ? [at] : [];
-      });
-
-const ownStores = (storePath: string): readonly StoreFile[] => {
-  const directory = ownStoreDirectory(storePath);
-  return !existsSync(directory)
-    ? []
-    : readdirSync(directory)
-        .filter((name) => name.endsWith(DATABASE) && statSync(join(directory, name)).isFile())
-        .map((name) => ({ path: join(directory, name), chain: `${STORE_MIGRATIONS}/${name.slice(0, -DATABASE.length)}` }));
-};
-
-const returnedFiles = (storePath: string, hosts: readonly string[]): readonly StoreFile[] => {
-  const data = storeDirectory(storePath);
-  return [
-    { path: storePath, chain: MIGRATIONS },
-    { path: join(data, ACTIVITY_DATABASE), chain: ACTIVITY_MIGRATIONS },
-    { path: join(data, PERFORMANCE_DATABASE), chain: EVIDENCE_MIGRATIONS },
-    ...ownStores(storePath),
-    ...databasesUnder(mirrorsHome(data)).map((path) => ({ path, chain: MIGRATIONS })),
-    ...hosts.map((state) => ({ path: join(state, 'executions.sqlite'), chain: `${EXECUTIONS}/${MIGRATIONS}` })),
-  ];
-};
-
-const returnPlace = (installRoot: string, release: string, storePath: string): Effect.Effect<ReturnPlace, PlatformError> =>
+const returnPlace = (
+  installRoot: string,
+  release: string,
+  storePath: string,
+  fills?: StoreFills,
+): Effect.Effect<ReturnPlace, PlatformError> =>
   Effect.map(idleStates(storePath).pipe(Effect.provide(Layer.merge(BunFileSystem.layer, claimHoldersLayer))), (hosts) => ({
     installRoot,
     own: basename(release),
     ownRoot: release,
-    files: () => returnedFiles(storePath, hosts.idle),
-    kept: () => returnedFiles(storePath, hosts.every),
+    files: () => dataStores(storePath, hosts.idle, fills),
+    kept: () => dataStores(storePath, hosts.every),
   }));
 
 class StoresUnread extends Data.TaggedError('StoresUnread')<{ readonly detail: string }> {}
 
 export const storesUnfitFor = (storePath: string, successorRoot: string): Effect.Effect<string | null, StoresUnread> =>
   Effect.try({
-    try: () => storeUnfit(returnedFiles(storePath, []), successorRoot),
+    try: () => storeUnfit(dataStores(storePath, []), successorRoot),
     catch: (cause) => new StoresUnread({ detail: cause instanceof Error ? cause.message : String(cause) }),
   });
 
@@ -113,9 +85,9 @@ export const stepBackSettledAt = (installRoot: string, release: string, storePat
     ),
   );
 
-export const returnedBeforeServing = Effect.fn('composition.returning')(function* (channel: Channel) {
-  const store = databasePathIn(channel, process.env);
-  const installRoot = installationRootIn(channel, process.env);
+export const returnedBeforeServing = Effect.fn('composition.returning')(function* (build: Build) {
+  const store = databasePathIn(build.channel, process.env);
+  const installRoot = installationRootIn(build.channel, process.env);
   if (Result.isFailure(store) || Result.isFailure(installRoot)) return;
   const release = holdingProcess(process.execPath);
   if (release === null) return;
@@ -125,7 +97,22 @@ export const returnedBeforeServing = Effect.fn('composition.returning')(function
   const data = storeDirectory(storePath);
   const manifest = releaseAt(installRoot.success, basename(release));
   if (manifest == null) return;
-  const listed = yield* Effect.result(returnPlace(installRoot.success, release, storePath));
+  if (asked.journals?.returned !== true) {
+    const starts = asked.journals?.starts ?? 0;
+    if (starts < JOURNAL_STARTS) {
+      const deferred = yield* Effect.result(journalsDeferred(installRoot.success, asked));
+      if (Result.isFailure(deferred)) {
+        console.error(`[tagma] this start's server returns the threads without counting the start: ${String(deferred.failure)}`);
+        return;
+      }
+      if (deferred.success) return;
+    } else
+      console.error(
+        `[tagma] the threads ${basename(release)} wrote stay in its form: its server started ${starts} times without returning them to ${asked.to}`,
+      );
+  }
+  const parts = yield* Effect.promise(build.parts);
+  const listed = yield* Effect.result(returnPlace(installRoot.success, release, storePath, fillsOf(parts.modules)));
   if (Result.isFailure(listed)) return yield* stepBackUnlisted(installRoot.success, asked, listed.failure);
   const place = listed.success;
   const predecessor = replaced(process.env);
@@ -155,7 +142,7 @@ export const returnedBeforeServing = Effect.fn('composition.returning')(function
   if (!carried && alone) return yield* lock.release;
   if (launch !== undefined && notified) yield* serving(true);
   const stoodBy = yield* Deferred.make<void>();
-  const log = serveLogPath(channel, process.env) ?? join(data, SERVE_LOG);
+  const log = serveLogPath(build.channel, process.env) ?? join(data, SERVE_LOG);
   const succession = Context.get(
     yield* Layer.build(
       successionLayer(
@@ -189,7 +176,55 @@ export const returnedBeforeServing = Effect.fn('composition.returning')(function
   yield* lock.release;
   yield* succession.release(null).pipe(Effect.orDie);
   yield* succession.settle.pipe(Effect.orDie);
+  if (carried && launch !== undefined) yield* stepBackDecided(installRoot.success, asked);
   if (carried) yield* stepBackPassed(place, asked);
   if (notified && launch === undefined) yield* serving(true);
   return yield* Effect.sync((): never => process.exit(0));
 }, Effect.scoped);
+
+export type JournalsServing = {
+  readonly installRoot: string;
+  readonly release: string;
+  readonly handoff: Effect.Effect<Succession['Service'], PendingUnreadable>;
+  readonly modules: readonly Manifest[];
+  readonly rollouts: ThreadRollouts['Service'];
+  readonly launch: SuccessorLaunch | undefined;
+  readonly notified: boolean;
+};
+
+export const journalsServed = Effect.fn('composition.journalsServed')(function* (handing: JournalsServing) {
+  const asked = stepBackAsked(handing.installRoot, basename(handing.release));
+  if (asked === null || asked.journals?.returned === true) return null;
+  const succession = yield* handing.handoff;
+  return (yield* journalsHanded(handing, asked, succession)) ? succession : null;
+});
+
+const journalsHanded = Effect.fnUntraced(function* (handing: JournalsServing, asked: StepBack, succession: Succession['Service']) {
+  const { installRoot, release } = handing;
+  const names = handing.modules.flatMap((module) => (module.formSteps ?? []).map((step) => step.name));
+  const returned = yield* Effect.result(
+    handing.rollouts.returnOnto({ carried: stepsCarried(join(installRoot, asked.to), names), since: installedSince(release) }),
+  );
+  if (Result.isFailure(returned))
+    console.error(`[tagma] the threads ${basename(release)} wrote did not all return to ${asked.to}: ${String(returned.failure)}`);
+  else {
+    const { threads, kept, unreturned } = returned.success;
+    console.error(`[tagma] ${threads} threads returned to the form ${asked.to} reads`);
+    if (kept.length > 0) console.error(`[tagma] the form steps ${kept.join(', ')} declare no way back, so their records stay as they are`);
+    for (const left of unreturned)
+      console.error(`[tagma] the thread ${left.threadId} stays in the form ${basename(release)} wrote: ${left.reason}`);
+  }
+  const marked = yield* Effect.result(journalsMarked(installRoot, asked));
+  if (Result.isFailure(marked)) {
+    console.error(
+      `[tagma] the threads' return to ${asked.to} was not recorded, so the next start returns them again: ${String(marked.failure)}`,
+    );
+    return false;
+  }
+  if (!marked.success) return false;
+  if (handing.launch !== undefined && handing.notified) yield* serving(true);
+  const handed = yield* Effect.result(succession.restart());
+  if (Result.isSuccess(handed)) return true;
+  console.error(`[tagma] the step back to ${asked.to} waits for the next start: ${handed.failure.detail}`);
+  return false;
+});

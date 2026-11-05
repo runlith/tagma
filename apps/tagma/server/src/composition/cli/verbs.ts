@@ -123,7 +123,7 @@ export const verbsOf = (build: Build, server: () => Promise<unknown>): VerbSourc
   const bindings = bindingsOf(build);
   const bound = (id: string): readonly VerbBinding[] => bindings[id] ?? [];
   return {
-    serve: async () => ({ serve: (await import('./serve.js')).serveCommand(build.channel, server) }),
+    serve: async () => ({ serve: (await import('./serve.js')).serveCommand(build, server) }),
     db: async () => ({ database: (await import('./database.js')).databaseCommand(build) }),
     ...Object.assign({}, ...build.verbs.map((module) => module.verbs(...(bound(module.id) as never[])))),
   };

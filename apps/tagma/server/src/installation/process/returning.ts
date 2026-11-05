@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { Clock, Data, Effect, Result, Schema } from 'effect';
-import { type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
+import { Clock, Data, Effect, Result, Schedule, Schema } from 'effect';
+import { type ChainFills, type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
 import { prepareEngine, selectEngine } from '@runlith/sqlite-process/engine';
 import type { Words } from '../../platform/contract/wire/refusal.js';
 import { cloneFile, type DurableWriteFailed, moveFile, removeFile } from '../../platform/durable/files.js';
@@ -19,9 +19,11 @@ import {
   writeStepBack,
 } from '../closure/attempt.js';
 import { carriedOnto, moving, undoneOnto } from '../closure/moves.js';
+import { INSTALL_FILE } from '../contract/wire/layout.js';
+import { SERVER_ENTRY } from '../contract/wire/manifest.js';
 import { STEP_BACK_SUFFIX, type StepBack } from '../contract/wire/stepBack.js';
 
-export type StoreFile = { readonly path: string; readonly chain: string };
+export type StoreFile = { readonly path: string; readonly chain: string; readonly fills?: ChainFills | undefined };
 
 class StepBackFailed extends Data.TaggedError('StepBackFailed')<{ readonly detail: string; readonly words?: Words }> {
   override get message(): string {
@@ -105,13 +107,20 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
   const leaving = join(fromRoot, chain);
   const answer = yield* Effect.try({
     try: () =>
-      returnToChain(path, target, {
-        steps: existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [],
-        folder: existsSync(leaving) ? leaving : null,
-      }),
+      returnToChain(
+        path,
+        target,
+        {
+          steps: existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [],
+          folder: existsSync(leaving) ? leaving : null,
+        },
+        file.fills,
+      ),
     catch: (cause) => failedOf(`${path} could not be returned`, cause),
   });
   if (answer.returned) snapshotsDropped(path);
+  for (const index of answer.unfilled)
+    console.error(`[tagma] the step back recreated the index ${index.table} of ${basename(path)} empty: ${index.reason}`);
   return answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` }));
 });
 
@@ -183,6 +192,32 @@ export const stepBackAsked = (installRoot: string, own: string): StepBack | null
   const asked = askedStepBack(installRoot);
   return asked !== null && asked.from === own && asked.to !== own ? asked : null;
 };
+
+export const JOURNAL_STARTS = 2;
+
+export const stepsCarried = (toRoot: string, names: readonly string[]): ReadonlySet<string> => {
+  const entry = join(toRoot, SERVER_ENTRY);
+  const code = existsSync(entry) ? readFileSync(entry, 'utf8') : '';
+  return new Set(names.filter((name) => code.includes(name)));
+};
+
+export const installedSince = (root: string): Date => new Date(statSync(join(root, INSTALL_FILE)).mtimeMs);
+
+const journalsWritten = (installRoot: string, back: StepBack, journals: NonNullable<StepBack['journals']>) =>
+  moving(installRoot, () =>
+    Effect.sync(() => {
+      const standing = askedStepBack(installRoot);
+      if (standing === null || standing.from !== back.from || standing.to !== back.to) return false;
+      writeStepBack(installRoot, { ...standing, journals });
+      return true;
+    }),
+  );
+
+export const journalsDeferred = (installRoot: string, back: StepBack) =>
+  journalsWritten(installRoot, back, { starts: (back.journals?.starts ?? 0) + 1, returned: false });
+
+export const journalsMarked = (installRoot: string, back: StepBack) =>
+  journalsWritten(installRoot, back, { starts: back.journals?.starts ?? 0, returned: true });
 
 const setAside = Effect.fn('installation.stepBackSetAside')(function* (place: ReturnPlace, unread: RecordUnreadable) {
   const stamp = yield* Clock.currentTimeMillis;
@@ -264,6 +299,24 @@ export const stepBackUnlisted = Effect.fn('installation.stepBackUnlisted')(funct
   yield* moving(installRoot, () => Effect.sync(() => writeStepBack(installRoot, failedRecord(back, new StepBackFailed({ detail })))));
   console.error(`[tagma] the step back to ${back.to} did not start, and the server puts back what an earlier start left: ${detail}`);
 });
+
+const ATTEMPT_POLL = '200 millis';
+
+export const stepBackDecided = (installRoot: string, back: StepBack) =>
+  Effect.asVoid(
+    Effect.repeat(
+      Effect.sync(() => readAttempt(installRoot)),
+      {
+        until: (read) =>
+          Result.isFailure(read) ||
+          read.success === null ||
+          read.success.to !== back.to ||
+          read.success.ended !== null ||
+          currentVersion(installRoot) !== back.to,
+        schedule: Schedule.spaced(ATTEMPT_POLL),
+      },
+    ),
+  );
 
 export const stepBackPassed = Effect.fn('installation.stepBackPassed')(function* (place: ReturnPlace, back: StepBack) {
   const open = readAttempt(place.installRoot);

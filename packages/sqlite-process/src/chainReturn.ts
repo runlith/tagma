@@ -26,7 +26,13 @@ type ChainLeaving = {
 
 export type ChainLoss = { readonly table: string; readonly rows: number };
 
-type ChainReturn = { readonly returned: boolean; readonly lost: readonly ChainLoss[] };
+export type ChainFill = (db: Database) => void;
+
+export type ChainFills = ReadonlyMap<string, ChainFill>;
+
+type ChainUnfilled = { readonly table: string; readonly reason: string };
+
+type ChainReturn = { readonly returned: boolean; readonly lost: readonly ChainLoss[]; readonly unfilled: readonly ChainUnfilled[] };
 
 type Row = { readonly type: string; readonly name: string; readonly tbl: string; readonly sql: string | null };
 
@@ -272,12 +278,44 @@ const orphansRemoved = (db: Database, checked: ReadonlySet<string>, lost: Map<st
   if (emptied.size > 0) orphansRemoved(db, childrenOf(db, emptied), lost);
 };
 
+const CONTENTLESS = /\bcontent\s*=\s*(?:''|"")/iu;
+
+const filledFrom = (db: Database, table: string, fill: ChainFill | undefined): ChainUnfilled | null => {
+  if (fill === undefined) return { table, reason: 'no fill is declared for it' };
+  db.run('SAVEPOINT chain_fill');
+  try {
+    fill(db);
+    db.run('RELEASE chain_fill');
+    return null;
+  } catch (cause) {
+    db.run('ROLLBACK TO chain_fill');
+    db.run('RELEASE chain_fill');
+    return { table, reason: cause instanceof Error ? cause.message : String(cause) };
+  }
+};
+
+const virtualRemade = (db: Database, reference: Database, held: string, want: Row): void => {
+  const aside = `__chain_return_${want.name}`;
+  db.run(`ALTER TABLE ${quoted(held)} RENAME TO ${quoted(aside)}`);
+  db.run(want.sql!);
+  const kept = new Set(columnsOf(db, aside).map((column) => column.name.toLowerCase()));
+  const shared = columnsOf(reference, want.name)
+    .map((column) => column.name)
+    .filter((name) => kept.has(name.toLowerCase()));
+  if (shared.length > 0)
+    db.run(
+      `INSERT INTO ${quoted(want.name)} (rowid, ${shared.map(quoted).join(', ')}) SELECT rowid, ${shared.map(quoted).join(', ')} FROM ${quoted(aside)}`,
+    );
+  db.run(`DROP TABLE ${quoted(aside)}`);
+};
+
 const reshaped = (
   db: Database,
   reference: Database,
   target: ChainTarget,
   leaving: ChainLeaving,
   excess: readonly LedgerRow[],
+  fills: ChainFills,
 ): ChainReturn => {
   const known = new Map(leaving.steps.map((step) => [step.name, step]));
   const excessSteps = excess.flatMap((row) => {
@@ -285,8 +323,13 @@ const reshaped = (
     return step === undefined ? [] : [step];
   });
   const touched = excessSteps.length === excess.length ? touchedBy(excessSteps.flatMap((step) => step.sql)) : null;
+  const members = membersOf(target);
+  const forward = touchedBy(
+    leaving.steps.filter((step) => step.name === undefined || members.get(step.name) !== step.hash).flatMap((step) => step.sql),
+  );
   const scripts = excessSteps.toReversed().flatMap((step) => (step.name === undefined ? [] : scriptOf(leaving, step.name)));
   const lost = new Map<string, number>();
+  const unfilled: ChainUnfilled[] = [];
   db.run('PRAGMA foreign_keys = OFF');
   db.run('PRAGMA legacy_alter_table = ON');
   db.run('BEGIN IMMEDIATE');
@@ -310,21 +353,27 @@ const reshaped = (
       if (!same && (reachable(row.tbl) || wantedTables.has(row.tbl.toLowerCase()))) db.run(`DROP INDEX ${quoted(row.name)}`);
     }
     const remade = new Set<string>();
+    const emptied = new Set<string>();
     for (const [name, row] of standingTables) {
-      if (!wantedTables.has(name) && touched !== null && touched.has(name)) db.run(`DROP TABLE ${quoted(row.name)}`);
+      if (!wantedTables.has(name) && ((touched !== null && touched.has(name)) || forward.has(name)))
+        db.run(`DROP TABLE ${quoted(row.name)}`);
     }
     for (const [name, want] of wantedTables) {
       const held = standingTables.get(name);
       if (held === undefined) {
         db.run(want.sql!);
         if (!virtualWanted.has(name)) seeded(db, reference, want.name);
+        else if (CONTENTLESS.test(want.sql!)) emptied.add(name);
         remade.add(name);
         continue;
       }
       if (!reachable(name) || held.sql === want.sql) continue;
       if (virtualWanted.has(name)) {
-        db.run(`DROP TABLE ${quoted(held.name)}`);
-        db.run(want.sql!);
+        if (/\bcontent\s*=/iu.test(want.sql!)) {
+          db.run(`DROP TABLE ${quoted(held.name)}`);
+          db.run(want.sql!);
+          if (CONTENTLESS.test(want.sql!)) emptied.add(name);
+        } else virtualRemade(db, reference, held.name, want);
         remade.add(name);
         continue;
       }
@@ -350,6 +399,10 @@ const reshaped = (
       const content = /\bcontent\s*=\s*["'`]?([\w$]+)/iu.exec(want.sql ?? '')?.[1]?.toLowerCase();
       if (content !== undefined && (remade.has(content) || remade.has(name) || thinned.has(content)))
         db.run(`INSERT INTO ${quoted(want.name)}(${quoted(want.name)}) VALUES ('rebuild')`);
+      if (emptied.has(name)) {
+        const missed = filledFrom(db, want.name, fills.get(name));
+        if (missed !== null) unfilled.push(missed);
+      }
     }
     db.run(`DELETE FROM ${CHAIN_LEDGER}`);
     const appliedAt = new Date().toISOString();
@@ -378,20 +431,22 @@ const reshaped = (
     throw cause;
   }
   db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-  return { returned: true, lost: [...lost].map(([table, count]) => ({ table, rows: count })) };
+  return { returned: true, lost: [...lost].map(([table, count]) => ({ table, rows: count })), unfilled };
 };
 
-export const returnToChain = (path: string, target: ChainTarget, leaving: ChainLeaving): ChainReturn => {
+const UNRETURNED: ChainReturn = { returned: false, lost: [], unfilled: [] };
+
+export const returnToChain = (path: string, target: ChainTarget, leaving: ChainLeaving, fills: ChainFills = new Map()): ChainReturn => {
   const db = new Database(path);
   try {
     const rows = ledgerRows(db);
-    if (rows === null) return { returned: false, lost: [] };
+    if (rows === null) return UNRETURNED;
     const members = membersOf(target);
     const excess = rows.filter((row) => row.name === null || members.get(row.name) !== row.hash);
-    if (excess.length === 0) return { returned: false, lost: [] };
+    if (excess.length === 0) return UNRETURNED;
     const reference = referenceOf(target);
     try {
-      return reshaped(db, reference, target, leaving, excess);
+      return reshaped(db, reference, target, leaving, excess, new Map([...fills].map(([table, fill]) => [table.toLowerCase(), fill])));
     } finally {
       reference.close();
     }
