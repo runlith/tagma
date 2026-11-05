@@ -110,6 +110,7 @@ export type ThreadRunParts = {
   readonly commitInstructions?: (instructions: string) => Effect.Effect<string, AgentHostFailed>;
   readonly priorTools?: readonly AgentToolRecord[];
   readonly stepsTaken?: number;
+  readonly startedAt?: number;
   readonly modeOf: ModeOf;
 };
 export type ThreadRunStartInput = ThreadRunParts & {
@@ -441,6 +442,7 @@ export function threadAgent<TCtx, TFail = never, TWrite = unknown>(options: Thre
                     commitInstructions: commitInstructions ? (text: string) => commitInstructions(given.compose(text)) : undefined,
                     commitEffects: input.commitEffects,
                     stepsTaken: input.stepsTaken,
+                    startedAt: input.startedAt,
                     model: input.model,
                     messages: input.messages,
                     approval: { mode: input.run.approvalMode, interactive: input.run.interactive },

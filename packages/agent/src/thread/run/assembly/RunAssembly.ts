@@ -233,6 +233,7 @@ export const runAssemblyLayer = Layer.effect(
               instructions: current.systemPrompt ?? undefined,
               priorTools: priorTools.length > 0 ? priorTools : undefined,
               stepsTaken: stepsTaken > 0 ? stepsTaken : undefined,
+              startedAt: run.startedAt.getTime(),
               keepWarm: run.kind === 'keep-warm',
               commitEffects: (intent) =>
                 Deferred.await(recorderReady).pipe(

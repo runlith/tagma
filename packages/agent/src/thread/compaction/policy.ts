@@ -1,6 +1,8 @@
 import type { ModelCapacity, ModelCompactionTrigger } from '@runlith/llm/models/description';
+import type { RunBudget } from '../agents/AgentProfile';
 
 export type ThreadCompactionPolicy = {
+  readonly runBudget?: RunBudget;
   readonly bufferTokens: number;
   readonly imageTokens: number;
   readonly maxRecentTokens: number;
@@ -55,6 +57,12 @@ export function threadUsableTokens(
   if (trigger.strategy === 'reserve-output') return reserved;
   const byShare = Math.floor(trigger.trigger * capacity.context);
   return Math.max(0, inputCeiling === null ? byShare : Math.min(byShare, inputCeiling));
+}
+
+export function budgetedCapacity(capacity: ModelCapacity, policy: ThreadCompactionPolicy): ModelCapacity {
+  if (policy.runBudget === undefined) return capacity;
+  const ceiling = policy.runBudget.prompt ?? capacity.premiumAbove;
+  return ceiling === undefined ? capacity : { ...capacity, input: Math.min(capacity.input ?? ceiling, ceiling) };
 }
 
 export function threadRequestCapacity(capacity: ModelCapacity): number {

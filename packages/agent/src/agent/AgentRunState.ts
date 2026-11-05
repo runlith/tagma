@@ -14,9 +14,11 @@ export class AgentRunState {
   private lastTool: string | undefined;
   private repeats = 0;
   private readonly ruleStates = new Map<string, unknown>();
+  readonly startedAt: number | undefined;
 
-  constructor(input: { priorTools?: readonly AgentToolRecord[]; stepsTaken?: number } = {}) {
+  constructor(input: { priorTools?: readonly AgentToolRecord[]; stepsTaken?: number; startedAt?: number } = {}) {
     this.step = input.stepsTaken ?? 0;
+    this.startedAt = input.startedAt;
     for (const record of input.priorTools ?? []) this.noteToolCall(record.toolName, record.toolCallId);
     this.pending.clear();
   }

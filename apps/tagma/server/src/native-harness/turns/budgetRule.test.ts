@@ -7,9 +7,9 @@ import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
 import { budgetSource } from './budgetRule.js';
 
-const gate = (budget: RunBudget | undefined) => {
+const gate = (budget: RunBudget | undefined, startedAt?: number) => {
   const policy = new AgentRuntimePolicy([budgetSource.create({} as never)]);
-  const run = new AgentRunState();
+  const run = new AgentRunState({ startedAt });
   const thread = { profile: budget === undefined ? null : { id: 'reader', overlay: { budget } } };
   const evaluate = (facts: Record<string, unknown>, at: number) =>
     policy.evaluate({ thread, run, runId: 'run-1', invocationKey: `at:${at}`, ordinal: at + 1, ...facts } as never);
@@ -53,6 +53,24 @@ it.effect('the seconds budget forces the answer once the run’s clock passes it
     expect(forced(yield* step()).require).toEqual([]);
     yield* TestClock.adjust('61 seconds');
     expect(forced(yield* step())).toEqual({ restrict: [['answer']], require: ['answer'] });
+  }),
+);
+
+it.effect('a recovered run keeps the seconds it already spent', () =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust('61 seconds');
+    const { step } = gate({ seconds: 60 }, 0);
+    expect(forced(yield* step())).toEqual({ restrict: [['answer']], require: ['answer'] });
+  }),
+);
+
+it.effect('a text-only reply to the forced answer step ends the run without another step', () =>
+  Effect.gen(function* () {
+    const { run, step, close } = gate({ steps: 2 });
+    yield* step();
+    run.commitStep();
+    expect(forced(yield* step()).require).toEqual(['answer']);
+    expect(agentGuides(yield* close(true))).toEqual([]);
   }),
 );
 

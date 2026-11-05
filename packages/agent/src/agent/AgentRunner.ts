@@ -90,6 +90,7 @@ export type AgentRunParts<TCtx> = {
   readonly commitInstructions?: (instructions: string) => Effect.Effect<string, AgentHostFailed>;
   readonly priorTools?: readonly AgentToolRecord[];
   readonly stepsTaken?: number;
+  readonly startedAt?: number;
   readonly rules?: readonly AgentRule<unknown>[];
   readonly approval: AgentApproval;
   readonly modeOf: ModeOf;
@@ -391,7 +392,7 @@ const runDoor = <TCtx>(
     input.caller ?? { agentId: agent.id, ownerId: input.model.ownerId, thread: null },
     input.ctx,
     new ToolJudge(input.modeOf),
-    new AgentRunState({ priorTools: input.priorTools, stepsTaken: input.stepsTaken }),
+    new AgentRunState({ priorTools: input.priorTools, stepsTaken: input.stepsTaken, startedAt: input.startedAt }),
     new AgentRuntimePolicy<TCtx>([...agent.rules, ...(input.rules ?? []), agentDeferredToolRule<TCtx>(() => live().catalog)]),
     declaredConfirmations,
     input.toolOutputs,

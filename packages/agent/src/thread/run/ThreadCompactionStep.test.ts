@@ -176,6 +176,56 @@ it.effect('a compaction serializes each message of the history it folds once and
   }),
 );
 
+it.effect('a run budget caps the request: a history over it is brought under it before the step, as the model window would', () =>
+  Effect.gen(function* () {
+    const BUDGET = 60_000;
+    const read = (at: number): readonly Message[] => [
+      Message.user(`Read part ${at}.`),
+      Message.assistant([ToolCallPart.from({ id: `part-${at}`, name: 'read', input: { at } })]),
+      Message.make({
+        role: 'tool',
+        content: [{ type: 'tool-result', id: `part-${at}`, name: 'read', result: { type: 'text', value: `line ${at} `.repeat(800) } }],
+      }),
+    ];
+    const history = Array.from({ length: 40 }, (_, at) => read(at)).flat();
+    const stepUnder = (given: ThreadCompactionPolicy) =>
+      makeThreadCompaction({
+        models: lookupModels({ request: () => uncallable, capacity: () => ({ context: 200_000, output: 32_000 }) }),
+        policy: () => Effect.succeed(given),
+        strategy: makeThreadDigestStrategy(),
+        recovery: makeThreadDigestStrategy(),
+        text,
+        checkpoints: {
+          latestCheckpoint: () => Effect.succeed(null),
+          prunedToolCalls: () => Effect.succeed(new Set<string>()),
+          prunedToolCallVolume: () => Effect.succeed({ count: 0, tokens: 0 }),
+          compactionCount: () => Effect.succeed(0),
+          markToolCallsPrunedIn: settlesNothing,
+          retirePrunedToolCallsIn: settlesNothing,
+          writeCheckpointIn: settlesNothing,
+        } satisfies ThreadCompactionStorage,
+      }).prepare({
+        threadId: 'thread-1',
+        runId: 'run-1',
+        stepNumber: 1,
+        ownerId: 'owner-1',
+        provider: 'openai-oauth',
+        model: 'gpt-5.6-sol',
+        reasoning: null,
+        switches: {},
+        history,
+        tools: [],
+        plannedOutputTokens: 32_000,
+        overflow: false,
+        meter: new ThreadRequestMeter(),
+        measuredRequest: null,
+      });
+
+    expect((yield* stepUnder(policy)).correctedTokens).toBeGreaterThan(BUDGET);
+    expect((yield* stepUnder({ ...policy, runBudget: { prompt: BUDGET } })).correctedTokens).toBeLessThanOrEqual(BUDGET);
+  }),
+);
+
 it.effect('a normal model step reads no message or tool result of the history the thread already measured', () =>
   Effect.gen(function* () {
     const { watch, measured } = watchedHistory();

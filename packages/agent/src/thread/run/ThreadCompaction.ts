@@ -21,7 +21,7 @@ import { corpusBaseline } from '../compaction/corpus';
 import { modelOf, sameDeployment, signed, triggerOf } from '../compaction/deployment';
 import { omitEarlierMedia, projectThreadOverflowRecovery } from '../compaction/overflow';
 import type { ThreadMeasuredRequest, ThreadTokenEstimate } from '../compaction/measurement';
-import { type ResolvedCompactionTrigger, type ThreadCompactionPolicy, threadUsableTokens } from '../compaction/policy';
+import { budgetedCapacity, type ResolvedCompactionTrigger, type ThreadCompactionPolicy, threadUsableTokens } from '../compaction/policy';
 import { MeteredParts, ThreadRequestMeter } from '../compaction/ThreadRequestMeter';
 import { selectThreadCompactionPrefix } from '../compaction/prefix';
 import { projectThreadHistory, threadCheckpointHead } from '../compaction/projection';
@@ -248,8 +248,8 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
 
     fits: Effect.fnUntraced(function* (input: ThreadCompactionInput): Effect.fn.Return<boolean, ThreadPortFailure | ThreadBorderFailed> {
       const served = yield* models.served(input.provider, input.model, input.runId);
-      const capacity = served.capacity;
       const policy = yield* policyOf({ threadId: input.threadId });
+      const capacity = budgetedCapacity(served.capacity, policy);
       const index = pruner.index(input.history);
       const pictures = threadPictureBudget(served.requestLimits, input.pictureSizes, index);
       const pruning = yield* pruner.prune(input.threadId, index, capacity, policy, yield* pictures);
@@ -361,8 +361,8 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
       input: ThreadCompactionInput,
     ): Effect.fn.Return<ThreadCompactionResult, ThreadCompactionRefused | ThreadBorderFailed> {
       const served = yield* models.served(input.provider, input.model, input.runId);
-      const capacity = served.capacity;
       const policy = yield* policyOf({ threadId: input.threadId });
+      const capacity = budgetedCapacity(served.capacity, policy);
       const trigger = triggerOf(served, input.provider, input.model, policy);
       const usable = threadUsableTokens(capacity, input.plannedOutputTokens, policy, trigger);
       const history = input.history;
@@ -511,8 +511,8 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
     ): Effect.fn.Return<ThreadManualCompactionResult, ThreadCompactionRefused | ThreadBorderFailed> {
       if (input.sourceMessages.length === 0) return { compacted: false, usage: null };
       const served = yield* models.served(input.provider, input.model, input.runId);
-      const capacity = served.capacity;
       const policy = yield* policyOf({ threadId: input.threadId });
+      const capacity = budgetedCapacity(served.capacity, policy);
       const trigger = triggerOf(served, input.provider, input.model, policy);
       const checkpoint = yield* checkpoints.latestCheckpoint(input.threadId);
       const alreadyCovered = 0;

@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import type { CompactionModels } from '../compaction/CompactionModels';
 import { sameDeployment, triggerOf } from '../compaction/deployment';
 import { estimateThreadTokens } from '../compaction/measurement';
-import { type ThreadCompactionPolicy, threadUsableTokens } from '../compaction/policy';
+import { budgetedCapacity, type ThreadCompactionPolicy, threadUsableTokens } from '../compaction/policy';
 import { selectThreadCompactionPrefix } from '../compaction/prefix';
 import type { ThreadPruner } from '../compaction/pruner';
 import type { ThreadCompactionEstimate, ThreadCompactionEstimateInput } from '../compaction/summarizer';
@@ -34,7 +34,7 @@ export const makeCompactionEstimator = <TWrite>(options: {
       if (input.history.length === 0) return { own: nothing, candidates: input.candidates.map(() => nothing) };
       const policy = yield* policyOf({ threadId: input.threadId });
       const served = yield* models.served(input.provider, input.model);
-      const capacity = served.capacity;
+      const capacity = budgetedCapacity(served.capacity, policy);
       const trigger = triggerOf(served, input.provider, input.model, policy);
       const checkpoint = yield* checkpoints.latestCheckpoint(input.threadId);
       const bounded = yield* pruner.bounded(input.threadId, input.history, capacity, policy);

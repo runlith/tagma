@@ -226,7 +226,11 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
       onRecords: (threadId, record) => rollouts.appendRecord(threadId, record),
     }),
     calibration: calibration ? { store: calibration } : undefined,
-    policy: ({ threadId }) => compactionPolicy(records, settings, threadId),
+    policy: ({ threadId }) =>
+      Effect.zipWith(compactionPolicy(records, settings, threadId), store.metadata(threadId), (policy, row) => {
+        const runBudget = row?.profile?.overlay.budget;
+        return runBudget === undefined ? policy : { ...policy, runBudget };
+      }),
     transcriptLocation: Effect.fnUntraced(function* (threadId) {
       const path = yield* rollouts.locate(threadId).pipe(stored('locate'));
       if (path === undefined) return yield* new ThreadCallBroke({ cause: new Error('The compaction transcript location is unavailable.') });

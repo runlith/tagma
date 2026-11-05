@@ -74,7 +74,7 @@ function budgetRule(): AgentRule<ThreadContext> {
           closeAsked: false,
         }));
         const now = yield* Clock.currentTimeMillis;
-        gate.startedAt ??= now;
+        gate.startedAt ??= ctx.run.startedAt ?? now;
         const steps = ctx.run.stepNumber;
 
         if (ctx.hook === 'beforeStep') {
@@ -117,7 +117,6 @@ function budgetRule(): AgentRule<ThreadContext> {
             gate.reserved += RESULT_RESERVE;
             return null;
           }
-          gate.reserved -= own;
           gate.denied = spent;
           return {
             type: 'deny',
@@ -126,7 +125,7 @@ function budgetRule(): AgentRule<ThreadContext> {
         }
 
         if (ctx.hook === 'beforeClose') {
-          if (ctx.catalog[ANSWER_TOOL] === undefined || ctx.run.called(ANSWER_TOOL) || gate.closeAsked) return null;
+          if (ctx.catalog[ANSWER_TOOL] === undefined || ctx.run.called(ANSWER_TOOL) || gate.closeAsked || gate.told) return null;
           gate.closeAsked = true;
           return { type: 'guide', text: `End by calling ${ANSWER_TOOL} with your answer.` } satisfies AgentDirective;
         }
