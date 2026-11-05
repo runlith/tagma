@@ -51,6 +51,18 @@ function shiftRange(changes: Map<number, WheelRange>, frame: number, delta: numb
   changes.set(frame, range);
 }
 
+function settlingEnds(scrollEnds: readonly number[], writes: readonly ScrollWrite[]): number[] {
+  const moved = writes.filter((write) => write.to !== write.from).map((write) => write.time);
+  let previous = Number.NEGATIVE_INFINITY;
+  return [...scrollEnds]
+    .sort((a, b) => a - b)
+    .filter((end) => {
+      const answers = moved.some((time) => time > previous && time < end);
+      previous = end;
+      return !answers;
+    });
+}
+
 export function wheelLimits(wheel: WheelReference, frame: number, change: number): WheelLimits | undefined {
   const late = wheel.late.get(frame);
   const early = wheel.early.get(frame);
@@ -82,7 +94,7 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
   const writes = ownWrites.map((write) => write.time);
   const nativeScrolls = [...(recording.scrolls ?? [])].sort((a, b) => a.stamp - b.stamp);
   const scrolls = nativeScrolls.map((scroll) => scroll.stamp);
-  const ends = [...(recording.scrollEnds ?? [])].sort((a, b) => a - b);
+  const ends = settlingEnds(recording.scrollEnds ?? [], ownWrites);
   const ticks = recording.ticks?.length ? recording.ticks : recording.frames.map((frame) => frame.time);
   const intervals = ticks
     .slice(1)

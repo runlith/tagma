@@ -671,6 +671,12 @@ test('an animated wheel is conserved once its scroll settles and never exceeds w
     limit: 1,
   });
   expect(displacement(animated([100, 140, 180, 200, 200], [41])).unchecked).toContainEqual({ frame: 1, reason: 'wheel-frame-missing' });
+  const answered = displacement({
+    ...animated([100, 140, 180, 200, 200], [11, 31]),
+    writes: [{ time: -5, frame: 0, method: 'scrollTo', from: 3000, to: 2900 }],
+  });
+  expect(answered.failures).toEqual([]);
+  expect(answered.unchecked).toEqual([]);
 });
 
 test('control calibration discards dirty recordings and requires five clean, observed flings', () => {
