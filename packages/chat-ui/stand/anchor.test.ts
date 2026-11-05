@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test } from 'vitest';
 import { anchorFlow } from './anchor';
 import { displacement } from './displacement';
 import type { Anchor, Frame, Recording, Rect, RowRect, RowSignature } from './recording';

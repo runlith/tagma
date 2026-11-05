@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test } from 'vitest';
 import { calibrate, momentum } from './momentum.fixture';
 import type { ScrollRecording } from '@runlith/e2e/ios';
 

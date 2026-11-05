@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test } from 'vitest';
 import { causes, type Cause } from './causes';
 import type { Frame, Recording, Rect, RowRect, RowSignature } from './recording';
 

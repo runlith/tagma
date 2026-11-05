@@ -24,6 +24,7 @@ export default defineConfig({
     projects: [
       { extends: true, test: { name: 'unit', include: ['src/**/*.test.ts'], exclude: isolatedUnit, isolate: false } },
       { extends: true, test: { name: 'unit-isolated', include: isolatedUnit, isolate: true, sequence: { groupOrder: 1 } } },
+      { extends: true, test: { name: 'unit-stand', include: ['stand/**/*.test.ts'], isolate: false } },
       {
         extends: true,
         test: { name: 'bench', include: ['src/**/*.bench.ts'], environment: 'node', sequence: { groupOrder: 2 } },

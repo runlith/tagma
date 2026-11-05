@@ -417,7 +417,7 @@
     }
   },
   "scripts": {
-    "test": "testbed vitest run src --project 'unit*'",
+    "test": "testbed vitest run --project 'unit*'",
     "test:e2e": "testbed e2e --no-isolate ./stand/feed.e2e.ts ./stand/submission.e2e.ts",
     "test:e2e:ios": "testbed e2e --parallel=1 ./stand/native.e2e.ts",
     "typecheck": "runlith-typecheck",

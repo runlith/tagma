@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test } from 'vitest';
 import { account, type Capture } from './trace';
 
 test('main-thread accounting partitions nested script, layout and paint without double counting', () => {
