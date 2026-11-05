@@ -54,6 +54,8 @@ edges:
     to: 01a0fd8b-bf10-7a02-a086-916b457e7a6c
   - kind: imports
     to: 01a1239f-2e01-7962-8ca3-25a8af373f07
+  - kind: imports
+    to: 01a12c51-8120-7250-9703-61feea5c74f4
 sources:
   - kind: dir
     ref: apps/tagma/server/src/plugins

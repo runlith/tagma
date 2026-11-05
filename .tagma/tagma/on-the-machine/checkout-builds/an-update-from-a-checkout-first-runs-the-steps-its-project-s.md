@@ -27,7 +27,7 @@ A plugin in Tagma's format declares it in `tagma-plugin.json`:
 "contributes": { "beforeBuild": [{ "tool": "<tool>", "title": "<what the card shows while it runs>" }] }
 ```
 
-The server calls the tool itself; it need not be offered to agents in `contributes.tools`. The steps that run are those of the plugins enabled in the project whose canonical checkout is the build's source checkout, in the order the plugins are listed, each step of one plugin in declaration order. With no such step the update behaves exactly as today.
+The server calls the tool itself: it stands in `contributes.tools` with audience `tagma`, which offers it to no agent or view. The steps that run are those of the plugins enabled in the project whose canonical checkout is the build's source checkout, in the order the plugins are listed, each step of one plugin in declaration order. With no such step the update behaves exactly as today.
 
 Tagma knows nothing of pins or of any particular repository: what a step does is the plugin's.
 
@@ -44,7 +44,7 @@ A tool error, an answer outside this shape, or the plugin's process ending befor
 ## Runner and card
 
 - `checkout-builds` declares a port in its own contract (the steps before a cut, by checkout and offer); composition fills it from enabled plugins' `beforeBuild` in every build, so a plugin declaring the point is accepted by a release server too, where no checkout build ever asks it.
-- An enabled plugin still starting is waited for; one whose process failed stops the update, since whether it declares a step cannot be told; a stopped plugin has none.
+- An enabled plugin not yet taken up or still starting is waited for; one whose process failed stops the update, since whether it declares a step cannot be told; an idle plugin's step opens its process; a stopped plugin has none.
 - An ask the MCP request window cut short counts as `pending`.
 - A new step `prepare` stands before `worktree` and `build` for `head` and `tree`; `back` runs no steps. The record carries the running step's title; `stop` during `prepare` ends the update with nothing landed, as at any step before the swap.
 - The revision the record names, and the HEAD a `head` build cuts, are read after the steps: a commit a step lands is the commit built.

@@ -41,6 +41,8 @@ edges:
   - kind: imports
     to: 01a0fd8b-bf01-77d4-950b-191990491249
   - kind: imports
+    to: 01a12c51-8120-7250-9703-61feea5c74f4
+  - kind: imports
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports-tests
     to: 01a0fd8b-bee9-7760-9b13-b9847a70e34e
@@ -58,4 +60,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/plugin-host
 ---
-A plugin in Tagma's format may run a process that serves its tools over stdio MCP, and this module keeps that process alive: one per machine for each installed plugin enabled in at least one project, started, restarted on an edit of its files or options, recovered after a crash and stopped when no project runs the plugin. It publishes each process generation's contributions through the points `plugins` owns, holds the `tools` point with its audiences, and answers the process state the plugin's card shows. Installing, enabling and reading a plugin are `plugins`'; what every other point means is its owner's.
+A plugin in Tagma's format may run a process that serves its tools over stdio MCP, and this module runs it: one per machine for each installed plugin enabled in at least one project, its contributions published from the manifest the moment it is enabled, its process opened on the first demand, stopped when quiet, kept up when the plugin is resident, replaced after a rebuild or an option change, recovered after a crash and stopped when no project runs the plugin. It holds the `tools` point with its audiences, refuses a process whose tool list differs from its manifest, and answers the process state the plugin's card shows. Installing, enabling and reading a plugin, and the content digests of its files, are `plugins`'; what every other point means is its owner's.

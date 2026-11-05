@@ -14,14 +14,15 @@ sources:
 ---
 An agent sees a plugin's tool as `plugin__<id>__<tool>`, not `mcp__…`: it does not enter the project MCP palette and does not collide with an MCP server of the same name.
 
-All three audiences are read through `PluginTools.of(projectId)` and stand empty in a project where the plugin is not enabled:
+The tools agents and views are offered are built from the manifest's `tools` entries — name, description, input schema, annotations — so they stand before the plugin's process ever runs; a process whose `tools/list` differs is refused when it opens (explanation 38074044). All three offered audiences are read through `PluginTools.of(projectId)` and stand empty in a project where the plugin is not enabled:
 - `agents` — deferred through the `plugins` capability (the `tagma` agent and file-declared ones).
 - `own` — through the `plugin:<id>` capability of the plugin's own agents.
-- `view` — MCP descriptors as is, only for the view bridge: a view tool needs no model, so `visibility: ["app"]` does not drop it. No path hands it to agents.
+- `view` — MCP descriptors as is, only for the view bridge. No path hands it to agents.
 
-Three cases refuse registration, so nothing promised silently disappears:
-- a tool named in the manifest but not handed over by the process;
+The fourth audience, `tagma`, reaches nobody: it names a tool only Tagma calls for a point — a tick, an ending, a notification answer, a build step — and a point naming any other tool is refused.
+
+Two cases refuse registration, so nothing promised silently disappears:
 - a name past the 64 characters a model accepts;
-- a tool from `agents` or `own` the model catalog will not accept (`visibility` without a model, tasks, names).
+- a tool from `agents` or `own` the model catalog will not accept (tasks, names).
 
-A process tool with no manifest record reaches nobody. `mutates` derives from the descriptor's `readOnlyHint`: without it the tool asks the operator in review mode — so ordering consent arrives with no new mechanism.
+While the plugin's process is `failed`, its `agents` and `own` tools are withdrawn from every catalog, so no agent is shown a tool that cannot run; they return when a process opens cleanly. `mutates` derives from the entry's `readOnlyHint`: without it the tool asks the operator in review mode — so ordering consent arrives with no new mechanism.

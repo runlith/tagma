@@ -1,6 +1,6 @@
 ---
 id: 01a12320-6df6-76cb-a826-b1be7d2dc40e
-title: A contribution point is declared by its owner; plugins checks a package's contributions against it, and plugin-host publishes them per process generation
+title: A contribution point is declared by its owner; plugins checks a package's contributions against it, and plugin-host publishes them while the plugin is enabled
 ord: 10
 tags: ["explanation"]
 edges:
@@ -18,4 +18,4 @@ A contribution point belongs to the owner of what a plugin writes into, not to `
 
 The registry is `plugins`', so a package is checked before it is installed: `install_plugin` decodes each `contributes` entry with its point's schema and refuses `plugin-refused` on a point no owner declares, naming the declared ones, or on a value the schema rejects. Nothing is silently lost. Declarations must stand before the first process starts: composition calls `PluginHost.start` once the runtime is assembled.
 
-`register` takes the contribution anew on every process generation: the tools this process hands over, and the caller going through the supervisor — during a restart it waits for the new process, during backoff after a crash it refuses at once. A check that needs the process or a sibling point (a tool the process does not serve, a view `views` does not name) fails at this step and shows as the process's `failed`, not as an install refusal. Registration is shared per machine, like the process; project visibility (`EnabledPlugins.held`) is filtered by the point owner itself.
+Contributions are published while the plugin is enabled in at least one project and its manifest reads, whether or not a process runs: `plugin-host` publishes them when it takes the plugin up and again on every new declaration, and withdraws them when no project enables it. `register` takes the manifest's value and the caller going through the supervisor, whose every call is a demand that opens the process when none runs. A check that needs a sibling point — a tool the manifest's `tools` does not name with audience `tagma`, a view `views` does not name — fails at publication and shows as the plugin's `failed`, not as an install refusal. Registration is shared per machine, like the process; project visibility (`EnabledPlugins.held`) is filtered by the point owner itself.
