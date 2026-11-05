@@ -31,7 +31,9 @@ MCP, HTTP, `_meta` and the fields of the manifest stay below the SDK. An author 
 - `/ui`, for views;
 - `/testing`.
 
-The doors share one version, the SDK surface version, and one declaration build, the kit. A plugin may combine parts: a provider, tools and views. `effect` becomes an optional peer dependency, needed only by `/adapter/*` and `/rules/effect`. The bin is `tagma-plugin`. `create-tagma` is its own package, because `npm create tagma` resolves that name.
+The doors share one version, the SDK surface version, and one declaration build, the kit. A plugin may combine parts: a provider, tools and views. `effect` becomes an optional peer dependency, needed only by `/adapter/*` and `/rules/effect`. The bin is `tagma-plugin`.
+
+**Authors are agents.** People using Tagma do not type commands or write code: an agent writes the plugin at a person's request. Every entry point is therefore one an agent calls. There is no generator package for a person to type.
 
 ## What the author writes
 
@@ -84,7 +86,7 @@ export default definePlugin({
 | `providers` | `/adapter/provider` and the speech contract |
 | `resident` | `plugin-host` |
 
-**Input schemas.** Tool and resource inputs take any validator that implements Standard Schema for checking and Standard JSON Schema for the JSON Schema an agent reads. Zod 4.2 and later, ArkType and Valibot implement both, and `create-tagma` scaffolds with zod. Input that fails its check answers the call as `isError` with the validator's message, and the process keeps running.
+**Input schemas.** Tool and resource inputs take any validator that implements Standard Schema for checking and Standard JSON Schema for the JSON Schema an agent reads. Zod 4.2 and later, ArkType and Valibot implement both, and the plugin template uses zod. Input that fails its check answers the call as `isError` with the validator's message, and the process keeps running.
 
 **Handlers** are plain async functions `(input, ctx)`. The surface of `/plugin` and `/ui` carries no Effect. `ctx` holds:
 
@@ -179,7 +181,9 @@ Decoding is lenient, so adding to the surface never breaks a running plugin: an 
   - `McpCaller`.
 
   At kit build the kit also writes the JSON Schema of every point, for the build's check. The point's owner stays its only author (rule 144dfedc, explanation 7d2dc40e).
-- **`create-tagma`** is one template, a plugin. A provider is that plugin with a `providers` field, since size never changes what a plugin is. `packages/tagma/kit/create.ts` and its adapter template move into it.
+- **One plugin template** ships in `packages/tagma`. A provider is that plugin with a `providers` field, since size never changes what a plugin is. `packages/tagma/kit/create.ts` and its adapter template fold into it. Two doors reach it:
+  - inside Tagma, the `plugins` operation `create_plugin {id, title}` writes it into `.tagma-plugins/<id>/`, with no npm and no network;
+  - an agent outside Tagma, such as one working in a repository, runs `tagma-plugin init`.
 - **`@runlith/tagma/testing`** runs a definition under Bun with no Tagma running. It calls a tool as a given caller, fires a tick, delivers an ending or a hook call, and reads the emitted manifest. It mirrors the adapter kit's `conformance`.
 
 ## Versions
@@ -194,7 +198,7 @@ Decoding is lenient, so adding to the surface never breaks a running plugin: an 
 
 ## Acceptance
 
-- **Creating.** `npm create tagma` produces a folder that builds, type-checks, and installs from the folder through one `install_plugin`.
+- **Creating.** `create_plugin` writes a folder into `.tagma-plugins/<id>/`, and `tagma-plugin init` writes the same template elsewhere. The folder builds, type-checks and installs through one `install_plugin`.
 - **The build.** `tagma-plugin build` emits `tagma-plugin.json` with each tool's JSON Schema. A field the server would refuse fails the build with the server's reason. An unbundlable import fails the build.
 - **Inputs.** A zod-typed tool shows its JSON Schema to an agent before the process first starts. Invalid input answers `isError` with the validator's message, and the process stays up.
 - **The client.** `ctx.tagma.op` offers exactly the `external` operations. A refusal throws with its `code`. An unknown answer arm decodes as an open variant.

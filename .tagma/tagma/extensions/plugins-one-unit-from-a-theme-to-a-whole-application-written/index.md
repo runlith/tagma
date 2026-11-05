@@ -43,7 +43,7 @@ A person, or an agent working for them, extends Tagma through one thing: the plu
 
 Size changes what a plugin declares, never what it is.
 
-- A plugin in Tagma's format is written in TypeScript against `@runlith/tagma` and its `/plugin` door, and `npm create tagma` starts one.
+- A plugin in Tagma's format is written in TypeScript against `@runlith/tagma` and its `/plugin` door. An agent writes it, at a person's request: people using Tagma do not type commands or write code.
 - Every plugin installs by one act from a folder, git, npm or a marketplace entry, and stands on the one Plugins screen.
 - Claude Code and Codex plugins install through the same act and stand in the same list.
 - An MCP server stays a connection, with its own list.
@@ -64,7 +64,7 @@ Size changes what a plugin declares, never what it is.
 - **A plugin's threads stand under the plugin.** The plugin decides whether they also stand in the general thread list.
 - **A plugin may ask a model once, with no thread.**
 - **The `TagmaApp` naming exception goes with `TagmaApp`.** The change that renames the code removes it from rules eeaf88ec and 931cfbf1.
-- **The package keeps its name.** It stays `@runlith/tagma`, the package every project's `tagma.config.ts` already imports (`@runlith/tagma/rules`), with doors added; `create-tagma` stands beside it.
+- **The package keeps its name.** It stays `@runlith/tagma`, the package every project's `tagma.config.ts` already imports (`@runlith/tagma/rules`), with doors added. No separate generator package is published, because a plugin is started by an agent, never typed by a person.
 
 Trust and consent at install are not part of this spec.
 
@@ -202,7 +202,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 - A part's module is loaded when the plugin is enabled, because feed rows need their geometry synchronously (explanation 8b7128c3).
 - Every mount sits in its own `<svelte:boundary>`, so a throwing part breaks only itself.
 - Sections, panes and windows take any view kind.
-- `create-tagma` produces Svelte views, and agents write Svelte views by default.
+- The plugin template produces Svelte views, and agents write Svelte views by default.
 
 **Where an iframe stays.** It stays where the HTML is not ours:
 - an MCP App window;
@@ -234,7 +234,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 - **One in-server loader** is extracted from `providers/adapters` (`importAdapter`, host modules, versioned directories, leases, sweep). `providers` and `speech` both load through it and each declares its own port for installed packages. Speech becomes a reloadable catalog, and a listening session pins the catalog it started with.
 - **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the specifier rewrite, the utilities sheet, the module route, the slot faces, and the page-view iframe module. Each declares its port to `plugins` for installed packages.
 - **`app-plugins` (client)** draws the screen. Providers are added from the Providers screen through the same install act.
-- **`@runlith/tagma`** gains the `/plugin`, `/ui` and `/testing` doors beside `/rules` and `/adapter/*` ([[5067fa15]]). `create-tagma` is its own package.
+- **`@runlith/tagma`** gains the `/plugin`, `/ui` and `/testing` doors beside `/rules` and `/adapter/*`, and the plugin template ([[5067fa15]]). `plugins` gains `create_plugin`, which writes the template into `.tagma-plugins/<id>/`.
 
 ## The Plugins screen
 
@@ -291,7 +291,7 @@ Earlier steps renamed these identifiers from `plugin__` to `app__` (`tagma-apps/
 ## Order of work
 
 1. **Fold apps into `plugins` and its screen.** One install act, the records, the migration, and apps standing on the Plugins screen with their state. Today a failed app shows only in `read_apps` (feature 15a61526).
-2. **The SDK and `create-tagma`, as a prerelease on npm.** Contributions published from the manifest, idle and on-demand start, committed build output.
+2. **The SDK and `create_plugin`, the SDK as a prerelease on npm.** Contributions published from the manifest, idle and on-demand start, committed build output.
 3. **Themes, shortcuts and window entries**, as data or as a command the process serves.
 4. **Depth 1 of the agent layer** (child spec).
 5. **The window's module host:** Svelte views, bundled views, page views, the utilities sheet. MCP App windows move to the MCP client's module.
@@ -303,7 +303,7 @@ Earlier steps renamed these identifiers from `plugin__` to `app__` (`tagma-apps/
 ## Acceptance
 
 Performer checks, each through the same door a real caller uses:
-- **Authoring.** `npm create tagma`, then an agent adds a tool, a schedule, a notification and a Svelte section; the build emits `tagma-plugin.json`. One `install_plugin` from the folder installs it. The tool stands in an agent's catalog before the process ever ran, and the first call starts the process.
+- **Authoring.** An agent asked for a plugin calls `create_plugin`, then adds a tool, a schedule, a notification and a Svelte section; the build emits `tagma-plugin.json`. One `install_plugin` from the folder installs it. The tool stands in an agent's catalog before the process ever ran, and the first call starts the process.
 - **Idle and resident.** A plugin idle past its quiet period stops, and its next tick starts it again. A `resident` plugin stays up.
 - **Installing.** Plugins in Tagma's format install from git, from npm and from a marketplace entry. A Claude Code plugin and a Codex plugin install through the same act and are listed beside it, with their source and skipped parts. A plugin's MCP server stands in the server list marked with it.
 - **The plugin's own server.** A plugin's process calls a tool of the server it brought under that server's sign-in, with no secret of its own.
@@ -320,7 +320,7 @@ Performer checks, each through the same door a real caller uses:
 
 ## Open for the operator
 
-- **Publishing.** Registering `create-tagma`, and publishing on npm, are acts outside the machine.
+- **Publishing.** Publishing `@runlith/tagma` on npm is an act outside the machine.
 
 ## Risks
 
