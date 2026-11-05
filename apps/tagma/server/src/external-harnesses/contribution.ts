@@ -53,7 +53,7 @@ export function externalHarness(
     birthWrites: protocol.writes,
     seat: (source, unit) =>
       Effect.flatMap(store.binding(source, unit), (binding) =>
-        binding?.adapter === 'terminal' ? terminal.seat(source, unit) : protocol.seat(source, unit),
+        binding?.transport.adapter === 'terminal' ? terminal.seat(source, unit) : protocol.seat(source, unit),
       ),
     retract,
     folded: () => Effect.void,

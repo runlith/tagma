@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { ThreadModelSelection } from '@runlith/agent/thread/record';
+import { isUnread, type ThreadModelSelection } from '@runlith/agent/thread/record';
 import type { Harness, HarnessMoveTo } from '../../threads/contract/service/harness.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -27,7 +27,15 @@ export function harnessMove(
   const provider = servingProvider(adapter, 'acp');
   return Effect.fnUntraced(function* (threadId: string, to: HarnessMoveTo) {
     const facet = yield* store.read(threadId);
-    if (facet === null || (yield* store.binding(threadId))?.adapter !== 'acp' || provider === null || to.provider !== provider) {
+    const bound = yield* store.binding(threadId);
+    if (bound !== undefined && isUnread(bound, 'transport')) {
+      return yield* new GateRefusal(
+        'model-pinned',
+        `Thread ${threadId}'s stored transport did not read, so its model cannot move until a transport is stored again.`,
+        ['set_thread_transport stores its transport again'],
+      );
+    }
+    if (facet === null || bound?.transport.adapter !== 'acp' || provider === null || to.provider !== provider) {
       return yield* new GateRefusal(
         'model-pinned',
         `${adapter.label} runs here on the ${provider ?? 'CLI'} row; another provider is another agent.`,

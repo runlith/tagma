@@ -6,7 +6,11 @@ export type ProofWords = { readonly label: string; readonly hint: string };
 
 const RUNS = { acp: 'runs here as a chat', terminal: 'runs in its own terminal' } as const;
 
-export const roadName = (transport: HarnessTransport): string => (transport === 'acp' ? 'Chat' : 'Terminal');
+export const runsOn = (transport: HarnessTransport | null): string =>
+  transport === null ? 'has a stored transport that did not read' : RUNS[transport];
+
+export const roadName = (transport: HarnessTransport | null): string =>
+  transport === null ? 'Transport unread' : transport === 'acp' ? 'Chat' : 'Terminal';
 
 const RECORD = 'Tagma’s record of the conversation: its words, answers and calls, without its reasoning or full tool outputs';
 
@@ -52,6 +56,11 @@ function seededGap(harness: HarnessRowDetail): readonly [string, string] | null 
 }
 
 export function proofWords(harness: HarnessRowDetail): ProofWords | null {
+  if (harness.unread !== undefined)
+    return {
+      label: roadName(null),
+      hint: `${harness.presentation.label}’s stored transport did not read, so what it can do is unknown until it moves to a transport again.`,
+    };
   const capabilities = harness.capabilities;
   const seeded = seededGap(harness);
   const copied = copyGap(capabilities);
@@ -75,6 +84,6 @@ export function proofWords(harness: HarnessRowDetail): ProofWords | null {
   if (first === undefined) return null;
   return {
     label: `${roadName(harness.transport)} · ${first[0]}`,
-    hint: `${harness.presentation.label} ${RUNS[harness.transport]}: ${gaps.map(([, said]) => said).join('; ')}.`,
+    hint: `${harness.presentation.label} ${runsOn(harness.transport)}: ${gaps.map(([, said]) => said).join('; ')}.`,
   };
 }

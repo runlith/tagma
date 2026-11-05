@@ -182,7 +182,8 @@ export const makeThreadEnding = Effect.fnUntraced(function* ({
             tree.map((member) => member.id),
             'scope-closed',
           );
-          for (const member of tree) yield* releasing.release(member.id);
+          const holding = new Set((yield* heldSessionsInSubtree(threadId)).map((session) => session.threadId));
+          for (const member of tree) if (holding.has(member.id)) yield* releasing.release(member.id);
           yield* held.left(tree.map((member) => member.id));
           yield* endHeld(tree, act);
           const taken = tree.map((member) => member.id);

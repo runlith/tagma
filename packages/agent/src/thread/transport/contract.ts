@@ -4,7 +4,7 @@ import type { WordsWait } from '../../transcript/live';
 import type { ThreadRunStoppedBy } from '../ending';
 import type { AgentRuntimeGuidance } from '../../agent/contracts';
 import type { ThreadEventBody } from '../events';
-import type { ThreadForkCut, TransportBinding, TransportCapabilities } from '../record';
+import type { ThreadBinding, ThreadForkCut, TransportCapabilities } from '../record';
 import type { ThreadTx, ThreadWriteTx } from '../ThreadPorts';
 import type { ThreadRow, ThreadRunRow } from '../rows';
 import type { ThreadInboxItem } from '../storage/inbox';
@@ -173,8 +173,14 @@ export class TransportUnregistered extends Data.TaggedError('TransportUnregister
   }
 }
 
+export class TransportUnread extends Data.TaggedError('TransportUnread')<{}> {
+  override get message(): string {
+    return 'The stored transport of this thread did not read, so no transport serves it until one is stored again.';
+  }
+}
+
 export type TransportRegistry = {
   register(transport: Transport): Effect.Effect<void, TransportMismatch | TransportRegistered>;
-  of(binding: TransportBinding): Effect.Effect<Transport, TransportUnregistered>;
+  of(binding: ThreadBinding): Effect.Effect<Transport, TransportUnregistered | TransportUnread>;
   all(): readonly Transport[];
 };

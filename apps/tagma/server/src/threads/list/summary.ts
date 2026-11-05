@@ -9,10 +9,8 @@ import {
   parseThreadContextReading,
   parseThreadRunFailure,
   parseThreadRunProgress,
-  readThreadAuthority,
   readThreadBornOf,
-  readTransportBinding,
-  readTransportCapabilities,
+  readThreadFacts,
   readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { thread } from '../store/kernel.js';
@@ -183,9 +181,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     cacheGroup: row.thread.cacheGroup ?? row.thread.id,
     provider: row.thread.provider ?? 'external',
     switches: row.thread.switches ?? {},
-    authority: readThreadAuthority(kinds, row.thread.id, row.thread.authority),
-    transport: readTransportBinding(kinds, row.thread.id, row.thread.transport),
-    capabilities: readTransportCapabilities(kinds, row.thread.id, row.thread.capabilities),
+    ...readThreadFacts(kinds, row.thread.id, row.thread),
   };
   const progress = row.progress === null ? null : readable(() => parseThreadRunProgress(row.progress), null);
   const harness = readable(() => parseExternalSession(row.harness), null);

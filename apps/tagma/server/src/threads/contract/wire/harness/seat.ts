@@ -1,8 +1,8 @@
 import type { ThreadTransport } from '@runlith/agent/thread/rows';
 import type { ModelSwitches } from '@runlith/llm/models/description';
-import type { TransportBinding, TransportCapabilities } from '@runlith/agent/thread/record';
+import type { ThreadBinding, TransportCapabilities, UnreadMark } from '@runlith/agent/thread/record';
 import type { HarnessTransport } from './names.js';
-import { NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
+import { isUnread, NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { ThreadModelSelection } from '@runlith/agent/thread/record';
 import type { ExternalSession } from './externalSession.js';
@@ -10,7 +10,8 @@ import { currentEffort, currentModel } from './observation.js';
 
 export const EXTERNAL_PROVIDER = 'external';
 
-export const harnessTransportOf = (binding: TransportBinding): HarnessTransport => (binding.adapter === 'terminal' ? 'terminal' : 'acp');
+export const harnessTransportOf = (seated: ThreadBinding): HarnessTransport | null =>
+  isUnread(seated, 'transport') ? null : seated.transport.adapter === 'terminal' ? 'terminal' : 'acp';
 
 export type SeatSelection = {
   readonly provider: string;
@@ -74,4 +75,4 @@ export const servedSelection = (
     : { provider, model, reasoning: chosen?.reasoning ?? (facet === null ? null : currentEffort(facet.observation)) };
 };
 
-export type HarnessRoad = ThreadTransport & SeatSelection;
+export type HarnessRoad = ThreadTransport & SeatSelection & UnreadMark;

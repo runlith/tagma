@@ -124,8 +124,8 @@ export const memorySessionRows = Effect.fnUntraced(function* (storage: MemorySto
       return storage.aggregate.update(id, { model: chosen?.model ?? null, reasoning: chosen?.reasoning ?? null, switches, account }, tx);
     },
     switches: (id, unit) => Effect.map(thread(id, unit), (row) => row?.switches ?? {}),
-    capabilities: (id) => Effect.map(thread(id), (row) => row?.capabilities),
-    binding: (id, unit) => Effect.map(thread(id, unit), (row) => row?.transport),
+    capabilities: (id) => Effect.map(thread(id), (row) => (row === undefined ? undefined : { capabilities: row.capabilities })),
+    binding: (id, unit) => Effect.map(thread(id, unit), (row) => (row === undefined ? undefined : { transport: row.transport })),
   });
   return {
     rows,

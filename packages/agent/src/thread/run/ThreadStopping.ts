@@ -39,9 +39,7 @@ export const threadStoppingLayer = Layer.effect(
       handle: (event) =>
         event.status !== 'withdrawn'
           ? Effect.void
-          : Effect.flatMap(store.metadata(event.threadId), (thread) =>
-              thread === undefined ? Effect.void : moved(thread.id, thread.transport),
-            ),
+          : Effect.flatMap(store.metadata(event.threadId), (thread) => (thread === undefined ? Effect.void : moved(thread.id, thread))),
     });
 
     const retold = Effect.fnUntraced(function* (thread: ThreadMetadataRow, ask: ThreadStopAsk) {
@@ -100,7 +98,7 @@ export const threadStoppingLayer = Layer.effect(
 
     return ThreadStopping.of({
       release: Effect.fnUntraced(function* (thread, operation) {
-        const transport = yield* Effect.mapError(transports.of(thread.transport), (cause) => new ThreadCallBroke({ cause }));
+        const transport = yield* Effect.mapError(transports.of(thread), (cause) => new ThreadCallBroke({ cause }));
         return transport.resource === undefined ? ('not-running' as const) : yield* transport.resource.release(thread.id, operation);
       }),
       stop,

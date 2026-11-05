@@ -41,7 +41,7 @@ export const makeHookGuidance = (
     if (projectId === undefined) return yield* threadCallFailed(new Error(`Thread ${threadId} has no home.`));
     const binding = yield* store.binding(threadId).pipe(Effect.mapError(threadCallFailed));
     if (binding === undefined) return yield* threadCallFailed(new Error(`Thread ${threadId} is gone.`));
-    const reports: AdapterReports = reportsFor.of(binding.adapter);
+    const reports: AdapterReports = reportsFor.of(binding.transport.adapter);
     return reports;
   });
 

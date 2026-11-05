@@ -1,8 +1,8 @@
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
-import type { TransportBinding } from '@runlith/agent/thread/record';
+import type { ThreadBinding, ThreadCapabilities } from '@runlith/agent/thread/record';
 import type { TransportCapabilities, TransportCopies } from '@runlith/agent/thread/record';
-import { readTransportBinding, readTransportCapabilities } from '@runlith/agent/thread/persisted';
+import { readThreadBinding, readThreadCapabilities, readThreadTransport } from '@runlith/agent/thread/persisted';
 import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
@@ -109,9 +109,9 @@ export const capabilitiesOf = (
   kinds: ThreadEntryReader,
   unit: Unit<'machine'>,
   threadId: string,
-): Effect.Effect<TransportCapabilities | undefined, StoreFailure> =>
+): Effect.Effect<ThreadCapabilities | undefined, StoreFailure> =>
   Effect.map(unit.run(db.select({ capabilities: thread.capabilities }).from(thread).where(eq(thread.id, threadId)).get()), (row) =>
-    row === undefined ? undefined : readTransportCapabilities(kinds, threadId, row.capabilities),
+    row === undefined ? undefined : readThreadCapabilities(kinds, threadId, row.capabilities),
   );
 
 export const chooseModel = Effect.fn('ThreadSeat.chooseModel')(function* (
@@ -185,9 +185,9 @@ export const bindingOf = (
   kinds: ThreadEntryReader,
   unit: Unit<'machine'>,
   threadId: string,
-): Effect.Effect<TransportBinding | undefined, StoreFailure> =>
+): Effect.Effect<ThreadBinding | undefined, StoreFailure> =>
   Effect.map(unit.run(db.select({ transport: thread.transport }).from(thread).where(eq(thread.id, threadId)).get()), (row) =>
-    row === undefined ? undefined : readTransportBinding(kinds, threadId, row.transport),
+    row === undefined ? undefined : readThreadBinding(kinds, threadId, row.transport),
   );
 
 export const roadOf = (
@@ -213,11 +213,7 @@ export const roadOf = (
     (row) =>
       row === undefined
         ? Effect.die(new Error(`Thread ${threadId} stands without its kernel row.`))
-        : Effect.succeed({
-            ...row,
-            transport: readTransportBinding(kinds, threadId, row.transport),
-            capabilities: readTransportCapabilities(kinds, threadId, row.capabilities),
-          }),
+        : Effect.succeed({ ...row, ...readThreadTransport(kinds, threadId, row) }),
   );
 
 export const askedOf = (

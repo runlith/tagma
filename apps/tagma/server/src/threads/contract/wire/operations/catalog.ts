@@ -273,7 +273,7 @@ export const THREAD_OPERATIONS = {
     meaning:
       "Restart one thread's agent: stop its running turn, end the agent process its transport holds so the next turn starts one from the installed build and the account the thread chose, and continue the stopped turn, or the last turn a rate limit ended, over its history. A transport that cannot continue without words, and a thread with neither turn, only lose the process; their next words start the new one. Each restart leaves one feed entry naming who restarted, the stopped turn and the calls it closed.",
     input: Schema.Struct({ threadId: ThreadId }),
-    refusals: ['not-found', 'foreign-project', 'session-owned', 'session-uncertain'],
+    refusals: ['not-found', 'foreign-project', 'session-owned', 'session-uncertain', 'transport-cannot'],
     subjects: (input, _prepared, actor) => subject('write', input.threadId, actor),
     confirmation: (input) => ({ summary: `Restart the agent of ${input.threadId}?` }),
     confirmLabel: 'Restart',

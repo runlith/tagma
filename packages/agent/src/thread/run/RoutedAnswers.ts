@@ -74,7 +74,7 @@ export const makeRoutedAnswers = Effect.fnUntraced(function* ({
       const row = yield* store.metadata(threadId);
       if (row === undefined) return null;
       const transport = yield* Effect.mapError(
-        transports.of({ ...row.transport, adapter: route }),
+        transports.of({ transport: { ...row.transport, adapter: route } }),
         (cause) => new ThreadCallBroke({ cause }),
       );
       if (transport.asks === undefined) {

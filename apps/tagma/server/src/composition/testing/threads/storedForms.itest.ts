@@ -23,6 +23,17 @@ import {
 } from '../../../threads/testing/doubles.js';
 import { NATIVE_BINDING } from '@runlith/agent/thread/record';
 import { restFor } from '../../../threads/testing/rest.js';
+import { MachineUnits } from '../../../platform/contract/service/units.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
+import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
+import { makeThreadRecords } from '../../../thread-record/layer.js';
+import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
+import { isTransportEntry } from '../../../threads/contract/wire/harness/transportEntry.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { terminalKernel } from '../../../external-harnesses/testing/doubles.js';
+import { threadStack } from '../threadParts.js';
+import { windowChannel } from './windowChannel.js';
 import { ENTRY_KINDS } from '../composed.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 
@@ -260,25 +271,117 @@ it.live('a thread whose authority, transport, capabilities or birth does not rea
     );
     yield* Schema.encodeEffect(threadsFeedEventSchema)(listed);
 
-    expect((yield* snapshotOf(projectId, damaged.authority))?.thread.authority).toEqual({ mode: 'review', bypassFrom: null });
-    expect((yield* snapshotOf(projectId, damaged.transport))?.thread.transport).toEqual({
-      adapter: 'unreadable',
-      profile: null,
-      agent: null,
+    expect((yield* snapshotOf(projectId, damaged.authority))?.thread).toMatchObject({
+      authority: { mode: 'review', bypassFrom: null },
+      unread: ['authority'],
     });
-    expect((yield* snapshotOf(projectId, damaged.capabilities))?.thread.capabilities).toMatchObject({ history: 'none', continue: false });
-    expect(yield* snapshotOf(projectId, damaged.bornOf)).not.toBeNull();
+    expect((yield* snapshotOf(projectId, damaged.transport))?.thread.unread).toEqual(['transport']);
+    expect((yield* snapshotOf(projectId, damaged.capabilities))?.thread).toMatchObject({
+      capabilities: { history: 'none', continue: false },
+      unread: ['capabilities'],
+    });
+    expect((yield* snapshotOf(projectId, damaged.bornOf))?.thread.unread).toBeUndefined();
 
     expect(yield* toldOf(damaged.authority)).toContainEqual(expect.stringContaining('thread row: Thread'));
     expect(yield* toldOf(damaged.transport)).toContainEqual(expect.stringContaining('transport binding cannot be read'));
     expect(yield* toldOf(damaged.capabilities)).toContainEqual(expect.stringContaining('transport capabilities cannot be read'));
     expect(yield* toldOf(damaged.bornOf)).toEqual([expect.stringContaining('born-of cannot be read')]);
 
-    const unreleased = yield* Effect.exit(
-      Effect.provide(turnsOf(world.runtime.owners).delete(damaged.transport, projectId), world.runtime.owners),
-    );
-    expect(Exit.isFailure(unreleased)).toBe(true);
-    yield* db.run(sql`update native_thread set transport = ${JSON.stringify(NATIVE_BINDING)} where id = ${damaged.transport}`);
+    const project = `project=${projectId}`;
+    expect((yield* world.op('restart_thread', { threadId: damaged.transport }, project)).body).toMatchObject({
+      code: 'transport-cannot',
+      reason: expect.stringContaining('did not read'),
+    });
+    expect((yield* world.op('delete_thread', { threadId: damaged.transport }, project)).body).toMatchObject({ status: 'deleted' });
+  }).pipe(Effect.scoped, Effect.provide(fixture)),
+);
+
+it.live(
+  'a transport or capabilities that did not read are told as such to every reader, and set_thread_transport stores a road again',
+  () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const projectId = yield* world.stealthProject();
+      yield* projectLeaving(world, projectId);
+      const { db } = Context.get(world.runtime.graph, MachineStore);
+      const units = Context.get(world.runtime.graph, MachineUnits);
+      const context = yield* world.runtime.runtime.contextEffect;
+      const records = yield* Effect.provide(makeThreadRecords, context);
+      const { store, threads } = yield* Effect.provide(threadStack({ db, units, records, kinds: ENTRY_KINDS }), context);
+      const cli = yield* units.write('storedForms.harnessThread', (unit) =>
+        Effect.gen(function* () {
+          const row = yield* store.insert({ ownerId: OPERATOR_PRINCIPAL, agentId: 'harness' }, unit);
+          yield* threads.rows.attachFacet(
+            {
+              threadId: row.id,
+              projectId,
+              harness: {
+                facet: harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))),
+                kernel: terminalKernel(builtinHarness('claude-code'), undefined, false, {}),
+              },
+            },
+            unit,
+          );
+          return row.id;
+        }),
+      );
+      const native = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null })).thread.id;
+      const broken = '{"oops":1}';
+      yield* db.run(sql`update native_thread set transport = ${broken} where id = ${cli}`);
+      yield* db.run(sql`update native_thread set capabilities = ${broken} where id = ${native}`);
+
+      const frame = yield* Stream.runHead(Context.get(world.runtime.owners, ThreadFeeds)['threads.subscribe']({ projectId }));
+      const listed = Option.getOrThrow(frame);
+      const row = listed.type === 'list' ? listed.rows.find((each) => each.id === cli) : undefined;
+      expect(row?.harness).toMatchObject({ name: 'claude-code', transport: null });
+
+      const cannot = yield* world.op('read_rewind_points', { threadId: native }, `project=${projectId}`);
+      expect(cannot.body).toMatchObject({
+        code: 'transport-cannot',
+        reason: expect.stringContaining('its stored transport capabilities did not read'),
+      });
+      expect((cannot.body as { readonly unblock: readonly string[] }).unblock.join(' ')).not.toContain('set_thread_transport');
+
+      const moved = yield* world.op('set_thread_transport', { threadId: cli, transport: 'acp' }, `project=${projectId}`);
+      expect(moved.body).toMatchObject({ status: 'switched', transport: 'acp' });
+      const seated = yield* snapshotOf(projectId, cli);
+      expect(seated?.thread).toMatchObject({ transport: { adapter: 'acp', profile: 'claude-code' } });
+      expect(seated?.thread.unread).toBeUndefined();
+      expect(seated?.transcript.filter(isTransportEntry).map((entry) => [entry.from, entry.to])).toEqual([[null, 'acp']]);
+
+      yield* db.run(sql`update native_thread set capabilities = ${broken} where id = ${cli}`);
+      const chosen = (yield* Context.get(world.runtime.owners, ProviderRegistry).catalog).defaultModel;
+      const pinned = yield* world.op(
+        'set_thread_model',
+        { threadId: cli, provider: chosen?.provider ?? 'none', model: chosen?.model ?? 'none', reasoning: null, switches: {} },
+        `project=${projectId}`,
+      );
+      expect(pinned.body).toMatchObject({ code: 'model-pinned', reason: expect.stringContaining('did not read') });
+    }).pipe(Effect.scoped, Effect.provide(fixture)),
+);
+
+it.live('a steer on a thread whose transport did not read is not taken back as unsent', () =>
+  Effect.gen(function* () {
+    const world = yield* DoorFixture;
+    const projectId = yield* world.stealthProject();
+    yield* projectLeaving(world, projectId);
+    const { db } = Context.get(world.runtime.graph, MachineStore);
+    const id = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null })).thread.id;
+    const run = `${id}:run`;
+    yield* db.insert(threadRun()).values({ id: run, threadId: id, ownerId: 'operator', status: 'running' });
+    const window = yield* windowChannel(world);
+    const steered = yield* window['thread.steer']({
+      projectId,
+      threadId: id,
+      params: { expectedRunId: run, text: 'later words', key: `${id}:steer` },
+    });
+    const inputId = 'itemId' in steered ? steered.itemId : '';
+    yield* db.run(sql`update native_thread set transport = ${'{"oops":1}'} where id = ${id}`);
+
+    const taken = yield* Effect.flip(window['thread.unqueue']({ projectId, threadId: id, params: { inputId } }));
+    expect(taken).toMatchObject({ code: 'withdraw-failed', reason: expect.stringContaining('did not read') });
+    yield* db.run(sql`update native_thread set transport = ${JSON.stringify(NATIVE_BINDING)} where id = ${id}`);
+    yield* db.run(sql`update thread_run set status = 'cut', finished_at = ${yield* Clock.currentTimeMillis} where id = ${run}`);
   }).pipe(Effect.scoped, Effect.provide(fixture)),
 );
 

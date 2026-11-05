@@ -29,7 +29,14 @@ export function threadTarget(thread: ThreadRecord): ThreadTarget {
   return { threadId: thread.id, ...(thread.projectId === undefined ? {} : { projectId: thread.projectId }) };
 }
 
-export type ThreadRecord = {
+export const UNREAD_FACTS = ['transport', 'capabilities', 'authority'] as const;
+export type UnreadFact = (typeof UNREAD_FACTS)[number];
+
+export type UnreadMark = { readonly unread?: readonly UnreadFact[] };
+
+export const isUnread = (read: UnreadMark, fact: UnreadFact): boolean => read.unread?.includes(fact) === true;
+
+export type ThreadRecord = UnreadMark & {
   readonly id: string;
   readonly projectId?: number;
   readonly principal: string;
@@ -72,6 +79,10 @@ export const transportBindingSchema = Schema.Struct({
   agent: Schema.NullOr(Schema.String),
 });
 export type TransportBinding = typeof transportBindingSchema.Type;
+
+export type ThreadBinding = UnreadMark & { readonly transport: TransportBinding };
+
+export type ThreadCapabilities = UnreadMark & { readonly capabilities: TransportCapabilities };
 
 export const transportWebSchema = Schema.Literals(['vendor', 'none']);
 export type TransportWeb = typeof transportWebSchema.Type;
@@ -132,16 +143,47 @@ export const TRANSPORT_CANNOT_WAYS = [
   'send words to the thread, or start a thread whose transport declares the capability',
 ] as const;
 
+export const CAPABILITIES_UNREAD_WAYS = [
+  'set_thread_transport stores a harness thread’s transport and capabilities again',
+  'start a new thread for this work',
+] as const;
+
+const NATIVE_UNREAD_WAYS = ['start a new thread for this work'] as const;
+
+export const capabilitiesUnreadWays = (adapter: string): readonly [string, ...string[]] =>
+  adapter === NATIVE_HARNESS ? NATIVE_UNREAD_WAYS : CAPABILITIES_UNREAD_WAYS;
+
 export class TransportCannotError extends Data.TaggedError('TransportCannot')<{
   readonly threadId: string;
   readonly capability: TransportCapabilityName;
   readonly adapter: string;
+  readonly capabilitiesUnread?: boolean;
   readonly reason?: string;
 }> {
   override get message(): string {
+    if (this.capabilitiesUnread === true)
+      return `This thread cannot ${CANNOT_ACTS[this.capability]}: its stored transport capabilities did not read, so they stand as none.`;
     return this.reason ?? transportCannotReason(this.capability, this.adapter);
   }
+
+  get ways(): readonly [string, ...string[]] {
+    return this.capabilitiesUnread === true ? capabilitiesUnreadWays(this.adapter) : TRANSPORT_CANNOT_WAYS;
+  }
 }
+
+export const cannotOn = (
+  thread: UnreadMark & { readonly id: string },
+  capability: TransportCapabilityName,
+  adapter: string,
+  reason?: string,
+): TransportCannotError =>
+  new TransportCannotError({
+    threadId: thread.id,
+    capability,
+    adapter: isUnread(thread, 'transport') ? 'unread' : adapter,
+    capabilitiesUnread: isUnread(thread, 'capabilities'),
+    reason,
+  });
 
 export const NATIVE_BINDING: TransportBinding = { adapter: 'native', profile: null, agent: null };
 

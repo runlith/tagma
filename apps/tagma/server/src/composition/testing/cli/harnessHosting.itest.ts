@@ -56,7 +56,7 @@ layer(fixture, { excludeTestServices: true })('hosted native calls', (it) => {
           const row = yield* storage.threads.metadata(thread);
           if (row === undefined) return yield* Effect.die('the hosted thread disappeared');
           const transports = Context.get(world.world.runtime.owners, ThreadHarness).runs.transports();
-          const transport = yield* transports.of(row.transport);
+          const transport = yield* transports.of(row);
           const reaching = yield* Deferred.make<void>();
           const printed = yield* Deferred.make<void>();
           yield* transports.register({

@@ -73,7 +73,7 @@ export const runControlLayer: Layer.Layer<RunControl, never, Transports | Thread
           return Effect.flatMap(store.metadata(run.threadId), (thread) =>
             thread === undefined
               ? Effect.succeed<InterruptReceipt>('no-turn')
-              : Effect.matchEffect(transports.of(thread.transport), {
+              : Effect.matchEffect(transports.of(thread), {
                   onFailure: () => Effect.succeed<InterruptReceipt>('no-turn'),
                   onSuccess: (bound) => bound.runs.interrupt(run.id, by),
                 }),

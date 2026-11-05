@@ -2,14 +2,13 @@ import { Clock, Effect, Predicate } from 'effect';
 import type { ThreadAuthority, ThreadHistory, ThreadMetadataRow } from '@runlith/agent/thread/rows';
 import type { ThreadTranscript } from '@runlith/agent/transcript/rows';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
+import type { UnreadMark } from '@runlith/agent/thread/record';
 import type { ThreadInsertValues, ThreadPatch } from '@runlith/agent/thread/storage/aggregate';
 import {
   parseThreadContextReading,
   parseThreadPendingInteraction,
-  readThreadAuthority,
   readThreadBornOf,
-  readTransportBinding,
-  readTransportCapabilities,
+  readThreadFacts,
   readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { and, eq, sql } from 'drizzle-orm';
@@ -115,10 +114,13 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
   };
 });
 
-export function threadRowOf<T extends ThreadMetadataRow>(kinds: ThreadEntryReader, row: T): Effect.Effect<T, ThreadStorageFailed> {
-  return trusted<T>('threadRow', () => ({
+export function threadRowOf<T extends ThreadMetadataRow>(
+  kinds: ThreadEntryReader,
+  row: T,
+): Effect.Effect<T & UnreadMark, ThreadStorageFailed> {
+  return trusted<T & UnreadMark>('threadRow', () => ({
     ...row,
-    authority: readThreadAuthority(kinds, row.id, row.authority),
+    ...readThreadFacts(kinds, row.id, row),
     bornOf: readThreadBornOf(kinds, row.id, row.bornOf),
     pendingInteraction: readableRowFact(
       kinds,
@@ -134,8 +136,6 @@ export function threadRowOf<T extends ThreadMetadataRow>(kinds: ThreadEntryReade
       () => parseThreadContextReading(kinds, row.contextReading),
       null,
     ),
-    transport: readTransportBinding(kinds, row.id, row.transport),
-    capabilities: readTransportCapabilities(kinds, row.id, row.capabilities),
   }));
 }
 

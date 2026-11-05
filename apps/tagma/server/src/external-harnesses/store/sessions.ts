@@ -6,7 +6,7 @@ import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { HarnessRoad } from '../../threads/contract/wire/harness/seat.js';
-import type { TransportBinding, TransportCapabilities } from '@runlith/agent/thread/record';
+import type { ThreadBinding, ThreadCapabilities } from '@runlith/agent/thread/record';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { observationRebound } from '../observations/staleness.js';
@@ -18,9 +18,20 @@ import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { SessionRows, StandingSession } from '../contract/service/sessionRows.js';
 
 export type SessionChange<A> = { readonly facet: ExternalSession; readonly value: A };
-type SessionArgv = (facet: ExternalSession, id: string, asked: HarnessAskedModel | undefined) => Effect.Effect<readonly string[] | null, HarnessFailure>;
-type SessionAcceptance = { readonly writes: WriteSet; readonly run: (session: HarnessSession, unit: WriteUnit<'machine'>) => Effect.Effect<void, HarnessFailure> };
-export type SessionOpening = { readonly session: HarnessSession; readonly created: boolean; readonly announce: Effect.Effect<void, HarnessFailure> };
+type SessionArgv = (
+  facet: ExternalSession,
+  id: string,
+  asked: HarnessAskedModel | undefined,
+) => Effect.Effect<readonly string[] | null, HarnessFailure>;
+type SessionAcceptance = {
+  readonly writes: WriteSet;
+  readonly run: (session: HarnessSession, unit: WriteUnit<'machine'>) => Effect.Effect<void, HarnessFailure>;
+};
+export type SessionOpening = {
+  readonly session: HarnessSession;
+  readonly created: boolean;
+  readonly announce: Effect.Effect<void, HarnessFailure>;
+};
 
 export type SessionPublished = (threadId: string, facet: ExternalSession) => Effect.Effect<void, HarnessFailure>;
 
@@ -171,42 +182,46 @@ export class HarnessSessionStore {
     accepted?: SessionAcceptance,
     run?: string,
   ): Effect.Effect<SessionOpening, HarnessFailure> {
-    return Effect.map(this.settle(
-      threadId,
-      (facet, unit): Effect.Effect<SessionChange<{ readonly session: HarnessSession; readonly created: boolean }>, HarnessFailure> => {
-        if (facet.retiring) return new GateRefusal('session-deleting', 'This session is being deleted.', ['finish deleting this session']);
-        if (harnessSessionActive(facet.session)) return Effect.succeed({ facet, value: { session: facet.session, created: false } });
-        if (run !== undefined && facet.turn?.run !== run)
-          return new GateRefusal('run-stopped', `Run ${run} was stopped before its CLI started, so none is started for it.`, [
-            'send the words again to start a new run',
-          ]);
-        const id = uuidv7();
-        return Effect.flatMap(
-          Effect.flatMap(this.asked(threadId, unit), (asked) => argvOf(facet, id, asked)),
-          (argv) =>
-            Effect.flatMap(Clock.currentTimeMillis, (at) => {
-              const now = new Date(at).toISOString();
-              const session: HarnessSession = {
-                id,
-                origin: 'launched',
-                state: 'starting',
-                prompt,
-                cwd: null,
-                argv,
-                ownerId,
-                startedAt: now,
-                heartbeatAt: now,
-              };
-              const observation = observationRebound(facet.observation, { sessionId: session.id, execution: null, rootKey: null });
-              const { interrupted: _past, ...unmarked } = facet;
-              return (accepted?.run(session, unit) ?? Effect.void).pipe(
-                Effect.as({ facet: { ...unmarked, execution: null, session, observation }, value: { session, created: true } }),
-              );
-            }),
-        );
-      },
-      accepted?.writes,
-    ), (settled) => ({ ...settled.value, announce: this.announce(threadId, settled) }));
+    return Effect.map(
+      this.settle(
+        threadId,
+        (facet, unit): Effect.Effect<SessionChange<{ readonly session: HarnessSession; readonly created: boolean }>, HarnessFailure> => {
+          if (facet.retiring)
+            return new GateRefusal('session-deleting', 'This session is being deleted.', ['finish deleting this session']);
+          if (harnessSessionActive(facet.session)) return Effect.succeed({ facet, value: { session: facet.session, created: false } });
+          if (run !== undefined && facet.turn?.run !== run)
+            return new GateRefusal('run-stopped', `Run ${run} was stopped before its CLI started, so none is started for it.`, [
+              'send the words again to start a new run',
+            ]);
+          const id = uuidv7();
+          return Effect.flatMap(
+            Effect.flatMap(this.asked(threadId, unit), (asked) => argvOf(facet, id, asked)),
+            (argv) =>
+              Effect.flatMap(Clock.currentTimeMillis, (at) => {
+                const now = new Date(at).toISOString();
+                const session: HarnessSession = {
+                  id,
+                  origin: 'launched',
+                  state: 'starting',
+                  prompt,
+                  cwd: null,
+                  argv,
+                  ownerId,
+                  startedAt: now,
+                  heartbeatAt: now,
+                };
+                const observation = observationRebound(facet.observation, { sessionId: session.id, execution: null, rootKey: null });
+                const { interrupted: _past, ...unmarked } = facet;
+                return (accepted?.run(session, unit) ?? Effect.void).pipe(
+                  Effect.as({ facet: { ...unmarked, execution: null, session, observation }, value: { session, created: true } }),
+                );
+              }),
+          );
+        },
+        accepted?.writes,
+      ),
+      (settled) => ({ ...settled.value, announce: this.announce(threadId, settled) }),
+    );
   }
   adopted(threadId: string, adoption: AdoptionRequest, ownerId: string): Effect.Effect<HarnessSession, HarnessFailure> {
     return this.change(threadId, (facet) =>
@@ -337,10 +352,10 @@ export class HarnessSessionStore {
   switches(threadId: string, held?: Unit<'machine'>): Effect.Effect<ModelSwitches, StoreFailure> {
     return held === undefined ? this.rows.inspect((unit) => this.rows.switches(threadId, unit)) : this.rows.switches(threadId, held);
   }
-  capabilities(threadId: string): Effect.Effect<TransportCapabilities | undefined, StoreFailure> {
+  capabilities(threadId: string): Effect.Effect<ThreadCapabilities | undefined, StoreFailure> {
     return this.rows.capabilities(threadId);
   }
-  binding(threadId: string, held?: Unit<'machine'>): Effect.Effect<TransportBinding | undefined, StoreFailure> {
+  binding(threadId: string, held?: Unit<'machine'>): Effect.Effect<ThreadBinding | undefined, StoreFailure> {
     return held === undefined ? this.rows.inspect((unit) => this.rows.binding(threadId, unit)) : this.rows.binding(threadId, held);
   }
 }

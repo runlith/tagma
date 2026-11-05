@@ -54,6 +54,7 @@ const TURN_REFUSALS = [
   'cli-background',
   'answer-invalid',
   'withdraw-failed',
+  'transport-cannot',
 ] as const;
 
 export const ENDING_REFUSALS = [
@@ -69,6 +70,7 @@ export const ENDING_REFUSALS = [
   'session-unreadable',
   'cli-standing',
   'cli-background',
+  'transport-cannot',
 ] as const;
 
 const THREAD_GATE = ['unknown-project', 'not-found', 'foreign-project', 'thread-gone'] as const;

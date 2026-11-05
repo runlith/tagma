@@ -56,7 +56,7 @@ export class ProtocolHistory {
     const binding = yield* store.binding(source, unit);
     const seat: HarnessSeat = {
       facet: harnessFacet(facet.name, harnessPresentation(adapter)),
-      kernel: acpKernel(adapter, binding?.agent ?? null, yield* store.asked(source, unit), {}),
+      kernel: acpKernel(adapter, binding?.transport.agent ?? null, yield* store.asked(source, unit), {}),
     };
     return seat;
   });

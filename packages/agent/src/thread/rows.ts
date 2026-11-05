@@ -10,7 +10,7 @@ import type { ThreadNotificationRecord, ThreadRunStopRequest } from './storage/s
 import type { ThreadTranscript, ThreadTranscriptEntry } from '../transcript/rows';
 import type { RunTerminalStatus } from '../transcript/live';
 import { NATIVE_BINDING, type TransportBinding } from './record';
-import type { TransportCapabilities } from './record';
+import type { TransportCapabilities, UnreadMark } from './record';
 
 export type ThreadStatus = 'idle' | 'running' | 'failed';
 
@@ -137,7 +137,8 @@ export type ThreadMetadataRow = {
   createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
-} & ThreadTransport;
+} & ThreadTransport &
+  UnreadMark;
 
 export const agentOf = (row: ThreadMetadataRow): string => row.transport.agent ?? row.agentId;
 

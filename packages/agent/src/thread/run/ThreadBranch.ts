@@ -12,9 +12,9 @@ import { spliceThreadHistory } from '../HistoryFold';
 import { ThreadRewindRefusedError } from '../rewind';
 import type { ThreadProfileBirth } from '../agents/AgentProfile';
 import {
+  cannotOn,
   forkCutLabel,
   historyCannot,
-  TransportCannotError,
   type ThreadForkCut,
   type ThreadModelSelection,
   type TransportCapabilities,
@@ -127,9 +127,7 @@ export const makeThreadBranch = Effect.gen(function* () {
     if (going === null) return asked;
     const cannot = historyCannot(source.capabilities, 'point');
     if (cannot !== null) {
-      return yield* new ThreadCallBroke({
-        cause: new TransportCannotError({ threadId: source.id, capability: cannot, adapter: source.transport.adapter }),
-      });
+      return yield* new ThreadCallBroke({ cause: cannotOn(source, cannot, source.transport.adapter) });
     }
     const before: ThreadForkCut = { kind: 'before', runId: going.id };
     return before;

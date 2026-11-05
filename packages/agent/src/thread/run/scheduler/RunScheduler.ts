@@ -371,7 +371,7 @@ export const runSchedulerLayer = Layer.effect(
       adopt: Effect.fnUntraced(function* (candidate) {
         const thread = yield* store.find(candidate.threadId);
         if (!thread) return 'declined' as const;
-        const transport = yield* Effect.option(transports.of(thread.transport));
+        const transport = yield* Effect.option(transports.of(thread));
         if (transport._tag === 'None') return 'declined' as const;
         if (candidate.kind === 'compaction' && (thread.capabilities.compaction === 'foreign' || (yield* summarizedHere(candidate))))
           return 'declined' as const;

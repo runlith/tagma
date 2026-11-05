@@ -1,5 +1,13 @@
 import { Context, Effect, Layer } from 'effect';
-import { TransportMismatch, TransportRegistered, TransportUnregistered, type Transport, type TransportRegistry } from './contract';
+import { isUnread } from '../record';
+import {
+  TransportMismatch,
+  TransportRegistered,
+  TransportUnread,
+  TransportUnregistered,
+  type Transport,
+  type TransportRegistry,
+} from './contract';
 
 function mismatchOf(transport: Transport): TransportMismatch | null {
   const { adapter, declares } = transport;
@@ -31,9 +39,11 @@ export const transportsLayer: Layer.Layer<Transports> = Layer.sync(Transports, (
         registered.set(transport.adapter, transport);
         return Effect.void;
       }),
-    of: (binding) => {
-      const transport = registered.get(binding.adapter);
-      return transport === undefined ? Effect.fail(new TransportUnregistered({ adapter: binding.adapter })) : Effect.succeed(transport);
+    of: (seated) => {
+      if (isUnread(seated, 'transport')) return Effect.fail(new TransportUnread());
+      const { adapter } = seated.transport;
+      const transport = registered.get(adapter);
+      return transport === undefined ? Effect.fail(new TransportUnregistered({ adapter })) : Effect.succeed(transport);
     },
     all: () => [...registered.values()],
   };

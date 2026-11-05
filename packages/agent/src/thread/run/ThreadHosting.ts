@@ -165,7 +165,7 @@ export const threadHostingLayer = Layer.effect(
           const run = yield* ledger.activeRun(threadId);
           const thread = run?.id === runId ? yield* store.metadata(threadId) : undefined;
           if (run === null || thread === undefined) return;
-          const transport = yield* transports.of(thread.transport);
+          const transport = yield* transports.of(thread);
           yield* transport.runs.reached(run, { callId });
         }),
       );
@@ -282,7 +282,7 @@ export const threadHostingLayer = Layer.effect(
     ): Effect.fn.Return<Hosted, ThreadBorderFailed> {
       const thread = yield* row(threadId);
       const callGuides = new Map<string, PendingRuntimeGuide[]>();
-      const words = new HostedWords(run, (yield* bordered(transports.of(thread.transport))).runs);
+      const words = new HostedWords(run, (yield* bordered(transports.of(thread))).runs);
       const halt = new RunStop();
       const { handle, prepared, history } = yield* assembly.hosted({
         thread,

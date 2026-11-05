@@ -21,6 +21,7 @@ import {
   threadStepFinishedEvent,
 } from '../../events';
 import { mintThreadRunId } from '../../identity';
+import { isUnread } from '../../record';
 import { isInboxRequest, isReaderWordsItem } from '../../inboxItems';
 import { actDigest, chargeKey, reportKey, type CallKey } from '../../keyed';
 import type { ThreadContextReading, ThreadMetadataRow, ThreadRunCost } from '../../rows';
@@ -242,7 +243,7 @@ export const runReportsLayer = Layer.effect(
     ): Effect.fn.Return<ThreadMetadataRow, ThreadPortFailure | ForeignBinding> {
       const thread = yield* store.metadata(threadId, tx);
       if (thread === undefined) return yield* Effect.fail(new ThreadNotFoundError(threadId));
-      if (thread.transport.adapter !== adapter) return yield* new ForeignBinding({ threadId, adapter });
+      if (isUnread(thread, 'transport') || thread.transport.adapter !== adapter) return yield* new ForeignBinding({ threadId, adapter });
       return thread;
     });
     const owedSteers = Effect.fnUntraced(function* (run: ThreadRunRef, items: readonly string[], tx: ThreadWriteTx) {

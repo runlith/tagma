@@ -5,7 +5,7 @@ import { ThreadModel, ThreadModelRefused } from '@runlith/agent/collaboration/mo
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadModelSelection } from '@runlith/agent/thread/record';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
-import { NATIVE_BINDING } from '@runlith/agent/thread/record';
+import { CAPABILITIES_UNREAD_WAYS, isUnread, NATIVE_BINDING } from '@runlith/agent/thread/record';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -54,6 +54,13 @@ const pinned = (threadId: string, name: string) =>
   new GateRefusal('model-pinned', `Thread ${threadId} runs ${name}, whose model was fixed at its birth.`, [
     'start a new agent on the model you need, with this one’s report as its brief',
   ]);
+
+const capabilitiesUnread = (threadId: string) =>
+  new GateRefusal(
+    'model-pinned',
+    `Thread ${threadId}'s stored transport capabilities did not read, so its model cannot move until they are stored again.`,
+    CAPABILITIES_UNREAD_WAYS,
+  );
 
 const resolved = (registry: HarnessRegistry['Service'], name: string) =>
   registry.resolve(name as HarnessId).pipe(Effect.mapError((missing) => harnessNotInstalled(missing.harness)));
@@ -241,15 +248,16 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
       const to = { ...asked, switches: asked.switches ?? (yield* kept(threadId, asked)) };
       const facet = yield* sessionOf(threadId);
       const bound = facet === null ? undefined : yield* units.read((unit) => bindingOf(db, kinds, unit, threadId));
-      const capabilities = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, kinds, unit, threadId));
-      if (facet !== null && capabilities?.modelMove === 'pinned') return yield* pinned(threadId, facet.name);
-      if (facet !== null && bound?.agent == null) return yield* within(threadId, facet, to);
+      const read = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, kinds, unit, threadId));
+      if (facet !== null && read !== undefined && isUnread(read, 'capabilities')) return yield* capabilitiesUnread(threadId);
+      if (facet !== null && read?.capabilities.modelMove === 'pinned') return yield* pinned(threadId, facet.name);
+      if (facet !== null && bound?.transport.agent == null) return yield* within(threadId, facet, to);
       const road = yield* registry.seating(to, models());
       if (facet === null && road === null) return null;
       if (facet !== null && facet.name === road?.name) return yield* within(threadId, facet, to);
       const record = yield* records.facts(threadId);
       if (record === undefined) return yield* new GateRefusal('thread-gone', `Thread ${threadId} is gone.`, ['name a thread that stands']);
-      const hosts = bound?.agent ?? record.agentId;
+      const hosts = bound?.transport.agent ?? record.agentId;
       const seat = road === null ? null : { name: road.name, seat: yield* road.seat(hosts) };
       return yield* handover(threadId, record, hosts, facet, seat, to).pipe(
         Effect.retry({ times: STALE_RETRIES, while: (failure) => failure instanceof HarnessTurnStale }),
@@ -298,7 +306,8 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
         const served = servedSelection(row.provider, row, facet) ?? { provider: row.provider, model: 'default', reasoning: row.reasoning };
         const stays: HarnessFollowed = { from: served, to: served, left: null };
         const standing = facet?.session;
-        const follows = bound?.adapter === 'acp' && bound.agent != null && row.account === null && row.provider === provider;
+        const follows =
+          bound?.transport.adapter === 'acp' && bound.transport.agent != null && row.account === null && row.provider === provider;
         if (!follows || account === null || standing === undefined) return stays;
         if (harnessSessionActive(standing) && standing.state === 'starting' && standing.account === undefined)
           return yield* new GateRefusal('session-starting', `The agent process of ${threadId} has not taken its account yet.`, [

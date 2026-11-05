@@ -32,9 +32,9 @@ export const wordsWaitOf = (
   standing: { readonly active: boolean; readonly after: string | null },
   tx?: ThreadTx,
 ): Effect.Effect<WordsWait | null, ThreadBorderFailed> =>
-  transports.of(thread.transport).pipe(
+  transports.of(thread).pipe(
     Effect.map((transport): WordsWait | null => transport.runs.wordsWait?.(thread.id) ?? null),
-    Effect.catchTag('TransportUnregistered', () => Effect.succeed(null)),
+    Effect.catchTags({ TransportUnregistered: () => Effect.succeed(null), TransportUnread: () => Effect.succeed(null) }),
     Effect.flatMap((declared) =>
       declared !== null || standing.active ? Effect.succeed(declared) : idleWaitOf(owners, thread.id, standing.after, tx),
     ),

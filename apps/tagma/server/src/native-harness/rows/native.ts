@@ -14,8 +14,8 @@ import { HARNESS_AGENT_ID } from '../../threads/contract/wire/harness/names.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities } from '@runlith/agent/thread/record';
-import { readTransportBinding, readTransportCapabilities } from '@runlith/agent/thread/persisted';
-import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { readThreadTransport } from '@runlith/agent/thread/persisted';
+import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { recordFacts } from '../../thread-record/facts.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { writeMandate } from '../../threads/mandate.js';
@@ -68,6 +68,16 @@ type StoredSeat = {
   readonly reasoning: string | null;
   readonly account: string | null;
   readonly switches: ModelSwitches | null;
+};
+
+const storedSeat = (
+  kinds: ThreadEntryReader,
+  id: string,
+  row: { readonly seated: unknown; readonly capabilities: unknown },
+): Pick<StoredSeat, 'seated' | 'capabilities'> => {
+  if (row.seated === null || row.capabilities === null) return { seated: null, capabilities: null };
+  const read = readThreadTransport(kinds, id, { transport: row.seated, capabilities: row.capabilities });
+  return read.unread === undefined ? { seated: read.transport, capabilities: read.capabilities } : { seated: null, capabilities: null };
 };
 
 const seatOf = (facet: ExternalSession | null, kernel: StoredSeat): HarnessSeat | null =>
@@ -136,11 +146,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
               scopeBlockUuid: row.scopeBlockUuid,
               title: row.title ?? DEFAULT_TITLE,
               archivedAt: row.archivedAt,
-              harness: seatOf(parseExternalSession(row.harness), {
-                ...row,
-                seated: row.seated === null ? null : readTransportBinding(kinds, id, row.seated),
-                capabilities: row.capabilities === null ? null : readTransportCapabilities(kinds, id, row.capabilities),
-              }),
+              harness: seatOf(parseExternalSession(row.harness), { ...row, ...storedSeat(kinds, id, row) }),
               contextEventId: row.contextEventId ?? 0,
               worldStateSnapshot: row.worldStateSnapshot ?? {},
               worldStateCheckpointId: row.worldStateCheckpointId,

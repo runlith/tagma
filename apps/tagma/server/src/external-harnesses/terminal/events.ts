@@ -108,7 +108,7 @@ export class TerminalEvents {
         ['post a session key from a thread opened as a harness type — harness:<name>'],
       );
     }
-    if ((yield* this.store.binding(threadId))?.adapter === 'acp') {
+    if ((yield* this.store.binding(threadId))?.transport.adapter === 'acp') {
       return {
         outcome: 'unchanged' as const,
         revision: born.observation.revision,

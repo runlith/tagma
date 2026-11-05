@@ -27,7 +27,7 @@ import type {
 import type { ThreadRunRow, ThreadRunStatus, ThreadStatus } from '../thread/rows';
 import { threadNotificationRecordSchema, threadSettledBySchema } from '../thread/storage/settlement';
 import { threadSummarizerSelectionSchema } from '../thread/storage/inbox';
-import { transportBindingSchema } from '../thread/record';
+import { UNREAD_FACTS, transportBindingSchema } from '../thread/record';
 import { agentTypeId } from '../thread/agents/AgentProfile';
 import { transportCapabilitiesSchema } from '../thread/record';
 import type { ThreadTranscriptEntry } from '../transcript/rows';
@@ -312,6 +312,7 @@ export const serializedThreadSchema = Schema.Struct({
   switches: Schema.Record(Schema.String, Schema.String),
   transport: transportBindingSchema,
   capabilities: transportCapabilitiesSchema,
+  unread: Schema.optional(Schema.Array(Schema.Literals(UNREAD_FACTS))),
   status: threadStatusSchema,
   failureReason: Schema.NullOr(Schema.String),
   contextReading: Schema.NullOr(threadContextReadingSchema),

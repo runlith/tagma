@@ -24,12 +24,15 @@ layer(transportsLayer)('Transports', (it) => {
       expect(transports.all()).toEqual([]);
       const native = fakeAdapter('native');
       yield* transports.register(native.transport);
-      expect(yield* transports.of(NATIVE_BINDING)).toBe(native.transport);
+      expect(yield* transports.of({ transport: NATIVE_BINDING })).toBe(native.transport);
+      expect(yield* Effect.flip(transports.of({ transport: NATIVE_BINDING, unread: ['transport'] }))).toMatchObject({
+        _tag: 'TransportUnread',
+      });
       expect(yield* Effect.flip(transports.register(fakeAdapter('native').transport))).toMatchObject({
         _tag: 'TransportRegistered',
         adapter: 'native',
       });
-      expect(yield* Effect.flip(transports.of({ adapter: 'terminal', profile: null, agent: null }))).toMatchObject({
+      expect(yield* Effect.flip(transports.of({ transport: { adapter: 'terminal', profile: null, agent: null } }))).toMatchObject({
         _tag: 'TransportUnregistered',
         adapter: 'terminal',
       });

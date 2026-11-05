@@ -413,7 +413,10 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
     yield* makeThreadLiveFeed<ThreadState>(),
   );
   harness = yield* Effect.acquireRelease(made, (opened) => opened.dispose());
-  const native = yield* harness.runs.transports().of({ adapter: 'native', profile: null, agent: 'tagma' }).pipe(Effect.orDie);
+  const native = yield* harness.runs
+    .transports()
+    .of({ transport: { adapter: 'native', profile: null, agent: 'tagma' } })
+    .pipe(Effect.orDie);
   yield* harness.runs
     .transports()
     .register({ ...native, adapter: 'acp', runs: { ...native.runs, launch: () => Effect.void } })

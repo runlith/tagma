@@ -313,7 +313,7 @@ export const threadAggregateLayer = Layer.effect(
         return yield* scheduler.admit(thread, { kind: 'say', mode, turn, refs: refs });
       });
     const seated = Effect.fnUntraced(function* (thread: ThreadMetadataRow) {
-      const transport = yield* Effect.mapError(transports.of(thread.transport), (cause) => new ThreadCallBroke({ cause }));
+      const transport = yield* Effect.mapError(transports.of(thread), (cause) => new ThreadCallBroke({ cause }));
       if (transport.resource !== undefined) yield* transport.resource.seated(thread.id);
     });
     const appended = Effect.fnUntraced(function* (

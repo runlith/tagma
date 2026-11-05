@@ -1,9 +1,10 @@
 import { Cause, Effect, Exit, type Fiber } from 'effect';
+import type { ThreadBinding } from '../../record';
 import type { ThreadRow, ThreadRunRow } from '../../rows';
 import type { ThreadCompactionEntry } from '../../../transcript/entries';
 import type { ThreadInboxItem } from '../../storage/inbox';
 import { ThreadCallBroke, type ThreadBorderFailed } from '../../ThreadBorder';
-import { LaunchFailed, type LaunchGuidance, type RunLaunch, type WithdrawFailed, type Withdrawal } from '../../transport/contract';
+import { LaunchFailed, WithdrawFailed, type LaunchGuidance, type RunLaunch, type Withdrawal } from '../../transport/contract';
 import { Transports } from '../../transport/Transports';
 import { LaunchGate } from '../LaunchGate';
 import { RunLifecycle } from '../lifecycle/RunLifecycle';
@@ -63,7 +64,7 @@ export const makeHandover = Effect.fnUntraced(function* ({
       const { compacts, ...opening } = opened;
       const launch: RunLaunch = { ...opening, guidance };
       yield* published;
-      const transport = yield* transports.of(launch.thread.transport);
+      const transport = yield* transports.of(launch.thread);
       if (compacts !== undefined) {
         const order = yield* compacts;
         if (order === null) {
@@ -85,6 +86,7 @@ export const makeHandover = Effect.fnUntraced(function* ({
         Effect.catchTags({
           LaunchFailed: (failure) => refused(opened, failure.reason),
           TransportUnregistered: (failure) => refused(opened, failure.message),
+          TransportUnread: (failure) => refused(opened, failure.message),
         }),
         Effect.exit,
         Effect.flatMap((exit) =>
@@ -93,16 +95,10 @@ export const makeHandover = Effect.fnUntraced(function* ({
       ),
   );
   return {
-    words: (thread: { readonly transport: ThreadRow['transport'] }): Effect.Effect<'opening' | 'receipt'> =>
-      Effect.map(Effect.option(transports.of(thread.transport)), (found) => (found._tag === 'Some' ? found.value.words : 'opening')),
-    deliver: (
-      thread: {
-        readonly transport: ThreadRow['transport'];
-      },
-      run: ThreadRunRow,
-      items: readonly ThreadInboxItem[],
-    ): Effect.Effect<void, ThreadBorderFailed> =>
-      Effect.flatMap(Effect.option(transports.of(thread.transport)), (found) => {
+    words: (thread: ThreadBinding): Effect.Effect<'opening' | 'receipt'> =>
+      Effect.map(Effect.option(transports.of(thread)), (found) => (found._tag === 'Some' ? found.value.words : 'opening')),
+    deliver: (thread: ThreadBinding, run: ThreadRunRow, items: readonly ThreadInboxItem[]): Effect.Effect<void, ThreadBorderFailed> =>
+      Effect.flatMap(Effect.option(transports.of(thread)), (found) => {
         if (found._tag === 'None' || found.value.words === 'opening') return Effect.void;
         inflight.handed(
           run,
@@ -110,28 +106,23 @@ export const makeHandover = Effect.fnUntraced(function* ({
         );
         return found.value.runs.deliver(run, items);
       }),
-    queued: (
-      thread: {
-        readonly transport: ThreadRow['transport'];
-      },
-      run: ThreadRunRow,
-    ): Effect.Effect<void, ThreadBorderFailed> =>
-      Effect.flatMap(Effect.option(transports.of(thread.transport)), (found) =>
+    queued: (thread: ThreadBinding, run: ThreadRunRow): Effect.Effect<void, ThreadBorderFailed> =>
+      Effect.flatMap(Effect.option(transports.of(thread)), (found) =>
         found._tag === 'None' || found.value.words === 'opening' ? Effect.void : found.value.runs.queued(run),
       ),
-    withdraw: (
-      thread: {
-        readonly transport: ThreadRow['transport'];
-      },
-      run: ThreadRunRow,
-      item: ThreadInboxItem,
-    ): Effect.Effect<Withdrawal, WithdrawFailed> =>
-      Effect.flatMap(Effect.option(transports.of(thread.transport)), (found) =>
-        found._tag === 'Some' && found.value.words === 'receipt' ? found.value.runs.withdraw(run, item) : Effect.succeed('unsent' as const),
+    withdraw: (thread: ThreadBinding, run: ThreadRunRow, item: ThreadInboxItem): Effect.Effect<Withdrawal, WithdrawFailed> =>
+      transports.of(thread).pipe(
+        Effect.catchTag('TransportUnread', (unread) =>
+          Effect.fail(new WithdrawFailed({ reason: `${unread.message} Whether this word was handed to it is unknown.` })),
+        ),
+        Effect.catchTag('TransportUnregistered', () => Effect.succeed(null)),
+        Effect.flatMap((found) =>
+          found !== null && found.words === 'receipt' ? found.runs.withdraw(run, item) : Effect.succeed('unsent' as const),
+        ),
       ),
-    restore: (thread: { readonly id: string; readonly transport: ThreadRow['transport'] }): Effect.Effect<void, ThreadBorderFailed> =>
+    restore: (thread: ThreadBinding & { readonly id: string }): Effect.Effect<void, ThreadBorderFailed> =>
       Effect.flatMap(
-        Effect.mapError(transports.of(thread.transport), (cause) => new ThreadCallBroke({ cause })),
+        Effect.mapError(transports.of(thread), (cause) => new ThreadCallBroke({ cause })),
         (transport) =>
           transport.history === undefined
             ? new ThreadCallBroke({ cause: new Error(`${transport.adapter} rebuilds no session from the thread history.`) })

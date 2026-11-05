@@ -1,6 +1,7 @@
 import { Clock, Effect } from 'effect';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import { describeError } from '@runlith/utils/error';
+import { isUnread } from '@runlith/agent/thread/record';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -26,7 +27,15 @@ export type DiagnosisParts = {
 
 export const protocolState = Effect.fnUntraced(function* (parts: DiagnosisParts, threadId: string) {
   const { store, rows, records, terminals, attendance, ownerId } = parts;
-  if ((yield* store.binding(threadId))?.adapter !== 'acp') {
+  const seated = yield* store.binding(threadId);
+  if (seated !== undefined && isUnread(seated, 'transport')) {
+    return yield* new GateRefusal(
+      'protocol-unavailable',
+      `Thread ${threadId}'s stored transport did not read, so no protocol is known for it.`,
+      ['set_thread_transport stores its transport again'],
+    );
+  }
+  if (seated?.transport.adapter !== 'acp') {
     return yield* new GateRefusal('protocol-unavailable', `Thread ${threadId} runs its CLI in a terminal, so it speaks no protocol.`, [
       'read its screen with read_harness_screen',
     ]);

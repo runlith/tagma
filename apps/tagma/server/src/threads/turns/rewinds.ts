@@ -2,7 +2,7 @@ import { Context, Effect } from 'effect';
 import type { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { actDigest, callKey } from '@runlith/agent/thread/keyed';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
-import { historyCannot, TransportCannotError, type HistorySide } from '@runlith/agent/thread/record';
+import { cannotOn, historyCannot, type HistorySide } from '@runlith/agent/thread/record';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import type {
   ThreadRestoreAnswer,
@@ -71,9 +71,7 @@ export const makeThreadRewinds = Effect.gen(function* () {
         const row = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
         const cannot = row === undefined ? null : historyCannot(row.capabilities, side);
         if (row !== undefined && cannot !== null) {
-          return yield* new ThreadCallBroke({
-            cause: new TransportCannotError({ threadId, capability: cannot, adapter: row.transport.adapter }),
-          });
+          return yield* new ThreadCallBroke({ cause: cannotOn(row, cannot, row.transport.adapter) });
         }
         yield* rollouts.rehydrate(threadId);
         return harness.threads.handle(threadId, OPERATOR_PRINCIPAL);

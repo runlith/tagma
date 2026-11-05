@@ -101,7 +101,7 @@ export class HarnessScreenAsks {
     binding: Effect.Success<ReturnType<HarnessSessionStore['binding']>>,
   ) {
     const prior = this.jobs.get(threadId);
-    const terminal = binding?.adapter === 'terminal';
+    const terminal = binding?.transport.adapter === 'terminal';
     const adapter = this.adapters.running(facet);
     const eligible =
       harnessSessionActive(facet.session) &&

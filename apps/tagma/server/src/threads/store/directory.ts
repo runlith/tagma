@@ -2,12 +2,7 @@ import { Clock, Context, Effect } from 'effect';
 import { mintCursor, readCursor } from '@runlith/paging';
 import { THREAD_LIST, type ThreadDirectoryRow, type ThreadListQuery } from '@runlith/agent/collaboration/threads';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
-import {
-  parseThreadContextReading,
-  parseThreadRunFailure,
-  readTransportCapabilities,
-  readableRowFact,
-} from '@runlith/agent/thread/persisted';
+import { parseThreadContextReading, parseThreadRunFailure, readThreadCapabilities, readableRowFact } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { currentRunOf } from '@runlith/agent/thread/state';
@@ -126,7 +121,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   ? mintCursor(THREAD_LIST, [last.life, last.movedAt.getTime(), last.threadId])
                   : null,
               rows: page.map((row): ThreadDirectoryRow => {
-                const capabilities = readTransportCapabilities(kinds, row.threadId, row.capabilities);
+                const { capabilities } = readThreadCapabilities(kinds, row.threadId, row.capabilities);
                 const current =
                   row.runId === null ||
                   row.runStatus === null ||

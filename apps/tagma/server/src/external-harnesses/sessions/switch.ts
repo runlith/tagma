@@ -1,4 +1,5 @@
 import { Effect } from 'effect';
+import { isUnread } from '@runlith/agent/thread/record';
 import { threadCauseOf } from '@runlith/agent/thread/ThreadBorder';
 import type { TransportRegistry } from '@runlith/agent/thread/transport/contract';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
@@ -37,7 +38,9 @@ export function transportSwitch(
   const seated = Effect.fnUntraced(function* (threadId: string) {
     const binding = yield* store.binding(threadId);
     if (binding === undefined) return null;
-    const resource = (yield* Effect.orDie(transports.of(binding))).resource;
+    const serving = yield* Effect.result(transports.of(binding));
+    if (serving._tag === 'Failure') return serving.failure.message;
+    const resource = serving.success.resource;
     if (resource === undefined) return null;
     const started = yield* Effect.result(resource.seated(threadId));
     if (started._tag === 'Success') return null;
@@ -62,7 +65,7 @@ export function transportSwitch(
   const moved = Effect.fnUntraced(function* (
     threadId: string,
     adapter: HarnessAdapter,
-    from: HarnessTransport,
+    { from, repair }: { readonly from: HarnessTransport | null; readonly repair: boolean },
     offer: HarnessTransportOffer,
     plain: boolean,
     account: string | null,
@@ -82,11 +85,11 @@ export function transportSwitch(
           if (harnessSessionActive(facet.session)) {
             return yield* new GateRefusal(
               'thread-running',
-              `Thread ${threadId} holds a ${from} process; its transport changes only while none stands.`,
+              `Thread ${threadId} holds a ${from ?? 'CLI'} process; its transport changes only while none stands.`,
               ['stop_agent, then set_thread_transport again'],
             );
           }
-          if (from === offer.transport) return { facet, value: { status: 'unchanged' as const, transport: offer.transport } };
+          if (from === offer.transport && !repair) return { facet, value: { status: 'unchanged' as const, transport: offer.transport } };
           if (recorded !== null) {
             yield* recorded(unit).pipe(
               Effect.mapError((failure) =>
@@ -120,8 +123,11 @@ export function transportSwitch(
           }
           const adapter = yield* adapters.row(standing.name, standing.presentation.install);
           const offer = yield* transportOf(adapter, transport);
-          const from: HarnessTransport = (yield* store.binding(threadId))?.adapter === 'acp' ? 'acp' : 'terminal';
-          if (from === transport) return { status: 'unchanged', transport } satisfies TransportSwitched;
+          const road = (yield* store.binding(threadId)) === undefined ? undefined : yield* store.road(threadId);
+          const from: HarnessTransport | null =
+            road === undefined ? 'terminal' : isUnread(road, 'transport') ? null : road.transport.adapter === 'acp' ? 'acp' : 'terminal';
+          const repair = road?.unread !== undefined;
+          if (from === transport && !repair) return { status: 'unchanged', transport } satisfies TransportSwitched;
           const facet = yield* store.read(threadId);
           const profile = adapter.acp;
           if (profile?.hosts !== null && profile !== undefined && !profile.sharedSessions) {
@@ -147,7 +153,7 @@ export function transportSwitch(
             }
             yield* release(threadId);
           }
-          const switched = yield* moved(threadId, adapter, from, offer, facet?.plain === true, row.account).pipe(
+          const switched = yield* moved(threadId, adapter, { from, repair }, offer, facet?.plain === true, row.account).pipe(
             Effect.retry({ times: STALE_RETRIES, while: (failure) => failure instanceof GateRefusal && failure.code === JOURNAL_MOVED }),
           );
           return switched.status === 'switched' ? { ...switched, unstarted: yield* seated(threadId) } : switched;

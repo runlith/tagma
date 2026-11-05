@@ -18,7 +18,7 @@ import {
   waitsForTurn,
 } from '../../inboxItems';
 import { inputAddressOf, type Keyed } from '../../keyed';
-import { TransportCannotError } from '../../record';
+import { cannotOn } from '../../record';
 import type { ThreadMetadataRow } from '../../rows';
 import type { ThreadInboxItem } from '../../storage/inbox';
 import { ThreadRunConflictError, ThreadRunHeldError, ThreadRunNotInterruptedError, type ThreadRunStartKey } from '../../storage/runs';
@@ -238,10 +238,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
       }
       let pending = yield* inbox.pending(thread.id);
       const said = () => beforeBarrier(pending).some((item) => opensTurn(item) || isReaderWordsItem(item));
-      const cannot = () =>
-        new ThreadCallBroke({
-          cause: new TransportCannotError({ threadId: thread.id, capability: 'continue', adapter: thread.transport.adapter }),
-        });
+      const cannot = () => new ThreadCallBroke({ cause: cannotOn(thread, 'continue', thread.transport.adapter) });
       if (!thread.capabilities.continue && !said()) return yield* cannot();
       const latest = yield* ledger.latestRun(thread.id);
       if (latest === null || !threadRunInterrupted(latest.status)) {

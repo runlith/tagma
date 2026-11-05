@@ -200,7 +200,7 @@ export const makeEngineBirths = Effect.fnUntraced(function* ({
           ),
         );
       const history = (yield* transports()
-        .of(parent.transport)
+        .of(parent)
         .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })))).history;
       if (history === undefined || face.seat === undefined)
         return yield* new ThreadCallBroke({ cause: new HarnessFaceMissing({ harness: source.name, face: 'fork' }) });

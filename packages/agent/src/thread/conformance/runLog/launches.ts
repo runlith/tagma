@@ -64,7 +64,7 @@ const nativeRuns = Effect.fnUntraced(function* <TTx, TWrite extends TTx, R>(open
   const { storage, world, thread } = yield* openedRun(open);
   const going = gate();
   world.plan.push(hangingTurn({ chunks: [{ type: 'text-start', id: 'r1' }], reached: going.reach }));
-  const transport = yield* world.harness.runs.transports().of(NATIVE_BINDING);
+  const transport = yield* world.harness.runs.transports().of({ transport: NATIVE_BINDING });
   yield* Effect.addFinalizer(() => Effect.orDie(world.harness.threads.handle(thread.id, OWNER).stop()));
   return {
     transport,

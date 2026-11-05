@@ -9,7 +9,7 @@ export const isTransportRoad = Schema.is(transportRoadSchema);
 export const TransportEntry = Schema.Struct({
   type: Schema.Literal(TRANSPORT_ENTRY),
   id: Schema.NonEmptyString,
-  from: transportRoadSchema,
+  from: Schema.NullOr(transportRoadSchema),
   to: transportRoadSchema,
   occurredAt: Schema.String,
 });

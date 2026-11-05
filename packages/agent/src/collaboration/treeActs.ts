@@ -4,7 +4,7 @@ import { ThreadRuns } from './runs';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { Raised } from '../permissions/vocabulary';
 import type { KeyedRequest } from '../thread/keyed';
-import { historyCannot, threadTarget, type ThreadRecord } from '../thread/record';
+import { capabilitiesUnreadWays, historyCannot, isUnread, threadTarget, type ThreadRecord } from '../thread/record';
 import type { ThreadRewindAsk } from '../thread/rewind';
 import { ThreadRewind } from '../thread/run/ThreadRewind';
 import type { ThreadCompactionPoint } from '../thread/storage/inbox';
@@ -82,6 +82,13 @@ export const makeTreeActs = Effect.fnUntraced(function* ({
       ask: TreeAsk & { readonly model: ThreadModelAsk },
     ): Effect.fn.Return<ThreadChildMoved | ThreadChildSpent, ThreadPlaneFailure> {
       const { thread } = yield* crossTo(caller, ask, 'child');
+      if (isUnread(thread, 'capabilities')) {
+        return yield* planeRefused(
+          'model-pinned',
+          `thread ${thread.id}'s stored transport capabilities did not read, so its model cannot move until they are stored again.`,
+          capabilitiesUnreadWays(thread.harness),
+        );
+      }
       if (thread.capabilities.modelMove === 'pinned') {
         return yield* planeRefused(
           'model-pinned',

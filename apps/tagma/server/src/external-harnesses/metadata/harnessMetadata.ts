@@ -85,7 +85,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
             Effect.uninterruptible(
               Effect.gen(function* () {
                 const prior = jobs.get(threadId);
-                const terminal = binding?.adapter === 'terminal';
+                const terminal = binding?.transport.adapter === 'terminal';
                 const eligible =
                   harnessSessionActive(facet.session) &&
                   terminal &&

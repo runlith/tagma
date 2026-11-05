@@ -23,7 +23,7 @@ export class ThreadRebinding extends Context.Service<
     readonly writes: WriteSet;
     readonly prepare: (
       threadId: string,
-      from: TransportRoad,
+      from: TransportRoad | null,
       seat: KernelSeat,
     ) => Effect.Effect<HarnessTurnWrite | null, ThreadStorageFailed>;
   }

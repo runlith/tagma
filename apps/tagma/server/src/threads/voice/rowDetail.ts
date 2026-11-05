@@ -26,10 +26,11 @@ export const wireHarness = (facet: ExternalSession | null, road: HarnessRoad): H
     : {
         name: facet.name,
         presentation: facet.presentation,
-        transport: harnessTransportOf(road.transport),
+        transport: harnessTransportOf(road),
         agent: road.transport.agent,
         provider: road.provider,
         capabilities: road.capabilities,
+        ...(road.unread === undefined ? {} : { unread: road.unread }),
         model: currentModel(facet.observation),
         effort: currentEffort(facet.observation),
         asked: road.model === null ? null : { model: road.model, reasoning: road.reasoning },

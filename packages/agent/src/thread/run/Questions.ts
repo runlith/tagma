@@ -306,7 +306,7 @@ export const questionsLayer = Layer.effectContext(
             if (thread === null || run?.id !== runId) return;
             const waiting = (yield* recorded(threadId, runId)).some((entry) => entry.status === 'open');
             if (waiting) {
-              const transport = yield* transports.of(thread.transport).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+              const transport = yield* transports.of(thread).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
               yield* transport.runs.reached(run, 'all');
             }
             yield* runs.writeProgress(

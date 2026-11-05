@@ -24,7 +24,7 @@ export function describeSessionStore<R>(
         expect((yield* store.road(id)).transport.adapter).toBe('terminal');
         yield* store.choose(id, undefined, {});
         expect(yield* store.asked(id)).toBeUndefined();
-        expect((yield* store.binding(id))?.adapter).toBe('terminal');
+        expect((yield* store.binding(id))?.transport.adapter).toBe('terminal');
       }));
     test('an opening reports whether it created or joined the committed session', () =>
       Effect.gen(function* () {

@@ -6,13 +6,28 @@ import { AgentApprovalMode } from '../agent/contracts';
 import type { ThreadBornOf } from '../protocol/birth';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
-import type { ThreadContextReading, ThreadHistory, ThreadPendingInteraction, ThreadRunProgress, ThreadAuthority } from './rows';
+import type {
+  ThreadContextReading,
+  ThreadHistory,
+  ThreadPendingInteraction,
+  ThreadRunProgress,
+  ThreadAuthority,
+  ThreadTransport,
+} from './rows';
 import type { ThreadTranscript, ThreadTranscriptEntry } from '../transcript/rows';
 import { type ThreadEntryReader, ThreadEntryUndecodable } from '../transcript/kinds';
 import type { DegradedReads } from '../agent/contracts';
 import { agentProfileSchema, type ThreadProfileBirth } from './agents/AgentProfile';
-import { transportBindingSchema, type TransportBinding, UNREAD_BINDING } from './record';
+import {
+  transportBindingSchema,
+  UNREAD_BINDING,
+  UNREAD_FACTS,
+  type ThreadBinding,
+  type ThreadCapabilities,
+  type TransportBinding,
+} from './record';
 import { transportCapabilitiesSchema, type TransportCapabilities, UNREAD_CAPABILITIES } from './record';
+import type { UnreadFact, UnreadMark } from './record';
 import { review } from '../modes/builtin';
 import { ThreadQuestionEntry, ThreadFailureDiagnostics, WithdrawnWords } from '../transcript/entries';
 import type { ThreadEventPayload } from './events';
@@ -310,6 +325,25 @@ export function parseThreadContextReading(kinds: ThreadEntryReader, value: unkno
   return parsed.success;
 }
 
+type RowFactRead<A> = { readonly value: A; readonly read: boolean };
+
+function rowFact<A>(
+  reads: DegradedReads,
+  thread: string,
+  why: string,
+  parse: () => A,
+  otherwise: A,
+  subject = `Thread ${thread}`,
+): RowFactRead<A> {
+  try {
+    return { value: parse(), read: true };
+  } catch (failure) {
+    const said = failure instanceof Error ? failure.message : String(failure);
+    reads.degraded({ thread, place: 'thread row', why, repeat: said, failure: new Error(`${subject}: ${said}`) });
+    return { value: otherwise, read: false };
+  }
+}
+
 export function readableRowFact<A>(
   reads: DegradedReads,
   thread: string,
@@ -318,13 +352,7 @@ export function readableRowFact<A>(
   otherwise: A,
   subject = `Thread ${thread}`,
 ): A {
-  try {
-    return parse();
-  } catch (failure) {
-    const said = failure instanceof Error ? failure.message : String(failure);
-    reads.degraded({ thread, place: 'thread row', why, repeat: said, failure: new Error(`${subject}: ${said}`) });
-    return otherwise;
-  }
+  return rowFact(reads, thread, why, parse, otherwise, subject).value;
 }
 
 export const threadBornOfSchema = Schema.Struct({
@@ -376,8 +404,8 @@ export const readThreadBornOf = (reads: DegradedReads, thread: string, value: un
 
 const UNREAD_AUTHORITY: ThreadAuthority = { mode: review.id, bypassFrom: null };
 
-export const readThreadAuthority = (reads: DegradedReads, thread: string, value: unknown): ThreadAuthority =>
-  readableRowFact(
+const authorityRead = (reads: DegradedReads, thread: string, value: unknown): RowFactRead<ThreadAuthority> =>
+  rowFact(
     reads,
     thread,
     'an authority this build cannot read stands as review, so every call that is not a pure read asks until the mode is set again',
@@ -385,23 +413,65 @@ export const readThreadAuthority = (reads: DegradedReads, thread: string, value:
     UNREAD_AUTHORITY,
   );
 
-export const readTransportBinding = (reads: DegradedReads, thread: string, value: unknown): TransportBinding =>
-  readableRowFact(
+const bindingRead = (reads: DegradedReads, thread: string, value: unknown): RowFactRead<TransportBinding> =>
+  rowFact(
     reads,
     thread,
-    'a transport this build cannot read stands as one no transport serves, so the thread opens and every run it starts is refused',
+    'a transport this build cannot read is marked unread, so the thread opens and every act that needs its transport is refused',
     () => parseTransportBinding(value),
     UNREAD_BINDING,
   );
 
-export const readTransportCapabilities = (reads: DegradedReads, thread: string, value: unknown): TransportCapabilities =>
-  readableRowFact(
+const capabilitiesRead = (reads: DegradedReads, thread: string, value: unknown): RowFactRead<TransportCapabilities> =>
+  rowFact(
     reads,
     thread,
-    'capabilities this build cannot read stand as none, so every act that needs one is refused until they read again',
+    'capabilities this build cannot read stand as none and are marked unread, so every act that needs one is refused until they read again',
     () => parseTransportCapabilities(value),
     UNREAD_CAPABILITIES,
   );
+
+const markOf = (reads: { readonly [Fact in UnreadFact]?: RowFactRead<unknown> }): UnreadMark => {
+  const unread = UNREAD_FACTS.filter((fact) => reads[fact]?.read === false);
+  return unread.length === 0 ? {} : { unread };
+};
+
+type StoredTransport = { readonly transport: unknown; readonly capabilities: unknown };
+
+const readTransportFacts = (reads: DegradedReads, thread: string, stored: StoredTransport) => ({
+  transport: bindingRead(reads, thread, stored.transport),
+  capabilities: capabilitiesRead(reads, thread, stored.capabilities),
+});
+
+export function readThreadTransport(reads: DegradedReads, thread: string, stored: StoredTransport): ThreadTransport & UnreadMark {
+  const { transport, capabilities } = readTransportFacts(reads, thread, stored);
+  return { transport: transport.value, capabilities: capabilities.value, ...markOf({ transport, capabilities }) };
+}
+
+export function readThreadFacts(
+  reads: DegradedReads,
+  thread: string,
+  stored: StoredTransport & { readonly authority: unknown },
+): ThreadTransport & UnreadMark & { readonly authority: ThreadAuthority } {
+  const { transport, capabilities } = readTransportFacts(reads, thread, stored);
+  const authority = authorityRead(reads, thread, stored.authority);
+  return {
+    authority: authority.value,
+    transport: transport.value,
+    capabilities: capabilities.value,
+    ...markOf({ transport, capabilities, authority }),
+  };
+}
+
+export function readThreadBinding(reads: DegradedReads, thread: string, stored: unknown): ThreadBinding {
+  const transport = bindingRead(reads, thread, stored);
+  return { transport: transport.value, ...markOf({ transport }) };
+}
+
+export function readThreadCapabilities(reads: DegradedReads, thread: string, stored: unknown): ThreadCapabilities {
+  const capabilities = capabilitiesRead(reads, thread, stored);
+  return { capabilities: capabilities.value, ...markOf({ capabilities }) };
+}
 
 export const threadProfileBirthSchema = Schema.Struct({
   id: Schema.String,

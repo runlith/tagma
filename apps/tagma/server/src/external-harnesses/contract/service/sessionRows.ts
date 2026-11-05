@@ -1,6 +1,6 @@
 import { Context, type Effect } from 'effect';
 import type { ModelSwitches } from '@runlith/llm/models/description';
-import type { TransportBinding, TransportCapabilities } from '@runlith/agent/thread/record';
+import type { ThreadBinding, ThreadCapabilities } from '@runlith/agent/thread/record';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -49,7 +49,7 @@ export class SessionRows extends Context.Service<
       unit: WriteUnit<'machine'>,
     ): Effect.Effect<void, HarnessFailure>;
     switches(threadId: string, unit: Unit<'machine'>): Effect.Effect<ModelSwitches, StoreFailure>;
-    capabilities(threadId: string): Effect.Effect<TransportCapabilities | undefined, StoreFailure>;
-    binding(threadId: string, unit: Unit<'machine'>): Effect.Effect<TransportBinding | undefined, StoreFailure>;
+    capabilities(threadId: string): Effect.Effect<ThreadCapabilities | undefined, StoreFailure>;
+    binding(threadId: string, unit: Unit<'machine'>): Effect.Effect<ThreadBinding | undefined, StoreFailure>;
   }
 >()('external-harnesses/SessionRows') {}

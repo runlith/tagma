@@ -3,7 +3,7 @@ import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { refusalOf } from '$lib/wire/refusal.js';
 import type { ThreadsRepo } from '../Repo.js';
 import { threadMark } from '../Life.svelte';
-import { proofWords, roadName } from './proofs.js';
+import { proofWords, roadName, runsOn } from './proofs.js';
 
 export type TransportOffer = {
   readonly label: string;
@@ -41,10 +41,10 @@ export function transportOffer(row: ThreadListRow): TransportOffer | null {
   const { label } = presentation;
   const proofs = proofWords(harness);
   if (!movable && proofs === null) return null;
-  const to = !movable ? null : harness.transport === 'acp' ? 'terminal' : !presentation.acp ? null : 'acp';
+  const to = !movable ? null : harness.transport !== 'terminal' ? 'terminal' : !presentation.acp ? null : 'acp';
   return {
     label: proofs?.label ?? roadName(harness.transport),
-    hint: proofs?.hint ?? (harness.transport === 'terminal' ? `${label} runs in its own terminal.` : `${label} runs here as a chat.`),
+    hint: proofs?.hint ?? `${label} ${runsOn(harness.transport)}.`,
     to,
     move: to === null ? null : to === 'acp' ? 'Continue in chat' : 'Open in the terminal',
     direct: false,

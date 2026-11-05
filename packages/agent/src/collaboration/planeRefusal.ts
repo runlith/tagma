@@ -1,5 +1,5 @@
 import { AgentProfileUnknownError } from '../thread/agents/AgentProfile';
-import { TransportCannotError, type ThreadRecord, type TransportCapabilityName } from '../thread/record';
+import { cannotOn, TransportCannotError, type ThreadRecord, type TransportCapabilityName } from '../thread/record';
 import { InboxConflict } from '../thread/storage/inbox';
 import { ThreadCallBroke, threadCauseOf } from '../thread/ThreadBorder';
 import { ThreadActReusedError } from '../thread/transition/port';
@@ -13,7 +13,7 @@ export function planeRefused(code: PlaneRefusalCode, reason: string, unblock?: r
 }
 
 export function transportCannot(thread: ThreadRecord, capability: TransportCapabilityName): ThreadCallBroke {
-  return new ThreadCallBroke({ cause: new TransportCannotError({ threadId: thread.id, capability, adapter: thread.harness }) });
+  return new ThreadCallBroke({ cause: cannotOn(thread, capability, thread.harness) });
 }
 
 export function planeRefusalOf(failure: unknown): PlaneRefused | null {
@@ -31,7 +31,7 @@ export function planeRefusalOf(failure: unknown): PlaneRefused | null {
   if (cause instanceof BirthConflict) {
     return new PlaneRefused(cause.reason === 'name-taken' ? 'name-taken' : 'spawn-conflict', cause.message);
   }
-  if (cause instanceof TransportCannotError) return new PlaneRefused('transport-cannot', cause.message);
+  if (cause instanceof TransportCannotError) return new PlaneRefused('transport-cannot', cause.message, cause.ways);
   if (cause instanceof ThreadActReusedError) return new PlaneRefused('key-reused', cause.message);
   if (cause instanceof ThreadCompactionConflict && cause.reason === 'act-id-reused') {
     return new PlaneRefused(

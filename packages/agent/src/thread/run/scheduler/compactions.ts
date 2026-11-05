@@ -16,7 +16,7 @@ import {
 } from '../../inboxItems';
 import { threadCompactionEvent } from '../../events';
 import { actDigest } from '../../keyed';
-import { TransportCannotError } from '../../record';
+import { cannotOn } from '../../record';
 import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../rows';
 import type { ThreadCompactionPoint, ThreadInboxItem, ThreadInboxItemValues } from '../../storage/inbox';
 import { ThreadRunConflictError, type ThreadRunStartKey } from '../../storage/runs';
@@ -193,15 +193,14 @@ export const makeCompactions = Effect.fnUntraced(function* ({
     });
   const cannotCompact = (thread: ThreadRow): Effect.Effect<never, ThreadBorderFailed> =>
     new ThreadCallBroke({
-      cause: new TransportCannotError({
-        threadId: thread.id,
-        capability: 'compaction',
-        adapter: thread.transport.adapter,
-        reason:
-          thread.capabilities.compaction === 'vendor'
-            ? "The vendor owns this session's compaction and exposes no compaction API; Tagma cannot compact it on request without replacing the session and losing its warm cache."
-            : undefined,
-      }),
+      cause: cannotOn(
+        thread,
+        'compaction',
+        thread.transport.adapter,
+        thread.capabilities.compaction === 'vendor'
+          ? "The vendor owns this session's compaction and exposes no compaction API; Tagma cannot compact it on request without replacing the session and losing its warm cache."
+          : undefined,
+      ),
     });
   const foldsAfterTurn = (thread: ThreadRow, named: ThreadSummarizerSelection | undefined): Effect.Effect<boolean, ThreadBorderFailed> =>
     thread.capabilities.compaction === 'foreign'

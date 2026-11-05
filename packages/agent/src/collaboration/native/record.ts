@@ -45,5 +45,6 @@ export function recordOf(agents: AgentRegistry, models: ModelCatalog | null, row
     capabilities: { ...row.capabilities, messaging: threadHoldsFinalAnswer(agents, row) },
     model: model === null ? null : { provider: row.provider, model, reasoning: row.reasoning },
     profile: row.profile?.id ?? null,
+    unread: row.unread,
   };
 }

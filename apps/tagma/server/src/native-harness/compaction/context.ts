@@ -6,7 +6,7 @@ import type { ThreadStore } from '../rows/threadRow.js';
 export function contextCompaction(native: ContextCompaction['Service'], store: ThreadStore): ContextCompaction['Service'] {
   const owner = Effect.fnUntraced(
     function* (threadId: string, summarized: boolean) {
-      const mode = (yield* store.capabilities(threadId))?.compaction ?? 'core';
+      const mode = (yield* store.capabilities(threadId))?.capabilities.compaction ?? 'core';
       if (mode === 'none' || (mode === 'session' && summarized))
         return yield* new ThreadCompactionRefused({ threadId, reason: 'unsupported', running: null });
       return native;

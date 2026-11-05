@@ -5,7 +5,7 @@ import { harnessSessionSchema } from './session.js';
 import { harnessAskedModelSchema } from './askedModel.js';
 import { harnessNameSchema } from '@runlith/tagma/adapter/harness';
 import { harnessTransportSchema } from './names.js';
-import { transportCapabilitiesSchema } from '@runlith/agent/thread/record';
+import { transportCapabilitiesSchema, UNREAD_FACTS } from '@runlith/agent/thread/record';
 
 export const harnessPresentationSchema = Schema.Struct({
   label: Schema.String,
@@ -125,10 +125,11 @@ export const harnessRowProcessSchema = Schema.Struct({
 export const harnessRowSchema = Schema.Struct({
   name: harnessNameSchema,
   presentation: harnessPresentationSchema,
-  transport: harnessTransportSchema,
+  transport: Schema.NullOr(harnessTransportSchema),
   agent: Schema.NullOr(Schema.String),
   provider: Schema.String,
   capabilities: transportCapabilitiesSchema,
+  unread: Schema.optional(Schema.Array(Schema.Literals(UNREAD_FACTS))),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Schema.String),
   asked: Schema.NullOr(harnessAskedModelSchema),

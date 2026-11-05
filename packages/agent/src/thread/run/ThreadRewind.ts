@@ -76,7 +76,7 @@ export const makeThreadRewind = Effect.gen(function* () {
   const transports = yield* Transports;
   const historyOf = (thread: ThreadMetadataRow): Effect.Effect<TransportHistory | null, ThreadBorderFailed> =>
     Effect.map(
-      Effect.mapError(transports.of(thread.transport), (cause) => new ThreadCallBroke({ cause })),
+      Effect.mapError(transports.of(thread), (cause) => new ThreadCallBroke({ cause })),
       (transport) => transport.history ?? null,
     );
   const journal = yield* ThreadEventJournal;
@@ -252,7 +252,7 @@ export const makeThreadRewind = Effect.gen(function* () {
         (release) => Effect.sync(release),
       );
       yield* snapshots.publish(threadId);
-      yield* moved(threadId, thread.transport);
+      yield* moved(threadId, thread);
       return answer;
     }),
     restore: Effect.fn('ThreadRewind.restore')(function* (threadId, ownerId, input) {
@@ -305,7 +305,7 @@ export const makeThreadRewind = Effect.gen(function* () {
               );
               if (settled !== null) {
                 yield* snapshots.publish(threadId);
-                yield* moved(threadId, thread.transport);
+                yield* moved(threadId, thread);
                 return settled;
               }
             }

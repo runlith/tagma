@@ -9,7 +9,8 @@ import {
   ThreadCompactionOffError,
   ThreadSummaryFailedError,
 } from '@runlith/agent/thread/storage/compaction';
-import { TransportCannotError, TRANSPORT_CANNOT_WAYS } from '@runlith/agent/thread/record';
+import { TransportCannotError } from '@runlith/agent/thread/record';
+import { TransportUnread, TransportUnregistered } from '@runlith/agent/thread/transport/contract';
 import { ThreadRewindRefusedError, type ThreadRewindRefusal } from '@runlith/agent/thread/rewind';
 import { SequenceUnavailable, ThreadActReusedError, ThreadActSpentError } from '@runlith/agent/thread/transition/port';
 import { ThreadDeleteConflictError, ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
@@ -190,7 +191,21 @@ function kernelRefusal(failure: unknown): Reworded | null {
     };
   }
   if (failure instanceof TransportCannotError) {
-    return { code: 'transport-cannot', reason: failure.message, unblock: TRANSPORT_CANNOT_WAYS };
+    return { code: 'transport-cannot', reason: failure.message, unblock: failure.ways };
+  }
+  if (failure instanceof TransportUnread) {
+    return {
+      code: 'transport-cannot',
+      reason: failure.message,
+      unblock: ['set_thread_transport stores a harness thread’s transport again', 'start a new thread for this work'],
+    };
+  }
+  if (failure instanceof TransportUnregistered) {
+    return {
+      code: 'transport-cannot',
+      reason: failure.message,
+      unblock: ['install the adapter whose transport this thread names', 'start a new thread for this work'],
+    };
   }
   if (failure instanceof ThreadActReusedError) {
     return {
