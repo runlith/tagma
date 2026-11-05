@@ -1,11 +1,16 @@
+import { renameSync, writeFileSync } from 'node:fs';
 import { readOutputFrame } from '@runlith/executions/protocol/lane';
 
-const [url, token, first] = process.argv.slice(2) as [string, string, string];
+const [url, token, first, result] = process.argv.slice(2) as [string, string, string, string];
 const KEYS = '#abcdefghijklmnopqrs';
 const SETTLE_MS = 20;
 
 const now = () => performance.timeOrigin + performance.now();
 const say = (line: unknown) => process.stdout.write(`${JSON.stringify(line)}\n`);
+const typed = (line: unknown) => {
+  writeFileSync(`${result}.staged`, JSON.stringify(line));
+  renameSync(`${result}.staged`, result);
+};
 
 type Expected = { readonly pattern: string; readonly settled: (at: number) => void };
 
@@ -50,7 +55,9 @@ socket.onmessage = (event) => {
 };
 socket.onopen = () => socket.send(JSON.stringify({ lane: token }));
 socket.onclose = (event) => {
-  if (event.code !== 1000) say({ closed: event.code, reason: event.reason });
+  if (event.code === 1000) return;
+  say({ closed: event.code, reason: event.reason });
+  typed({ closed: event.code, reason: event.reason });
 };
 
 let sequence = Number(first);
@@ -77,7 +84,7 @@ process.on('SIGUSR2', () => {
     const echoes = [...KEYS].map((key) => expect(key));
     const keys = [...KEYS].map((key) => type(key));
     const seen = await Promise.all(echoes);
-    say({
+    typed({
       started: command.at,
       finished: seen.at(-1),
       command: answered - command.at,

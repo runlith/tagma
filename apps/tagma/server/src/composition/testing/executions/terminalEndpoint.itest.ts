@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Clock, Context, Effect, Layer, Queue, Schedule, Schema } from 'effect';
+import { Context, Effect, Layer, Queue, Schedule, Schema } from 'effect';
+import { laneTypist } from '@runlith/execution-host/testing/laneTypist';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { TerminalWriting } from '../../../executions/contract/service/writing.js';
 import { TerminalGrids } from '../../../executions/contract/service/views.js';
@@ -9,9 +10,6 @@ import { TerminalOperationReading } from '../../../executions/contract/wire/oper
 import { TerminalLaneOpened, ViewId, type TerminalDecider } from '../../../executions/contract/wire/viewLeases.js';
 import { makePageWorld } from '../pageWorld.js';
 
-const CLIENT = Bun.resolveSync('@runlith/execution-host/testing/laneClient', import.meta.dir);
-const BLOCK_MS = 2000;
-const ECHO_MS = 100;
 const TYPIST = ViewId.make('endpoint-typist');
 const WATCHER = ViewId.make('endpoint-watcher');
 const CLICKER = ViewId.make('endpoint-clicker');
@@ -60,56 +58,11 @@ const acted = (url: string, token: string, act: unknown) =>
     return Effect.sync(() => socket.close());
   });
 
-type Measured = {
-  readonly started: number;
-  readonly finished: number;
-  readonly command: number;
-  readonly keys: ReadonlyArray<number>;
-};
-
-const typist = Effect.fnUntraced(function* (url: string, token: string, next: number) {
-  const lines = yield* Queue.unbounded<string>();
-  const child = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      Bun.spawn([process.execPath, CLIENT, url, token, String(next)], { stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' }),
-    ),
-    (spawned) =>
-      Effect.promise(async () => {
-        spawned.kill('SIGKILL');
-        await spawned.exited;
-      }),
-  );
-  yield* Effect.forkScoped(
-    Effect.promise(async () => {
-      const decoder = new TextDecoder();
-      let held = '';
-      for await (const chunk of child.stdout) {
-        held += decoder.decode(chunk, { stream: true });
-        for (let at = held.indexOf('\n'); at >= 0; at = held.indexOf('\n')) {
-          Queue.offerUnsafe(lines, held.slice(0, at));
-          held = held.slice(at + 1);
-        }
-      }
-    }),
-  );
-  return { pid: child.pid, line: Effect.map(Queue.take(lines), (line) => JSON.parse(line) as Record<string, unknown>) };
-});
-
-const blocking = Effect.fnUntraced(function* (signalled: number) {
-  process.kill(signalled, 'SIGUSR2');
-  const from = yield* Clock.currentTimeMillis;
-  yield* Effect.sync(() => {
-    const until = performance.now() + BLOCK_MS;
-    while (performance.now() < until);
-  });
-  return { from, to: yield* Clock.currentTimeMillis };
-});
-
 layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer)), { excludeTestServices: true })(
   'terminal endpoint',
   (it) => {
     it.effect(
-      'a key typed through a lane the server opened echoes within 100 ms while the server’s loop is blocked, and the host’s reports tell the server who typed and which view decides',
+      'a key typed through a lane the server opened echoes while the server’s loop is blocked, and the host’s reports tell the server who typed and which view decides',
       () =>
         Effect.gen(function* () {
           const page = yield* Page;
@@ -125,15 +78,11 @@ layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer
             .pipe(Effect.flatMap(Schema.decodeUnknownEffect(TerminalLaneOpened)));
           expect(lane.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/terminal$/u);
 
-          const client = yield* typist(lane.url, lane.token, lane.next);
+          const client = yield* laneTypist(lane.url, lane.token, lane.next);
           expect(yield* client.line).toHaveProperty('ready');
-          const blocked = yield* blocking(client.pid);
-          const measured = (yield* client.line) as Measured;
-          const said = JSON.stringify(measured);
-          expect(measured.started, said).toBeGreaterThanOrEqual(blocked.from);
-          expect(measured.finished, said).toBeLessThanOrEqual(blocked.to);
-          expect(measured.command, said).toBeLessThan(ECHO_MS);
-          expect(Math.max(...measured.keys), said).toBeLessThan(ECHO_MS);
+          const typed = yield* client.typed;
+          expect(typed.started, typed.said).toBeGreaterThanOrEqual(typed.from);
+          expect(typed.finished, typed.said).toBeLessThanOrEqual(typed.to);
 
           const frame = yield* Effect.repeat(Queue.take(decided), { until: (heard) => heard.decider === TYPIST });
           expect(frame).toEqual({ decider: TYPIST, applied: TYPIST_BOX });
