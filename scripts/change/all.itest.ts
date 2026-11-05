@@ -233,6 +233,27 @@ test('a package script finds the binaries its own package installs, as its packa
   }
 });
 
+test('a package whose integration files all belong to another platform passes as skipped', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'foreign-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    const other = process.platform === 'linux' ? 'darwin' : 'linux';
+    mkdirSync(join(root, 'pkg'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['pkg'] }));
+    writeFileSync(join(root, 'pkg/package.json'), JSON.stringify({ scripts: { 'test:integration': 'testbed itest --no-isolate' } }));
+    writeFileSync(join(root, `pkg/adapter.${other}.itest.ts`), 'throw new Error("a foreign platform file was imported");');
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--jobs', '1', '--report', join(root, 'reading.json')],
+      { stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect(code, stdout + stderr).toBe(0);
+    expect(stdout).toMatch(/pkg:test:integration\t.*\tskip$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('all suites resume without replay and report an unconfigured workspace failure by file', async () => {
   const root = mkdtempSync(join(tmpdir(), 'all-suites-'));
   try {

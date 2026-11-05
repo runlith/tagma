@@ -281,6 +281,7 @@ function settle(suite: Suite, run: Ended): void {
     for (const file of vitest.testResults ?? []) if (file.status === 'failed') failed.add(file.name);
   }
   const missing = runs.length === 0;
+  const skipped = /^SKIP .*$/m.exec(stdout + stderr)?.[0];
   const result: Result = {
     id: suite.id,
     directory: suite.directory,
@@ -290,8 +291,8 @@ function settle(suite: Suite, run: Ended): void {
     cpu: runs.reduce((total, run) => total + run.cpu, 0),
     queued: runs.reduce((total, run) => total + run.queued, 0),
     unmeasured: missing,
-    skipped: /^SKIP .*$/m.exec(stdout + stderr)?.[0],
-    code: missing ? exit || 1 : exit,
+    skipped,
+    code: missing && skipped === undefined ? exit || 1 : exit,
     files: files.length,
     tests: runs.reduce((total, run) => total + run.tests, 0),
     failed: [...failed].sort(),
