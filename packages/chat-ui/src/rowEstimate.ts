@@ -102,6 +102,9 @@ const LIST_ROW_PX = 24;
 const CLAMP_FOOT_PX = 24;
 export const WELL_LINES = 8;
 export const WORDS_LINES = 6;
+export const ANSWER_LINES = 6;
+const QUESTION_PAD_PX = 4;
+const ANSWER_GAP_PX = 4;
 export const META_PX = 24;
 export const BUBBLE_PX = 16;
 export const ATTACHMENTS_PX = 102;
@@ -257,9 +260,12 @@ function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): num
     }
     case 'list':
       if (display.items.some((item) => item.state !== undefined)) {
-        const rows = display.items.map(
-          (item, index) => LIST_ROW_PX + (item.detail ? view.markdown(`${key}:${index}`, item.detail, view.metrics.document) : 0),
-        );
+        const rows = display.items.map((item, index) => {
+          const asked = wrappedLines(item.label, view.metrics.words.columns) * LINE_PX + QUESTION_PAD_PX;
+          if (!item.detail) return asked;
+          const said = view.markdown(`${key}:${index}`, item.detail, view.metrics.document);
+          return asked + ANSWER_GAP_PX + clamped(said, ANSWER_LINES, view.expanded(`${key}:${index}:all`, false));
+        });
         return STEP_BODY_PX + rows.reduce((height, row) => height + row, 0) + Math.max(0, rows.length - 1) * BODY_GAP_PX;
       }
       return STEP_BODY_PX + wellHeight(display.items.length * LIST_ROW_PX, whole);

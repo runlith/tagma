@@ -91,7 +91,7 @@ export function askAsk(input: AskInput, requestId: string, step?: number): Threa
 const questionsTitle = (count: number): string => `${count} question${count === 1 ? '' : 's'}`;
 
 export function askingDisplay(questions: readonly (string | undefined)[]): ToolDisplay {
-  const asked = questions.flatMap((question) => (question === undefined ? [] : [{ label: question }]));
+  const asked = questions.flatMap((question) => (question === undefined ? [] : [{ label: question, state: 'working' as const }]));
   return { form: 'list', verb: 'Asking', title: questionsTitle(asked.length), items: asked };
 }
 

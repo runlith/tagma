@@ -8,7 +8,7 @@ export const ToolDisplayFact = Schema.Struct({ label: Schema.String, value: Sche
 export const ToolDisplayItem = Schema.Struct({
   label: Schema.String,
   detail: Schema.optional(Schema.String),
-  state: Schema.optional(Schema.Literals(['answered', 'partial', 'failed'])),
+  state: Schema.optional(Schema.Literals(['working', 'answered', 'partial', 'failed'])),
   thread: Schema.optional(Schema.Struct({ id: Schema.String, projectId: Schema.optional(Schema.Int) })),
 });
 
