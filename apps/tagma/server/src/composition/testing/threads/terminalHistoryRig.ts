@@ -20,10 +20,9 @@ const ANSWERING = [
 ];
 
 const TUI = `const { appendFileSync, existsSync, readFileSync, watch } = require('node:fs');
-const [report, keys, ...argv] = process.argv.slice(2);
+const [keys, ...argv] = process.argv.slice(2);
 const rule = '─'.repeat(40);
 const heard = (event) => appendFileSync(keys + '.events', JSON.stringify({ pid: process.pid, ...event }) + '\\n');
-appendFileSync(report, JSON.stringify(argv) + '\\n');
 heard({ kind: 'boot', argv });
 for (const signal of ['SIGHUP', 'SIGTERM'])
   process.on(signal, () => {
@@ -203,7 +202,6 @@ export const terminalHistoryWorld = Effect.gen(function* () {
   const flow = deliveryRig(world, rig);
 
   const raised = Effect.fn('testing.historyClaude')(function* (name: string, harness: 'claude-code' | 'codex' | 'grok') {
-    const report = join(stage, `${name}.argv`);
     const keys = join(stage, `${name}.keys`);
     const binary = harness === 'claude-code' ? 'claude' : harness;
     const answering =
@@ -221,7 +219,7 @@ export const terminalHistoryWorld = Effect.gen(function* () {
     const composer = harness === 'codex' ? `env TUI_MARK='›' TUI_IDLE='Ask Codex to do anything' ` : '';
     yield* files.writeFileString(
       join(bin, binary),
-      [...answering, `exec ${composer}${process.execPath} ${join(stage, 'tui.js')} ${report} ${keys} "$@"`].join('\n'),
+      [...answering, `exec ${composer}${process.execPath} ${join(stage, 'tui.js')} ${keys} "$@"`].join('\n'),
       { mode: 0o755 },
     );
     const cli = yield* rig.raised({ name, type: `harness:${harness}`, transcript: '', seeded: false });
@@ -237,14 +235,15 @@ export const terminalHistoryWorld = Effect.gen(function* () {
       const update = yield* Context.get(world.runtime.owners, TerminalScreens).screen(record.execution);
       return update._tag === 'ScreenTextFrame' ? screenLines(update) : null;
     });
+    const events = () => linesOf<TuiEvent>(files, `${keys}.events`);
     return {
       cli,
       keys,
       transcript,
       shown: (text: string) =>
         settledOn(Effect.map(screen, (lines) => (lines?.some((line) => line.includes(text)) === true ? true : null))),
-      boots: () => linesOf<readonly string[]>(files, report),
-      events: () => linesOf<TuiEvent>(files, `${keys}.events`),
+      boots: () => Effect.map(events(), (all) => all.flatMap((event) => (event.kind === 'boot' ? [event.argv] : []))),
+      events,
       draft: (text: string) => files.writeFileString(`${keys}.draft`, text),
       undraft: () => files.remove(`${keys}.draft`, { force: true }),
       linger: () => files.writeFileString(`${keys}.linger`, ''),

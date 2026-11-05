@@ -39,6 +39,7 @@ const common: [string, string, string, boolean][] = [
   ['team', 'threads', 'beforeStep', false],
   ['rule-checks', 'enforcement', 'afterTool', false],
 ];
+const budget: [string, string, undefined, boolean] = ['run-budget', 'native-harness', undefined, false];
 
 it.effect('every built-in declaration keeps its rule set and hook order when module registration order changes', () =>
   Effect.gen(function* () {
@@ -47,10 +48,10 @@ it.effect('every built-in declaration keeps its rule set and hook order when mod
     for (const declaration of DECLARATIONS()) {
       const setup: RuleSetup = { declaration, definitions, mandate, teams };
       const registered = registry.rules(setup);
-      expect(registered.map((rule) => [rule.id, rule.owner, rule.hook, rule.critical === true])).toEqual(common);
+      expect(registered.map((rule) => [rule.id, rule.owner, rule.hook, rule.critical === true])).toEqual([...common, budget]);
       const rules = orderedRules([...registered, ...definitions.rules(declaration, (ctx) => ctx.thread.profile?.overlay)]);
       const tail = capabilities[declaration.id]!;
-      expect(rules.map((rule) => rule.id)).toEqual([...common.map((row) => row[0]), ...tail]);
+      expect(rules.map((rule) => rule.id)).toEqual([...common.map((row) => row[0]), ...tail, budget[0]]);
       const called: string[] = [];
       const policy = new AgentRuntimePolicy(
         rules.map((rule) =>
@@ -66,11 +67,19 @@ it.effect('every built-in declaration keeps its rule set and hook order when mod
       );
       const facts = { runId: 'run', run: new AgentRunState(), invocationKey: 'probe', ordinal: 1, modelMessages: [] };
       yield* policy.evaluate({ ...facts, hook: 'beforeStep' });
-      expect(called.splice(0)).toEqual(['project-instructions', 'explicit-skills', 'delegation', 'capability-settings', 'team', ...tail]);
+      expect(called.splice(0)).toEqual([
+        'project-instructions',
+        'explicit-skills',
+        'delegation',
+        'capability-settings',
+        'team',
+        ...tail,
+        budget[0],
+      ]);
       yield* policy.evaluate({ ...facts, hook: 'afterTool' });
-      expect(called.splice(0)).toEqual(['touch', 'capability-cues', 'rule-checks', ...tail]);
+      expect(called.splice(0)).toEqual(['touch', 'capability-cues', 'rule-checks', ...tail, budget[0]]);
       yield* policy.evaluate({ ...facts, hook: 'beforeTool' });
-      expect(called).toEqual([...tail]);
+      expect(called).toEqual([...tail, budget[0]]);
     }
   }),
 );
