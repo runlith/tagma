@@ -103,7 +103,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
   checkoutRoot = root,
   compared?: Compared,
   installed: Installs = [],
-  budget: Budget = budgetOf(inspection.builtin, envelopeOf(inspection.builtin)),
+  budget?: Budget,
 ) {
   return yield* Effect.gen(function* () {
     yield* ensureCalibration(git, root, inspection, sides, cache);
@@ -129,7 +129,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
       compared: compared === undefined ? undefined : new Set(compared.map(([path]) => path)),
       depth: placed.depth,
     };
-    const fetchedBudget = budget;
+    const fetchedBudget = budget ?? budgetOf(inspection.builtin, envelopeOf(inspection.builtin));
     let wanted = sides.map((side) => ({
       ...side,
       paths: prefetch ? side.paths.filter((path) => !known(side.listed.objects.get(path) ?? '', path)) : [],

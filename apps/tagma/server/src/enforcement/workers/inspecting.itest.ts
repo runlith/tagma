@@ -6,7 +6,7 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import type { Assembled } from '@tagma/inspection/builtins';
-import { deriveCalibration } from '@tagma/inspection/node/budget';
+import { clearCalibrations, deriveCalibration, PROBE_MAX_FILES } from '@tagma/inspection/node/budget';
 import { MEMO_BYTES } from '@tagma/inspection/node/memo';
 import { createHash } from 'node:crypto';
 import { openCache } from '../cache/store.js';
@@ -227,6 +227,34 @@ test('a persisted over-budget estimate is remeasured before refusing a feasible 
   );
   if (!reply.answered || !('verdict' in reply)) throw new Error(JSON.stringify(reply));
   expect(reply.verdict.violations.map((violation) => violation.file)).toEqual(['app/src/core/recovery.ts']);
+});
+
+test('a fresh worker judges a change past its probe on the calibration that change measures', async () => {
+  clearCalibrations();
+  const files = Object.fromEntries(
+    Array.from({ length: PROBE_MAX_FILES + 1 }, (_, at) => [`app/src/core/wide${at}.ts`, `export const wide${at} = ${at};\n`]),
+  );
+  const built = await commit(files);
+  const reply = await answer(
+    {
+      id: ++asked,
+      kind: 'judge',
+      lane: 'landing',
+      root,
+      base: first,
+      built,
+      paths: Object.keys(files),
+      places: ['app/src'],
+      debt: [],
+      inspection: {
+        builtin: 'swallowed-failures',
+        params: { base: 'app/src', region: ['core/'], files: { extensions: ['.ts'], exclude: [] }, allow: [] },
+      },
+    },
+    'judge',
+  );
+  if (!reply.answered || !('verdict' in reply)) throw new Error(JSON.stringify(reply));
+  expect(reply.verdict).toEqual({ violations: [], unjudged: [] });
 });
 
 test('cold calibration permits repairing an unreadable base and leaves unsupported files to the judge', async () => {
