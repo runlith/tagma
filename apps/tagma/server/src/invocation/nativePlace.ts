@@ -140,6 +140,7 @@ export const nativePlacement = <Owners>(ctx: NativeCall<Owners>) => {
       prepare &&
       ctx.places !== undefined &&
       actor.kind === 'thread' &&
+      entry.place === 'project' &&
       place !== null &&
       checkout != null &&
       (facts.served !== null || (entry.mutates === true && place.projectId !== actor.projectId))
