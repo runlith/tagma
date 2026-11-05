@@ -1,5 +1,5 @@
 import { freemem } from 'node:os';
-import { Clock, Deferred, Effect, FileSystem, Path, Semaphore } from 'effect';
+import { Clock, Deferred, Effect, FileSystem, Path, Queue, Semaphore } from 'effect';
 import type { CommandDeadline } from '@runlith/executions/protocol/command';
 import type { ExecutionId, ExecutionRef, ExecutionState, Incarnation } from '@runlith/executions/protocol/execution';
 import type { InputProfile } from '@runlith/executions/protocol/inputProfile';
@@ -140,7 +140,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
   const releasing = new Map<ExecutionId, Deferred.Deferred<void>>();
   const sealedReads = new Map<ExecutionId, SealedReaders>();
   const shelf = yield* Semaphore.make(1);
-  const evicting = yield* Semaphore.make(1);
+  const reclaims = yield* Queue.sliding<void>(1);
   let keptBytes = 0;
   const disownedOwners = new Set<string>();
   const disownedScopes = new Set<string>();
@@ -173,6 +173,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
   });
 
   let exhausted = false;
+  let reclaiming = true;
 
   const reclaimPass = Effect.flatMap(store.retiredLedger(), (generations) => generationEviction.reclaimListed(generations)).pipe(
     Effect.withSpan('Host.evictGenerations'),
@@ -188,16 +189,22 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
       return after;
     });
 
-  const evictGenerations = evicting.withPermits(1)(Effect.flatMap(reclaimPass, settle));
+  const evictGenerations = Effect.forever(
+    Effect.gen(function* () {
+      yield* Effect.flatMap(reclaimPass, settle);
+      reclaiming = false;
+      yield* Queue.take(reclaims);
+    }),
+  );
 
-  const relieve = Effect.flatMap(readVolume, (measured) => {
+  const relieve = Effect.map(readVolume, (measured) => {
     if (measured === undefined || measured.available >= measured.reserve) {
       exhausted = false;
-      return Effect.succeed(measured);
+    } else if (!exhausted && !reclaiming) {
+      reclaiming = true;
+      Queue.offerUnsafe(reclaims, undefined);
     }
-    return exhausted
-      ? Effect.succeed(measured)
-      : evicting.withPermits(1)(Effect.suspend(() => (exhausted ? readVolume : Effect.flatMap(reclaimPass, settle))));
+    return measured;
   });
 
   const disownedOf = (entry: Released): boolean =>

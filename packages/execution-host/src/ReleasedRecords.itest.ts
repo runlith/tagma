@@ -70,6 +70,7 @@ type Faults = {
   elapsedNanos: bigint;
   release: Parking | undefined;
   shelf: Gate | undefined;
+  ledger: Gate | undefined;
   readonly gates: Set<Gate>;
 };
 type Host = {
@@ -99,6 +100,7 @@ const fixture = Layer.effect(
       elapsedNanos: 0n,
       release: undefined,
       shelf: undefined,
+      ledger: undefined,
       gates: new Set(),
     };
     const records = `${directory}/records/`;
@@ -144,6 +146,14 @@ const fixture = Layer.effect(
               yield* pass(gate);
             }
             return yield* real.sealRecordBytes(incarnation, bytes);
+          }),
+          retiredLedger: Effect.fnUntraced(function* () {
+            const gate = faults.ledger;
+            if (gate !== undefined) {
+              faults.ledger = undefined;
+              yield* pass(gate);
+            }
+            return yield* real.retiredLedger();
           }),
         });
       }),
@@ -198,6 +208,7 @@ const withHost = <A, E, R>(body: (host: RecordCase) => Effect.Effect<A, E, R>) =
         host.faults.gates.clear();
         host.faults.release = undefined;
         host.faults.shelf = undefined;
+        host.faults.ledger = undefined;
         host.faults.volume = PLENTY;
         host.faults.recoveredVolume = undefined;
         host.faults.sizing = undefined;
@@ -459,6 +470,20 @@ layer(fixture, { excludeTestServices: true })('released records', (it) => {
         yield* released(open, second.execution);
         expect(text((yield* open.byteRecords.read(stdout(first), 4096)).bytes)).toBe('first\n');
         expect((yield* open.stops.ending(first.execution))?.retention).toBe('retained');
+      }),
+    ),
+  );
+
+  it.effect('a release below the volume reserve seals its record while the retired generations are still being reclaimed', () =>
+    withHost(
+      Effect.fnUntraced(function* (open) {
+        const reclaim = yield* gateOf(open);
+        open.faults.ledger = reclaim;
+        open.faults.volume = { total: 1_000_000_000_000, available: 34_000_000_000 };
+        const ref = yield* started(open, 'op-reclaim-aside', { line: "printf 'aside\\n'" });
+        yield* released(open, ref.execution);
+        yield* Deferred.await(reclaim.entered);
+        expect(text((yield* open.byteRecords.read(stdout(ref), 4096)).bytes)).toBe('aside\n');
       }),
     ),
   );

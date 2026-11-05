@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, References, Tracer } from 'effect';
 import { statVolume, type VolumeReader } from '../RecordVolume';
 import { openState } from './state';
 import { adoptHeld } from './adoption';
@@ -17,7 +17,12 @@ export const ExecutionRegistry = {
 
 const make = Effect.fnUntraced(function* (options: { readonly volumeOf: VolumeReader }) {
   const registry = yield* openState(options);
-  yield* Effect.forkIn(registry.shelf.evictGenerations, registry.registryScope);
+  yield* Effect.forkIn(
+    Effect.updateContext(registry.shelf.evictGenerations, (context: Context.Context<never>) =>
+      Context.omit(Tracer.ParentSpan, References.CurrentStackFrame)(context),
+    ),
+    registry.registryScope,
+  );
   const unadopted = yield* adoptHeld(registry);
   yield* Effect.forkIn(registry.shelf.evictKept, registry.registryScope);
   yield* Effect.forEach(
