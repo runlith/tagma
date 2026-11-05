@@ -139,7 +139,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/report"
           if [ "$RUNNER_OS" = macOS ]; then
             while :; do
-              echo "$(date -u +%T) $(memory_pressure -Q | tail -1) | $(sysctl -n vm.swapusage) | $(vm_stat | awk '/Pageouts|Swapouts|Pages free|compressor/ {printf "%s %s ", $1, $NF}') | $(ps -axo rss=,comm= | sort -nr | head -5 | awk '{printf "%dM %s, ", $1/1024, $2}')"
+              echo "$(date -u +%T) $(top -l 2 -s 1 -n 0 | grep 'CPU usage' | tail -1) | load $(sysctl -n vm.loadavg) | $(ps -axo %cpu=,comm= | sort -nr | head -5 | awk '{printf "%s%% %s, ", $1, $2}') | $(memory_pressure -Q | tail -1) | $(sysctl -n vm.swapusage) | $(vm_stat | awk '/Pageouts|Swapouts|Pages free|compressor/ {printf "%s %s ", $1, $NF}') | $(ps -axo rss=,comm= | sort -nr | head -5 | awk '{printf "%dM %s, ", $1/1024, $2}')"
               sleep 30
             done > "$RUNNER_TEMP/report/machine.log" &
           fi
