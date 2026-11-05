@@ -237,7 +237,13 @@ export const reportOwed = Effect.fnUntraced(function* (
     const context = yield* contextOf(source, ended.reading);
     for (const request of answered) {
       const taken = completed ? (request.deliveredToRunId ?? ended.ending) : ended.ending;
-      const receipt = yield* report(source, request, taken, ended.report ?? completionReport(source, ended, taken), context);
+      const receipt = yield* report(
+        source,
+        request,
+        taken,
+        ended.report ?? completionReport(source, ended, taken, request.body.reportDelivery === 'collect'),
+        context,
+      );
       if (receipt !== null) receipts.push(receipt);
     }
   }

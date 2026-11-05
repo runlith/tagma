@@ -29,7 +29,8 @@ type Answer = {
 };
 
 const LEAD = 'Work out how the floor is built.';
-const QUESTIONS = ['Where does the floor live?', 'What owns the beams?', 'Who laid the tiles?'];
+const QUESTIONS = ['Where does the floor live?', 'What owns the beams?', 'Who laid the tiles?', 'How wide is the hall?'];
+const HALL = 'The hall is four metres wide.';
 const CALL = 'ask-floor';
 
 const toolCall = (id: string, name: string, input: unknown): Stream.Stream<LLMEvent> =>
@@ -96,6 +97,7 @@ const setup = Effect.gen(function* () {
                 complete: false,
                 missing: 'who maintains them',
               });
+            if (question === 3) return said(HALL);
             return Stream.fail(credentialMissing('fixture provider failure'));
           },
         }),
@@ -224,8 +226,9 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       });
       const answer = response.body as Answer;
       expect(answer).toMatchObject({ status: 'asked' });
-      expect(answer.entries?.map((entry) => entry.status)).toEqual(['answered', 'partial', 'failed']);
+      expect(answer.entries?.map((entry) => entry.status)).toEqual(['answered', 'partial', 'failed', 'partial']);
       expect(answer.entries?.map((entry) => entry.question)).toEqual(QUESTIONS);
+      expect(answer.entries?.[3]?.text).toBe(`${HALL}\n\n${HALL}`);
     }),
   );
 });

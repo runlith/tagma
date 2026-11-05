@@ -4,10 +4,11 @@ import type { ThreadRecord } from '../thread/record';
 export const theAgent = (thread: ThreadRecord): string =>
   thread.name === null ? `The agent in thread ${thread.id}` : `The agent ${thread.name} (thread ${thread.id})`;
 
-export function completionReport(source: ThreadRecord, ended: RunEnded, taken: string): string {
+export function completionReport(source: ThreadRecord, ended: RunEnded, taken: string, collected: boolean): string {
   const prefix = `${theAgent(source)}, run ${ended.runId},`;
   if (ended.status === 'completed') {
     const answer = ended.answer;
+    if (collected) return answer === null || answer.trim() === '' ? `${prefix} ended without a final answer or a last message.` : answer;
     const ran =
       taken === ended.runId
         ? `${prefix} ended the run your request opened`
