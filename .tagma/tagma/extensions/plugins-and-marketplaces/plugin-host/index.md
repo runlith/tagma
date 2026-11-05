@@ -11,6 +11,10 @@ fields:
       },
       {
         "at": "plugin-host.ts"
+      },
+      {
+        "at": "testing/",
+        "role": "testing"
       }
     ],
     "id": "plugin-host",

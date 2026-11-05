@@ -3,6 +3,9 @@ id: 01a189de-7f93-7650-97a5-c9b107c6506c
 title: A plugin runs in a project when the person's layer or the project's own enables it and the project has not switched it off
 ord: 9
 tags: ["explanation"]
+edges:
+  - kind: supersedes
+    to: 01a12320-6e01-7be0-8d8d-0d2d464327ae
 sources:
   - kind: file
     ref: apps/tagma/server/src/plugins/enabling.ts

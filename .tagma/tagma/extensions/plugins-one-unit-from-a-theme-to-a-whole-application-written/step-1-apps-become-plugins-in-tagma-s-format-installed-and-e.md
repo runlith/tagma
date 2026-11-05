@@ -25,7 +25,7 @@ Step 1 of [[d2b5f488]]: apps become plugins in Tagma's format, installed and ena
   - the start step `tagma-apps/steps/data.ts`;
   - the `secrets` point and the `tagma-apps` secret owner.
 
-  The journal's form steps stay.
+  The three journal form steps that renamed plugins to apps (`toolNames`, `appBinding`, `appCapabilities`) go too: they run on every read and would turn the current names back into app names. Old thread records stay as written.
 - **Names:** the caller `plugin:<id>`, tool names `plugin__<id>__<tool>`, `bindings.plugin`, the capabilities `plugins` and `plugin:<id>`, and `TagmaApp*` symbols renamed by role.
 - **Text:** the `apps` skill and the Apps doctrine section become `plugins`, describing the hand-written `tagma-plugin.json` until the SDK of step 2 emits it.
 

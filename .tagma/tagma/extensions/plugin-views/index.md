@@ -1,53 +1,53 @@
 ---
-id: 01a174f2-3d7f-7ca2-9e04-eb039cc7259f
+id: 01a1237e-b7b0-70ab-98b0-c0c63d78b068
 title: Plugin views
-ord: 36
+ord: 29
 tags: ["module"]
 fields:
   {
     "entries": [
       {
-        "at": "."
+        "at": "contract/"
+      },
+      {
+        "at": "views.ts"
+      },
+      {
+        "at": "files.ts"
       }
     ],
-    "id": "app-plugin-views",
-    "kind": "product"
+    "id": "views",
+    "order": [
+      [
+        "contract/wire/"
+      ],
+      [
+        "contract/service/"
+      ],
+      [
+        "."
+      ]
+    ]
   }
 edges:
   - kind: imports
-    to: 01a0c700-4cde-7cce-8b46-dc3859cc3c49
+    to: 01a0ca5d-3b72-7529-8b88-94c413756ad0
   - kind: imports
-    to: 01a0ca5c-5906-74eb-a8b8-6650cb732496
+    to: 01a0fd8b-bedd-7f22-b461-adddedf810fe
   - kind: imports
-    to: 01a0ca95-302a-761c-b835-d02e2f69b0c4
+    to: 01a0fd8b-bee9-7760-9b13-b9847a70e34e
   - kind: imports
-    to: 01a0fd8b-bef1-758e-b119-40b1d962023e
+    to: 01a0fd8b-beeb-7ef2-bff4-d6d3b824564e
   - kind: imports
-    to: 01a0fd8b-bf01-77d4-950b-191990491249
+    to: 01a0fd8b-befe-744b-876f-36f2f3b6b585
   - kind: imports
-    to: 01a0fd8b-bf06-7d52-a6ca-9e8e1a45453a
+    to: 01a1231f-29af-74c6-9e71-e4a62243eda2
   - kind: imports
-    to: 01a1237e-b7b0-70ab-98b0-c0c63d78b068
-  - kind: imports
-    to: 01a174f2-3d3c-7aba-98fd-93f206137f5a
-  - kind: imports
-    to: 01a174f2-3d42-7971-98e6-d64d57643bc7
-  - kind: imports
-    to: 01a174f2-3d51-75fa-8183-c8b41c9696ea
-  - kind: imports
-    to: 01a174f2-3d52-7cb0-8660-a40d39910e41
-  - kind: imports
-    to: 01a174f2-3d53-77eb-b835-34ca4f0a6d9b
-  - kind: imports
-    to: 01a174f2-3d5a-7431-8610-6fcfbbff045a
-  - kind: imports
-    to: 01a174f2-3d65-7e23-bb0f-9d871e061782
-  - kind: imports
-    to: 01a174f2-3d66-76d1-9288-c921d7074a11
+    to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports-tests
-    to: 01a0c704-a612-7c4c-9f81-5089acc2829b
+    to: 01a1239f-2e01-7962-8ca3-25a8af373f07
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugin-views
+    ref: apps/tagma/server/src/views
 ---
-A plugin may contribute views, and the module embeds them in the window: plugin sections, panes and windows, their launchers and actions. The plugin's own interface renders inside the view frame.
+A plugin view draws in Tagma what its process holds: a tool result in the feed, a pin above the feed, a project section, a side pane, a window opened from the palette and the rail. The module declares the `views`, `results`, `surfaces`, `panes` and `launchers` points, hands the client the checked views of the plugins enabled in the project with the plugin origin named by the door, serves the plugin's `ui/` files on that origin, and executes what a view asks of the host: a `view`-audience tool call, a process-resource read and subscription, view key-value storage in the plugin's data directory. Mounting, bridge and isolation are held by the client; the process and its life belong to `plugin-host`.

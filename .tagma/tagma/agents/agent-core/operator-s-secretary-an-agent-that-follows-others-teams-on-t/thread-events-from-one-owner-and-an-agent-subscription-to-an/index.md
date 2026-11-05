@@ -14,7 +14,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/collaboration/childUpdates.ts
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
+    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
   - kind: file
     ref: apps/tagma/server/src/threads/list/attention.ts
 ---

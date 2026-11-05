@@ -5,7 +5,7 @@ ord: 7
 tags: ["idea"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 Question: make Tagma a platform where a user asks and agents build an application right inside Tagma — a game, a trainer, a tool.
