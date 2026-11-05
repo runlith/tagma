@@ -113,7 +113,7 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
 
 1. **It reads the definition** in describe mode: it imports `plugin.ts`, `definePlugin` returns a description, and no handler runs.
 2. **It writes the manifest:**
-   - the envelope: `id`, `title`, `version` from `package.json`, and `engines.tagma` (Versions, below);
+   - the envelope: `id`, `title`, and `version` from `package.json`;
    - `process: {entry: 'dist/process.js', resident?}`, when a handler exists;
    - `contributes` by point, each tool with its description, input JSON Schema and annotations;
    - a hash of the sources the build read.
@@ -128,8 +128,7 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
    - **Chunks.** It bundles every other import into plain ESM chunks. Host specifiers (`svelte`, `svelte/*`, `@runlith/tagma/ui`) stay external there too.
    - **Direction.** Svelte files import chunks, never the reverse.
    - **Refusal.** A dependency that imports `svelte/internal/*` fails the build.
-   - **Page views.** `view.page('./ui/board/')` copies the folder as it is.
-6. **It checks the result** against the point schemas of the SDK's surface version. A manifest the server would refuse fails the build, with the reason the server would give.
+6. **It checks the result** against the point schemas of the SDK's own Tagma version. A manifest the server would refuse fails the build, with the reason the server would give.
 
 The template commits `dist/` and `tagma-plugin.json`, and marks them as generated and merged as binary in `.gitattributes`. A collaborator, or an install from git, then has everything with no build of their own.
 
@@ -151,7 +150,7 @@ The apps skill now teaches some things by hand; the runtime's code does them ins
 - `readOnlyHint` and `isError` carry their meaning;
 - data is keyed by `projectId`.
 
-The protocol between the runtime and the host is part of the promised surface: the shape of the caller, the names under which tools are listed, and the payloads of ticks, endings, questions, notifications, build steps, hooks and actions. So is the runtime baseline a process may rely on:
+The protocol between the runtime and the host belongs to the SDK: the shape of the caller, the names under which tools are listed, and the payloads of ticks, endings, questions, notifications, build steps, hooks and actions. So does the runtime baseline a process may rely on:
 - the Bun version range of the Tagma release;
 - the Node built-ins Bun implements;
 - `bun:sqlite`, for a plugin that keeps its own database.
@@ -162,8 +161,6 @@ The protocol between the runtime and the host is part of the promised surface: t
 - it returns the operation's answer arms, discriminated by `status`;
 - a refusal throws `TagmaRefused`, with `code`, `reason` and `unblock`;
 - keyed acts such as `start_turn` take their `key` as a field.
-
-Decoding is lenient, so adding to the surface never breaks a running plugin. An answer arm, a refusal code or an entry role the plugin's SDK does not know arrives as an open variant, carrying its raw value.
 
 On top of the generated calls the SDK owns what is not a plain operation:
 - `threads.events(since)`, an async iterator over the projection of the child spec, with `since` a map from thread id to that thread's position;
@@ -185,7 +182,7 @@ Typing `op` by operation id, rather than mapping operations to method names by h
 | `tagma.open(...)` | Opens a thread or a section of Tagma |
 | `tagma.servers.<name>.call(...)` | Calls a tool of a server the plugin brought |
 
-`@runlith/tagma/ui` also exports the host's components and tokens. A view reaches only this surface, through the view host's declared methods (`BRIDGE_METHODS`). `<Thread>` is the person's own thread interface and acts as the person: placing it hands the person their own composer, not the plugin. A page view reaches the same host through the existing `tagma/*` bridge methods, which belong to the window surface.
+`@runlith/tagma/ui` also exports the host's components and tokens, and `<Frame src>`, which embeds someone else's site, widget or web application in an iframe on its own origin. A view reaches only this surface, through the view host's declared methods (`BRIDGE_METHODS`). `<Thread>` is the person's own thread interface and acts as the person: placing it hands the person their own composer, not the plugin.
 
 ## Where it lives in the code
 
@@ -207,36 +204,26 @@ Typing `op` by operation id, rather than mapping operations to method names by h
 
 ## Versions
 
-- **The surface has two parts.** Each has its own version, `major.minor`, independent of Tagma's release numbers, since Tagma releases bump their last number on `0.x`:
-  - *process*: external operations, point schemas, the host protocol, the runtime baseline;
-  - *window*: host modules, the view surface, the slot faces, the page-view bridge.
-- **A minor adds; a major removes or changes.**
-- **What a plugin declares.** `engines.tagma` names, for each part the plugin uses, the version of the SDK it was built against. A plugin with no views does not depend on the window part, so a new Svelte major leaves it running.
-- **Acceptance.** Tagma accepts a plugin when each part has the same major and an equal or higher minor. Otherwise the card reads "needs a newer Tagma" with **Update Tagma**, or "outdated" with **Fix with an agent** when Tagma has moved past its major.
-- **Development servers** carry the surface versions in their code, so a checkout server, whose release reads `0.1.0`, judges plugins the same way.
-- **The release build checks each part by position:**
-  - what plugins supply — operation inputs, manifest fields, hook answers — must still be accepted: the old type is assignable to the new;
-  - what the host supplies — answers, events, payloads, `ctx`, host-module exports — must still be readable: the new type is assignable to the old, open variants allowed.
+While rule [[0528876d]] stands, the SDK keeps no compatibility and no version gate:
+- The SDK carries Tagma's release and changes with it in the same commit.
+- A plugin either fits the running Tagma or reads broken. **Fix with an agent** then rebuilds it on the running SDK.
+- The acceptance plugins are type-checked against each new SDK and run against each new Tagma, so a change that breaks them is fixed in the same work.
 
-  A change that fails this check needs a major of that part.
-- **The acceptance plugins** are type-checked against each new SDK and run against each new Tagma, as real consumers.
+Surface versions, `engines.tagma`, lenient decoding and a release-time compatibility check come when the rule is cancelled and outside authors arrive.
 
 ## Acceptance
 
 - **Creating.** `create_plugin` writes a folder into `.tagma-plugins/<id>/`, and `tagma-plugin init` writes the same template elsewhere. After the agent installs dependencies, the folder builds, type-checks, and installs through one `install_plugin`.
 - **The build.** `tagma-plugin build` emits `tagma-plugin.json` with each tool's JSON Schema and the source hash. A field the server would refuse fails the build with the server's reason. An unbundlable import fails it, and so does a dependency reaching `svelte/internal/*`.
 - **Inputs.** A zod-typed tool shows its JSON Schema to an agent before the process first starts. Invalid input answers `isError` with the validator's message, and the process stays up.
-- **The client.** `ctx.tagma.op` offers exactly the `external` operations. A refusal throws with its `code`. An unknown answer arm decodes as an open variant.
+- **The client.** `ctx.tagma.op` offers exactly the `external` operations. A refusal throws with its `code`.
 - **The plugin's own server.** `ctx.servers.gitlab.call` reaches the server the plugin brought, under its sign-in.
 - **Views.**
   - A Svelte view calls its own `view` tool with the types of `typeof plugin`.
   - Two plugins' views on one screen each reach only their own tools.
   - A view that uses a Svelte component library from npm compiles against the window's runtime.
 - **Installing.** A plugin installed from npm runs with no `npm install` on the machine.
-- **Versions.**
-  - A plugin built against process `1.2` runs on Tagma serving `1.3`, and on a checkout server serving `1.3`.
-  - One built against `2.0` reads "needs a newer Tagma".
-  - A plugin with no views keeps running across a window major.
+- **Breaking.** A plugin the running Tagma no longer accepts reads broken. Fix with an agent rebuilds it on the running SDK, and it runs again.
 - **Testing.** `@runlith/tagma/testing` calls a tool as an agent caller, fires a tick and delivers a question under Bun, with no Tagma running.
 - **SDK only.** Every acceptance plugin of [[d2b5f488]] and [[c4451a7e]] is written only against the SDK, with no raw HTTP or MCP.
 

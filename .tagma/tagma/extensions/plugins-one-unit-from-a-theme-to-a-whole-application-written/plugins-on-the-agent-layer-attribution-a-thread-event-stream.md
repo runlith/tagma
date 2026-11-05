@@ -80,7 +80,7 @@ It cannot show live text or other tools' calls, answer a question or a confirmat
 
   A subscription with a position for a thread receives only the deltas after it. `read_thread_events {threadId, before, limit}`, an `external` read, pages the projection back from `before`.
 
-  The producer applies the function to the same records and revision as the wire feed, the way `threads.presence` is produced. The window applies the same function to its own thread session for `tagma.threadEvents`, so one implementation serves both, and no consumer refolds (rule 51c66cb6). Unknown roles decode as open variants. The projection changes only by addition.
+  The producer applies the function to the same records and revision as the wire feed, the way `threads.presence` is produced. The window applies the same function to its own thread session for `tagma.threadEvents`, so one implementation serves both, and no consumer refolds (rule 51c66cb6).
 - **The door: `GET /api/feed/<id>`** answers NDJSON:
   - only for streaming feeds declared `external`; acts go through `POST /api/op`;
   - through the same RPC handler as the socket, never a second feed runner;
@@ -166,7 +166,7 @@ A plugin writes no feed entries of its own. Entries decode only installed kinds,
 
 ## Risks and not established
 
-- **A public contract.** The projection's vocabulary, the slot faces and the hook protocol become a versioned contract under the SDK's process and window surface versions.
+- **A public contract later.** The projection's vocabulary, the slot faces and the hook protocol change with Tagma in one commit while rule [[0528876d]] stands, and become a versioned contract once it is cancelled.
 - **Latency.** A matching hook adds a process round trip to the tool call, and a start when the process is idle.
 - **Not established:**
   - that `Conversation` draws correctly in a seat without a pane, which is reasoned from `ThreadSlot`'s arguments and not run;
