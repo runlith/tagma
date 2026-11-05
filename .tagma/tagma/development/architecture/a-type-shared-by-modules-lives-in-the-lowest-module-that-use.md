@@ -333,11 +333,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/cut/notarize.ts",
+          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/cut/release.ts",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/cut/release.ts",
+          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/mac-release/notarize.ts",
           "owner": "5a3bed29"
         }
       ],

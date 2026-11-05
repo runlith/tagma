@@ -19190,22 +19190,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#NotarizationRefused",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#Developer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#Apple",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#sealingNotary",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notes.ts#NotesUnreadable",
           "owner": "5a3bed29"
         },
@@ -19227,10 +19211,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/packages.ts#carryPackages",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#diskImageFile",
           "owner": "5a3bed29"
         },
         {
@@ -19322,14 +19302,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/signing.ts#SIGNING_NAME",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/signing.ts#SigningRefused",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stack.ts#Decoded",
           "owner": "5a3bed29"
         },
@@ -19366,14 +19338,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/target.ts#TargetTrouble",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/target.ts#rustTriple",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/tools.ts#ToolCarried",
           "owner": "5a3bed29"
         },
@@ -19382,41 +19346,57 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/trial.ts#Trial",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/notarize.ts#Developer",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Ran",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/notarize.ts#Apple",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Terminal",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/notarize.ts#sealingNotary",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Beats",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/signing.ts#SIGNING_NAME",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Waited",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/signing.ts#SigningRefused",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#serves",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#Ran",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#op",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#Terminal",
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#keptOf",
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#Beats",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#Waited",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#serves",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#op",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/mac-release/world.ts#keptOf",
           "owner": "5a3bed29"
         }
       ],
       "escaped": [
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/presence/Presence.svelte.ts#PresenceHold",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 59,
@@ -19424,7 +19404,7 @@ fields:
           "said": "exported type `PresenceHold` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/ThreadSlot.svelte.ts#SlotOptions",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 69,
@@ -19432,7 +19412,7 @@ fields:
           "said": "exported type `SlotOptions` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 17,
@@ -19440,7 +19420,7 @@ fields:
           "said": "exported type `Chosen` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutCarry.ts#CarryOpening",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -19448,7 +19428,7 @@ fields:
           "said": "exported type `CarryOpening` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 159,
@@ -19456,7 +19436,7 @@ fields:
           "said": "exported type `ThreadReaderWorker` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -19464,7 +19444,7 @@ fields:
           "said": "exported function `cachedExecutable` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/inspector.ts#bootstrap",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 12,
@@ -19472,7 +19452,7 @@ fields:
           "said": "exported function `bootstrap` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#COMPANION_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 12,
@@ -19480,7 +19460,7 @@ fields:
           "said": "exported const `COMPANION_VERSION` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#CLIENT_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 13,
@@ -19488,7 +19468,7 @@ fields:
           "said": "exported const `CLIENT_VERSION` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#PYTHON_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 14,
@@ -19496,55 +19476,55 @@ fields:
           "said": "exported const `PYTHON_VERSION` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#cacheDirectory",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 49,
+          "line": 50,
           "path": "packages/e2e/src/lanes/iosTools.ts",
           "said": "exported function `cacheDirectory` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#cachedTools",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 148,
+          "line": 171,
           "path": "packages/e2e/src/lanes/iosTools.ts",
           "said": "exported const `cachedTools` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#TemplateParams",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 22,
+          "line": 10,
           "path": "packages/e2e/src/lanes/template.ts",
           "said": "exported type `TemplateParams` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#Preparation",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 38,
+          "line": 26,
           "path": "packages/e2e/src/lanes/template.ts",
           "said": "exported type `Preparation` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#resolve",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 140,
+          "line": 128,
           "path": "packages/e2e/src/lanes/template.ts",
           "said": "exported function `resolve` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#prepare",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 177,
+          "line": 165,
           "path": "packages/e2e/src/lanes/template.ts",
           "said": "exported const `prepare` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#PageException",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 3,
@@ -19552,7 +19532,7 @@ fields:
           "said": "exported const `PageException` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#PageFailed",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 4,
@@ -19560,7 +19540,7 @@ fields:
           "said": "exported class `PageFailed` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#pageFailure",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 6,
@@ -19568,7 +19548,7 @@ fields:
           "said": "exported function `pageFailure` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#errorScript",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 11,
@@ -19576,7 +19556,7 @@ fields:
           "said": "exported function `errorScript` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#flushErrors",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 29,
@@ -19584,7 +19564,7 @@ fields:
           "said": "exported const `flushErrors` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#testServices",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 4,
@@ -19592,7 +19572,7 @@ fields:
           "said": "exported const `testServices` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#runTest",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 11,
@@ -19600,7 +19580,7 @@ fields:
           "said": "exported function `runTest` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#makeFixture",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 29,
@@ -19608,7 +19588,7 @@ fields:
           "said": "exported function `makeFixture` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/layer/src/App.ts#Sources",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 44,
@@ -19616,7 +19596,7 @@ fields:
           "said": "exported type `Sources` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/layer/src/App.ts#Closed",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 65,
@@ -19624,7 +19604,7 @@ fields:
           "said": "exported type `Closed` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/layer/src/Rung.ts#RungName",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 74,
@@ -19632,7 +19612,7 @@ fields:
           "said": "exported type `RungName` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 19,
@@ -19640,7 +19620,7 @@ fields:
           "said": "exported type `McpServedMedia` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 42,
@@ -19648,7 +19628,7 @@ fields:
           "said": "exported type `StdioServerInput` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/bed.ts#diskContinuity",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 174,
@@ -19656,39 +19636,39 @@ fields:
           "said": "exported function `diskContinuity` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#worldHome",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 57,
+          "line": 58,
           "path": "packages/testbed/src/core/run.ts",
           "said": "exported function `worldHome` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#PathLocation",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 66,
+          "line": 67,
           "path": "packages/testbed/src/core/run.ts",
           "said": "exported type `PathLocation` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#locate",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 70,
+          "line": 71,
           "path": "packages/testbed/src/core/run.ts",
           "said": "exported function `locate` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#runLiveness",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 110,
+          "line": 111,
           "path": "packages/testbed/src/core/run.ts",
           "said": "exported function `runLiveness` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/started.ts#STARTED",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 5,
@@ -19696,7 +19676,7 @@ fields:
           "said": "exported const `STARTED` is imported by no production file"
         },
         {
-          "commit": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/utils/src/worker.ts#WorkerLink",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,

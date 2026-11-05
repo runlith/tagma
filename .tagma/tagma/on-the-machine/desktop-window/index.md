@@ -47,9 +47,9 @@ edges:
   - kind: imports
     to: 01a1488c-954c-76bc-bfcd-42d64103030b
   - kind: imports
-    to: 01a1a316-f62a-7363-b503-d860360417ba
-  - kind: imports
     to: 01a1a83d-f5be-74d5-8aa8-06b53d10c144
+  - kind: imports
+    to: 01a1a95d-e159-7393-b1ce-ac0137f92c13
 sources:
   - kind: dir
     ref: apps/tagma/desktop
