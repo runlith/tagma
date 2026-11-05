@@ -119,8 +119,11 @@ export const returnedBeforeServing = Effect.fn('composition.returning')(function
         `[tagma] the threads ${basename(release)} wrote stay in its form: its server started ${starts} times without returning them to ${asked.to}`,
       );
   }
-  const parts = yield* Effect.promise(build.parts);
-  const listed = yield* Effect.result(returnPlace(installRoot.success, release, storePath, fillsOf(parts.modules)));
+  const parts = yield* Effect.result(Effect.tryPromise(build.parts));
+  if (Result.isFailure(parts))
+    console.error(`[tagma] the stores return without their index fills: the modules could not be read: ${String(parts.failure)}`);
+  const fills = Result.isSuccess(parts) ? fillsOf(parts.success.modules) : undefined;
+  const listed = yield* Effect.result(returnPlace(installRoot.success, release, storePath, fills));
   if (Result.isFailure(listed)) return yield* stepBackUnlisted(installRoot.success, asked, listed.failure);
   const place = listed.success;
   const predecessor = replaced(process.env);
