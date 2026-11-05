@@ -9,16 +9,19 @@ const fling = (offsets: readonly number[], velocity = 1, times = offsets.map((_,
   release: { t: 0, offset: 0, velocity, touchVelocity: null, velocitySource: 'first-momentum-frames' },
 });
 
-test('a fling passes decay, out-of-phase samples and a fold at rest, and fails pull-back, a stop, a moving write and a short distance', () => {
+test('a fling passes decay, out-of-phase samples, a stalled page and a fold at rest, and fails pull-back, a stop, a moving write and a short distance', () => {
   const control = calibrate(Array.from({ length: 5 }, (_, index) => fling([10, 20, 25, 27, 28, 28], 1 + index / 100)));
   expect(momentum(fling([10, 20, 25, 27, 28, 28], 1.02), control)).toEqual({
     ratio: 28 / 1.02,
     floor: 14 / 1.04,
     reversals: 0,
     interruptions: 0,
+    unjudged: 0,
     stoppingWrites: 0,
     aboveFloor: true,
   });
+  const stalled = fling([10, 20, 28, 34, 40, 41, 41, 41, 42, 49, 49, 49], 1, [10, 20, 30, 40, 50, 60, 70, 520, 540, 545, 555, 565]);
+  expect(momentum(stalled, control)).toMatchObject({ interruptions: 0, unjudged: 5 });
   expect(momentum(fling([10, 30, 30, 37, 39, 40, 40, 41, 41, 41]), control).interruptions).toBe(0);
   expect(momentum(fling([10, 20, 18, 25, 26, 26]), control).reversals).toBe(1);
   expect(momentum(fling([10, 20, 20, 20, 20]), control).interruptions).toBe(1);
