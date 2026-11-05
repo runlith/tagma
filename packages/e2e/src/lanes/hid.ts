@@ -4,6 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { TouchFailed, type TouchPhase } from '../touch.ts';
+import type { Device } from './device.ts';
 import type { Point, Swipe } from './ios.ts';
 import type { Tools } from './iosTools.ts';
 
@@ -25,7 +26,7 @@ type Command =
   | { readonly phase: 'tap'; readonly x: number; readonly y: number }
   | { readonly phase: 'launch'; readonly bundle: string }
   | { readonly phase: 'quiet'; readonly pid: number };
-type ClientOptions = { readonly tools: Tools; readonly port: number };
+type ClientOptions = { readonly tools: Tools; readonly port: number; readonly device: Device };
 type Submission = { readonly resolve: (value: unknown) => void; readonly reject: (cause: unknown) => void };
 type Ended = { readonly failure: TouchFailed | undefined };
 const Submitted = Schema.Struct({ id: Schema.Number, value: Schema.Unknown });
@@ -53,40 +54,42 @@ class InputClient {
   private stderr = '';
   private sequence = 1;
 
-  constructor(options: ClientOptions) {
+  constructor(
+    private readonly name: string,
+    file: string,
+    args: readonly string[],
+  ) {
     const stop = holding();
     try {
-      this.child = spawn(options.tools.python, ['-I', '-u', join(import.meta.dir, 'hid.py'), String(options.port)], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      this.child = spawn(file, [...args], { stdio: ['pipe', 'pipe', 'pipe'] });
     } finally {
       stop();
     }
     this.child.stderr.on('data', (chunk: Buffer) => {
       this.stderr = (this.stderr + chunk.toString()).slice(-65536);
     });
-    this.child.on('error', (cause) => this.fail(new TouchFailed({ message: 'the native input client could not start', cause })));
-    this.child.stdin.on('error', (cause) => this.fail(new TouchFailed({ message: 'the native input client rejected a command', cause })));
+    this.child.on('error', (cause) => this.fail(new TouchFailed({ message: `the ${name} could not start`, cause })));
+    this.child.stdin.on('error', (cause) => this.fail(new TouchFailed({ message: `the ${name} rejected a command`, cause })));
     const lines = createInterface({ input: this.child.stdout });
     lines.on('line', (line) => {
       try {
         const { id, value } = Schema.decodeUnknownSync(Submitted)(JSON.parse(line));
         const submission = this.submissions.get(id);
-        if (submission === undefined) throw new TouchFailed({ message: `the native input client acknowledged unknown command ${id}` });
+        if (submission === undefined) throw new TouchFailed({ message: `the ${name} acknowledged unknown command ${id}` });
         this.submissions.delete(id);
         submission.resolve(value);
       } catch (cause) {
-        this.fail(new TouchFailed({ message: 'the native input client returned an invalid command receipt', cause }));
+        this.fail(new TouchFailed({ message: `the ${name} returned an invalid command receipt`, cause }));
       }
     });
     this.completion = new Promise((resolve) =>
       this.child.once('close', (code, signal) => {
         if (this.failure === undefined && (code !== 0 || this.submissions.size > 0)) {
-          this.failure = new TouchFailed({ message: `the native input client ended (${signal ?? code})\n${this.stderr}` });
+          this.failure = new TouchFailed({ message: `the ${name} ended (${signal ?? code})\n${this.stderr}` });
         }
         this.ended = { failure: this.failure };
         for (const submission of this.submissions.values())
-          submission.reject(this.failure ?? new TouchFailed({ message: 'the native input client ended before command completion' }));
+          submission.reject(this.failure ?? new TouchFailed({ message: `the ${name} ended before command completion` }));
         this.submissions.clear();
         resolve(this.ended);
       }),
@@ -101,7 +104,7 @@ class InputClient {
   }
 
   async send(command: Command): Promise<unknown> {
-    if (this.ended !== undefined) throw this.ended.failure ?? new TouchFailed({ message: 'the native input client already ended' });
+    if (this.ended !== undefined) throw this.ended.failure ?? new TouchFailed({ message: `the ${this.name} already ended` });
     if (this.failure !== undefined) throw this.failure;
     const id = this.sequence++;
     return new Promise<unknown>((resolve, reject) => {
@@ -120,13 +123,19 @@ class InputClient {
   }
 }
 
-export const nativeInput = Effect.fn('e2e.nativeTouch')(function* (options: ClientOptions) {
-  const client = yield* Effect.try({
-    try: () => new InputClient(options),
-    catch: (cause) => new TouchFailed({ message: 'the native input client could not start', cause }),
-  });
+const started = (name: string, file: string, args: readonly string[]) =>
+  Effect.acquireRelease(
+    Effect.try({
+      try: () => new InputClient(name, file, args),
+      catch: (cause) => new TouchFailed({ message: `the ${name} could not start`, cause }),
+    }),
+    (client) => Effect.promise(() => client.stop()),
+  );
+
+export const nativeInput = Effect.fn('e2e.nativeTouch')(function* ({ tools, port, device }: ClientOptions) {
+  const companion = yield* started('native input client', tools.python, ['-I', '-u', join(import.meta.dir, 'hid.py'), String(port)]);
+  const digitizer = yield* started('digitizer', tools.digitizer, [device.set, device.udid]);
   let isPressed = false;
-  yield* Effect.addFinalizer(() => Effect.promise(() => client.stop()));
   const input: NativeInput = {
     touch: async (phase, point) => {
       if (phase === 'press') {
@@ -134,30 +143,30 @@ export const nativeInput = Effect.fn('e2e.nativeTouch')(function* (options: Clie
         isPressed = true;
       }
       if (!isPressed) throw new TouchFailed({ message: 'the native touch stream has no pressed finger' });
-      await client.send({ phase, x: point.x, y: point.y });
+      await digitizer.send({ phase, x: point.x, y: point.y });
       if (phase === 'release') isPressed = false;
     },
     swipe: async ({ from, to, duration = 0.15, delta = 5 }, pressed) => {
       if (isPressed) throw new TouchFailed({ message: 'the native touch stream already holds a finger' });
       isPressed = true;
-      await client.send({ phase: 'press', x: from.x, y: from.y });
+      await digitizer.send({ phase: 'press', x: from.x, y: from.y });
       await pressed();
-      await client.send({ phase: 'swipe', to, duration, delta });
+      await digitizer.send({ phase: 'swipe', to, duration, delta });
       isPressed = false;
     },
     tap: async (point) => {
-      await client.send({ phase: 'tap', x: Math.round(point.x), y: Math.round(point.y) });
+      await companion.send({ phase: 'tap', x: Math.round(point.x), y: Math.round(point.y) });
     },
-    launch: async (bundle) => Schema.decodeUnknownSync(PID)(await client.send({ phase: 'launch', bundle })),
+    launch: async (bundle) => Schema.decodeUnknownSync(PID)(await companion.send({ phase: 'launch', bundle })),
     quiescence: async (pid) => {
-      const response = Schema.decodeUnknownSync(Quiet)(await client.send({ phase: 'quiet', pid }));
+      const response = Schema.decodeUnknownSync(Quiet)(await companion.send({ phase: 'quiet', pid }));
       if ('state' in response) return true;
       if (response.retry === 'safe' && alive(pid)) return false;
       throw new TouchFailed({
         message: `the native interface of pid ${pid} did not go quiet: ${response.message} (${response.retry}: ${response.reason})`,
       });
     },
-    trace: () => client.trace(),
+    trace: () => `${companion.trace()}\n--- digitizer\n${digitizer.trace()}`,
   };
   return input;
 });

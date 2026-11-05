@@ -1,16 +1,11 @@
 import asyncio
 import json
 import logging
-import math
 import sys
 from contextlib import aclosing
 
 from idb.common.types import (
-    HIDDirection,
-    HIDPress,
-    HIDTouch,
     IdbException,
-    Point,
     QuiescenceState,
     QuiescenceStateChanged,
     QuiescenceTargetExited,
@@ -19,72 +14,9 @@ from idb.common.types import (
 from idb.grpc.client import Client
 from idb.grpc.idb_pb2 import LaunchRequest
 
-STEP = 5.0
-INTERVAL = 1 / 120
-
-
-def sample(x, y, direction=HIDDirection.DOWN):
-    return HIDPress(action=HIDTouch(point=Point(x=x, y=y)), direction=direction)
-
 
 def receipt(command, value=None):
     print(json.dumps({"id": command["id"], "value": value}), flush=True)
-
-
-async def events(reader, command, terminal):
-    last = None
-    while True:
-        if command is None:
-            line = await reader.readline()
-            if not line:
-                raise EOFError("touch input ended without an explicit release")
-            command = json.loads(line)
-        phase = command["phase"]
-        if phase == "swipe":
-            end = command["to"]
-            origin, target = last, (end["x"], end["y"])
-            resolution = math.ceil(math.dist(origin, target) / command["delta"])
-            cadence = math.floor(command["duration"] / INTERVAL)
-            steps = max(2, min(resolution, cadence))
-            interval = command["duration"] / steps
-            loop = asyncio.get_running_loop()
-            began = loop.time()
-            sent = []
-            fraction = 0.0
-            while fraction < 1:
-                await asyncio.sleep(began + interval * (math.floor((loop.time() - began) / interval) + 1) - loop.time())
-                elapsed = loop.time() - began
-                fraction = min(1.0, elapsed / command["duration"])
-                sent.append(round(elapsed * 1000, 1))
-                yield sample(
-                    origin[0] + (target[0] - origin[0]) * fraction,
-                    origin[1] + (target[1] - origin[1]) * fraction,
-                )
-            await asyncio.sleep(began + interval * (math.floor((loop.time() - began) / interval) + 1) - loop.time())
-            sent.append(round((loop.time() - began) * 1000, 1))
-            yield sample(*target, HIDDirection.UP)
-            print(json.dumps({"swipe": sent}), file=sys.stderr, flush=True)
-            terminal.update(command)
-            return
-        x, y = command["x"], command["y"]
-        if phase == "press":
-            yield sample(x, y)
-        elif phase == "move":
-            steps = max(2, math.ceil(math.dist(last, (x, y)) / STEP) * 2)
-            for index in range(1, steps + 1):
-                await asyncio.sleep(INTERVAL)
-                t = index / steps
-                eased = t * t * t * (t * (t * 6 - 15) + 10)
-                yield sample(last[0] + (x - last[0]) * eased, last[1] + (y - last[1]) * eased)
-        elif phase == "release":
-            yield sample(x, y, HIDDirection.UP)
-            terminal.update(command)
-            return
-        else:
-            raise ValueError("unknown touch phase: " + phase)
-        last = (x, y)
-        receipt(command)
-        command = None
 
 
 async def launch(client, bundle):
@@ -130,11 +62,7 @@ async def main():
         while line := await reader.readline():
             command = json.loads(line)
             phase = command["phase"]
-            if phase == "press":
-                terminal = {}
-                await client.hid(events(reader, command, terminal))
-                receipt(terminal)
-            elif phase == "launch":
+            if phase == "launch":
                 receipt(command, await launch(client, command["bundle"]))
             elif phase == "quiet":
                 receipt(command, await quiet(client, command["pid"]))

@@ -64,7 +64,7 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
         lines.once('close', () => reject(new Error(stderr)));
       }),
   );
-  const native = yield* nativeInput({ tools, port }).pipe(
+  const native = yield* nativeInput({ tools, port, device }).pipe(
     Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })),
   );
   const control: Input = {

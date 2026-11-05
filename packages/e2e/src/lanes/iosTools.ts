@@ -13,7 +13,8 @@ export const COMPANION_VERSION = '1.7.7';
 export const CLIENT_VERSION = '1.7.7';
 export const PYTHON_VERSION = '3.11';
 
-export type Tools = { readonly companion: string; readonly client: string; readonly bridge: string; readonly python: string };
+type Release = { readonly companion: string; readonly client: string; readonly bridge: string; readonly python: string };
+export type Tools = Release & { readonly digitizer: string };
 export class ToolsUnavailable extends Data.TaggedError('ToolsUnavailable')<{
   readonly message: string;
   readonly cause?: unknown;
@@ -40,7 +41,7 @@ const unavailable = (cause: unknown): ToolsUnavailable =>
         message: `iOS tools are unavailable; prepare them with ${preparation}: ${cause instanceof Error ? cause.message : String(cause)}`,
         cause,
       });
-const pathsIn = (directory: string): Tools => ({
+const pathsIn = (directory: string): Release => ({
   companion: join(directory, 'companion', 'idb_companion'),
   client: join(directory, 'client', 'bin', 'idb'),
   bridge: join(directory, 'companion', 'Resources', 'SimulatorFrameworkBridge-iOS'),
@@ -60,6 +61,15 @@ const location = Effect.fnUntraced(function* () {
   return join(yield* cacheDirectory(), `idb-${COMPANION_VERSION}-client-${CLIENT_VERSION}-python-${PYTHON_VERSION}-macos-arm64`);
 });
 const executable = (path: string) => Effect.tryPromise({ try: () => access(path, constants.X_OK), catch: unavailable });
+const digitizerSource = join(import.meta.dir, 'digitizer.swift');
+const digitizerIn = Effect.fnUntraced(function* () {
+  const files = yield* FileSystem.FileSystem;
+  const digest = createHash('sha256')
+    .update(yield* files.readFile(digitizerSource))
+    .digest('hex')
+    .slice(0, 16);
+  return join(yield* cacheDirectory(), `digitizer-${digest}`);
+});
 const inspect = Effect.fn('e2e.inspectIosTools')(function* (directory: string) {
   const files = yield* FileSystem.FileSystem;
   const held = yield* files.readFileString(join(directory, 'complete.json'));
@@ -145,9 +155,25 @@ const install = Effect.fn('e2e.installIosTools')(function* (directory: string) {
   return pathsIn(directory);
 });
 
+const compile = Effect.fn('e2e.compileDigitizer')(function* (directory: string) {
+  const files = yield* FileSystem.FileSystem;
+  const binary = join(directory, 'digitizer');
+  if (yield* files.exists(directory)) return binary;
+  const staging = yield* files.makeTempDirectoryScoped({ directory: dirname(directory), prefix: '.digitizer-' });
+  const ready = join(staging, 'ready');
+  yield* files.makeDirectory(ready);
+  yield* command('/usr/bin/xcrun', ['swiftc', '-O', '-swift-version', '5', '-o', join(ready, 'digitizer'), digitizerSource]);
+  yield* executable(join(ready, 'digitizer'));
+  yield* files.rename(ready, directory);
+  return binary;
+});
+
 export const cachedTools = Effect.fn('e2e.cachedIosTools')(
   function* () {
-    return yield* inspect(yield* location());
+    const release = yield* inspect(yield* location());
+    const digitizer = join(yield* digitizerIn(), 'digitizer');
+    yield* executable(digitizer);
+    return { ...release, digitizer } satisfies Tools;
   },
   Effect.provide(BunFileSystem.layer),
   (effect) => Effect.mapError(effect, unavailable),
@@ -156,7 +182,13 @@ export const cachedTools = Effect.fn('e2e.cachedIosTools')(
 export const fetchTools = Effect.fn('e2e.fetchIosTools')(
   function* () {
     const directory = yield* location();
-    return yield* withFileLock(`${directory}.lock`, Infinity, () => install(directory)).pipe(
+    const digitizer = yield* digitizerIn();
+    return yield* withFileLock(`${directory}.lock`, Infinity, () =>
+      Effect.gen(function* () {
+        const release = yield* install(directory);
+        return { ...release, digitizer: yield* compile(digitizer) } satisfies Tools;
+      }),
+    ).pipe(
       Effect.mapError((cause) => {
         if (cause._tag === 'LockUnavailable')
           return new ToolsUnavailable({ message: `iOS tool cache lock ${cause.path}: ${cause.reason}`, cause });
