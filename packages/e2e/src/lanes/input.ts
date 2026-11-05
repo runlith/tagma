@@ -72,7 +72,7 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
     quiet: async (pid) => {
       while (!(await native.quiescence(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
     },
-    diagnostics: () => stderr,
+    diagnostics: () => `${stderr}\n--- input client\n${native.trace()}`,
   };
   return control;
 });

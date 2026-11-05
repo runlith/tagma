@@ -49,19 +49,21 @@ async def events(reader, command, terminal):
             interval = command["duration"] / steps
             loop = asyncio.get_running_loop()
             began = loop.time()
-            for index in range(1, steps + 1):
-                remaining = began + interval * index - loop.time()
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-                fraction = index / steps
+            sent = []
+            fraction = 0.0
+            while fraction < 1:
+                await asyncio.sleep(began + interval * (math.floor((loop.time() - began) / interval) + 1) - loop.time())
+                elapsed = loop.time() - began
+                fraction = min(1.0, elapsed / command["duration"])
+                sent.append(round(elapsed * 1000, 1))
                 yield sample(
                     origin[0] + (target[0] - origin[0]) * fraction,
                     origin[1] + (target[1] - origin[1]) * fraction,
                 )
-            remaining = began + interval * (steps + 1) - loop.time()
-            if remaining > 0:
-                await asyncio.sleep(remaining)
+            await asyncio.sleep(began + interval * (math.floor((loop.time() - began) / interval) + 1) - loop.time())
+            sent.append(round((loop.time() - began) * 1000, 1))
             yield sample(*target, HIDDirection.UP)
+            print(json.dumps({"swipe": sent}), file=sys.stderr, flush=True)
             terminal.update(command)
             return
         x, y = command["x"], command["y"]

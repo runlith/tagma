@@ -15,6 +15,7 @@ export type NativeInput = {
   readonly tap: (point: Point) => Promise<void>;
   readonly launch: (bundle: string) => Promise<number>;
   readonly quiescence: (pid: number) => Promise<boolean>;
+  readonly trace: () => string;
 };
 type Contact = { readonly phase: TouchPhase; readonly x: number; readonly y: number };
 type Gesture = { readonly phase: 'swipe'; readonly to: Point; readonly duration: number; readonly delta: number };
@@ -109,6 +110,10 @@ class InputClient {
     });
   }
 
+  trace(): string {
+    return this.stderr;
+  }
+
   async stop(): Promise<void> {
     if (this.ended === undefined) this.child.kill('SIGTERM');
     await this.completion;
@@ -152,6 +157,7 @@ export const nativeInput = Effect.fn('e2e.nativeTouch')(function* (options: Clie
         message: `the native interface of pid ${pid} did not go quiet: ${response.message} (${response.retry}: ${response.reason})`,
       });
     },
+    trace: () => client.trace(),
   };
   return input;
 });
