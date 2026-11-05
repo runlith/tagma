@@ -4,9 +4,10 @@ import { OPERATIONS_CLI as operationsCli } from '../composed.js';
 
 const served = mcpCatalog(operationsCli).tools('catalog');
 const schemaOf = (name: string) =>
-  served.find((tool) => tool.name === name)!.inputSchema as {
-    properties: Record<string, { enum?: readonly string[]; description?: string }>;
-    required?: readonly string[];
+  served.find((tool) => tool.name === name)!.inputSchema as Readonly<Record<string, unknown>> & {
+    readonly type: 'object';
+    readonly properties: Record<string, { enum?: readonly string[]; description?: string }>;
+    readonly required?: readonly string[];
   };
 
 test('a union-input operation is served as one flat object a client need not flatten', () => {

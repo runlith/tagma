@@ -8,18 +8,14 @@ import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
 import { FileWatcher } from '../platform/contract/service/watch.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
 import { tagmaFormat } from '../plugin-formats/tagma/format.js';
+import { MANIFEST } from '../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText } from '../plugin-formats/tagma/testing/folder.js';
 import { codeFilterOf, revisionOf } from './revision.js';
+import { fixtureEntries } from './testing/tools.js';
 import { hostWorld } from './testing/world.js';
 
 const FIXTURE = resolve(import.meta.dir, 'testing/fixture.ts');
-const processOf = (flags: readonly string[] = []) => ({ command: process.execPath, args: [FIXTURE, ...flags] });
-const TOOLS = {
-  tools: [
-    { name: 'look', audience: 'agents' },
-    { name: 'act', audience: 'own' },
-    { name: 'deal', audience: 'view' },
-  ],
-};
+const TOOLS = { tools: fixtureEntries({ look: 'agents', act: 'own', deal: 'view' }) };
 
 const watched = Effect.map(Layer.build(watchProcessLayer), (built) => Context.make(FileWatcher, Context.get(built, FileWatcher)));
 
@@ -37,7 +33,7 @@ it.live('an installed plugin routes its audiences, survives a refused edit and a
     const world = yield* hostWorld({ prefix: 'host-', watcher: yield* watched });
     const { host, plugins, projectId, tools, said, until } = world;
     const agentTools = () => Effect.map(tools.of(projectId), (available) => Object.keys(available.agents()).sort());
-    const root = yield* world.place('fixture', { process: processOf(), contributes: TOOLS });
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
     expect(yield* world.install(root)).toMatchObject({ id: 'fixture', format: 'tagma', enabled: true });
     yield* until(() => host.reading('fixture')?.state === 'running');
     expect(yield* agentTools()).toEqual(['plugin__fixture__look']);
@@ -50,7 +46,7 @@ it.live('an installed plugin routes its audiences, survives a refused edit and a
     });
     const first = yield* said('pid');
     const manifest = (contributes: Record<string, unknown>) =>
-      writeFile(join(root, 'tagma-plugin.json'), JSON.stringify({ id: 'fixture', title: 'Fixture', process: processOf(), contributes }));
+      writeFile(join(root, MANIFEST), manifestText({ id: 'fixture', title: 'Fixture', program: FIXTURE, contributes }));
     yield* Effect.promise(() => manifest({ ...TOOLS, surfaces: [] }));
     yield* until(() => host.reading('fixture')?.refused?.includes('surfaces') === true);
     expect((yield* plugins.rows(projectId, ['fixture']))[0]?.process?.refused).toContain('surfaces');
@@ -80,7 +76,7 @@ it.live('an installed plugin routes its audiences, survives a refused edit and a
 it.live('a manifest naming a point no owner declares refuses the install', () =>
   Effect.gen(function* () {
     const world = yield* hostWorld({ prefix: 'host-refused-' });
-    const root = yield* world.place('fixture', { process: processOf(), contributes: { ...TOOLS, surfaces: [] } });
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: { ...TOOLS, surfaces: [] } });
     expect(yield* Effect.flip(world.install(root))).toMatchObject({ code: 'plugin-refused' });
     expect(world.host.reading('fixture')).toBeUndefined();
   }),
@@ -89,7 +85,7 @@ it.live('a manifest naming a point no owner declares refuses the install', () =>
 it.live('a plugin whose manifest is broken when the server starts is watched, and starts once the manifest is repaired', () =>
   Effect.gen(function* () {
     const world = yield* hostWorld({ prefix: 'host-boot-', watcher: yield* watched });
-    const root = yield* world.place('fixture', { process: processOf(), contributes: TOOLS });
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
     yield* world.install(root);
     yield* world.until(() => world.host.reading('fixture')?.state === 'running');
     yield* world.shutdown;
@@ -107,7 +103,7 @@ it.live('a plugin whose manifest is broken when the server starts is watched, an
 it.live('a directory holding tagma-plugin.json is read in Tagma’s format even where a marketplace entry declares another', () =>
   Effect.gen(function* () {
     const world = yield* hostWorld({ prefix: 'host-formats-', formats: [tagmaFormat, claudeCodeFormat] });
-    const root = yield* world.place('fixture', { process: processOf(), contributes: TOOLS });
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
     yield* Effect.promise(async () => {
       await mkdir(join(root, '.claude-plugin'), { recursive: true });
       await writeFile(join(root, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'fixture' }));
@@ -129,8 +125,9 @@ it.live('closing the host waits out processes that ignore the end of stdin toget
     const owned = yield* Scope.fork(yield* Effect.scope);
     const world = yield* hostWorld({ prefix: 'host-linger-' }).pipe(Scope.provide(owned));
     const journal = join(yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'plugins-linger-'))), 'journal');
+    const linger = [{ key: 'LINGER', title: 'Linger', description: 'Where the process notes how it was ended.', default: journal }];
     for (const id of ['fixture', 'second']) {
-      yield* world.install(yield* world.place(id, { process: processOf(['--linger', journal]), contributes: TOOLS }));
+      yield* world.install(yield* world.place(id, { program: FIXTURE, options: linger, contributes: TOOLS }));
     }
     yield* world.until(() => world.host.reading('fixture')?.state === 'running' && world.host.reading('second')?.state === 'running');
     const pids = [Number(yield* world.said('pid')), Number(yield* world.said('pid', 'second'))];
@@ -146,7 +143,7 @@ it.live('an edit drains the serving call before replacing its process, and concu
   Effect.gen(function* () {
     const world = yield* hostWorld({ prefix: 'host-drain-', watcher: yield* watched });
     const { host, projectId, tools, said, until } = world;
-    const root = yield* world.place('fixture', { process: processOf(), contributes: TOOLS });
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
     yield* Effect.promise(() => writeFile(join(root, '.gitignore'), '*.log\n'));
     yield* world.install(root);
     yield* until(() => host.reading('fixture')?.state === 'running');
@@ -162,12 +159,12 @@ it.live('an edit drains the serving call before replacing its process, and concu
     const serving = yield* Effect.forkScoped(said('hold'));
     yield* Effect.promise(() =>
       writeFile(
-        join(root, 'tagma-plugin.json'),
-        JSON.stringify({
+        join(root, MANIFEST),
+        manifestText({
           id: 'fixture',
           title: 'Fixture',
-          process: processOf(),
-          contributes: { tools: [...TOOLS.tools, { name: 'pid', audience: 'agents' }] },
+          program: FIXTURE,
+          contributes: { tools: fixtureEntries({ look: 'agents', act: 'own', deal: 'view', pid: 'agents' }) },
         }),
       ),
     );

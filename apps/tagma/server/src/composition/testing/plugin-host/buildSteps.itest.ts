@@ -9,6 +9,7 @@ import { BuildSteps } from '../../../checkout-builds/contract/service/steps.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { tagmaFormat } from '../../../plugin-formats/tagma/format.js';
+import { writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { HostPlace, PluginHost } from '../../../plugin-host/contract/service/supervision.js';
 import { pluginHost } from '../../../plugin-host/plugin-host.js';
 import { PluginFormats } from '../../../plugins/contract/service/format.js';
@@ -52,13 +53,20 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           const fileSystem = yield* FileSystem.FileSystem;
           const home = yield* tempRootEffect(demo.fixture, 'build-steps-home-');
           const root = yield* tempRootEffect(demo.fixture, 'build-steps-plugin-');
-          yield* fileSystem.writeFileString(
-            join(root, 'tagma-plugin.json'),
-            JSON.stringify({
+          yield* Effect.promise(() =>
+            writePlugin(root, {
               id: 'pin',
               title: 'Pin',
-              process: { command: process.execPath, args: [join(import.meta.dir, 'buildStepsFixture.ts')] },
-              contributes: { beforeBuild: [{ tool: 'pin', title: 'Core pin' }] },
+              program: join(import.meta.dir, 'buildStepsFixture.ts'),
+              contributes: {
+                tools: ['pin', 'read'].map((name) => ({
+                  name,
+                  audience: 'tagma',
+                  description: name,
+                  inputSchema: { type: 'object', properties: {} },
+                })),
+                beforeBuild: [{ tool: 'pin', title: 'Core pin' }],
+              },
             }),
           );
           const built = yield* Layer.build(

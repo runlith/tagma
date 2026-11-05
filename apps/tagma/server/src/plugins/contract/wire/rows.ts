@@ -49,7 +49,7 @@ export const pluginComponentSchema = Schema.Struct({
   kind: Schema.Literals(PLUGIN_COMPONENT_KINDS),
   name: Schema.String.annotate({
     description:
-      'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event, a process its command, a contribution its point.',
+      'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event, a process the module it runs, a contribution its point.',
   }),
   detail: Schema.optional(Schema.String).annotate({
     description: 'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of.',

@@ -4,7 +4,10 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import type { LLMEvent } from '@runlith/llm/schema/events';
 import { Clock, Context, Data, Deferred, Effect, Fiber, FileSystem, Layer, Schedule, Stream } from 'effect';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText, writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { PluginHost } from '../../../plugin-host/contract/service/supervision.js';
+import { fixtureEntries } from '../../../plugin-host/testing/tools.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { agentsOffered } from '../../../threads/contract/wire/settings.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
@@ -27,17 +30,16 @@ let gate = Deferred.makeUnsafe<void>();
 Deferred.doneUnsafe(gate, Effect.void);
 const toolsOf = new Map<string, readonly string[]>();
 
-const manifest = (title: string) =>
-  JSON.stringify({
-    id: 'fixture',
-    title,
-    process: { command: process.execPath, args: [FIXTURE] },
-    contributes: {
-      tools: [{ name: 'act', audience: 'own' }],
-      agents: [{ id: 'player', path: 'agents/player.md' }],
-      on: { ended: 'ended' },
-    },
-  });
+const folder = (title: string) => ({
+  id: 'fixture',
+  title,
+  program: FIXTURE,
+  contributes: {
+    tools: fixtureEntries({ act: 'own' }),
+    agents: [{ id: 'player', path: 'agents/player.md' }],
+    on: { ended: 'ended' },
+  },
+});
 
 const setup = Effect.gen(function* () {
   const world = yield* makeDoorWorld({
@@ -77,7 +79,7 @@ const setup = Effect.gen(function* () {
     join(plugin, 'agents', 'player.md'),
     '---\ndescription: Plays a seat.\ncapabilities: []\n---\nPlay your seat.\n',
   );
-  yield* files.writeFileString(join(plugin, 'tagma-plugin.json'), manifest('Fixture'));
+  yield* Effect.promise(() => writePlugin(plugin, folder('Fixture')));
   const installed = yield* world.op('install_plugin', { source: plugin }, scope);
   expect(installed.body).toMatchObject({ plugin: { id: 'fixture' } });
   yield* Effect.addFinalizer(() => world.op('uninstall_plugin', { id: 'fixture' }, scope).pipe(Effect.orDie));
@@ -193,7 +195,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       yield* until(Effect.sync(() => toolsOf.has(runId)));
 
       const held = yield* Effect.forkChild(host.call('fixture', 'hold', {}, {}));
-      yield* files.writeFileString(join(plugin, 'tagma-plugin.json'), manifest('Fixture again'));
+      yield* files.writeFileString(join(plugin, MANIFEST), manifestText(folder('Fixture again')));
       yield* until(Effect.sync(() => host.reading('fixture')?.tools === 0));
 
       yield* Deferred.succeed(gate, undefined);
@@ -211,12 +213,10 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
   it.effect('removing the only project that enables a plugin stops its process', () =>
     Effect.gen(function* () {
       const { world, host } = yield* Table;
-      const files = yield* FileSystem.FileSystem;
       const projectId = yield* world.stealthProject(yield* world.directory('lone'));
       const plugin = yield* world.directory('lone-plugin');
-      yield* files.writeFileString(
-        join(plugin, 'tagma-plugin.json'),
-        JSON.stringify({ id: 'lone', title: 'Lone', process: { command: process.execPath, args: [FIXTURE] } }),
+      yield* Effect.promise(() =>
+        writePlugin(plugin, { id: 'lone', title: 'Lone', program: FIXTURE, contributes: { tools: fixtureEntries({}) } }),
       );
       expect((yield* world.op('install_plugin', { source: plugin }, `project=${projectId}`)).status).toBe(200);
       yield* until(Effect.sync(() => host.reading('lone')?.state === 'running'));

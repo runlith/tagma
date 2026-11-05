@@ -50,6 +50,7 @@ const read: PluginFormat['read'] = Effect.fn('claudeCode.read')(function* (root,
     hooks: yield* hooksOf(root, plugin, manifest, ignored, declared.hooks),
     options,
     process: null,
+    build: null,
     contributes: {},
     ignored,
   } satisfies PluginPackage;

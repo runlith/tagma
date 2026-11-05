@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { type PluginFormat, PluginRefused } from '../../plugins/contract/service/format.js';
+import { type PluginFormat, type PluginProcess, PluginRefused } from '../../plugins/contract/service/format.js';
 import { entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
-import { Envelope, MANIFEST } from './manifest.js';
+import { Envelope, MANIFEST } from './contract/wire/manifest.js';
 
 const decodeManifest = Schema.decodeUnknownEffect(Envelope);
 
@@ -23,10 +23,17 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
   if (entry !== null && entry.name !== manifest.id) {
     return yield* new PluginRefused({ reason: `its marketplace entry names it ${entry.name}, but ${MANIFEST} names it ${manifest.id}` });
   }
+  const process: PluginProcess | null =
+    manifest.process === undefined ? null : { entry: manifest.process.entry, resident: manifest.process.resident ?? false };
+  if (process !== null && (yield* entryOf(root, process.entry)).kind !== 'file') {
+    return yield* new PluginRefused({
+      reason: `${MANIFEST} runs ${process.entry}, which is not a file inside the plugin: build the plugin again`,
+    });
+  }
   return {
     name: manifest.id,
     title: manifest.title,
-    version: manifest.version ?? null,
+    version: manifest.version,
     description: manifest.description ?? null,
     about: { author: null, homepage: null, repository: null, license: null },
     skills: [],
@@ -43,7 +50,12 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       required: option.required ?? false,
       fallback: option.default ?? null,
     })),
-    process: manifest.process === undefined ? null : { command: manifest.process.command, args: manifest.process.args ?? [] },
+    process,
+    build: {
+      hash: manifest.build.hash,
+      sources: manifest.build.sources,
+      outputs: process === null ? [MANIFEST] : [MANIFEST, process.entry],
+    },
     contributes: manifest.contributes ?? {},
     ignored: [],
   };

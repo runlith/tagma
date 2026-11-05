@@ -23,6 +23,8 @@ import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js'
 import { SESSION_HEADER } from '../../../platform/contract/wire/session.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { frozenBuildsLayer } from '../../../installation/testing/doubles.js';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText } from '../../../plugin-formats/tagma/testing/folder.js';
 import { startupStateSchema } from '../../../installation/contract/wire/restart.js';
 import { remoteDriving, remoteListener, remoteServing } from '../../http/remote.js';
 import { sandboxRoutes } from '../../http/sites.js';
@@ -95,12 +97,8 @@ const setup = Effect.gen(function* () {
   const ui = join(plugin, 'ui');
   yield* files.makeDirectory(ui, { recursive: true });
   yield* files.writeFileString(
-    join(plugin, 'tagma-plugin.json'),
-    JSON.stringify({
-      id: 'static',
-      title: 'Static',
-      contributes: { views: [{ id: 'page', entry: 'ui/page.html' }] },
-    }),
+    join(plugin, MANIFEST),
+    manifestText({ id: 'static', title: 'Static', contributes: { views: [{ id: 'page', entry: 'ui/page.html' }] } }),
   );
   yield* files.writeFileString(join(ui, 'page.html'), '<!doctype html><script type="module" src="./view.js"></script>');
   yield* files.writeFileString(join(ui, 'view.js'), 'export default 42;');

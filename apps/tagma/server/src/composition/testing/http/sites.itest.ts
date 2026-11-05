@@ -6,6 +6,8 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { Context, Effect, FileSystem, Layer, Result, Stream } from 'effect';
 import { HttpEffect, HttpPlatform, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { portBlock } from '../../../installation/contract/wire/ports.js';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText } from '../../../plugin-formats/tagma/testing/folder.js';
 import { CHANNEL } from '../../developer/channel.js';
 import { Access } from '../../../remote/contract/service/access.js';
 import { PlacedSites } from '../../../remote/contract/service/sites.js';
@@ -23,8 +25,8 @@ const setup = Effect.gen(function* () {
     const plugin = yield* world.directory(`plugin-${id}`);
     yield* files.makeDirectory(join(plugin, 'ui'), { recursive: true });
     yield* files.writeFileString(
-      join(plugin, 'tagma-plugin.json'),
-      JSON.stringify({ id, title: id, contributes: { views: [{ id: 'page', entry: `ui/${id}.html` }] } }),
+      join(plugin, MANIFEST),
+      manifestText({ id, contributes: { views: [{ id: 'page', entry: `ui/${id}.html` }] } }),
     );
     yield* files.writeFileString(join(plugin, 'ui', `${id}.html`), `<!doctype html><p>${id}</p>`);
     expect(yield* world.op('install_plugin', { source: plugin }, `project=${project}`)).toMatchObject({ status: 200 });

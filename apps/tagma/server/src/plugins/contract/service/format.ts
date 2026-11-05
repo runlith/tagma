@@ -96,7 +96,9 @@ export type PluginAbout = {
   readonly license: string | null;
 };
 
-export type PluginProcess = { readonly command: string; readonly args: readonly string[] };
+export type PluginProcess = { readonly entry: string; readonly resident: boolean };
+
+type PluginBuild = { readonly hash: string; readonly sources: readonly string[]; readonly outputs: readonly string[] };
 
 export type PluginPackage = {
   readonly name: string;
@@ -111,6 +113,7 @@ export type PluginPackage = {
   readonly hooks: readonly PluginHook[];
   readonly options: readonly PluginOption[];
   readonly process: PluginProcess | null;
+  readonly build: PluginBuild | null;
   readonly contributes: Readonly<Record<string, unknown>>;
   readonly ignored: readonly PluginIgnored[];
 };

@@ -7,16 +7,19 @@ import { Context, Effect, Fiber, Layer, Queue, Schedule, Stream } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { makeDoorWorld } from '../composition/testing/doorFixture.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { MANIFEST } from '../plugin-formats/tagma/contract/wire/manifest.js';
+import { entryText, manifestText, PROCESS_ENTRY } from '../plugin-formats/tagma/testing/folder.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import type { PluginViews, ViewSites } from './contract/service/views.js';
 import type { PluginViewState } from './contract/wire/sets.js';
 import { siteFile } from './files.js';
 
 const SERVER = resolve(import.meta.dir, '../../../../../packages/mcp/test/mcpAppServer.ts');
+const object = { type: 'object', properties: {} };
 const contributes = {
   tools: [
-    { name: 'dashboard', audience: 'agents' },
-    { name: 'refresh', audience: 'view' },
+    { name: 'dashboard', audience: 'agents', description: 'Shows the dashboard.', inputSchema: object },
+    { name: 'refresh', audience: 'view', description: 'Refreshes the state.', inputSchema: object },
   ],
   views: [{ id: 'board', entry: 'ui/board.html', live: true }],
   results: [{ tool: 'dashboard', view: 'board' }],
@@ -31,11 +34,13 @@ const staticContributions = {
   launchers: contributes.launchers,
 };
 const manifest = (points: Record<string, unknown>, withProcess = false, id = 'board') =>
-  JSON.stringify({
-    id,
-    title: 'Board',
-    process: withProcess ? { command: process.execPath, args: [SERVER] } : undefined,
-    contributes: points,
+  manifestText({ id, title: 'Board', program: withProcess ? SERVER : undefined, contributes: points });
+const placed = (root: string, text: string) =>
+  Effect.promise(async () => {
+    await mkdir(join(root, 'ui'), { recursive: true });
+    await mkdir(join(root, 'dist'), { recursive: true });
+    await writeFile(join(root, PROCESS_ENTRY), entryText(SERVER));
+    await writeFile(join(root, MANIFEST), text);
   });
 const FRAMERS = 'http://127.0.0.1:*';
 const SITES: ViewSites['Service'] = { site: (plugin) => ({ _tag: 'served', origin: `https://${plugin}.example` }), moved: Stream.never };
@@ -67,11 +72,8 @@ const setup = Effect.fnUntraced(function* (withProcess = false) {
   const projectId = yield* world.stealthProject();
   const scope = `project=${projectId}`;
   const root = yield* world.directory('board-plugin');
-  yield* Effect.promise(async () => {
-    await mkdir(join(root, 'ui'), { recursive: true });
-    await writeFile(join(root, 'ui', 'board.html'), '<!doctype html><p>board</p>');
-    await writeFile(join(root, 'tagma-plugin.json'), manifest(withProcess ? contributes : staticContributions, withProcess));
-  });
+  yield* placed(root, manifest(withProcess ? contributes : staticContributions, withProcess));
+  yield* Effect.promise(() => writeFile(join(root, 'ui', 'board.html'), '<!doctype html><p>board</p>'));
   const installed = (source: string) => world.op('install_plugin', { source }, scope);
   return {
     world,
@@ -153,7 +155,7 @@ it.live('a view reaches the outside origins its manifest declares and no origin 
     yield* Effect.promise(async () => {
       await writeFile(join(root, 'ui', 'player.html'), '<!doctype html><p>player</p>');
       await writeFile(
-        join(root, 'tagma-plugin.json'),
+        join(root, MANIFEST),
         manifest({
           ...staticContributions,
           views: [
@@ -185,13 +187,10 @@ it.live('a contribution naming an undeclared view fails the plugin and shows not
     for (const point of ['results', 'surfaces', 'panes', 'launchers']) {
       const entry = point === 'results' ? { tool: 'dashboard', view: 'missing' } : { view: 'missing', title: 'Missing' };
       const plugin = yield* world.directory(`bad-${point}`);
-      yield* Effect.promise(async () => {
-        await mkdir(join(plugin, 'ui'), { recursive: true });
-        await writeFile(
-          join(plugin, 'tagma-plugin.json'),
-          manifest({ ...(point === 'results' ? contributes : staticContributions), [point]: [entry] }, point === 'results', point),
-        );
-      });
+      yield* placed(
+        plugin,
+        manifest({ ...(point === 'results' ? contributes : staticContributions), [point]: [entry] }, point === 'results', point),
+      );
       expect(yield* world.op('install_plugin', { source: plugin }, scope)).toMatchObject({ status: 200 });
       const failed = yield* Effect.repeat(
         Effect.sync(() => host.reading(point)),

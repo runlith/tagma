@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { McpNotConnected } from '@runlith/mcp/McpFailure';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
@@ -48,11 +49,13 @@ class LaunchFailed extends Data.TaggedError('LaunchFailed')<{ readonly reason: s
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-const declarationOf = (launch: Launch, process: PluginProcess): McpServerDeclaration => ({
+const RUNTIME_FLAGS = ['--no-install', '--no-env-file'] as const;
+
+const declarationOf = (launch: Launch, declared: PluginProcess): McpServerDeclaration => ({
   name: launch.id,
   transport: 'stdio',
-  command: process.command,
-  args: process.args,
+  command: process.execPath,
+  args: [...RUNTIME_FLAGS, join(launch.root, declared.entry)],
   cwd: launch.root,
   env: {
     ...launch.environment.env,

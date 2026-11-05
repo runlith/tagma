@@ -4,7 +4,7 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { layer } from '@runlith/effect-test';
-import { Context, Data, Effect, FileSystem, Layer, Schedule, Stream } from 'effect';
+import { Context, Data, Effect, Layer, Schedule, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Notifications } from '../../../notify/contract/service/notifications.js';
 import { Senders } from '../../../notify/contract/service/senders.js';
@@ -12,6 +12,7 @@ import { notify } from '../../../notify/notify.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { tagmaFormat } from '../../../plugin-formats/tagma/format.js';
+import { writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { HostPlace, PluginHost } from '../../../plugin-host/contract/service/supervision.js';
 import { pluginHost } from '../../../plugin-host/plugin-host.js';
 import { PluginFormats } from '../../../plugins/contract/service/format.js';
@@ -60,16 +61,20 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem;
           const home = yield* tempRootEffect(demo.fixture, 'background-home-');
           const root = yield* tempRootEffect(demo.fixture, 'background-plugin-');
-          yield* fileSystem.writeFileString(
-            join(root, 'tagma-plugin.json'),
-            JSON.stringify({
+          yield* Effect.promise(() =>
+            writePlugin(root, {
               id: 'background',
               title: 'Background',
-              process: { command: process.execPath, args: [join(import.meta.dir, 'backgroundFixture.ts')] },
+              program: join(import.meta.dir, 'backgroundFixture.ts'),
               contributes: {
+                tools: ['poll', 'outcome', 'read'].map((name) => ({
+                  name,
+                  audience: 'tagma',
+                  description: name,
+                  inputSchema: { type: 'object', properties: {} },
+                })),
                 schedule: [{ name: 'poll', everyMs: 60_000, tool: 'poll' }],
                 notify: { tool: 'outcome' },
               },

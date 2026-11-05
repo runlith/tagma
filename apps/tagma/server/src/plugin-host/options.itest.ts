@@ -10,7 +10,7 @@ const FIXTURE = resolve(import.meta.dir, 'testing/keyed.ts');
 const TOKEN = 'tok-5678-abcdef';
 const OTHER = 'tok-9012-ghijklmnop';
 const manifest = {
-  process: { command: process.execPath, args: [FIXTURE] },
+  program: FIXTURE,
   options: [{ key: 'API_TOKEN', title: 'API token', description: 'The token of the service the plugin bridges.', sensitive: true }],
 };
 const target = { owner: 'plugins', id: 'fixture', name: 'API_TOKEN' } as const;

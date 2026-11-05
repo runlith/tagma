@@ -1,12 +1,12 @@
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Context, Effect, Exit, Layer, Scope } from 'effect';
 import { graphFixture, tempRootEffect } from '../../composition/testing/graphFixture.js';
 import { FileWatcher } from '../../platform/contract/service/watch.js';
 import { tagmaFormat } from '../../plugin-formats/tagma/format.js';
+import { type PluginFolder, writePlugin } from '../../plugin-formats/tagma/testing/folder.js';
 import { type PluginFormat, PluginFormats } from '../../plugins/contract/service/format.js';
 import { PluginPlaces, Plugins } from '../../plugins/contract/service/plugins.js';
 import { plugins as pluginsModule } from '../../plugins/plugins.js';
@@ -79,12 +79,9 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
     };
   });
 
-  const place = Effect.fnUntraced(function* (id: string, manifest: Readonly<Record<string, unknown>>) {
+  const place = Effect.fnUntraced(function* (id: string, folder: Omit<PluginFolder, 'id'>) {
     const root = join(project.rootPath, '.tagma-plugins', id);
-    yield* Effect.promise(async () => {
-      await mkdir(root, { recursive: true });
-      await writeFile(join(root, 'tagma-plugin.json'), JSON.stringify({ id, title: 'Fixture', ...manifest }));
-    });
+    yield* Effect.promise(() => writePlugin(root, { id, title: 'Fixture', ...folder }));
     return root;
   });
 

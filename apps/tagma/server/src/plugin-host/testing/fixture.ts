@@ -2,14 +2,15 @@ import { appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { serveMcpOverStdio } from '@runlith/mcp/server';
 import { Effect } from 'effect';
+import { FIXTURE_TOOLS } from './tools.js';
 
 const data = process.env.TAGMA_PLUGIN_DATA ?? '.';
 const journal = (line: string): void => appendFileSync(join(data, 'journal'), `${line}\n`);
 
 journal(`start ${process.pid}`);
 process.on('exit', () => journal(`exit ${process.pid}`));
-const lingering = process.argv[process.argv.indexOf('--linger') + 1];
-if (process.argv.includes('--linger') && lingering !== undefined) {
+const lingering = process.env.LINGER;
+if (lingering !== undefined) {
   setInterval(() => undefined, 60_000);
   process.stdin.on('end', () => appendFileSync(lingering, `eof ${process.pid}\n`));
   process.on('SIGTERM', () => {
@@ -17,8 +18,6 @@ if (process.argv.includes('--linger') && lingering !== undefined) {
     process.exit(0);
   });
 }
-
-const object = { type: 'object' as const, properties: {} };
 
 const released = async (): Promise<void> => {
   while (!existsSync(join(data, 'release'))) await new Promise((done) => setTimeout(done, 20));
@@ -33,17 +32,7 @@ await Effect.runPromise(
   serveMcpOverStdio({
     name: 'fixture',
     version: '0.0.0',
-    tools: () => [
-      { name: 'look', description: 'Answers what the caller sees.', inputSchema: object, annotations: { readOnlyHint: true } },
-      { name: 'act', description: 'Acts.', inputSchema: object },
-      { name: 'deal', description: 'Deals.', inputSchema: object },
-      { name: 'pid', description: 'Answers this process id.', inputSchema: object, annotations: { readOnlyHint: true } },
-      { name: 'environment', description: 'Answers the variables Tagma handed this process.', inputSchema: object },
-      { name: 'crash', description: 'Ends this process at once.', inputSchema: object },
-      { name: 'slow', description: 'Answers after a while.', inputSchema: object },
-      { name: 'hold', description: 'Answers once the release file stands in the data directory.', inputSchema: object },
-      { name: 'ended', description: 'Takes the end of a turn of a thread bound to this plugin.', inputSchema: object },
-    ],
+    tools: () => FIXTURE_TOOLS,
     call: async (tool, args, meta) => {
       if (tool === 'crash') process.exit(3);
       if (tool === 'pid') return { text: String(process.pid) };
