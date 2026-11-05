@@ -5814,10 +5814,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/orientation/Instructions.ts#InstructionChanges",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/orientation/law.ts#lawOff",
           "owner": "5a3bed29"
         },
