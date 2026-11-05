@@ -123,22 +123,15 @@ const calibratedMessage = (builtin: string, files: number, bytes: number, calibr
   return `${builtin} is not judged: the subject reaches ${files} files and ${(bytes / MIB).toFixed(1)} MiB, past its calibrated envelope of about ${envelope.files} files and ${envelope.mib.toFixed(1)} MiB (10 s + max(${calibration.cbMsPerFile.toFixed(2)} ms/file·F, ${calibration.dbMsPerMib.toFixed(1)} ms/MiB·MiB) would pass 120 s; measured ${calibration.probeMs.toFixed(1)} ms over ${calibration.probeFiles} files and ${calibration.probeMib.toFixed(2)} MiB on this machine)`;
 };
 
-export const calibratedBudgetOf = (builtin: string, calibration: Calibration): Budget => {
+const counting = (refusal: (files: number, bytes: number) => EnvelopeExceeded | undefined): Budget => {
   let files = 0;
   let bytes = 0;
   const seen = new Set<string>();
   const take = (more: number, size: number): void => {
     files += more;
     bytes += size;
-    if (!fitsCalibration(calibration, files, bytes)) {
-      throw new EnvelopeExceeded(
-        builtin,
-        files,
-        bytes,
-        calibratedEnvelopeOf(calibration),
-        calibratedMessage(builtin, files, bytes, calibration),
-      );
-    }
+    const refused = refusal(files, bytes);
+    if (refused !== undefined) throw refused;
   };
   return {
     take,
@@ -156,80 +149,36 @@ export const calibratedBudgetOf = (builtin: string, calibration: Calibration): B
   };
 };
 
-const fallbackEnvelope: Envelope = { files: PROBE_MAX_FILES, mib: PROBE_MAX_BYTES / MIB };
+export const calibratedBudgetOf = (builtin: string, calibration: Calibration): Budget =>
+  counting((files, bytes) =>
+    fitsCalibration(calibration, files, bytes)
+      ? undefined
+      : new EnvelopeExceeded(
+          builtin,
+          files,
+          bytes,
+          calibratedEnvelopeOf(calibration),
+          calibratedMessage(builtin, files, bytes, calibration),
+        ),
+  );
 
-const fallbackBudgetOf = (builtin: string): Budget => {
-  let files = 0;
-  let bytes = 0;
-  const seen = new Set<string>();
-  const take = (more: number, size: number): void => {
-    files += more;
-    bytes += size;
-    if (files > fallbackEnvelope.files || bytes > fallbackEnvelope.mib * MIB) {
-      throw new EnvelopeExceeded(
-        builtin,
-        files,
-        bytes,
-        fallbackEnvelope,
-        `${builtin} is not judged: no calibration is stored on this machine yet, so the reading is bounded by its probe (${fallbackEnvelope.files} files, ${fallbackEnvelope.mib.toFixed(1)} MiB) — it reaches ${files} files and ${(bytes / MIB).toFixed(1)} MiB, never judged clean`,
-      );
-    }
-  };
-  return {
-    take,
-    source: (id, size) => {
-      const fresh = !seen.has(id);
-      seen.add(id);
-      take(1, fresh ? size : 0);
-    },
-    blob: (id, size) => {
-      if (!seen.has(id)) {
-        seen.add(id);
-        take(1, size);
-      }
-    },
-  };
-};
+const envelopedBudgetOf = (builtin: string, envelope: Envelope, detail?: (files: number, bytes: number) => string): Budget =>
+  counting((files, bytes) =>
+    files <= envelope.files && bytes <= envelope.mib * MIB
+      ? undefined
+      : new EnvelopeExceeded(builtin, files, bytes, envelope, detail?.(files, bytes)),
+  );
 
-const calibrations = new Map<string, Calibration>();
+const probeEnvelope: Envelope = { files: PROBE_MAX_FILES, mib: PROBE_MAX_BYTES / MIB };
 
-export const setCalibration = (builtin: string, calibration: Calibration): void => {
-  calibrations.set(builtin, calibration);
-};
-
-export const getCalibration = (builtin: string): Calibration | undefined => calibrations.get(builtin);
-
-export const clearCalibrations = (): void => {
-  calibrations.clear();
-};
-
-export const budgetOf = (builtin: string, envelope: Envelope | undefined): Budget => {
-  const calibrated = calibrations.get(builtin);
-  if (calibrated !== undefined) return calibratedBudgetOf(builtin, calibrated);
-  if (envelope !== undefined) {
-    let files = 0;
-    let bytes = 0;
-    const seen = new Set<string>();
-    const take = (more: number, size: number): void => {
-      files += more;
-      bytes += size;
-      if (files > envelope.files || bytes > envelope.mib * MIB) throw new EnvelopeExceeded(builtin, files, bytes, envelope);
-    };
-    return {
-      take,
-      source: (id, size) => {
-        const fresh = !seen.has(id);
-        seen.add(id);
-        take(1, fresh ? size : 0);
-      },
-      blob: (id, size) => {
-        if (!seen.has(id)) {
-          seen.add(id);
-          take(1, size);
-        }
-      },
-    };
-  }
-  if (isCalibratedBuiltin(builtin)) return fallbackBudgetOf(builtin);
-  return { take: UNBOUNDED.take };
+export const budgetOf = (builtin: string, envelope: Envelope | undefined, calibration?: Calibration): Budget => {
+  if (calibration !== undefined) return calibratedBudgetOf(builtin, calibration);
+  if (envelope !== undefined) return envelopedBudgetOf(builtin, envelope);
+  if (!isCalibratedBuiltin(builtin)) return UNBOUNDED;
+  return envelopedBudgetOf(
+    builtin,
+    probeEnvelope,
+    (files, bytes) =>
+      `${builtin} is not judged: it has not been calibrated in this judgement, so the reading is bounded by its probe (${probeEnvelope.files} files, ${probeEnvelope.mib.toFixed(1)} MiB) — it reaches ${files} files and ${(bytes / MIB).toFixed(1)} MiB, never judged clean`,
+  );
 };

@@ -131,8 +131,8 @@ export function judge(
   debt: readonly (string | Debt)[],
   adapters: Adapters = ADAPTERS,
   memo?: InspectionMemo,
+  budget: Budget = budgetFor(inspection),
 ): Verdict {
-  const budget = budgetFor(inspection);
   const paths = [...new Set([...change.paths, ...affected(inspection, change.base, change.built, change.paths, adapters, budget, memo)])];
   const base = inspect(inspection, standingOnly(change.base, adapters), paths, adapters, budget, memo, 'change');
   const built = inspect(inspection, change.built, paths, adapters, budget, memo, 'change');

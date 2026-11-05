@@ -6,17 +6,14 @@ import {
   budgetOf,
   calibratedBudgetOf,
   calibratedEnvelopeOf,
-  clearCalibrations,
   deriveCalibration,
   askMsOf,
   EnvelopeExceeded,
   fitsCalibration,
-  getCalibration,
   isCalibratedBuiltin,
   PROBE_MAX_BYTES,
   PROBE_MAX_FILES,
   probeOf,
-  setCalibration,
   spreadProbe,
 } from './budget';
 import { ready } from '../../builtins.node';
@@ -113,7 +110,6 @@ describe('calibrated budgets refuse with the typed envelope, never clean', () =>
 
 describe('budget registry keeps the worker interface unchanged', () => {
   it('marks the calibrated builtins, and leaves platforms on its declared envelope', () => {
-    clearCalibrations();
     expect(['call-services', 'swallowed-failures', 'names'].every(isCalibratedBuiltin)).toBe(true);
     expect(isCalibratedBuiltin('platforms')).toBe(false);
   });
@@ -156,29 +152,16 @@ describe('budget registry keeps the worker interface unchanged', () => {
     });
   });
 
-  it('returns the calibrated budget once the worker stores it, and the probe bound before that', () => {
-    clearCalibrations();
-    try {
-      const before = budgetOf('swallowed-failures', undefined);
-      expect(() => before.take(PROBE_MAX_FILES + 1, 0)).toThrow(EnvelopeExceeded);
-      expect(() => before.take(0, PROBE_MAX_BYTES + 1)).toThrow(EnvelopeExceeded);
-      const cal = deriveCalibration(20, 10, 512 * 1024);
-      setCalibration('swallowed-failures', cal);
-      expect(getCalibration('swallowed-failures')).toEqual(cal);
-      const after = budgetOf('swallowed-failures', undefined);
-      expect(() => after.take(PROBE_MAX_FILES + 1, 0)).not.toThrow();
-    } finally {
-      clearCalibrations();
-    }
+  it('bounds a reading by the probe until it is given a calibration, and by that calibration once given', () => {
+    const before = budgetOf('swallowed-failures', undefined);
+    expect(() => before.take(PROBE_MAX_FILES + 1, 0)).toThrow(EnvelopeExceeded);
+    expect(() => budgetOf('swallowed-failures', undefined).take(0, PROBE_MAX_BYTES + 1)).toThrow(EnvelopeExceeded);
+    const after = budgetOf('swallowed-failures', undefined, deriveCalibration(20, 10, 512 * 1024));
+    expect(() => after.take(PROBE_MAX_FILES + 1, 0)).not.toThrow();
   });
 
   it('keeps explicit static envelopes working', () => {
-    clearCalibrations();
-    try {
-      expect(() => budgetOf('swallowed-failures', { files: 1, mib: 1 }).take(2, 0)).toThrow(EnvelopeExceeded);
-    } finally {
-      clearCalibrations();
-    }
+    expect(() => budgetOf('swallowed-failures', { files: 1, mib: 1 }).take(2, 0)).toThrow(EnvelopeExceeded);
   });
 });
 

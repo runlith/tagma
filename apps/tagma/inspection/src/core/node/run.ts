@@ -5,19 +5,7 @@ import { facetOf, sitesOf, type Tree, type TreeChange, type TreeDiffEntry } from
 import { resolve } from 'node:path';
 import type { Applied, Envelope } from '../rule';
 import type { Debt, Verdict } from '../verdict';
-import {
-  budgetOf,
-  type Budget,
-  calibratedBudgetOf,
-  deriveCalibration,
-  EnvelopeExceeded,
-  getCalibration,
-  isCalibratedBuiltin,
-  probeOf,
-  setCalibration,
-  spreadProbe,
-  UNBOUNDED,
-} from './budget';
+import { budgetOf, type Budget, type Calibration, deriveCalibration, isCalibratedBuiltin, probeOf, spreadProbe, UNBOUNDED } from './budget';
 import { facetFor, inspect, lists, prefetches, selects } from './implementations';
 import { type InspectionMemo, type MemoValue, memoWrites } from './memo';
 import { judge, judgeReadings } from './judge';
@@ -36,8 +24,6 @@ import {
   worktreeSide,
 } from './sides';
 import { mergeSlices, planOf, schedule, sliceEnvelopeOf, sliceExceeded, sliceOf, snapshotOf } from './slices';
-
-const MIB = 1024 * 1024;
 
 export const settledLazy = <A>(
   repository: string,
@@ -167,26 +153,10 @@ export const changedPaths = (repository: string, base: string, at: string | null
 export const lazySeedOf = (entries: readonly TreeDiffEntry[], paths: readonly string[]): readonly string[] =>
   [...new Set([...paths, ...entries.map((entry) => entry.path)])].sort();
 
-const admitted = (inspection: Applied, side: Side, paths: readonly string[]) => {
-  const calibration = getCalibration(inspection.builtin);
-  const envelope = ruleOf(inspection.builtin).envelope;
-  if (calibration === undefined && envelope === undefined) return;
-  const bytes = paths.reduce((sum, path) => sum + (side.size(path) ?? 0), 0);
-  if (calibration !== undefined) return calibratedBudgetOf(inspection.builtin, calibration).take(paths.length, bytes);
-  if (envelope === undefined) return;
-  if (paths.length > envelope.files || bytes > envelope.mib * MIB)
-    throw new EnvelopeExceeded(inspection.builtin, paths.length, bytes, envelope);
-};
-
-const ensureRunCalibration = (inspection: Applied, sides: readonly Side[], paths: readonly string[]): void => {
-  if (
-    !isCalibratedBuiltin(inspection.builtin) ||
-    ruleOf(inspection.builtin).envelope !== undefined ||
-    getCalibration(inspection.builtin) !== undefined
-  )
-    return;
+const ensureRunCalibration = (inspection: Applied, sides: readonly Side[], paths: readonly string[]): Calibration | undefined => {
+  if (!isCalibratedBuiltin(inspection.builtin) || ruleOf(inspection.builtin).envelope !== undefined) return undefined;
   const listed = sides.at(-1);
-  if (listed === undefined) return;
+  if (listed === undefined) return undefined;
   const size = (path: string): number => sides.reduce((sum, side) => sum + (side.size(path) ?? 0), 0);
   const probe = probeOf(
     paths,
@@ -200,7 +170,7 @@ const ensureRunCalibration = (inspection: Applied, sides: readonly Side[], paths
     probe,
     sides.map((side, at) => ({ object: (path: string) => trees[at]?.object?.(path), size: side.size })),
   );
-  if (spread.files === 0) return;
+  if (spread.files === 0) return undefined;
   const facet = facetFor(inspection.builtin);
   const read = (tree: Tree, path: string): unknown =>
     facet === undefined ? sitesOf(tree, path, ADAPTERS) : facetOf(tree, path, facet, ADAPTERS);
@@ -217,7 +187,7 @@ const ensureRunCalibration = (inspection: Applied, sides: readonly Side[], paths
       }
     }
   });
-  setCalibration(inspection.builtin, deriveCalibration(performance.now() - started, spread.files, spread.bytes));
+  return deriveCalibration(performance.now() - started, spread.files, spread.bytes);
 };
 
 export const repositoryPath = (repository: string, path: string): string => {
@@ -258,17 +228,21 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
           ? commitSide(repository, at, parts, parses, facts)
           : pathsSide(repository, treeIdOf(repository, at), named, parts, parses, facts);
     const judged = built.paths.filter((path) => selects(inspection, path));
-    ensureRunCalibration(inspection, [built], judged);
-    const fetchBudget = budgetOf(inspection.builtin, envelope);
-    if (prefetches(inspection.builtin)) admitted(inspection, built, judged);
+    const calibration = ensureRunCalibration(inspection, [built], judged);
+    const budget = () => budgetOf(inspection.builtin, envelope, calibration);
+    if (prefetches(inspection.builtin))
+      budget().take(
+        judged.length,
+        judged.reduce((sum, path) => sum + (built.size(path) ?? 0), 0),
+      );
     const verdict = sliced
       ? slicedSide(inspection, built, [''], memo, sliceEnvelopeOf(inspection), (tree) => withCheckout(environment, tree))
       : settled(
           [built],
           [prefetches(inspection.builtin) ? judged : []],
-          ([tree], memo) => inspect(inspection, withCheckout(environment, tree as Tree), judged, undefined, undefined, memo),
+          ([tree], memo) => inspect(inspection, withCheckout(environment, tree as Tree), judged, undefined, budget(), memo),
           memo,
-          fetchBudget,
+          budget(),
         );
     return { verdict, judged };
   }
@@ -281,7 +255,8 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
     const seed = lazySeedOf(baseEntries, paths);
     const before = commitSideAt(repository, baseTree, parts, parses, facts, { change }, seedAt(repository, baseTree, parts, seed));
     const lazyBuilt = commitSideAt(repository, builtTree, parts, parses, facts, { change }, seedAt(repository, builtTree, parts, seed));
-    ensureRunCalibration(inspection, [before, lazyBuilt], paths);
+    const calibration = ensureRunCalibration(inspection, [before, lazyBuilt], paths);
+    const budget = () => budgetOf(inspection.builtin, envelope, calibration);
     const verdict = settled(
       [before, lazyBuilt],
       [[], []],
@@ -292,9 +267,10 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
           debt,
           undefined,
           memo,
+          budget(),
         ),
       memo,
-      budgetOf(inspection.builtin, envelope),
+      budget(),
     );
     return { verdict, judged: paths };
   }
@@ -306,8 +282,8 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
       : named === undefined
         ? commitSideAt(repository, builtTree, parts, parses, facts, undefined, seedAt(repository, builtTree, parts, changed))
         : pathsSide(repository, builtTree, named, parts, parses, facts);
-  ensureRunCalibration(inspection, [before, built], changed);
-  const fetchBudget = budgetOf(inspection.builtin, envelope);
+  const calibration = ensureRunCalibration(inspection, [before, built], changed);
+  const budget = () => budgetOf(inspection.builtin, envelope, calibration);
   if (sliced) {
     const slice = sliceEnvelopeOf(inspection);
     const baseReading = slicedSide(inspection, before, [''], memo, slice, (tree) => withEnvironment(environment, tree));
@@ -316,9 +292,17 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
       [before, built],
       [[], []],
       ([baseTree, builtTree], memo) =>
-        judgeReadings(inspection, { base: baseTree as Tree, built: builtTree as Tree, paths: changed }, debt, baseReading, builtReading),
+        judgeReadings(
+          inspection,
+          { base: baseTree as Tree, built: builtTree as Tree, paths: changed },
+          debt,
+          baseReading,
+          builtReading,
+          undefined,
+          budget(),
+        ),
       undefined,
-      fetchBudget,
+      budget(),
     );
     return { verdict, judged: changed };
   }
@@ -333,9 +317,10 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
         debt,
         undefined,
         memo,
+        budget(),
       ),
     memo,
-    fetchBudget,
+    budget(),
   );
   return { verdict, judged: changed };
 };

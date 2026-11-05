@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Schema } from 'effect';
 import type { Params } from '../../../builtins';
 import { names as declared } from './declaration';
-import { deriveCalibration, setCalibration, UNBOUNDED } from '../../../core/node/budget';
+import { calibratedBudgetOf, deriveCalibration, UNBOUNDED } from '../../../core/node/budget';
 import { judge } from '../../../core/node/judge';
 import { readNames } from './implementation';
 import { commitTree } from '../../../core/node/sides';
@@ -210,7 +210,8 @@ const largest = [...own.objects.keys()].sort(
   (left, right) => (own.texts.get(own.objects.get(right) ?? '')?.length ?? 0) - (own.texts.get(own.objects.get(left) ?? '')?.length ?? 0),
 );
 const LANDING = largest.slice(0, 4);
-setCalibration('names', deriveCalibration(small.cold, smallSubject.paths.length, smallSubject.bytes));
+const calibration = deriveCalibration(small.cold, smallSubject.paths.length, smallSubject.bytes);
+const budget = () => calibratedBudgetOf('names', calibration);
 const words = new Map<string, Set<string>>();
 for (const [path, object] of own.objects) {
   for (const [word] of (own.texts.get(object) ?? '').matchAll(/[A-Za-z_$][\w$]*|'[^'\n]*'/g)) {
@@ -227,14 +228,18 @@ const landingTree = (facts: FacetMemo): Tree => ({
 const inspection = { builtin: 'names', params: gate } as const;
 const coldLanding = median(
   Array.from({ length: RUNS }, () =>
-    timed(() => judge(inspection, { base: landingTree(new Map()), built: landingTree(new Map()), paths: LANDING }, [])),
+    timed(() =>
+      judge(inspection, { base: landingTree(new Map()), built: landingTree(new Map()), paths: LANDING }, [], ADAPTERS, undefined, budget()),
+    ),
   ),
 );
 const heldFacts: FacetMemo = new Map();
-judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, []);
+judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], ADAPTERS, undefined, budget());
 const warmLanding = median(
   Array.from({ length: RUNS }, () =>
-    timed(() => judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [])),
+    timed(() =>
+      judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], ADAPTERS, undefined, budget()),
+    ),
   ),
 );
 console.log(

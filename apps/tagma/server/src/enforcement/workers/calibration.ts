@@ -1,15 +1,13 @@
 import type { Assembled } from '@tagma/inspection/builtins';
 import {
-  calibratedBudgetOf,
   deriveCalibration,
   fitsCalibration,
   isCalibratedBuiltin,
   probeOf,
-  setCalibration,
   spreadProbe,
   type Calibration,
 } from '@tagma/inspection/node/budget';
-import { facetFor, prefetches, selects } from '@tagma/inspection/node/implementations';
+import { facetFor, selects } from '@tagma/inspection/node/implementations';
 import { MEMO_BYTES } from '@tagma/inspection/node/memo';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, type FacetMemo, parseAhead } from '@runlith/code-facts/blobs';
@@ -20,7 +18,7 @@ import { Effect } from 'effect';
 import type { InspectionCache } from './caches.js';
 import { parses } from './parses.js';
 import { fetchedBlobs, type Side, texts } from './sides.js';
-import { type Unread, unreadFrom } from './unread.js';
+import { unreadFrom } from './unread.js';
 
 const remembered = new Map<string, Calibration>();
 const CALIBRATIONS_KEPT = Math.floor(MEMO_BYTES / 1024);
@@ -31,7 +29,7 @@ const rememberCalibration = (key: string, calibration: Calibration): void => {
   if (remembered.size > CALIBRATIONS_KEPT) remembered.delete(remembered.keys().next().value as string);
 };
 
-const fullOf = (sides: readonly Side[]): { readonly files: number; readonly bytes: number } => {
+export const subjectOf = (sides: readonly Side[]): { readonly files: number; readonly bytes: number } => {
   let files = 0;
   let bytes = 0;
   for (const side of sides) {
@@ -66,25 +64,11 @@ export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(funct
 ) {
   if (!isCalibratedBuiltin(inspection.builtin)) return undefined;
   const key = `${root}\0${inspection.builtin}`;
-  const lazy = !prefetches(inspection.builtin);
-  const check = (
-    calibration: Calibration,
-    full: { readonly files: number; readonly bytes: number },
-  ): Effect.Effect<Calibration, Unread> => {
-    setCalibration(inspection.builtin, calibration);
-    if (lazy) return Effect.succeed(calibration);
-    try {
-      calibratedBudgetOf(inspection.builtin, calibration).take(full.files, full.bytes);
-    } catch (error) {
-      return Effect.fail(unreadFrom(error));
-    }
-    return Effect.succeed(calibration);
-  };
-  const full = fullOf(sides);
+  const full = subjectOf(sides);
   const held = remembered.get(key);
   if (held !== undefined) {
     rememberCalibration(key, held);
-    return yield* check(held, full);
+    return held;
   }
   const stored = cache?.calibration.get(inspection.builtin);
   if (stored !== undefined && fitsCalibration(stored, full.files, full.bytes)) {
@@ -96,10 +80,10 @@ export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(funct
       probeMib: stored.probeMib,
     };
     rememberCalibration(key, calibration);
-    return yield* check(calibration, full);
+    return calibration;
   }
   const probe = probeSidesOf(inspection, sides);
-  const seen = fullOf(probe);
+  const seen = subjectOf(probe);
   if (seen.files === 0) return undefined;
   const started = performance.now();
   const fetched = yield* texts(git, root, probe);
@@ -133,5 +117,5 @@ export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(funct
   rememberCalibration(key, calibration);
   cache?.calibration.set(inspection.builtin, calibration);
   cache?.flush();
-  return yield* check(calibration, full);
+  return calibration;
 });
