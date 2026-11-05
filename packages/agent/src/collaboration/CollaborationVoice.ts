@@ -131,7 +131,7 @@ function handoffGuidance(models: ModelCatalog, startable: readonly ThreadSpawnTy
     '1. Context off the task: spawn fresh with its last report.',
     '2. Warm, or small: `send_task`; add `compact` for a large task or near its compaction point, `keep` naming what it needs — a warm child near its compaction point is compacted, not replaced.',
     `3. Cold and large (refused \`cold-wake\`): spawn fresh with its last report;${summarizerChoice ? ' `compact` if another model summarizes;' : ''} \`wake: true\` if its history is worth the full price.`,
-    'Review only a change you delivered that the project keeps — committed code, a spec, a rule, a document — never an answer, a reading, research or a report, which whoever asked judges. Confirm each finding against the work and fix it, in one round. The review policy you were told sets how many reviewers such a change takes at most; start none without it, unless the operator’s word asks for one.',
+    'A change you land that the project keeps — committed code, a spec, a rule, a document — gets the review the policy you were told names before you report it done; a micro-edit whose result is obvious takes none, and an answer, a reading, research or a report is judged by whoever asked. Confirm each finding against the work and fix it, in one round; your report names the reviewer and what its findings changed. A child’s report of such a change without its review is unfinished: send it back, or start the review yourself when the child cannot start agents. With no policy told, start a reviewer only on the operator’s word.',
   ];
 }
 

@@ -200,7 +200,7 @@ export function modelChoiceWords(team: Team): string {
 export function reviewWords(team: Team): string {
   if (reviewers(team).length === 0) return 'Review: none — start no reviewer.';
   const { reviewers: count, lenses } = team.review;
-  const who = count === 1 ? 'at most one reviewer' : `up to ${count} reviewers, as many as the change needs`;
+  const who = count === 1 ? 'one reviewer' : `up to ${count} reviewers, as many as the change needs`;
   const how =
     count === 1
       ? []
