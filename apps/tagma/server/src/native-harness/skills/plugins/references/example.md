@@ -1,151 +1,97 @@
 # A minimal plugin end to end
 
-A notes board per project: agents add notes with a tool, each call draws the board in the feed, and the project gets a Notes section that follows the board live. Write it into `.tagma-plugins/notes/`, run `bun add @modelcontextprotocol/sdk` there, then `install_plugin {source: ".tagma-plugins/notes"}`.
+A notes board per project: agents add notes with a tool, each call draws the board in the feed, and the project gets a Notes section that follows the board live. `create_plugin {id: "notes", title: "Notes"}`, install the folder's dependencies, write the files below, run `bunx tagma-plugin build` in the folder, then `install_plugin {source: ".tagma-plugins/notes"}`.
 
-## `tagma-plugin.json`
-
-```json
-{
-  "id": "notes",
-  "title": "Notes",
-  "process": { "command": "bun", "args": ["server/main.ts"] },
-  "contributes": {
-    "tools": [
-      { "name": "add_note", "audience": "agents" },
-      { "name": "list_notes", "audience": "view" }
-    ],
-    "views": [{ "id": "board", "entry": "ui/board.html" }],
-    "results": [{ "tool": "add_note", "view": "board" }],
-    "surfaces": [{ "view": "board", "title": "Notes" }]
-  }
-}
-```
-
-## `server/main.ts`
+## `plugin.ts`
 
 ```ts
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { definePlugin, type PluginContext, Refusal, resource, tool } from '@runlith/tagma/plugin';
+import { z } from 'zod';
 
-type Caller = { readonly kind: 'agent' | 'operator' | 'tagma'; readonly projectId: number | null };
 type Note = { readonly id: number; readonly text: string; readonly at: number };
 
-class Refusal extends Error {}
-
-const data = process.env.TAGMA_PLUGIN_DATA;
-if (data === undefined) {
-  console.error('notes: TAGMA_PLUGIN_DATA is set by Tagma and was not');
-  process.exit(1);
-}
-
-const fileOf = (project: number) => join(data, `notes-${project}.json`);
 const uriOf = (project: number) => `notes://project/${project}`;
-const URI = /^notes:\/\/project\/(\d+)$/u;
 
-function read(project: number): Note[] {
-  try {
-    return JSON.parse(readFileSync(fileOf(project), 'utf8')) as Note[];
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+const projectOf = (ctx: PluginContext): number => {
+  if (ctx.project === null) throw new Refusal('notes belong to a project; call from inside one');
+  return ctx.project;
+};
+
+const read = async (ctx: PluginContext): Promise<Note[]> => {
+  const text = await readFile(join(ctx.data, 'notes.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return '[]';
     throw error;
-  }
-}
+  });
+  return JSON.parse(text) as Note[];
+};
 
-function write(project: number, notes: readonly Note[]): void {
-  const staged = `${fileOf(project)}.${process.pid}`;
-  writeFileSync(staged, JSON.stringify(notes));
-  renameSync(staged, fileOf(project));
-}
+const write = async (ctx: PluginContext, notes: readonly Note[]): Promise<void> => {
+  const staged = join(ctx.data, `notes.json.${process.pid}`);
+  await writeFile(staged, JSON.stringify(notes));
+  await rename(staged, join(ctx.data, 'notes.json'));
+};
 
-function projectOf(meta: Readonly<Record<string, unknown>> | undefined): number {
-  const caller = meta?.['runlith/caller'] as Caller | undefined;
-  if (caller === undefined || caller.projectId === null) throw new Refusal('notes belong to a project; call from inside one');
-  return caller.projectId;
-}
-
-function ownResource(uri: string, meta: Readonly<Record<string, unknown>> | undefined): number {
-  const matched = URI.exec(uri);
-  if (matched === null) throw new Refusal(`no resource ${uri}`);
-  const project = projectOf(meta);
-  if (project !== Number(matched[1])) throw new Refusal('a view reads only the board of its own project');
-  return project;
-}
-
-const subscribed = new Set<string>();
-
-const TOOLS = [
-  {
-    name: 'add_note',
-    description: 'Add a note to the board of this project.',
-    inputSchema: { type: 'object' as const, properties: { text: { type: 'string', description: 'The note.' } }, required: ['text'] },
+export default definePlugin({
+  id: 'notes',
+  title: 'Notes',
+  tools: {
+    add_note: tool({
+      description: 'Add a note to the board of this project.',
+      audience: 'agents',
+      input: z.object({ text: z.string().trim().min(1).describe('The note') }),
+      run: async ({ text }, ctx) => {
+        const project = projectOf(ctx);
+        const notes = await read(ctx);
+        const note: Note = { id: (notes.at(-1)?.id ?? 0) + 1, text, at: Date.now() };
+        await write(ctx, [...notes, note]);
+        ctx.changed(uriOf(project));
+        return { note };
+      },
+    }),
+    list_notes: tool({
+      description: 'The notes of the board, for its view.',
+      audience: 'view',
+      readOnly: true,
+      run: async (_input, ctx) => {
+        projectOf(ctx);
+        return { notes: await read(ctx) };
+      },
+    }),
   },
-  {
-    name: 'list_notes',
-    description: 'The notes of the board, for its view.',
-    inputSchema: { type: 'object' as const, properties: {} },
-    annotations: { readOnlyHint: true },
+  resources: {
+    board: resource({
+      uri: 'notes://project/{project}',
+      read: async ({ project }, ctx) => {
+        if (Number(project) !== projectOf(ctx)) throw new Refusal('a view reads only the board of its own project');
+        return { notes: await read(ctx) };
+      },
+    }),
   },
-];
-
-const mcp = new Server({ name: 'notes', version: '1.0.0' }, { capabilities: { tools: {}, resources: { subscribe: true } } });
-
-mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));
-
-mcp.setRequestHandler(CallToolRequestSchema, ({ params }) => {
-  try {
-    const project = projectOf(params._meta);
-    const notes = read(project);
-    if (params.name === 'list_notes') {
-      return { content: [{ type: 'text' as const, text: `${notes.length} notes` }], structuredContent: { notes } };
-    }
-    if (params.name !== 'add_note') throw new Refusal(`no tool ${params.name}`);
-    const text = typeof params.arguments?.text === 'string' ? params.arguments.text.trim() : '';
-    if (text === '') throw new Refusal('a note needs text');
-    const note: Note = { id: (notes.at(-1)?.id ?? 0) + 1, text, at: Date.now() };
-    write(project, [...notes, note]);
-    const uri = uriOf(project);
-    if (subscribed.has(uri)) {
-      void mcp.notification({ method: 'notifications/resources/updated', params: { uri } }).catch((failure) => console.error(failure));
-    }
-    return { content: [{ type: 'text' as const, text: `Added note ${note.id}.` }], structuredContent: { note } };
-  } catch (error) {
-    if (!(error instanceof Refusal)) console.error(`[notes] ${params.name}`, error);
-    return { content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }], isError: true };
-  }
+  views: [{ id: 'board', entry: 'ui/board.html' }],
+  results: [{ tool: 'add_note', view: 'board' }],
+  surfaces: [{ view: 'board', title: 'Notes' }],
 });
-
-mcp.setRequestHandler(ReadResourceRequestSchema, ({ params }) => {
-  const notes = read(ownResource(params.uri, params._meta));
-  return { contents: [{ uri: params.uri, mimeType: 'application/json', text: JSON.stringify({ notes }) }] };
-});
-
-mcp.setRequestHandler(SubscribeRequestSchema, ({ params }) => {
-  ownResource(params.uri, params._meta);
-  subscribed.add(params.uri);
-  return {};
-});
-
-mcp.setRequestHandler(UnsubscribeRequestSchema, ({ params }) => {
-  subscribed.delete(params.uri);
-  return {};
-});
-
-mcp.onclose = () => process.exit(0);
-process.stdin.on('end', () => process.exit(0));
-await mcp.connect(new StdioServerTransport());
-console.error(`[notes] up, data in ${data}`);
 ```
 
-`subscribed` keeps one set for the whole machine: the host holds one protocol subscription per URI and admits each further caller — another project or view — through its own `resources/subscribe`, which `ownResource` judges.
+`ctx.data` is already the caller's project's directory, so two projects never share a board; `read` refuses a view of another project, and the same refusal keeps it from subscribing.
+
+## `plugin.test.ts`
+
+```ts
+import { expect, test } from 'bun:test';
+import { testPlugin } from '@runlith/tagma/testing';
+import plugin from './plugin';
+
+test('a note an agent adds reaches the board of its project only', async () => {
+  const notes = testPlugin(plugin);
+  expect((await notes.call('add_note', { text: 'ship it' })).isError).toBe(false);
+  expect(notes.changed).toEqual(['notes://project/1']);
+  expect(JSON.parse((await notes.read('notes://project/1')).text).notes).toHaveLength(1);
+  expect((await notes.read('notes://project/2')).isError).toBe(true);
+});
+```
 
 ## `ui/board.html`
 
