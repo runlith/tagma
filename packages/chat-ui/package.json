@@ -382,6 +382,11 @@
       "bun": "./stand/scenarios.ts",
       "default": "./stand/scenarios.ts"
     },
+    "./testing/stand/thumb": {
+      "types": "./stand/thumb.ts",
+      "bun": "./stand/thumb.ts",
+      "default": "./stand/thumb.ts"
+    },
     "./testing/stand/controls": {
       "types": "./stand/controls.ts",
       "bun": "./stand/controls.ts",

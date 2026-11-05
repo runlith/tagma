@@ -13,6 +13,7 @@ import {
   type EngineInput,
   type ScenarioOptions,
 } from '@runlith/chat-ui/testing/stand/scenarios';
+import { CalibrationFailure } from '@runlith/chat-ui/testing/stand/thumb';
 import { e2e } from '@runlith/e2e/browser';
 import type { Touch } from '@runlith/e2e/touch';
 import { Effect, FileSystem } from 'effect';
@@ -43,6 +44,11 @@ const scenario = Effect.fnUntraced(function* (
     ),
   );
   if ('recording' in outcome) return outcome.recording;
+  if (outcome.failure instanceof CalibrationFailure)
+    yield* (yield* FileSystem.FileSystem).writeFileString(
+      join(artifacts, 'thumb-control.json'),
+      JSON.stringify({ control: outcome.failure.control, trial: outcome.failure.trial }),
+    );
   if (outcome.failure instanceof ScenarioFailure)
     yield* (yield* FileSystem.FileSystem).writeFileString(
       join(artifacts, 'frames.json'),
