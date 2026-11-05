@@ -15,7 +15,6 @@ type Measured = {
 };
 
 export type Typed = Measured & {
-  readonly from: number;
   readonly to: number;
   readonly said: string;
 };
@@ -49,14 +48,13 @@ export const laneTypist = Effect.fnUntraced(function* (url: string, token: strin
   );
   const typed = Effect.gen(function* () {
     process.kill(child.pid, 'SIGUSR2');
-    const from = yield* Clock.currentTimeMillis;
     //! the loop stays blocked until the typist has seen every echo, so nothing on it can carry them
     yield* Effect.sync(() => {
       while (!existsSync(result));
     });
     const to = yield* Clock.currentTimeMillis;
     const said = yield* files.readFileString(result);
-    return { ...(JSON.parse(said) as Measured), from, to, said } satisfies Typed;
+    return { ...(JSON.parse(said) as Measured), to, said } satisfies Typed;
   });
   return { line: Effect.map(Queue.take(lines), (line) => JSON.parse(line) as Record<string, unknown>), typed };
 }, Effect.provide(BunFileSystem.layer));

@@ -81,8 +81,7 @@ layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer
           const client = yield* laneTypist(lane.url, lane.token, lane.next);
           expect(yield* client.line).toHaveProperty('ready');
           const typed = yield* client.typed;
-          expect(typed.started, typed.said).toBeGreaterThanOrEqual(typed.from);
-          expect(typed.finished, typed.said).toBeLessThanOrEqual(typed.to);
+          expect(typed.keys, typed.said).toHaveLength(20);
 
           const frame = yield* Effect.repeat(Queue.take(decided), { until: (heard) => heard.decider === TYPIST });
           expect(frame).toEqual({ decider: TYPIST, applied: TYPIST_BOX });

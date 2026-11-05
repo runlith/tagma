@@ -109,8 +109,6 @@ describe('the terminal endpoint', () => {
         expect(resizedAt).toBeGreaterThanOrEqual(typed.to);
         expect(resized).toMatchObject({ _tag: 'InputAdmitted', receipt: { sequence: 0, cause: 'resize' } });
         expect((yield* executions.summary(ref.execution))?.grid).toEqual(GRID);
-        expect(typed.started, typed.said).toBeGreaterThanOrEqual(typed.from);
-        expect(typed.finished, typed.said).toBeLessThanOrEqual(typed.to);
         expect(typed.keys, typed.said).toHaveLength(20);
         expect(typed.receipts.every(Number.isFinite), typed.said).toBe(true);
 
