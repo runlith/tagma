@@ -162,6 +162,7 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       expect(result).toContain('1. answered');
       expect(result.indexOf('2. partial')).toBeGreaterThan(result.indexOf('1. answered'));
       expect(result.indexOf('3. failed')).toBeGreaterThan(result.indexOf('2. partial'));
+      expect(result.slice(result.indexOf('3. failed'))).toContain('fixture provider failure');
       expect(result).toContain('floor/index.ts:1');
       expect(result).toContain('who maintains them');
       expect(yield* runsOf(asking)).toHaveLength(1);
@@ -184,10 +185,30 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       const asking = yield* lead();
       yield* turnsOf(world.runtime.owners).send(asking, projectId, LEAD, undefined, { key: 'ask-stop' });
       yield* Deferred.await(started);
-      yield* Context.get(world.runtime.owners, ThreadHarness).threads.handle(asking, 'operator').stop();
       const readers = yield* readersOf(asking);
       expect(readers).toHaveLength(QUESTIONS.length);
+      const agents = yield* world.op('list_agents', {}, `project=${projectId}`, { [GRANT_HEADER]: grantFor(asking) });
+      for (const reader of readers) expect(JSON.stringify(agents.body)).not.toContain(reader);
+      yield* Context.get(world.runtime.owners, ThreadHarness).threads.handle(asking, 'operator').stop();
       for (const reader of readers) yield* idle(reader);
+      script.hold = null;
+    }),
+  );
+
+  it.effect('a reader gone before the caller stops leaves no other reader running', () =>
+    Effect.gen(function* () {
+      const { world, projectId } = yield* Place;
+      const started = yield* Deferred.make<void>();
+      script.hold = { started, seen: 0 };
+      const asking = yield* lead();
+      yield* turnsOf(world.runtime.owners).send(asking, projectId, LEAD, undefined, { key: 'ask-gone' });
+      yield* Deferred.await(started);
+      const readers = yield* readersOf(asking);
+      expect((yield* world.op('delete_thread', { threadId: readers[0]! }, `project=${projectId}`)).body).toMatchObject({
+        status: 'deleted',
+      });
+      yield* Context.get(world.runtime.owners, ThreadHarness).threads.handle(asking, 'operator').stop();
+      for (const reader of readers.slice(1)) yield* idle(reader);
       script.hold = null;
     }),
   );

@@ -19,9 +19,15 @@ export const holdThreads = Effect.fnUntraced(function* (world: DoorFixture['Serv
         stop();
         const removed = new Set(yield* Context.get(world.runtime.owners, Projects).removed().pipe(Effect.orDie));
         const standing = born.filter((thread) => !removed.has(thread.projectId)).reverse();
-        yield* Effect.forEach(standing, ({ threadId, projectId }) => turnsOf(world.runtime.owners).stop(threadId, projectId), {
-          discard: true,
-        }).pipe(Effect.orDie);
+        const records = Context.get(world.runtime.owners, ThreadRecords);
+        yield* Effect.forEach(
+          standing,
+          ({ threadId, projectId }) =>
+            Effect.flatMap(records.projectOf(threadId), (home) =>
+              home === undefined ? Effect.void : turnsOf(world.runtime.owners).stop(threadId, projectId),
+            ),
+          { discard: true },
+        ).pipe(Effect.orDie);
       }),
   );
 });

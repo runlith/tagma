@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Exit } from 'effect';
 import type { ModelOption } from '@runlith/llm/models/catalog';
 import type { ThreadBornOf } from '../protocol/birth';
 import type { ThreadRecord } from '../thread/record';
@@ -13,6 +13,7 @@ import { ThreadDirectory, type ThreadDirectoryAssignment } from './ThreadDirecto
 import { ThreadEnvelopes } from './ThreadEnvelopes';
 import type { ThreadModelAsk, ThreadPlaneFailure } from './ThreadPlaneAccess';
 import { ThreadSpawnTree } from './ThreadSpawnTree';
+import { Threads } from './threads';
 import type { TreeActs } from './treeActs';
 import { ThreadTypes } from './types';
 
@@ -70,6 +71,7 @@ export const makeAsks = Effect.fnUntraced(function* ({ acting }: { readonly acti
   const directory = yield* ThreadDirectory;
   const messaging = yield* ThreadEnvelopes;
   const tree = yield* ThreadSpawnTree;
+  const threads = yield* Threads;
   const types = yield* ThreadTypes;
 
   const lightModel = (parent: ThreadRecord): ThreadModelAsk | undefined => {
@@ -120,12 +122,20 @@ export const makeAsks = Effect.fnUntraced(function* ({ acting }: { readonly acti
     };
     const readers: Reader[] = [];
     const failures = new Map<number, unknown>();
-    const stopReaders = Effect.suspend(() =>
-      Effect.forEach(
-        readers,
-        (reader, position) => acting.stop(parent, { threadId: reader.id, key: `${input.requestId}:stop:${position}` }),
-        {
-          discard: true,
+    const born = Effect.map(
+      Effect.forEach(input.questions, (_, position) => threads.birthReceipt(parent.id, `${input.requestId}:${position}`), {
+        concurrency: 'unbounded',
+      }),
+      (receipts) => receipts.flatMap((receipt) => (receipt === null ? [] : [receipt.threadId])),
+    );
+    const stopReaders = Effect.flatMap(born, (ids) =>
+      Effect.flatMap(
+        Effect.forEach(ids, (threadId) => Effect.exit(acting.stop(parent, { threadId, key: `${input.requestId}:stop:${threadId}` })), {
+          concurrency: 'unbounded',
+        }),
+        (exits) => {
+          const failed = exits.find(Exit.isFailure);
+          return failed === undefined ? Effect.void : Effect.failCause(failed.cause);
         },
       ),
     );
@@ -174,8 +184,7 @@ export const makeAsks = Effect.fnUntraced(function* ({ acting }: { readonly acti
     }).pipe(Effect.onError(() => Effect.orDie(stopReaders)));
 
     const entries = yield* collected;
-    const archived =
-      config.readers === undefined ? undefined : yield* Effect.result(config.readers.archive(readers.map((reader) => reader.id)));
+    const archived = config.readers === undefined ? undefined : yield* Effect.result(config.readers.archive(yield* born));
     return {
       status: 'asked',
       entries,

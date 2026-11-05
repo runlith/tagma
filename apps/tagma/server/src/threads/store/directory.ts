@@ -43,7 +43,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
         eq(recordFacts.principalId, query.principal),
         isNotNull(recordFacts.projectId),
         isNull(recordFacts.archivedAt),
-        query.ids ? inArray(recordFacts.id, [...query.ids]) : undefined,
+        query.ids ? inArray(recordFacts.id, [...query.ids]) : sql`json_extract(${recordFacts.bornOf}, '$.ask') is null`,
         query.parent === undefined ? undefined : eq(recordFacts.parentId, query.parent),
         sql`exists (select 1 from ${recordsAs('r')} where r.id = ${query.from} and r.principal_id = ${query.principal})`,
       );
