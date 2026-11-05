@@ -29,10 +29,9 @@ export function answerOf(input: typeof answerInput.Type): ThreadAnswer {
 }
 
 export const ASK =
-  'Answers factual questions about a project without you reading it: each question goes to an agent of its own, which reads the project and answers with evidence. ' +
-  'It pays when a fact would take you several reads or searches whose output then stays in your context; a fact one read gives, read yourself, since each question runs a model on the user’s account. ' +
-  'Ask what is — how a part is arranged, where something lives, what owns a place, what a contract or decision says — never for a design, a judgement or a change, and put independent questions in one call. ' +
-  'Before acting on an answer, check the evidence of the claims your decision rests on, and only those.';
+  'Answers factual questions about a project: each question goes to an agent that reads the project and answers with evidence. ' +
+  'Asking is cheap — usually cheaper than reading yourself, since that agent works in its own short context while your reads stay in yours — so ask for any fact that takes more than one read. ' +
+  'Never ask for a design, a judgement or a change; put independent questions in one call, and check the evidence behind the claims you act on.';
 
 export const askInput = Schema.Struct({
   questions: Schema.Array(CollaborationText)
