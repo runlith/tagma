@@ -1,0 +1,53 @@
+name: trace-fs
+run-name: trace-fs ${{ inputs.files }} x${{ inputs.rounds }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      files:
+        description: Server itest files, space separated, relative to apps/tagma/server
+        required: true
+      rounds:
+        description: How many times the files run
+        required: false
+        default: '6'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/cache@v6
+        with:
+          path: packages/execution-host/native/target
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/execution-host/native/Cargo.lock', 'packages/execution-host/native/**/Cargo.toml', 'packages/execution-host/native/**/*.rs') }}
+          restore-keys: native-${{ runner.os }}-${{ runner.arch }}-
+      - name: build the interposer
+        run: cc -dynamiclib -o "$RUNNER_TEMP/fs-trace.dylib" .github/trace/fs-trace.c
+      - name: run the files under the interposer
+        working-directory: apps/tagma/server
+        env:
+          FILES: ${{ inputs.files }}
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          : > /tmp/fs-trace.log
+          for round in $(seq 1 "$ROUNDS"); do
+            echo "=== round $round"
+            : > /tmp/fs-trace.round
+            DYLD_INSERT_LIBRARIES="$RUNNER_TEMP/fs-trace.dylib" bun ../../../packages/testbed/src/cli.ts bun test --no-isolate $FILES 2>&1 | tee "$RUNNER_TEMP/round-$round.log" | grep -E "^\(fail\)|^\(pass\)|ENOENT|error:" | cut -c1-300 || true
+            cp /tmp/fs-trace.log "$RUNNER_TEMP/trace-after-$round.log"
+          done
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trace-fs
+          path: |
+            ${{ runner.temp }}/round-*.log
+            ${{ runner.temp }}/trace-after-*.log
+            /tmp/fs-trace.log
+          if-no-files-found: ignore
