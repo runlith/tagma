@@ -16,6 +16,7 @@ import {
   probeOf,
   setCalibration,
   spreadProbe,
+  UNBOUNDED,
 } from './budget';
 import { facetFor, inspect, lists, prefetches, selects } from './implementations';
 import { type InspectionMemo, type MemoValue, memoWrites } from './memo';
@@ -124,7 +125,7 @@ export const slicedSide = (
       return planOf(inspection, placed(tree as Tree), places, snapshot, envelope);
     },
     undefined,
-    budgetOf(inspection.builtin, envelope),
+    UNBOUNDED,
   );
   const frontiers: InspectionMemo = new Map();
   const run = schedule(plan);
@@ -139,7 +140,7 @@ export const slicedSide = (
           return { sliced: sliceOf(inspection, placed(tree as Tree), step.scope, writes, trusted, snapshot, places), writes, trusted };
         },
         undefined,
-        budgetOf(inspection.builtin, envelope),
+        UNBOUNDED,
       );
       if (result.sliced.needs.length === 0) {
         result.writes.commit();

@@ -233,19 +233,6 @@ describe('platform slices', () => {
     );
   });
 
-  it('refuses a plan exactly when one group grows past the headroom the plan reported', () => {
-    const texts = repository();
-    const big = 'packages/core/src/big.ts';
-    texts.set(big, `export const big = '${'x'.repeat(4000)}';`);
-    const loose = planSlices(params, treeOf(texts), [''], { files: 50, mib: 1 });
-    const envelope = { files: 50, mib: 1 - (loose.headroom - 100) / (1024 * 1024) };
-    expect(planSlices(params, treeOf(texts), [''], envelope).headroom).toBe(100);
-    const grown = (by: number) =>
-      planSlices(params, treeOf(new Map([...texts, [big, texts.get(big)!.replace("'x", `'${'y'.repeat(by)}x`)]])), [''], envelope);
-    expect(grown(100).headroom).toBe(0);
-    expect(() => grown(101)).toThrow('exceeds its per-slice source envelope');
-  });
-
   it('judges only the narrowed place and reads other packages only through their own frontier asks', () => {
     const texts = repository();
     const { asks, reading } = sliced(texts, ['packages/ui'], new Map());
@@ -296,10 +283,13 @@ describe('platform slices', () => {
     );
   });
 
-  it('refuses an indivisible package beyond one slice envelope by name', () => {
+  it('plans an indivisible package beyond one slice envelope as a slice of its own', () => {
     const texts = repository();
     for (let at = 0; at < 20; at += 1) texts.set(`packages/server/src/part${at}.ts`, 'export {};');
-    expect(() => planSlices(params, treeOf(texts), [''], { files: 20, mib: 32 })).toThrow(/indivisible package group server/);
+    const plan = planSlices(params, treeOf(texts), [''], { files: 20, mib: 32 });
+    const alone = plan.slices.filter(({ parts }) => parts.some((part) => part.package === 'server'));
+    expect(alone.map(({ parts }) => parts.map((part) => part.package))).toEqual([['server']]);
+    expect(alone[0]!.files).toBeGreaterThan(20);
   });
 });
 
@@ -568,7 +558,6 @@ describe('slice closure', () => {
 describe('slice schedule', () => {
   const plan: Plan = {
     envelope: { files: 10, mib: 1 },
-    headroom: 0,
     slices: [
       { parts: [{ package: 'a', judged: true }], files: 1, bytes: 1 },
       { parts: [{ package: 'b', judged: true }], files: 1, bytes: 1 },

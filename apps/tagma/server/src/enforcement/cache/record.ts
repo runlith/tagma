@@ -77,7 +77,6 @@ const memo = Schema.Struct({
   universal: Schema.optional(Schema.Array(Schema.Struct({ key: Schema.String, violation: Violation }))),
   hits: Schema.optional(Schema.Array(hit)),
   started: Schema.optional(Schema.Boolean),
-  headroom: Schema.optional(Schema.Finite),
   read: Schema.Array(Schema.String),
 }) satisfies Schema.Codec<MemoValue>;
 

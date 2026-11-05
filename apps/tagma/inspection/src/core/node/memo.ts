@@ -29,7 +29,6 @@ export type MemoValue = {
   readonly universal?: readonly Keyed[];
   readonly hits?: readonly Hit[];
   readonly started?: boolean;
-  readonly headroom?: number;
   readonly read: readonly string[];
 };
 

@@ -266,7 +266,7 @@ export const platforms = {
     'The routes model is a directory tree of pages and of layouts wrapping the routes below, with one exported option deciding server rendering per directory. A per-file directive, a file kept out of a platform’s bundle by its name, and a second routed directory in one app are not expressible: declare such files through `ssr`, `server` and `roots`.',
     'A query is read only as the rule declares it: one in `leaves` ends the walk at that import, one in `workers` starts the file named without it as a worker; any other query stays part of the path, so the import is unresolved. A worker built from `new URL(…)` is followed with its query cut off.',
     'The source closure includes dynamic, worker and literal glob sites. Non-literal or ambiguous resolution, unreadable files and unsupported source outside declared leaves are violations, except a non-literal load inside a file an app declares injected: its function is serialized into a page, so its loads run there and belong to no start; and a non-literal load inside a file named in loaders, with its why: it loads code installed outside the tree at runtime, which no start of the tree reaches.',
-    'The envelope bounds blobs read across both trees; the enforcement ask deadline is not implemented yet.',
+    'The envelope is the size independent package groups are packed up to in one slice; an indivisible package group larger than it is judged on a slice of its own, and no size refuses a slice. The enforcement ask deadline is not implemented yet.',
   ],
   unblock: ['Cut the reported chain, correct the platform marker or dependency declaration, or provide a resolvable supported source.'],
 } as const;

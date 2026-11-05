@@ -33,7 +33,6 @@ export type JudgeRequest = {
     readonly built: Reading;
     readonly compared: Compared;
     readonly installed: { readonly base: Installs; readonly built: Installs };
-    readonly headroom: { readonly base: number; readonly built: number };
   };
   readonly checkout?: string;
 };
@@ -50,7 +49,7 @@ export type PlanAsk = {
   readonly places: readonly string[];
   readonly job?: string;
   readonly measures?: true;
-  readonly from?: { readonly commit: string; readonly headroom: number };
+  readonly from?: { readonly commit: string };
   readonly compared?: Compared;
   readonly installed?: Installs;
   readonly checkout?: string;
@@ -110,11 +109,7 @@ export type UnreadCause = 'git' | 'source' | 'envelope';
 
 export type Posted = WorkerAsk & { readonly id: number; readonly cacheRoot?: string };
 
-export type Planned = { readonly compared: Compared } & (
-  | { readonly plan: Plan }
-  | { readonly reading: Reading; readonly headroom: number }
-  | { readonly same: true; readonly headroom: number }
-);
+export type Planned = { readonly compared: Compared } & ({ readonly plan: Plan } | { readonly reading: Reading } | { readonly same: true });
 
 type Served = {
   readonly id: number;

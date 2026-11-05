@@ -16,7 +16,7 @@ export type Sliced = {
   readonly stats?: MemoStats;
 };
 export type Planned = { readonly parts: readonly Part[]; readonly files: number; readonly bytes: number };
-export type Plan = { readonly slices: readonly Planned[]; readonly envelope: Envelope; readonly headroom: number };
+export type Plan = { readonly slices: readonly Planned[]; readonly envelope: Envelope };
 export type Step = { readonly slice: number; readonly scope: Scope };
 
 export const WHOLE: Scope = { parts: 'whole', entries: [] };

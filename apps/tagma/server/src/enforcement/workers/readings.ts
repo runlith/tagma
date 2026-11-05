@@ -6,12 +6,12 @@ import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, type ParseMemo } from '@runlith/code-facts/blobs';
 import { installedStamp } from '@runlith/code-facts/js/config';
 import type { Git } from '@runlith/git/Git';
-import { pointedTreeAt, type TreeDifference } from '@runlith/git/trees';
+import type { TreeDifference } from '@runlith/git/trees';
 import { Effect } from 'effect';
 import { createHash } from 'node:crypto';
 import type { Compared, Installs } from './asks.js';
 import { GrowingPaths, type Side, texts } from './sides.js';
-import { gitUnread, unreadFrom } from './unread.js';
+import { unreadFrom } from './unread.js';
 
 const keyOf = (inspection: Assembled, places: readonly string[], compared: Compared, tree: string): string =>
   `readings/${createHash('sha256')
@@ -20,7 +20,6 @@ const keyOf = (inspection: Assembled, places: readonly string[], compared: Compa
 
 type Known = {
   readonly reading: Reading;
-  readonly headroom: number;
   readonly installed: readonly (readonly [string, string | null])[];
 };
 
@@ -32,9 +31,7 @@ export const knownReading = (
   tree: string,
 ): Known | undefined => {
   const held = memo?.get(keyOf(inspection, places, compared, tree));
-  return held === undefined
-    ? undefined
-    : { reading: { violations: held.violations, unjudged: [] }, headroom: held.headroom ?? 0, installed: held.installed ?? [] };
+  return held === undefined ? undefined : { reading: { violations: held.violations, unjudged: [] }, installed: held.installed ?? [] };
 };
 
 export const keepReading = (
@@ -44,7 +41,6 @@ export const keepReading = (
   compared: Compared,
   tree: string,
   reading: Reading,
-  headroom: number,
   installed: Installs,
 ): void => {
   if (reading.unjudged.length > 0) return;
@@ -53,7 +49,6 @@ export const keepReading = (
     installed: installed.map(([path, file]) => [path, installedStamp(file ?? undefined)]),
     listings: [],
     violations: reading.violations,
-    headroom,
     read: [],
   });
 };
@@ -90,16 +85,4 @@ export const carried = Effect.fn('inspecting.carried')(function* (
     if (fetched.unread.size > 0) return false;
     for (const [object, text] of fetched.held) held.set(object, text);
   }
-});
-
-export const growth = Effect.fn('inspecting.growth')(function* (
-  git: Git['Service'],
-  root: string,
-  trees: { readonly from: string; readonly to: string },
-  paths: readonly string[],
-) {
-  const [before, after] = yield* Effect.all([pointedTreeAt(git, root, trees.from, paths), pointedTreeAt(git, root, trees.to, paths)], {
-    concurrency: 2,
-  }).pipe(Effect.mapError(gitUnread));
-  return paths.reduce((sum, path) => sum + Math.max(0, (after.sizes.get(path) ?? 0) - (before.sizes.get(path) ?? 0)), 0);
 });

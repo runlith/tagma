@@ -209,51 +209,53 @@ it('shares one parsed usage fact across base and built trees of the same blob', 
   ).toBe('two');
 });
 
-it('judges divergent platform trees in independent bounded slices with the same change verdict as a whole walk', () => {
-  const params: Params<'platforms'> = {
-    base: '',
-    platforms: { browser: { runtime: 'browser' }, bun: { runtime: 'bun', unmarked: true } },
-    shipped: 'bun',
-    files: { extensions: ['.ts'], exclude: [] },
-    allows: {},
-    refuses: {},
-    leaves: ['.json'],
-    compiled: [],
-    apps: [],
-    packages: { a: { loads: { browser: ['sharp'] } } },
-  };
-  const inspection: Inspection = { builtin: 'platforms', params };
-  const sideFor = (added: string) => {
-    const texts = new Map(
-      Object.entries({
-        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
-        'packages/a/package.json': JSON.stringify({
-          name: 'a',
-          exports: { '.': { browser: './src/main.ts', default: './src/main.ts' } },
-          dependencies: { b: '*' },
-        }),
-        'packages/a/src/main.ts': "import 'b';",
-        'packages/b/package.json': JSON.stringify({ name: 'b', exports: { '.': { browser: './src/main.ts', default: './src/main.ts' } } }),
-        'packages/b/src/main.ts': `import 'node:fs'; ${added}`,
+const platformParams: Params<'platforms'> = {
+  base: '',
+  platforms: { browser: { runtime: 'browser' }, bun: { runtime: 'bun', unmarked: true } },
+  shipped: 'bun',
+  files: { extensions: ['.ts'], exclude: [] },
+  allows: {},
+  refuses: {},
+  leaves: ['.json'],
+  compiled: [],
+  apps: [],
+  packages: { a: { loads: { browser: ['sharp'] } } },
+};
+const platformInspection: Inspection = { builtin: 'platforms', params: platformParams };
+const platformSide = (added: string) => {
+  const texts = new Map(
+    Object.entries({
+      'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+      'packages/a/package.json': JSON.stringify({
+        name: 'a',
+        exports: { '.': { browser: './src/main.ts', default: './src/main.ts' } },
+        dependencies: { b: '*' },
       }),
-    );
-    const listed = new Map([...texts].map(([path, text]) => [path, { object: `${path}\0${text}`, size: text.length }]));
-    const blobs = new Map([...listed].map(([path, { object }]) => [object, texts.get(path)!]));
-    return overlaidSide(
-      listed,
-      new Map(),
-      [''],
-      (wanted) => new Map(wanted.map(({ object }) => [object, blobs.get(object)!])),
-      () => {
-        throw new Error('no working-tree reads');
-      },
-      () => new Set<string>(),
-      new Map(),
-      new Map(),
-    );
-  };
-  const base = sideFor(''),
-    built = sideFor("import 'sharp';");
+      'packages/a/src/main.ts': "import 'b';",
+      'packages/b/package.json': JSON.stringify({ name: 'b', exports: { '.': { browser: './src/main.ts', default: './src/main.ts' } } }),
+      'packages/b/src/main.ts': `import 'node:fs'; ${added}`,
+    }),
+  );
+  const listed = new Map([...texts].map(([path, text]) => [path, { object: `${path}\0${text}`, size: text.length }]));
+  const blobs = new Map([...listed].map(([path, { object }]) => [object, texts.get(path)!]));
+  return overlaidSide(
+    listed,
+    new Map(),
+    [''],
+    (wanted) => new Map(wanted.map(({ object }) => [object, blobs.get(object)!])),
+    () => {
+      throw new Error('no working-tree reads');
+    },
+    () => new Set<string>(),
+    new Map(),
+    new Map(),
+  );
+};
+
+it('judges divergent platform trees in independent bounded slices with the same change verdict as a whole walk', () => {
+  const inspection = platformInspection;
+  const base = platformSide(''),
+    built = platformSide("import 'sharp';");
   const memo = new Map<string, MemoValue>();
   const envelope = { files: 4, mib: 1 };
   const before = slicedSide(inspection, base, [''], memo, envelope);
@@ -265,6 +267,14 @@ it('judges divergent platform trees in independent bounded slices with the same 
   const whole = settled([base, built], [[], []], ([a, b]) => judge(inspection, { base: a!, built: b!, paths }, []));
   expect(reading).toEqual(whole);
   expect(reading.violations.map(({ fingerprint }) => fingerprint)).toEqual(['a [browser] -> sharp']);
+});
+
+it('judges an indivisible platform package larger than the slice envelope on a slice of its own', () => {
+  const built = platformSide("import 'sharp';");
+  const tight = slicedSide(platformInspection, built, [''], new Map(), { files: 1, mib: 1 });
+  const loose = slicedSide(platformInspection, platformSide("import 'sharp';"), [''], new Map(), { files: 100, mib: 32 });
+  expect(tight).toEqual(loose);
+  expect(tight.violations.map(({ fingerprint }) => fingerprint)).toEqual(['a [browser] -> sharp', 'b [browser] -> fs']);
 });
 
 it('charges an on-demand blob before fetching it', () => {

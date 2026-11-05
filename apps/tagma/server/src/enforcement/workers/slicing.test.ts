@@ -12,7 +12,6 @@ const inspection = { builtin: 'platforms', params: {} } as unknown as Assembled;
 const subject = { root: '/repo', commit: 'c0ffee', inspection, places: [''], job: 'job' };
 const plan: Plan = {
   envelope: { files: 10, mib: 1 },
-  headroom: 0,
   slices: [
     { parts: [{ package: 'core', judged: true }], files: 2, bytes: 2 },
     { parts: [{ package: 'app', judged: true }], files: 2, bytes: 2 },

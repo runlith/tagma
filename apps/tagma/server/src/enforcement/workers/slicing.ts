@@ -24,7 +24,7 @@ type Subject = {
   readonly checkout?: string;
 };
 type Judged = { readonly verdict: Verdict; readonly read: readonly string[]; readonly ms: number };
-type Held = { readonly commit: string; readonly reading: Reading; readonly headroom: number; readonly installed: Installs };
+type Held = { readonly commit: string; readonly reading: Reading; readonly installed: Installs };
 
 const partsOf = (scope: Scope): string =>
   scope.parts === 'whole' ? 'every package' : scope.parts.map((part) => part.package ?? 'files outside every package').join(', ');
@@ -51,7 +51,7 @@ export const slicedReading = Effect.fnUntraced(function* <E extends Failure>(
     places: subject.places,
     job: subject.job,
     measures: subject.measures,
-    from: from === undefined ? undefined : { commit: from.commit, headroom: from.headroom },
+    from: from === undefined ? undefined : { commit: from.commit },
     compared: subject.compared,
     installed: [...pinned],
     checkout: subject.checkout,
@@ -59,15 +59,13 @@ export const slicedReading = Effect.fnUntraced(function* <E extends Failure>(
   if (!('compared' in planned)) return yield* Effect.fail(failing('worker', 'the inspection worker answered a plan ask without a plan'));
   const { compared } = planned;
   take(planned.installed);
-  if ('reading' in planned)
-    return { reading: planned.reading, read: planned.read, compared, headroom: planned.headroom, installed: [...used] };
+  if ('reading' in planned) return { reading: planned.reading, read: planned.read, compared, installed: [...used] };
   if ('same' in planned) {
     if (from === undefined)
       return yield* Effect.fail(failing('worker', 'the inspection worker carried a reading nobody asked it to carry'));
     take(from.installed);
-    return { reading: from.reading, read: planned.read, compared, headroom: planned.headroom, installed: [...used] };
+    return { reading: from.reading, read: planned.read, compared, installed: [...used] };
   }
-  const { headroom } = planned.plan;
   const read = new Set(planned.read);
   const run = schedule(planned.plan);
   for (let step = run.next(); step !== undefined; step = run.next()) {
@@ -111,7 +109,7 @@ export const slicedReading = Effect.fnUntraced(function* <E extends Failure>(
       catch: (error) => failing('source', error instanceof Error ? error.message : String(error)),
     });
   }
-  return { reading: mergeSlices(run.readings()), read: [...read], compared, headroom, installed: [...used] };
+  return { reading: mergeSlices(run.readings()), read: [...read], compared, installed: [...used] };
 });
 
 export const slicedReach = Effect.fnUntraced(function* <E extends Failure>(
@@ -138,7 +136,6 @@ export const slicedJudge = Effect.fnUntraced(function* <E extends Failure>(
   const built = yield* slicedReading(answer, { ...at, commit: message.built, installed: base.installed }, failing, {
     commit: message.base,
     reading: base.reading,
-    headroom: base.headroom,
     installed: base.installed,
   });
   const readings = {
@@ -146,7 +143,6 @@ export const slicedJudge = Effect.fnUntraced(function* <E extends Failure>(
     built: built.reading,
     compared: built.compared,
     installed: { base: base.installed, built: built.installed },
-    headroom: { base: base.headroom, built: built.headroom },
   };
   const judged = yield* answer({ ...message, kind: 'judge', readings });
   if (!('verdict' in judged)) return yield* Effect.fail(failing('worker', 'the inspection worker answered a judge ask without a verdict'));

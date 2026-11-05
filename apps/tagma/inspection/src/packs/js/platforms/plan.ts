@@ -10,7 +10,7 @@ export function planSlices(params: Of, source: Tree, places: readonly string[], 
   try {
     snapshot = prepared ?? snapshotOf(params, source);
   } catch {
-    return { slices: [{ parts: [{ package: null, judged: true }], files: 0, bytes: 0 }], envelope, headroom: 0 };
+    return { slices: [{ parts: [{ package: null, judged: true }], files: 0, bytes: 0 }], envelope };
   }
   const { inventory } = snapshot;
   const { packages: size, shared, outliers } = sizesOf(snapshot, params, source);
@@ -52,7 +52,6 @@ export function planSlices(params: Of, source: Tree, places: readonly string[], 
   };
   for (const name of names) if (!index.has(name)) visit(name);
   const capacity = { files: envelope.files - shared.files, bytes: envelope.mib * MIB - shared.bytes };
-  let headroom = capacity.bytes;
   const slices: Planned[] = [];
   const open = new Map<boolean, Planned>();
   const place = (parts: readonly Part[], files: number, bytes: number, judged: boolean): void => {
@@ -71,9 +70,6 @@ export function planSlices(params: Of, source: Tree, places: readonly string[], 
     const parts = group.map((name) => ({ package: name, judged: covered(places, inventory.packages.get(name)!.dir) }));
     const files = group.reduce((sum, name) => sum + (size.get(name)?.files ?? 0), 0);
     const bytes = group.reduce((sum, name) => sum + (size.get(name)?.bytes ?? 0), 0);
-    if (shared.files + files > envelope.files || shared.bytes + bytes > envelope.mib * MIB)
-      throw new Error(`platforms: indivisible package group ${group.join(', ')} exceeds its per-slice source envelope`);
-    headroom = Math.min(headroom, capacity.bytes - bytes);
     place(
       parts,
       files,
@@ -82,11 +78,8 @@ export function planSlices(params: Of, source: Tree, places: readonly string[], 
     );
   }
   if (outliers.files.length > 0) {
-    if (shared.files + outliers.files.length > envelope.files || shared.bytes + outliers.bytes > envelope.mib * MIB)
-      throw new Error('platforms: files outside packages exceed their per-slice source envelope');
-    headroom = Math.min(headroom, capacity.bytes - outliers.bytes);
     const judged = outliers.files.some((path) => covered(places, path));
     place([{ package: null, judged }], outliers.files.length, outliers.bytes, judged);
   }
-  return { slices, envelope, headroom };
+  return { slices, envelope };
 }
