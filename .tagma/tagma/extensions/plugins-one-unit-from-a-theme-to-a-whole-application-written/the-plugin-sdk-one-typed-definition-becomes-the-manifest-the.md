@@ -122,7 +122,6 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
 4. **It bundles a provider part** into `dist/provider.js`, against the host modules the in-server loader serves.
 5. **It prepares the views.**
    - Svelte views: it ships `.svelte` and `.svelte.ts` files as source, bundles every other import of theirs into plain ESM chunks, and rewrites the Svelte files' imports to those chunks.
-   - Bundled views (`view.bundle('./ui/react/index.tsx')`): one ESM file each, with the framework inside.
    - Page views (`view.page('./ui/board/')`): the folder, copied as it is.
 6. **It checks the result.** It checks the manifest against the point schemas of its surface version. A manifest the server would refuse fails the build, with the reason the server would give.
 
@@ -156,15 +155,15 @@ The protocol between the runtime and the host is part of the promised surface:
 
 Decoding is lenient, so adding to the surface never breaks a running plugin: an answer arm, a refusal code or an entry role the plugin's SDK does not know arrives as an open variant carrying its raw value. On top of the generated calls the SDK owns the streams, which are not plain operations: `threads.events(ids, {since})` is an async iterator over the child spec's projection, with resume. Typing `op` by operation id, rather than mapping operations to method names by hand, keeps the client from drifting from the catalog.
 
-**In a view.** The view gets `tagma` from its mount's context. In a Svelte view it is `getContext`, which `@runlith/tagma/ui` wraps as `useTagma()`. In a bundled view it is the `tagma` argument of `mount`. A single shared module could not tell the plugins apart. The surface is listed once here:
+**In a view.** The view gets `tagma` from its mount's context. That is `getContext`, which `@runlith/tagma/ui` wraps as `useTagma()`; a single shared module could not tell the plugins apart. Views are Svelte, plus page views; views in other frameworks are left out for now (parent spec). The surface is listed once here:
 
 | Call | What it does |
 |---|---|
 | `tagma.tools.<name>(input)` | Calls one of the plugin's own `view` tools, typed from `typeof plugin` (`import type plugin from '../plugin'`) |
-| `tagma.resource(uri)` | A reactive value in a Svelte view; `subscribe(uri, onChange)` returns an unsubscribe function for bundled views |
+| `tagma.resource(uri)` | A reactive value |
 | `tagma.storage` | The view's key-value storage |
-| `tagma.threadEvents(ids)` | The reactive projection of threads, with `subscribe` for bundled views |
-| `<Thread id>` in Svelte, `tagma.mountThread(element, id)` in a bundled view | The whole thread, drawn by the host |
+| `tagma.threadEvents(ids)` | The reactive projection of threads |
+| `<Thread id>` | The whole thread, drawn by the host |
 | `tagma.speech` | Listening and speaking, as the speech bridge offers views now |
 | `tagma.openLink(url)` | Opens a link, during a click |
 | `tagma.open(...)` | Opens a thread or a section of Tagma |

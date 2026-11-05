@@ -23,7 +23,7 @@ A thread's authority, transport and capabilities have no absence, so a stored on
 A stand-in only keeps the thread open and listed; a reader that acts decides by the mark, never by the stand-in's fields, since `UNREAD_BINDING` reads as a non-acp, non-terminal binding and `UNREAD_CAPABILITIES` as a transport that declares nothing:
 
 - The transport registry takes the row, not the bare binding, and refuses a marked transport with `TransportUnread`, so a launch, release, rewind, answer or restart says the stored transport did not read. A release cannot know which transport holds a process, so archive and delete keep such a thread and project removal leaves it standing with a warning.
-- `set_thread_transport` treats an unread transport as no road at all: it never answers `unchanged`, writes the asked road (the journal's transport entry names no `from`), and refuses `session-uncertain` while the thread holds a CLI process it cannot route a stop to.
+- `set_thread_transport` treats a road whose transport or capabilities did not read as no road at all: it never answers `unchanged`, writes the asked road with fresh capabilities (the journal's transport entry names no `from`), and refuses `session-uncertain` while the thread holds a CLI process it cannot route a stop to.
 - The CLI row names no road (`harnessTransportOf` answers `null`), and the app shows the transport as unread.
 - `TransportCannot` built through `cannotOn` says the capabilities did not read and offers storing them again, instead of claiming the transport declares no such capability.
 - A stored seat read back for a fork yields no kernel when its transport or capabilities did not read, so a stand-in is never written into another thread as a real value.

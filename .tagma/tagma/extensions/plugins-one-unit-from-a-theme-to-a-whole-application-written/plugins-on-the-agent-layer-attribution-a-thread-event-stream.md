@@ -101,9 +101,8 @@ A program beside Tagma that is not a plugin reaches the same door and stream. It
 **What changes.**
 - **`app/src/lib/features/threads`: a fixed-thread seat.** `ThreadSlot.start` already takes any section scope and any `SlotWriter`. A seat whose writer holds one thread id, wrapped in `PaneGraph` and `Conversation`, shows the same thread as the side pane, and two holders share one session.
 - **A Svelte view** places `<Thread id={threadId} />` from `@runlith/tagma/ui`. The host module behind that facade is the window's own component.
-- **A bundled view** calls `tagma.mountThread(element, id)`. The host mounts `<Thread>` with Svelte's `mount(…, {target, context})`, passing the app context captured where the view was mounted, and returns the disposer. The bundled framework never touches Svelte.
 
-Either way the thread is whole — composer, tool cards, model picker, every feature contribution — and it is the person's own interface acting as the person.
+The thread is whole — composer, tool cards, model picker, every feature contribution — and it is the person's own interface acting as the person.
 
 **Rejected:** publishing `@runlith/chat-ui` over `ChatConnection`. Mounted alone, it lacks Tagma's markdown and block references, tool renderers, model picker and uploads. It would also make the kit's protocol types a public contract.
 
@@ -143,7 +142,6 @@ A plugin writes no feed entries of its own. Entries decode only installed kinds,
    `thread.events` and the window's projection come from the one function. A quiet stream outlives the idle timeout.
 3. **Depth 2**, after the parent spec's module host:
    - a section lists merge requests beside a live `<Thread>`;
-   - a React bundle shows a thread through `tagma.mountThread`;
    - a shortcut on a free chord opens a grid of four threads on four providers.
 4. **Depth 3:**
    - a composer button inserts text into the draft, and shows only in projects where its plugin is enabled;

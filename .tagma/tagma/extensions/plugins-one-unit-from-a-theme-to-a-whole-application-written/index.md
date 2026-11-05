@@ -60,9 +60,10 @@ Size changes what a plugin declares, never what it is.
 - **All three depths on the agent layer are needed**, built in this order: a plugin's own chat over our agents, our thread inside a plugin, additions to our chat.
 - **The Plugins screen stays the one home.** Apps get no screen of their own.
 - **Built-in providers** stand on the Plugins screen in one group, "Built into Tagma". They cannot be removed, and they are switched off only for the whole machine.
-- **A project declares the plugins it uses.** Beside its own `.tagma-plugins/<id>/`, a project lists plugins it uses from a marketplace, npm or git, with their version ranges, in the committed `.tagma-plugins/plugins.json`. A collaborator opening the project is offered each one it does not have.
+- **A project declares the plugins it uses.** Beside its own `.tagma-plugins/<id>/`, a project lists plugins it uses from a marketplace, npm or git, with their version ranges, in the committed `.tagma-plugins/plugins.json`. Tagma writes that file when the person adds a plugin to the project from its card; nobody edits it by hand. A collaborator opening the project is offered each listed plugin they do not have.
 - **A plugin's threads stand under the plugin.** The plugin decides whether they also stand in the general thread list.
 - **A plugin may ask a model once, with no thread.**
+- **Views are Svelte, plus HTML pages in a frame.** Views in React or other frameworks are left out for now. Adding them later is pure addition and breaks nothing, while adding them now would fix a second form of the view interface into the public contract.
 - **The `TagmaApp` naming exception goes with `TagmaApp`.** The change that renames the code removes it from rules eeaf88ec and 931cfbf1.
 - **The package keeps its name.** It stays `@runlith/tagma`, the package every project's `tagma.config.ts` already imports (`@runlith/tagma/rules`), with doors added. No separate generator package is published, because a plugin is started by an agent, never typed by a person.
 
@@ -75,7 +76,6 @@ Trust and consent at install are not part of this spec.
 - **Connection** is an MCP server.
 - **View kinds**, by how the window draws them:
   - a *Svelte view*, compiled by Tagma;
-  - a *bundled view*, which the SDK builds with its own framework inside;
   - a *page view*, an HTML page the plugin brings, drawn in an iframe.
 - **Tagma's own loop** is the agent loop Tagma runs: Tagma's own threads, and Tagma's agent hosted by an outside runner.
 
@@ -103,7 +103,7 @@ The core under this is sound. Contribution points are declared by their owners (
 - `tagma-plugin.json`;
 - `dist/process.js`, when the plugin has a process;
 - `dist/provider.js`, when it has a provider part;
-- `dist/ui/`, which holds Svelte sources, the plain chunks they import, bundled views and page views.
+- `dist/ui/`, which holds Svelte sources, the plain chunks they import, and page views.
 
 The output is committed with the plugin's sources. A collaborator, or an install from git, therefore runs nothing before Tagma reads it.
 
@@ -188,12 +188,6 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 
 **Tailwind.** Tailwind does not run per plugin. Tagma regenerates one utilities sheet against the window's theme, over the window build's own class candidates and those of every enabled plugin, and swaps the sheet when a plugin is installed or removed. Utilities therefore keep one order, and a plugin cannot override the window's own classes.
 
-**Bundled views: React or anything else.** The SDK builds them into one ESM file with the framework inside. The file exports `mount(element, tagma)`, which returns a disposer. A bundled view:
-- takes the look from the token CSS variables;
-- reaches Tagma through `tagma`;
-- shows a thread through `tagma.mountThread(element, id)`;
-- survives Tagma updates while the surface version holds.
-
 **Page views.** An HTML page a plugin brings is drawn by an iframe module the host supplies, on the plugin's own origin, as views are today (explanation a9714f0d). This is what keeps the views of existing apps working, and it serves any finished web application a plugin brings whole.
 
 **Placement.**
@@ -201,7 +195,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 - A slot's owner shows a plugin's part only in threads of projects where the plugin is enabled.
 - A part's module is loaded when the plugin is enabled, because feed rows need their geometry synchronously (explanation 8b7128c3).
 - Every mount sits in its own `<svelte:boundary>`, so a throwing part breaks only itself.
-- Sections, panes and windows take any view kind.
+- Sections, panes and windows take a Svelte view or a page view.
 - The plugin template produces Svelte views, and agents write Svelte views by default.
 
 **Where an iframe stays.** It stays where the HTML is not ours:
@@ -242,11 +236,12 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 - **Plugins built in the project** stand with the project as their source. One not yet installed on this machine has a row with Install.
 - **Sources are the marketplaces.** Tagma's marketplace also carries plugins in Tagma's format. Claude Code and Codex plugins are translated, and what Tagma skips is named.
 - **The add field** reads what an address holds: a package carrying `tagma-plugin.json`, or a Claude Code or Codex manifest, is a plugin; a command or a URL is a server.
-- **A plugin's card** names:
-  - what the plugin brings: tools, skills, agents, a section or window, a theme, a provider, hooks; hooks are marked as binding Tagma's own loop only;
-  - its process state: idle, starting, running, or failed with the end of its stderr and its restart count. Idle reads as rest, not as a fault;
-  - a refusal: an incompatible surface version, a view the compiler rejected, a shortcut already taken;
-  - that its data stays on remove.
+- **A plugin's card speaks to a person who does not read code.**
+  - It names in plain words what the plugin brings: tools for agents, skills, agents, a section or window, a theme, a provider.
+  - Its state is a plain word: working, asleep or broken. Asleep is rest, not a fault.
+  - Anything wrong shows as one sentence with **Fix with an agent**: a broken plugin, a view that did not compile, an outdated plugin, a shortcut already taken. The act opens a thread that holds the details — the end of stderr, the restart count, the versions, the compiler's message — so the person never reads them.
+  - It says the plugin's data stays on remove.
+  - **Add to this project** writes the plugin into `.tagma-plugins/plugins.json`.
 - **The main act** follows what the plugin is: Try for a skill, Use for a theme, Open for a section or window.
 - **The header** speaks of the window as well as of agents.
 
@@ -294,7 +289,7 @@ Earlier steps renamed these identifiers from `plugin__` to `app__` (`tagma-apps/
 2. **The SDK and `create_plugin`, the SDK as a prerelease on npm.** Contributions published from the manifest, idle and on-demand start, committed build output.
 3. **Themes, shortcuts and window entries**, as data or as a command the process serves.
 4. **Depth 1 of the agent layer** (child spec).
-5. **The window's module host:** Svelte views, bundled views, page views, the utilities sheet. MCP App windows move to the MCP client's module.
+5. **The window's module host:** Svelte views, page views, the utilities sheet. MCP App windows move to the MCP client's module.
 6. **Depth 2** (child spec).
 7. **Depth 3** (child spec).
 8. **Providers through the one loader**, speech included.
@@ -303,6 +298,7 @@ Earlier steps renamed these identifiers from `plugin__` to `app__` (`tagma-apps/
 ## Acceptance
 
 Performer checks, each through the same door a real caller uses:
+- **A person asks in words.** A person tells an agent "make me a section for GitLab merge requests". The agent creates, builds, installs and enables the plugin, and the section opens. "Change X" makes the agent edit the plugin, and the section shows the change. The person types no command and reads no code.
 - **Authoring.** An agent asked for a plugin calls `create_plugin`, then adds a tool, a schedule, a notification and a Svelte section; the build emits `tagma-plugin.json`. One `install_plugin` from the folder installs it. The tool stands in an agent's catalog before the process ever ran, and the first call starts the process.
 - **Idle and resident.** A plugin idle past its quiet period stops, and its next tick starts it again. A `resident` plugin stays up.
 - **Installing.** Plugins in Tagma's format install from git, from npm and from a marketplace entry. A Claude Code plugin and a Codex plugin install through the same act and are listed beside it, with their source and skipped parts. A plugin's MCP server stands in the server list marked with it.
@@ -312,11 +308,10 @@ Performer checks, each through the same door a real caller uses:
 - **A collaborator.** A collaborator opening a project with a committed `.tagma-plugins/<id>/` is offered the plugin, and it runs with no build on their machine. A plugin the project lists in `.tagma-plugins/plugins.json` from a marketplace, npm or git is offered too, within its version range.
 - **Existing apps.** Every existing app directory installs and runs through `install_plugin`. Its page views draw, and its data, secrets, schedule grid, bound threads and approvals stay intact.
 - **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A change of the compiler's identity recompiles it, counted through the compile cache.
-- **Bundled views.** A React bundle mounts in a pane and shows a thread through `tagma.mountThread`.
 - **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, and keeps the state colours' meanings.
 - **Windows and shortcuts.** A shortcut on a chord the keymap leaves free opens a frameless, always-on-top window holding a grid of four threads on four providers. A plugin claiming a chord Tagma uses is refused, and its card names the chord.
 - **Providers.** A model provider and a speech provider install as plugins with no rebuild and appear in their catalogs.
-- **The screen.** A plugin's card shows its process state, its refusals and what it brings.
+- **The screen.** A broken plugin shows one plain sentence and Fix with an agent. The thread that act opens holds the stderr and the versions.
 
 ## Open for the operator
 
@@ -326,7 +321,7 @@ Performer checks, each through the same door a real caller uses:
 
 - **A public contract.** The SDK surface, the host protocol, the slot faces and the host modules become a versioned contract. That goes against the practice of one form changed in one commit; only the surface the SDK lists is promised.
 - **Svelte majors.** A new Svelte major recompiles every Svelte view and may refuse some.
-- **A shared window.** A hung Svelte or bundled module hangs the window, and a leak lives until reload. The Vigla idea [[6b792682]] would address this later, and nothing here waits for it.
+- **A shared window.** A hung Svelte module hangs the window, and a leak lives until reload. The Vigla idea [[6b792682]] would address this later, and nothing here waits for it.
 - **Weight.** The server ships the Svelte compiler and Tailwind on every platform, and regenerates one sheet on every install and every removal.
 
 ## Not established
