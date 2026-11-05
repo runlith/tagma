@@ -3,6 +3,7 @@ import { AgentFault, FAULT } from '@runlith/acp/agent';
 import {
   HostedAgentSchema,
   HostedCalledSchema,
+  HostedClosedSchema,
   HostedHeldSchema,
   HostedListedSchema,
   HostedOpenedSchema,
@@ -46,6 +47,10 @@ export class ServerDoor implements HostedDoor {
 
   call(toolCallId: string, name: string, input: unknown): Effect.Effect<HostedCalled, AgentFault> {
     return this.perform('call_hosted_tool', { toolCallId, name, input }, HostedCalledSchema);
+  }
+
+  close(id: string, text: string | null): Effect.Effect<string | null, AgentFault> {
+    return Effect.map(this.perform('close_hosted_turn', { id, text }, HostedClosedSchema), (closed) => closed.guide);
   }
 
   private perform<A>(id: HostedOperationId, input: object, schema: Schema.Codec<A, unknown>): Effect.Effect<A, AgentFault> {

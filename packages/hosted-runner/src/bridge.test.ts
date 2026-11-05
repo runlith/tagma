@@ -30,6 +30,7 @@ it.effect('a bridge runs a call under the vendor-read call id and refuses one th
       agent: () => Effect.die('no agent'),
       history: () => Effect.die('no history'),
       turn: () => Effect.die('no turn'),
+      close: () => Effect.die('no close'),
       tools: () => Effect.succeed({ tools: [read], names: ['read'], dispatch: false }),
       call: (toolCallId, name) => {
         ran.push(`${toolCallId}:${name}`);
@@ -60,6 +61,7 @@ it.effect('a bridge for a vendor that never relists serves a changed list at onc
         agent: () => Effect.die('no agent'),
         history: () => Effect.die('no history'),
         turn: () => Effect.die('no turn'),
+        close: () => Effect.die('no close'),
         tools: () => Effect.die('no list read'),
         call: () => Effect.die('no call'),
       },
@@ -79,6 +81,7 @@ it.effect('a dispatching bridge runs a dispatched call as the named tool and ans
       agent: () => Effect.die('no agent'),
       history: () => Effect.die('no history'),
       turn: () => Effect.die('no turn'),
+      close: () => Effect.die('no close'),
       tools: () => Effect.die('no list read'),
       call: (toolCallId, name, input) => {
         ran.push(`${toolCallId}:${name}:${JSON.stringify(input)}`);

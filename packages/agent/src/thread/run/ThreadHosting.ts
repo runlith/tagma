@@ -79,13 +79,24 @@ import {
   type HostedAgent,
   type HostedAnswer,
   type HostedCall,
+  type HostedClose,
   type HostedOwing,
   type HostedReply,
   type HostedTools,
   type HostedTurn,
   type Settled,
 } from './hostedParts';
-import { admissionEntry, callFailed, ENDED, entryOf, failure, hostedExecutionOf, outcomeSettled, restartedSettled } from './hostedRecords';
+import {
+  admissionEntry,
+  callFailed,
+  closingStep,
+  ENDED,
+  entryOf,
+  failure,
+  hostedExecutionOf,
+  outcomeSettled,
+  restartedSettled,
+} from './hostedRecords';
 import { questioned } from './hostedAsks';
 import { placeSealed } from './hostedOrder';
 import { queuedReason } from '../../agent/door/CallOrder';
@@ -102,6 +113,7 @@ export class ThreadHosting extends Context.Service<
     tools(threadId: string, agentId: string): Effect.Effect<HostedTools, ThreadBorderFailed>;
     display(threadId: string, name: string, reading: PartialJsonState): ToolDisplay | undefined;
     call(call: HostedCall): Effect.Effect<HostedReply, ThreadBorderFailed>;
+    close(close: HostedClose): Effect.Effect<string | null, ThreadBorderFailed>;
     holds(threadId: string, questionId: string): Effect.Effect<boolean, ThreadBorderFailed>;
     answer(
       threadId: string,
@@ -329,6 +341,7 @@ export const threadHostingLayer = Layer.effect(
         step: 0,
         active: null,
         history,
+        closed: null,
       };
     });
 
@@ -353,6 +366,36 @@ export const threadHostingLayer = Layer.effect(
       const messages = guides.map((guide) => agentRuntimeGuidanceMessage(guide.text, guide.state, guide.retell));
       return { events: [threadGuidanceEvent(entry)], messages, texts: messages.map(messageText), moved: false };
     };
+
+    const closing = Effect.fnUntraced(function* (hosted: Hosted, close: HostedClose): Effect.fn.Return<string | null, ThreadBorderFailed> {
+      if (hosted.halt.stopped) return null;
+      if (hosted.closed?.id === close.id) return hosted.closed.told;
+      const history = yield* historyOf(close.threadId);
+      const entries = yield* store.entriesOfRun(close.threadId, hosted.runId);
+      const directives = yield* hosted.handle.door
+        .evaluate({
+          hook: 'beforeClose',
+          modelMessages: vendorVisible(history),
+          steps: [closingStep(entries, close.text)],
+          catalog: hosted.handle.catalog(),
+          invocationKey: `close:${hosted.step}`,
+          ordinal: hosted.step + 1,
+        })
+        .pipe(Effect.mapError(broke));
+      const told = guidance(
+        hosted,
+        pendingRuntimeGuides('beforeClose', directives).map((guide) => ({ ...guide, state: { ...guide.state, closing: true } })),
+      );
+      if (told.events.length > 0) {
+        const written = yield* committed(close.threadId, hosted.runId, {}, told.events, `guidance:close:${hosted.step}`, true);
+        if (!written) return null;
+        hosted.history = [...history, ...told.messages];
+        hosted.step += 1;
+      }
+      const answer = told.texts.length === 0 ? null : told.texts.join('\n\n');
+      hosted.closed = { id: close.id, told: answer };
+      return answer;
+    });
 
     const stepped = Effect.fnUntraced(function* (hosted: Hosted, history: readonly Message[]): Effect.fn.Return<Step, ThreadBorderFailed> {
       if (hosted.open.size === 0) yield* hosted.handle.place(hosted.step).pipe(Effect.mapError(broke));
@@ -738,6 +781,13 @@ export const threadHostingLayer = Layer.effect(
           return yield* Cause.hasInterruptsOnly(exit.cause) ? Effect.fail(broke(new Error(ENDED))) : Effect.failCause(exit.cause);
         yield* hosted.words.refresh();
         return { ...exit.value, words: hosted.words.handed() };
+      }),
+      close: Effect.fnUntraced(function* (close) {
+        const run = yield* owned(close.threadId);
+        if (run === null || run.kind !== 'turn') return null;
+        const hosted = yield* hosting(close.threadId, close.agentId);
+        if (hosted === null || hosted.runId !== run.id) return null;
+        return yield* locked(close.threadId, closing(hosted, close));
       }),
       holds: (threadId, questionId) => questions.holds(threadId, questionId),
       answer: (threadId, questionId, answers) =>

@@ -15,6 +15,7 @@ const unattended: HostedDoor = {
   history: () => Effect.succeed([]),
   turn: () => Effect.succeed({ context: null, prompt: null, web: 'vendor' }),
   call: () => Effect.never,
+  close: () => Effect.succeed(null),
 };
 
 export const fixtureRunner = Effect.fnUntraced(function* ({ report, server }: Input) {

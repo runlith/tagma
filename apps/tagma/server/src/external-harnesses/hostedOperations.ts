@@ -126,4 +126,18 @@ export const hostedCall = pair(
   }),
 );
 
-export const HOSTED_PAIRS = [hostedPrompt, hostedTools, hostedHistoryRead, hostedTurn, hostedCall] as const;
+export const hostedClose = pair(
+  HOSTED_OPERATIONS.close_hosted_turn,
+  body(HOSTED_OPERATIONS.close_hosted_turn, {
+    execute: Effect.fnUntraced(function* (input, _prepared, caller) {
+      const threadId = yield* provenThread(caller);
+      const agentId = yield* declaredRefusals(HOSTED_OPERATIONS.close_hosted_turn)(hostOf(threadId));
+      const guide = yield* declaredRefusals(HOSTED_OPERATIONS.close_hosted_turn)(
+        (yield* ThreadHarness).runs.hosting().close({ threadId, agentId, id: input.id, text: input.text }),
+      );
+      return { status: 'closed' as const, guide };
+    }),
+  }),
+);
+
+export const HOSTED_PAIRS = [hostedPrompt, hostedTools, hostedHistoryRead, hostedTurn, hostedCall, hostedClose] as const;

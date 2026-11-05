@@ -23,6 +23,8 @@ export const HostedCalledSchema = Schema.Struct({
   words: Schema.Array(Schema.String),
 });
 
+export const HostedClosedSchema = Schema.Struct({ guide: Schema.NullOr(Schema.String) });
+
 export type HostedAgent = typeof HostedAgentSchema.Type;
 export type HostedListed = typeof HostedListedSchema.Type;
 export type HostedOpened = typeof HostedOpenedSchema.Type;
@@ -34,4 +36,5 @@ export interface HostedDoor {
   history(): Effect.Effect<readonly HostedMessage[], AgentFault>;
   turn(): Effect.Effect<HostedOpened, AgentFault>;
   call(toolCallId: string, name: string, input: unknown): Effect.Effect<HostedCalled, AgentFault>;
+  close(id: string, text: string | null): Effect.Effect<string | null, AgentFault>;
 }

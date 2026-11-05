@@ -44,6 +44,7 @@ layer(MemoryFileSystem.layer)('Cursor hosted session', (it) => {
             offered: false,
             words: [],
           }),
+        close: () => Effect.die('Cursor ends its turns unasked'),
       };
       const boundary = CursorSdk.of({
         fork: () => Effect.die('unexpected fork'),
@@ -127,6 +128,7 @@ layer(MemoryFileSystem.layer)('Cursor hosted session', (it) => {
           }),
         history: () => Effect.succeed([]),
         call: () => Effect.die('no calls'),
+        close: () => Effect.die('Cursor ends its turns unasked'),
       };
       const boundary = CursorSdk.of({
         fork: () => Effect.void,

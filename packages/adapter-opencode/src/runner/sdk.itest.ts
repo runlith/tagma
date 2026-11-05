@@ -191,6 +191,7 @@ it.live(
             words: [],
           };
         }),
+        close: () => Effect.die('OpenCode ends its turns unasked'),
       };
       const outlet: Outlet = {
         update: (event) =>

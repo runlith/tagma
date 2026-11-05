@@ -14,6 +14,9 @@ import { ToolFailed } from '../../agent/tool';
 import { settledToolEntry, toolExecutionOf } from './ThreadToolRecords';
 import { toolExecutionFailure } from './ToolQuestion';
 import { READ_UNANSWERED, startedReading } from './ThreadEffectSettlement';
+import type { AgentStep } from '../../agent/AgentStep';
+import { coreEntry } from '../../transcript/kinds';
+import type { ThreadTranscript } from '../../transcript/rows';
 
 export const ENDED = 'The run ended before this call answered.';
 
@@ -114,3 +117,16 @@ export const hostedExecutionOf = (admission: CallAdmission): ThreadToolExecution
   const execution = toolExecutionOf(admission);
   return execution.state === 'queued' ? { ...execution, gated: true } : execution;
 };
+
+export const closingStep = (entries: ThreadTranscript, text: string | null): AgentStep => ({
+  content: [],
+  text: text ?? '',
+  reasoningText: undefined,
+  toolCalls: [],
+  toolResults: entries.flatMap((entry) =>
+    coreEntry(entry) && entry.type === 'tool' && entry.toolState === 'output-available'
+      ? [{ toolCallId: entry.toolCallId, toolName: entry.toolName, output: entry.toolOutput }]
+      : [],
+  ),
+  usage: undefined,
+});

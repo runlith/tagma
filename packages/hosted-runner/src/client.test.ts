@@ -16,6 +16,7 @@ const open = Effect.fnUntraced(function* (send: ClientDriver['send']) {
     tools: () => Effect.succeed({ names: [], tools: [], dispatch: false }),
     history: () => Effect.succeed([]),
     call: () => Effect.die('no calls'),
+    close: () => Effect.die('no close'),
   };
   const process = { stderr: () => {}, died: (reason: string) => Effect.die(reason) };
   const cycle: Cycle = {

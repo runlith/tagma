@@ -27,6 +27,7 @@ const openingDoor: HostedDoor = {
   history: () => Effect.die('the session has no history to seed'),
   tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
   call: () => Effect.die('this prompt calls no tool'),
+  close: () => Effect.die('this prompt never closes'),
   turn: () => Effect.succeed({ context: 'the workspace moved', prompt: null, web: 'none' }),
 };
 
@@ -81,6 +82,7 @@ it.effect('closing a session settles a prompt still waiting for the hosted turn 
       history: () => Effect.die('the session has no history to seed'),
       tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
       call: () => Effect.die('this prompt calls no tool'),
+      close: () => Effect.die('this prompt never closes'),
       turn: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
     };
     const turn = new Turn(door, session);

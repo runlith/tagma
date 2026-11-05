@@ -113,6 +113,21 @@ export const HOSTED_OPERATIONS = {
     confirmation: (input) => ({ summary: `Perform ${input.name}?` }),
     presentation: { running: 'Performing a hosted call', done: 'Performed a hosted call' },
   }),
+
+  close_hosted_turn: operation('close_hosted_turn', {
+    approval: ASKS_NEVER,
+    ...hostedDoor,
+    meaning:
+      'Ask before a thread whose agent loop runs outside Tagma ends its turn cleanly whether the rules of its run let it end: record and answer the guidance they give it instead.',
+    grammar: `${PROVEN}\nCall it when the agent is about to end its turn on a reply, not when the turn was cancelled or failed; \`text\` is the reply it ended with. \`guide\` is null when the turn may end; otherwise the agent continues the same turn with it as its next input, and asks again when it is about to end once more. Each rule guides once per run. Calling again with the same \`id\` answers the guidance that call recorded; a run that is stopped, or a turn that runs no run, answers null.`,
+    input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)), text: Schema.NullOr(Schema.String) }),
+    answer: arms({ closed: { guide: Schema.NullOr(Schema.String) } }),
+    refusals: HOSTED_REFUSALS,
+    effect: 'write',
+    identity: { key: 'request' },
+    confirmation: () => ({ summary: 'Close the hosted turn?' }),
+    presentation: { running: 'Closing the hosted turn', done: 'Closed the hosted turn' },
+  }),
 } as const;
 
 export type HostedOperationId = keyof typeof HOSTED_OPERATIONS;

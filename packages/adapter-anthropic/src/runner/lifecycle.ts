@@ -4,6 +4,7 @@ import type { AgentFault } from '@runlith/acp/agent';
 import { Bridge, TAGMA_SERVER, servedPrompt } from '@runlith/hosted-runner/bridge';
 import { claudeConfig, claudeVendor } from './bridge.js';
 import { failed, said } from './calls.js';
+import { closingHook } from './closing.js';
 import type { Channel, ClaudeSdk, Said } from './channel.js';
 import type { HostedAgent, HostedDoor, HostedListed, HostedOpened } from '@runlith/hosted-runner/door';
 import type { Fetching } from './fetching.js';
@@ -265,6 +266,7 @@ export class Lifecycle {
           },
         ],
         PostCompact: [{ hooks: [() => Effect.runPromise(Effect.as(this.listener.compacted(), {}))] }],
+        Stop: [closingHook(this.door, this.runner.stderr)],
       },
       permissionMode: MODE,
       allowDangerouslySkipPermissions: true,

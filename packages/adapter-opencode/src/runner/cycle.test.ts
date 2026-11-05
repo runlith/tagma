@@ -43,6 +43,7 @@ it.effect('restored history survives a cancelled submission and leaves only afte
       tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
       history: () => Effect.succeed([{ role: 'user', content: [{ type: 'text', text: 'RESTORED_JOURNAL' }] }]),
       call: () => Effect.die('no calls'),
+      close: () => Effect.die('OpenCode ends its turns unasked'),
     };
     const cycle = yield* makeOpenCodeCycle(
       door,

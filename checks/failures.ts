@@ -2353,4 +2353,11 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     site: 'd91d2455',
     why: 'Unsubscribe освобождает покинутого reader; локальная очередь закрывается отдельно, а уже закрытая сессия ничего не отправляет. Остальные сбои отправки логируются, не меняют прочитанные данные и не подтверждают остановку execution.',
   },
+  {
+    path: 'packages/adapter-anthropic/src/runner/closing.ts',
+    symbol: 'asked',
+    form: 'catch',
+    site: 'bdab7e8e',
+    why: 'A Stop hook that cannot learn the closing rules lets Claude Code end its turn as it would without them, the fault written to stderr: the door already rode out silence and run-not-held, so what reaches here is a refusal or an unreadable answer, and holding the turn open would leave the run no end.',
+  },
 ];

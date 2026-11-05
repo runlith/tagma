@@ -52,6 +52,7 @@ export const unhosted: RunHosting = {
   tools: unused,
   display: () => undefined,
   call: unused,
+  close: unused,
   holds: unused,
   answer: unused,
 };

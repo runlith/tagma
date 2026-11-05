@@ -85,6 +85,16 @@ export type Hosted = {
   step: number;
   active: ReadonlySet<string> | null;
   history: readonly Message[];
+  closed: HostedClosed | null;
+};
+
+type HostedClosed = { readonly id: string; readonly told: string | null };
+
+export type HostedClose = {
+  readonly threadId: string;
+  readonly agentId: string;
+  readonly id: string;
+  readonly text: string | null;
 };
 
 export type Settled = {

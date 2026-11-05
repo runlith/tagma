@@ -90,6 +90,7 @@ const world = Effect.fnUntraced(function* (
         return { names: catalog.names, tools: catalog.reversed ? tools.toReversed() : tools, dispatch: catalog.dispatch };
       }),
     history: () => Effect.succeed([]),
+    close: () => Effect.die('Muse ends its turns unasked'),
     call: (toolCallId, name, input) =>
       Effect.sync(() => {
         called.push(`${toolCallId}:${name}:${JSON.stringify(input)}`);
