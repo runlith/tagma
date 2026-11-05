@@ -1,6 +1,6 @@
 import type { Page } from 'playwright-core';
 import type { StandGlobal } from './port';
-import type { Frame, Recording, Scrollbar, Sentinel, ThumbControl, ThumbReference, ThumbSample } from './recording';
+import type { Frame, Recording, RowSignature, Scrollbar, Sentinel, ThumbControl, ThumbReference, ThumbSample } from './recording';
 
 const CONTROL_STEPS = 64;
 const TRIAL_PORTIONS = 64;
@@ -34,6 +34,8 @@ export class CalibrationFailure extends Error {
     this.name = 'CalibrationFailure';
   }
 }
+
+const rendered = (signature: RowSignature) => ({ ...signature, images: signature.images.map((image) => image.source) });
 
 function reject(control: ThumbControl, reason: string): never {
   throw new CalibrationFailure(reason, control);
@@ -91,7 +93,7 @@ function scaleOf(control: ThumbControl): number {
         before !== undefined &&
         (before.rect.width !== row.rect.width ||
           before.rect.height !== row.rect.height ||
-          JSON.stringify(before.signature) !== JSON.stringify(row.signature))
+          JSON.stringify(rendered(before.signature)) !== JSON.stringify(rendered(row.signature)))
       )
         reject(control, 'a rendered row changed');
     }
