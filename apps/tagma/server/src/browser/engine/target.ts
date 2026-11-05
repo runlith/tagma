@@ -174,10 +174,10 @@ export const boxOf = Effect.fn('browser.box')(function* (
 export const pointOf = (attached: Attached, located: Located): Effect.Effect<Point, CommandFailure | GateRefusal<'action-failed'>> =>
   Effect.map(boxOf(attached, located), (box) => box.localCenter);
 
-const COVERS = `function (hit) { let at = hit; while (at) { if (at === this) return true; at = at.parentNode || at.host || null; } return false; }`;
+const COVERS = `function (hit) { let at = hit; while (at) { if (at === this) return true; at = at.parentNode || at.host || at.parent || null; } return false; }`;
 
 const NAMED = `function () {
-  const element = this.nodeType === 1 ? this : this.parentElement;
+  const element = this.nodeType === 1 ? this : this.parentElement || this.element;
   if (!element) return '#text';
   const id = element.id ? '#' + element.id : '';
   const kind = typeof element.className === 'string' && element.className.trim() ? '.' + element.className.trim().split(/\\s+/).slice(0, 3).join('.') : '';
