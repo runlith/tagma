@@ -171,10 +171,11 @@ const snap = (value: number, dpr: number): number => Math.round(value * dpr) / d
 const pixelRatio = (page: Page): Promise<number> =>
   page.evaluate(() => (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio);
 
-async function sample(page: Page, y: number): Promise<ThumbSample> {
+async function sample(page: Page, y: number, from: number | null = null): Promise<ThumbSample> {
   return page.evaluate(
-    async ({ y, settled }) => {
+    async ({ y, settled, from }) => {
       const port = (globalThis as StandGlobal).feedStand!;
+      while (from !== null && port.scrollbar().top === from) await port.frames();
       let top = port.scrollbar().top;
       for (let still = 0; still < settled;) {
         await port.frames();
@@ -184,7 +185,7 @@ async function sample(page: Page, y: number): Promise<ThumbSample> {
       }
       return { y, time: port.frameTime(), top };
     },
-    { y, settled: SETTLED_FRAMES },
+    { y, settled: SETTLED_FRAMES, from },
   );
 }
 
@@ -254,10 +255,11 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
       port.start('thumb-control');
       await port.frames(3);
     });
+    let top = (await sample(page, y)).top;
     for (let index = 0; index < ESTABLISH_STEPS; index += 1) {
       y -= step;
       await page.mouse.move(scrollbar.x, y);
-      await sample(page, y);
+      top = (await sample(page, y, top)).top;
     }
     samples.push(await sample(page, y));
     samples.push(await sample(page, y));
@@ -265,7 +267,7 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
       for (let index = 0; index < CONTROL_STEPS; index += 1) {
         y += direction * step;
         await page.mouse.move(scrollbar.x, y);
-        samples.push(await sample(page, y));
+        samples.push(await sample(page, y, samples.at(-1)!.top));
       }
       samples.push(await sample(page, y));
     }
@@ -336,6 +338,7 @@ export async function dragThumb(page: Page, reference: ThumbReference): Promise<
       port.beginDrag(0, 0, true);
     });
     await frames(page, 3);
+    let top = (await sample(page, y)).top;
     for (let index = 0; index < TRIAL_PORTIONS; index += 1) {
       await travel(page, pointerStep * MOVE_STEPS, speed, trial.range / scale);
       for (let step = 0; step < MOVE_STEPS; step += 1) {
@@ -343,7 +346,7 @@ export async function dragThumb(page: Page, reference: ThumbReference): Promise<
         await page.mouse.move(trial.x, y);
         await frames(page);
       }
-      await sample(page, y);
+      top = (await sample(page, y, top)).top;
       if ((index + 1) % 8 === 0) {
         await portion(page, 0, 0);
         await frames(page, 3);
