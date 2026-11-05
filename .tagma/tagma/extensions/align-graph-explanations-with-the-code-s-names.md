@@ -5,7 +5,7 @@ ord: 21
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 Align graph explanations with the code's names.

@@ -26,7 +26,7 @@ sources:
 
 **Behaviour.**
 - Right after installation, Agents, Checkout and Knowledge are pinned.
-- "…" enumerates all rail places in a stable order: Rules, Journal, Calls, Agent library, app sections and windows. Pinned ones are there too, their pin always visible.
+- "…" enumerates all rail places in a stable order: Rules, Journal, Calls, Agent library, plugin sections and windows. Pinned ones are there too, their pin always visible.
 - A newly pinned place stands at the rail's end. A place dropped on the rail stands where it was released.
 - When an open place is not on the rail, "…" is highlighted.
 - Hover, pin and drag in "…" do not steal focus. If the operator was typing in an input, they keep typing there.
