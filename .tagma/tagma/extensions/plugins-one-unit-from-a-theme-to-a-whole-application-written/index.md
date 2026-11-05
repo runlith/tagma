@@ -25,204 +25,315 @@ edges:
   - kind: supersedes
     to: 01a1ad0c-9c6d-75f8-b5b7-b2a7c1891844
 ---
-Read from the code at `11f23bfc7` on 2026-11-05; nothing was run. Two child specs carry the detail. The SDK, everything a plugin author writes and the only way a plugin reaches Tagma, is [[5067fa15]]. The agent layer is [[c4451a7e]].
+Read from the code at `11f23bfc7` on 2026-11-05, and revised after a product review and an architecture review the same day. Nothing was run.
+
+Two child specs carry the detail:
+- [[5067fa15]], the SDK: everything a plugin author writes, and a plugin's only way to Tagma.
+- [[c4451a7e]], the agent layer.
 
 ## Outcome
 
-A person, or an agent working for them, extends Tagma through one thing: the plugin. A plugin may be a theme, a sidebar button, a section for a service, a separate tool such as a language trainer, a launcher-style window over Tagma's agents, or a model, harness or speech provider. Size changes what it declares, never what it is.
+A person, or an agent working for them, extends Tagma through one thing: the plugin. A plugin may be any of these:
+- a theme;
+- a sidebar button;
+- a section for a service;
+- a separate tool, such as a language trainer;
+- a launcher-style window over Tagma's agents;
+- a model, harness or speech provider.
 
-- It is written in TypeScript against the published `@runlith/tagma-sdk`, and `npm create tagma` starts one.
-- It is installed by one act from a folder, git, npm or a marketplace entry, and listed on the one Plugins screen.
-- Plugins in the Claude Code and Codex formats install through the same act and the same list, with their source marked.
-- An MCP server stays a connection with its own list.
+Size changes what a plugin declares, never what it is.
+
+- A plugin in Tagma's format is written in TypeScript against `@runlith/tagma` and its `/plugin` door, and `npm create tagma` starts one.
+- Every plugin installs by one act from a folder, git, npm or a marketplace entry, and stands on the one Plugins screen.
+- Claude Code and Codex plugins install through the same act and stand in the same list.
+- An MCP server stays a connection, with its own list.
 
 ## Decided with the operator on 2026-11-05
 
-- **One term.** The product says plugin. "App" leaves the product vocabulary, and promotion may still use the word. "Tagma app" is never used, because it names the client itself.
-- **Our format is the full one.** Foreign formats are translated into it by readers the person never sees.
-- **A bare MCP server is not a plugin.** It is a connection, a command or URL with its secrets and sign-in, and carries no author, version or files. It keeps its own list. A plugin may bring servers into that list, marked with the plugin and switched with it.
-- **Everything at the side is a plugin:** model and harness providers and speech providers too. A built-in one ships with Tagma as a plugin.
-- **Every plugin goes through the SDK.** The SDK is typed and public, and it is a plugin's only way to Tagma. Code in another language lives behind the plugin, in an MCP server it brings or a program its handlers run.
-- **MCP is the wire** between Tagma and a plugin's process, hidden by the SDK.
-- **Code, then manifest.** The author writes code. The SDK's build emits the manifest Tagma reads without running the plugin, and nobody writes it by hand.
-- **All three depths on the agent layer are needed.** A plugin can run its own chat over our agents, show our thread, and add to our chat. They are built in that order.
+- **One term.** The product says plugin. "App" leaves the product vocabulary; promotion may still use the word. "Tagma app" is never used: it names the client itself.
+- **Tagma's format is the full one.** It carries everything the other formats carry and more, and readers translate the other formats into it without the person seeing them.
+- **A bare MCP server is not a plugin.** It is a connection: a command or a URL with its secrets and sign-in, with no author, version or files. It keeps its own list. A plugin may bring servers into that list; they are marked with the plugin and switched with it.
+- **Everything at the side is a plugin.** That includes model, harness and speech providers. A built-in one ships with Tagma as a plugin.
+- **Every plugin in Tagma's format goes through the SDK.** The SDK is typed and public, and it is the plugin's only way to Tagma. Code in another language lives behind the plugin: in an MCP server it brings, or in a program its handlers run.
+- **MCP is the wire** between Tagma and a plugin's process, and the SDK hides it.
+- **Code first, then the manifest.** The author writes code. The SDK's build emits the manifest, which Tagma reads without running the plugin; nobody writes a manifest by hand.
+- **All three depths on the agent layer are needed**, built in this order: a plugin's own chat over our agents, our thread inside a plugin, additions to our chat.
 - **The Plugins screen stays the one home.** Apps get no screen of their own.
+- **Built-in providers** stand on the Plugins screen in one group, "Built into Tagma". They cannot be removed, and they are switched off only for the whole machine.
+- **A project declares the plugins it uses.** Beside its own `.tagma-plugins/<id>/`, a project lists plugins it uses from a marketplace, npm or git, with their version ranges, in the committed `.tagma-plugins/plugins.json`. A collaborator opening the project is offered each one it does not have.
+- **A plugin's threads stand under the plugin.** The plugin decides whether they also stand in the general thread list.
+- **A plugin may ask a model once, with no thread.**
+- **The `TagmaApp` naming exception goes with `TagmaApp`.** The change that renames the code removes it from rules eeaf88ec and 931cfbf1.
+- **The package keeps its name.** It stays `@runlith/tagma`, the package every project's `tagma.config.ts` already imports (`@runlith/tagma/rules`), with doors added; `create-tagma` stands beside it.
 
 Trust and consent at install are not part of this spec.
 
+## Terms
+
+- **Format** names what a plugin is written in: Tagma's format, Claude Code's or Codex's. Each is called by its name, never "native" or "foreign".
+- **Source** names where a plugin came from: a marketplace, npm, git, a folder, or the project itself.
+- **Connection** is an MCP server.
+- **View kinds**, by how the window draws them:
+  - a *Svelte view*, compiled by Tagma;
+  - a *bundled view*, which the SDK builds with its own framework inside;
+  - a *page view*, an HTML page the plugin brings, drawn in an iframe.
+- **Tagma's own loop** is the agent loop Tagma runs: Tagma's own threads, and Tagma's agent hosted by an outside runner.
+
 ## What stands
 
-| Installs | Owner | What it takes | How it runs |
+| Act | Owner | What it takes | How it runs |
 |---|---|---|---|
-| `install_app`, `enable_app`, `uninstall_app` | `tagma-apps`, `views`, client `app-tagma-apps`, `app-views` | A directory holding a hand-written `tagma-app.json` | One MCP stdio process per machine, contributions by owner-declared points, views in iframes on the app's own origin |
-| `install_plugin`, `enable_plugin`, `update_plugin` | `plugins`, `plugin-formats/*`, `marketplaces`, client `app-plugins` | Claude Code, Codex and Agent Plugins packages | Skills, commands, agents, MCP servers and command hooks through the `plugin-hooks` rule |
-| `install_adapter` and its family | `providers/adapters` | Model and harness adapters from npm, GitHub or a folder | Inside the server process: `importAdapter`, host modules, one directory per version |
+| `install_app`, `enable_app`, `uninstall_app` | `tagma-apps`, `views`, client `app-tagma-apps`, `app-views` | A directory holding a hand-written `tagma-app.json` | One MCP stdio process per machine. It is enabled per project, and a machine flag stops it everywhere (explanation 464327ae). Its contributions register from the live process's `tools/list` (explanation 38074044). Views are page views on the app's own origin (explanation a9714f0d). |
+| `install_plugin`, `enable_plugin`; `update_plugin` belongs to `marketplaces` | `plugins`, `plugin-formats/*`, `marketplaces`, client `app-plugins` | Claude Code, Codex and Agent Plugins packages | Skills, commands, agents, MCP servers and command hooks, the hooks through the `plugin-hooks` rule. A person's layer ("all my projects") applies per project, and each project can switch a plugin off. |
+| `install_adapter` and its family | `providers/adapters` | Model and harness adapters from npm, GitHub or a folder | Inside the server process: `importAdapter`, host modules, one directory per version with run leases (explanation 6cdd67c3) |
 | `add_mcp_server` | `mcp` | Connections | The project's MCP pool |
-| none | `composition/speech.ts` | Speech providers | Compiled in |
+| none | `composition/speech.ts` | Speech providers | A fixed list, compiled in |
 
-Under all of it the core is sound. Contribution points are declared by their owners (`ContributionPoint`, explanation 7d2dc40e), and every operation carries a schema. What is missing:
+The core under this is sound. Contribution points are declared by their owners (`ContributionPoint`, explanation 7d2dc40e), and every operation carries its schemas. What is missing:
 - an SDK, a generator and a typed client;
-- any proof of who a plugin is: `x-tagma-caller` proves nothing, and a local call without it is the operator;
+- contributions that stand without a live process;
 - loading window code from outside the build;
-- a theme point, keyboard shortcuts and window kinds for plugins;
-- a second installer path for speech.
+- a theme point, shortcuts and window kinds for plugins;
+- one loader for in-server provider code;
+- a plugin's way to call the servers it brought.
 
 ## The plugin
 
-**Package.** A plugin is a directory holding:
-- `tagma-plugin.json`, emitted by the SDK build from `definePlugin(...)`;
-- the `.svelte` sources of its native views, or the built bundle of foreign ones;
-- its process entry, if it has one;
-- the files its contributions name.
+**Package.** A plugin in Tagma's format is a directory holding the SDK's build output:
+- `tagma-plugin.json`;
+- `dist/process.js`, when the plugin has a process;
+- `dist/provider.js`, when it has a provider part;
+- `dist/ui/`, which holds Svelte sources, the plain chunks they import, bundled views and page views.
 
-The manifest is today's envelope (`TagmaAppEnvelope`: `id`, `title`, `process`, `contributes`) plus `version`, `engines.tagma` (a semver range of Tagma versions) and `providers`. The JSON Schema of the manifest stays generated from the declared points, as `read_app_schema` does now. A point stays its owner's to declare and to judge.
+The output is committed with the plugin's sources. A collaborator, or an install from git, therefore runs nothing before Tagma reads it.
 
-**Where each part lives.**
+**Manifest.**
+- **Envelope.** `id`, `title`, `version` and `engines.tagma`. `engines.tagma` names the SDK surface version the plugin was built against: [[5067fa15]], Versions.
+- **Process.** `process` holds `{entry, resident?}`.
+- **Contributions by point.** `contributes` holds each point's entries, and each tool carries its description, input JSON Schema and annotations.
 
-| Part | Lives | Reason |
+Tagma's format is the superset that the translation into it needs. Each part is a point of its owner:
+- `skills` and `commands`;
+- `mcpServers`, through `mcp`'s port for contributors;
+- `options` and `secrets`;
+- `agents` and `tools`;
+- `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins` and `shortcuts`;
+- `themes`;
+- `schedules`, `notifications`, `onThreadEnded`, `beforeBuild` and `hooks`;
+- `resources`;
+- `providers`.
+
+The manifest's JSON Schema stays generated from the declared points. Every point's schema sits in its owner's `contract/wire`, including the points the window owns, and is listed in its owner's manifest.
+
+**Where each part runs.**
+
+| Part | Runs | Reason |
 |---|---|---|
-| Theme, button, command, shortcut | Data in the manifest | No code and no process |
+| Theme, shortcut, window entry, skill, command, option | Data in the manifest | No code needs to run |
 | Sections, panes, windows, slots in the chat, composer and sidebar | A module mounted in the window | Keys, menus, drag and Tagma's components work only in the window's document |
-| Tools, agents, schedules, notifications, thread endings, build steps, hooks on tool calls | The plugin's own process | Any language, and a crash leaves the server standing |
-| Model, harness and speech providers | Inside the server | The provider contracts share `effect`, `Held` and schema objects with the server (explanation 6cdd67c3), so they cannot cross a process boundary |
+| Tools, agents' tools, schedules, notifications, thread endings, build steps, hooks, resources | The plugin's process | Any language behind it, and a crash leaves the server standing |
+| Model, harness and speech providers | Inside the server | Provider contracts share `effect`, `Held` and schema objects with the server (explanation 6cdd67c3) |
 
 The graph, threads, law and gates are never plugins: the product's guarantees stand on them.
 
-**Install and scope.** Install is a machine record and enabling is per project, which is the model both apps and agent plugins use today. Plugins a project builds for itself live in `.tagma-plugins/<id>/`, the successor of `.tagma-apps/<id>/`. The project offers them as installable from the project. Install accepts a folder, git, npm (versions resolved by semver, as adapters are now), or a marketplace entry.
+**Scope.** Enabling works as it does for agent plugins today: one project, or all of the person's projects with per-project switch-offs. "Off everywhere" disables the plugin for the whole machine.
 
-**Process life.** A process starts on first demand: a tool call, a tick, a view's resource subscription, a thread ending owed to it. It stops after an idle period with no open subscription, unless the manifest marks it `resident` because it holds a live connection to a service. Today a process starts at install and runs until uninstall, which a machine with many plugins pays for in memory. Everything else stays as the supervisor holds it now (explanation 38074044):
-- one process per machine;
-- generations under the plugin's lock;
-- restart on edit;
-- backoff after a crash;
-- calls during a restart waiting for the new process;
-- the data directory outliving uninstall.
+| Contributions | Scope | Off here | Off everywhere | Remove |
+|---|---|---|---|---|
+| Tools, agents, skills, commands, MCP servers, sections, panes, results, pins, chat slots, hooks, `beforeBuild` | The project | Withdrawn from this project | Withdrawn everywhere | Withdrawn |
+| Themes, shortcuts, windows | The person, in every window | No change | Withdrawn | Withdrawn |
+| Process, schedules, endings, notifications | The machine | No change, since other projects still use them | The process stops and ticks stop | The process stops, the data stays |
+| Providers | The machine | — | Withdrawn from the catalogs | Withdrawn; a built-in provider cannot be removed |
 
-**Formats.** `plugin-formats/<format>` each read a directory into the one plugin description the `plugins` module installs. A new reader, `plugin-formats/tagma`, reads `tagma-plugin.json` and, during migration, `tagma-app.json`. A directory may carry manifests for several clients, as the plugins of Tagma's marketplace already do, and Tagma reads its own when present. Foreign formats keep:
+- **Handlers outside a project.** A tick and a global window have no project of their own. A handler there gets the projects where the plugin is enabled, and acts in one by naming it.
+- **Global shortcuts.** A window opened by a global shortcut stands in the project of the last focused Tagma window.
+- **Removing.** Removing a plugin keeps its data, and its card says so; a separate act deletes the data. Its pins stay, drawn as a gone view. Threads bound to it, and threads typed as one of its agents, stay as ordinary threads.
+
+**Process life.** Contributions are published from the manifest when the plugin is enabled, with or without a running process; a process generation only executes them. The supervisor gains an `idle` state:
+- A call, a tick, an ending owed, a view's subscription or a matching hook opens a generation under the plugin's lock.
+- Idle stop, after a quiet period with no open subscription, runs the same six-step transition as a restart (explanation 38074044).
+- A plugin marked `resident` stays up, because it holds a live connection to a service.
+- A process whose `tools/list` differs from the manifest is refused, with the difference named.
+- Plugins still on a hand-written `tagma-app.json` keep eager start until they move.
+
+**Revision.** For a plugin built by the SDK, the process revision is the hash of the manifest and `process.entry`. Views are keyed apart from it, so a source edit followed by a rebuild restarts the process once and recompiles only what changed.
+
+**Installed files.** Every plugin revision is installed into its own directory. A sweep honours the leases of every holder: process generations, provider runs and compiled views. The order of an install is:
+
+fetch → read → check against the points → compile views → settle the directory → write the record.
+
+At start the record and the directories are reconciled. A plugin installed from a folder runs its process and views in place, and its provider part is copied per revision, because ESM never unloads. The start step in `tagma-apps/steps/data.ts`, which moves `<data>/plugins/` and `plugin-data/` into `apps/`, retires in the same change.
+
+**Formats.** Each `plugin-formats/<format>` reads a directory into one plugin description. `plugin-formats/tagma` reads `tagma-plugin.json`, and during the migration `tagma-app.json`. A directory that carries manifests for several clients, as the plugins of Tagma's marketplace already do, is read in Tagma's format when that manifest is present. Since Tagma's format is the superset, nothing is lost by reading it. Other formats keep:
 - their `<plugin>-<name>` component names and collision rules;
-- the list of what Tagma skips and why;
+- the list of what Tagma skips;
 - their command hooks.
 
-**MCP servers.** Declarations, the pool, sign-in and secrets stay with `mcp`. A plugin's servers reach the pool through the port `mcp` already opens to contributors. The screen lists servers apart from plugins, each server marked with the plugin that brought it. A server's MCP App window keeps its two-layer iframe proxy (explanation 960e5e20). The view that shows it becomes a module the MCP client owns, so the window's module host knows one kind of view.
+**MCP servers.** Declarations, the pool, sign-in and secrets stay with `mcp`. A plugin's servers reach the pool through `mcp`'s port for contributors. The plugin's process and its views call the tools of the servers it brought through the host, under that server's sign-in (`ctx.servers`). A service section therefore needs no second credential. A server's MCP App window keeps its two-layer iframe proxy (explanation 960e5e20), drawn by a module the MCP client owns.
 
 ## Interface
 
-**Native views: Svelte, later Vigla.** The plugin ships `.svelte` source, and Tagma compiles it on its own. This happens at install and again after every Tagma update, in a worker (rule 7a910861), with the compiler and Tailwind the window was built with and the theme of `app.css`. Shipped compiled, a view would fail in two ways:
-- It breaks on the next Svelte update, because a compiled component imports `svelte/internal/client`, the private API of one version (5.57.0 today).
-- Its Tailwind classes would not exist, because Tailwind emits only classes found in the `@source` paths of `app.css`.
+**Svelte views.**
+- **Build.** The SDK build ships `.svelte` and `.svelte.ts` files as source. It bundles every other import of the views (the plugin's own TypeScript, npm packages) into plain ESM chunks that do not depend on Svelte's version, and rewrites the Svelte files' imports to point at those chunks.
+- **Compile.** Tagma compiles only the Svelte files, with its own `compile` and `compileModule` and Bun's transpiler for TypeScript. It does this in a worker (rule 7a910861), at install and whenever the compiler's identity changes. The compile cache is keyed on that identity. Tagma promises Svelte's version 5 source language, never its internals.
+- **Failure.** A view the compiler rejects refuses that view only, with the compiler's message; the plugin's tools and schedules stay.
+- **Serving.** The output is served under `/api/plugins/<id>/`, behind admission on the remote door (explanation 8c5b6812).
 
-What Tagma promises about Svelte is its version 5 source language, never its internals. A source the current compiler rejects leaves the plugin `refused` with the compiler's message. The output is served under `/api/plugins/<id>/`, which is behind admission on the remote door (explanation 8c5b6812).
+**Host modules.** These modules are shared with the window, because they hold shared runtime state:
+- `svelte`, `svelte/internal/client`, `svelte/internal/disclose-version` and `svelte/internal/flags/*`;
+- `svelte/store`, `transition`, `motion`, `reactivity`, `events`, `attachments` and `animate`;
+- the window's implementation of `@runlith/tagma/ui`.
 
-**Host module table.** The window's build emits stable chunks for `svelte`, `svelte/internal/client` and `@runlith/tagma-sdk/ui`. The shell document names them in an import map, and a compiled plugin imports them as bare specifiers. The window's own code imports the same chunks, so one runtime and one component set serve both. The list is short and versioned, as `hostModules` is for adapters.
+The window's build emits each as a chunk with its named exports kept (`preserveSignature: 'strict'`), and the app imports those same chunks. Because Tagma compiles every plugin itself, it rewrites bare specifiers to the chunk URLs from the build manifest. No import map is needed, and the dev front's second origin is covered too. The published `@runlith/tagma/ui` is a type facade generated from the app's exports. A real implementation in a package would carry a second `@runlith/layer` and make a package depend on the app.
 
-**Foreign views: React or anything else.** The plugin ships a built bundle exporting `mount(element, tagma)`, which returns a disposer, and brings its own framework.
-- It takes Tagma's look from the token CSS variables.
-- It shows a thread through `tagma.thread(element, id)`, which the host draws.
-- It survives Tagma updates while the promised calls hold.
+**Tailwind.** Tailwind does not run per plugin. Tagma regenerates one utilities sheet against the window's theme, over the window build's own class candidates and those of every enabled plugin, and swaps the sheet when a plugin is installed or removed. Utilities therefore keep one order, and a plugin cannot override the window's own classes.
 
-**Placement.** Slots inside the chat, composer and feed take native views only, because a separate foreign root in each measured row of a feed is costly and fragile. Sections, panes and windows take either kind. `create-tagma` produces a native plugin, and agents write native by default.
+**Bundled views: React or anything else.** The SDK builds them into one ESM file with the framework inside. The file exports `mount(element, tagma)`, which returns a disposer. A bundled view:
+- takes the look from the token CSS variables;
+- reaches Tagma through `tagma`;
+- shows a thread through `tagma.mountThread(element, id)`;
+- survives Tagma updates while the surface version holds.
 
-**Where an iframe stays.** It is a component a module places inside itself, never a second kind of view in the host. It stays where the HTML is not ours:
+**Page views.** An HTML page a plugin brings is drawn by an iframe module the host supplies, on the plugin's own origin, as views are today (explanation a9714f0d). This is what keeps the views of existing apps working, and it serves any finished web application a plugin brings whole.
+
+**Placement.**
+- Slots inside the chat, composer and feed take Svelte views only.
+- A slot's owner shows a plugin's part only in threads of projects where the plugin is enabled.
+- A part's module is loaded when the plugin is enabled, because feed rows need their geometry synchronously (explanation 8b7128c3).
+- Every mount sits in its own `<svelte:boundary>`, so a throwing part breaks only itself.
+- Sections, panes and windows take any view kind.
+- `create-tagma` produces Svelte views, and agents write Svelte views by default.
+
+**Where an iframe stays.** It stays where the HTML is not ours:
 - an MCP App window;
 - someone else's site or widget;
-- a finished web application a plugin brings whole and serves from its process;
-- pages an agent writes, which stay on their own origin.
+- a page view;
+- the pages an agent writes, which keep their own origin.
 
-**Windows and shortcuts.** Any window Tagma opens loads Tagma's own client, so a plugin's window shows real threads as the main window does.
-- A plugin declares keyboard shortcuts that open its views, or run a command its process serves.
-- It declares windows: plain, without a frame, always on top.
-- It declares a global shortcut that works while Tagma is not focused.
+**Windows and shortcuts.** Any window Tagma opens loads Tagma's client, so a plugin's window shows real threads as the main window does.
+- **Window entries.** A plugin declares windows: plain, without a frame, or always on top. On the web, where there is no shell, they open as floating panels.
+- **Shortcut entries.** A plugin declares shortcuts that open a view or run a command its process serves, local or global.
+- **The shell grants them.** It already holds frameless, always-on-top windows and global shortcuts for its own dictation pill and quick hide (`apps/tagma/desktop/src/main.ts`, `projectWindows.ts`). It grants the declared entries, never Electron itself.
+- **Conflicts.** A shortcut is a proposal, and the keymap owner resolves it (`app/src/lib/features/executions/terminal/Keymap.ts`). Tagma's own keys win, a second claim on a chord is refused and named on the plugin's card, and the person rebinds a plugin's keys in the keymap settings.
 
-The shell already has all three for its own dictation pill and quick hide (`apps/tagma/desktop/src/main.ts`, `projectWindows.ts`). The shell opens them to plugins through declared entries, never by handing a plugin Electron itself. On the web, where no shell exists, such a window opens as a floating panel, as launcher views do now.
-
-**Themes.** A `themes` point takes token values for light and dark: surfaces, text, brand, syntax roles and the terminal palette. The window's `Theme` service applies the chosen theme, and the terminal theme catalog lists it beside its own. The state colours keep their meaning. A theme may retune their values, but never swap one state's colour for another's.
-
-**What is promised to a plugin** lives in the SDK as its public surface, and only that surface is versioned:
-- the host module table;
-- the slot faces of the child spec;
-- the `tagma.*` calls;
-- the shortcut and window entries;
-- the theme tokens;
-- the operations declared `external`.
+**Themes.**
+- **Contents.** A `themes` entry carries token values for light and dark: surfaces, text, brand, syntax roles and the terminal palette.
+- **The `Theme` service.** It holds a theme catalog: light, dark, and the themes of enabled plugins. It applies the chosen one. Today it only switches light and dark.
+- **The terminal.** Its catalog takes the theme's terminal palette as hex, as Tagma's own themes keep theirs (note 1ec33fbf).
+- **State colours** keep their meaning: a theme retunes their values, never swaps one for another.
 
 ## Modules after the change
 
-- **`plugins` (server)** owns the one install act for every format: prepare, install, update, enable per project, uninstall, the machine record and each plugin's data directory. `install_app`, `enable_app`, `uninstall_app` and `read_apps` fold into `install_plugin`, `enable_plugin`, `uninstall_plugin` and `read_plugins`. Adapter fetching and records fold in too; adapter loading stays with `providers`.
-- **`plugin-host` (server), today `tagma-apps`**, keeps the process supervisor, the contribution-point protocol and tool audiences. The name changes because "app" leaves the product. The caller becomes `plugin:<id>`, `bindings.app` becomes `bindings.plugin`, and plugin tools are named `plugin__<id>__<tool>`. Journal entries already written keep the names they carry.
-- **`providers` and `speech`** load the `providers` part of an installed plugin. `providers` keeps its loader. `speech` gains one on the same model — host modules, one directory per version, a run pinning the catalog it started with — so a speech provider installs without a rebuild.
-- **`views` (server) and `app-views` (client)** become the native module host: the compile pipeline, the module route, the host module table and the slot faces. The iframe frame and bridge stay as a component.
-- **`app-plugins` (client)** draws the screen below.
-- **`@runlith/tagma` becomes `@runlith/tagma-sdk`**, published on npm with the doors `/plugin`, `/ui`, `/testing`, `/rules` and `/adapter/*`, and with `create-tagma` beside it. What each holds and how it is built is [[5067fa15]]. The bare `@runlith/tagma` stays reserved for the product itself.
+- **`plugins` (server)** owns:
+  - the manifest and the point registry: it checks contributions when a package is prepared, and publishes them when the plugin is enabled;
+  - the one install act for every format, the machine record and the person's and project's enabling;
+  - installed directories with their leases, and each plugin's data directory.
+
+  `install_app`, `enable_app`, `uninstall_app`, `read_apps` and `read_app_schema` fold into its acts and reads, and adapter fetching and records fold in with them. "Enabled in this project" at admission is an `invocation` port that `plugins` fills.
+- **`plugin-host` (server), today `tagma-apps`,** keeps process life only: the supervisor, its generations and `idle`, restart and backoff, and the `caller` a contribution carries for executing it. It imports `plugins`, never the other way.
+- **One in-server loader** is extracted from `providers/adapters` (`importAdapter`, host modules, versioned directories, leases, sweep). `providers` and `speech` both load through it and each declares its own port for installed packages. Speech becomes a reloadable catalog, and a listening session pins the catalog it started with.
+- **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the specifier rewrite, the utilities sheet, the module route, the slot faces, and the page-view iframe module. Each declares its port to `plugins` for installed packages.
+- **`app-plugins` (client)** draws the screen. Providers are added from the Providers screen through the same install act.
+- **`@runlith/tagma`** gains the `/plugin`, `/ui` and `/testing` doors beside `/rules` and `/adapter/*` ([[5067fa15]]). `create-tagma` is its own package.
 
 ## The Plugins screen
 
-- The project's list has two groups: plugins, and MCP servers. A server a plugin brought is marked with that plugin.
-- Plugins built in the project appear with the project as their source.
-- The sources stay the marketplaces. Tagma's marketplace also carries full plugins. Anthropic's and OpenAI's are translated, and what Tagma skips is named.
-- Providers install here. Their accounts and model choices stay in the model settings.
-- A plugin's card names what it brings: tools, skills, agents, a section or window, a theme, a provider. It says whether the plugin runs a process on this machine.
-- The header speaks of the window as well as of agents.
+- **The project list** holds two groups: plugins, and MCP servers. A server a plugin brought is marked with that plugin.
+- **Plugins built in the project** stand with the project as their source. One not yet installed on this machine has a row with Install.
+- **Sources are the marketplaces.** Tagma's marketplace also carries plugins in Tagma's format. Claude Code and Codex plugins are translated, and what Tagma skips is named.
+- **The add field** reads what an address holds: a package carrying `tagma-plugin.json`, or a Claude Code or Codex manifest, is a plugin; a command or a URL is a server.
+- **A plugin's card** names:
+  - what the plugin brings: tools, skills, agents, a section or window, a theme, a provider, hooks; hooks are marked as binding Tagma's own loop only;
+  - its process state: idle, starting, running, or failed with the end of its stderr and its restart count. Idle reads as rest, not as a fault;
+  - a refusal: an incompatible surface version, a view the compiler rejected, a shortcut already taken;
+  - that its data stays on remove.
+- **The main act** follows what the plugin is: Try for a skill, Use for a theme, Open for a section or window.
+- **The header** speaks of the window as well as of agents.
 
 ## Capabilities only a plugin reaches
 
-`schedule`, `notify`, `on.ended` and `beforeBuild` stay points of a plugin, as typed fields in the SDK. Their engines are generic. `schedule` keys schedules by owner and delivers through the `TickReceivers` port, which only `composition/ticks.ts` fills today. Giving a thread a timed assignment without a plugin is idea [[d5c27a25]], outside this spec.
+`schedule`, `notify`, `on.ended` and `beforeBuild` stay plugin points, as typed fields in the SDK. Their engines are generic: `schedule`, for one, keys its grids by owner and delivers ticks through the `TickReceivers` port, which only `composition/ticks.ts` fills today. Giving a thread a timed assignment without a plugin is idea [[d5c27a25]], outside this spec.
 
 ## Migration
 
-- Existing app directories keep working: the `tagma` reader takes `tagma-app.json` as a manifest. They are rebuilt on the SDK at their owners' pace. Support for `tagma-app.json` and `.tagma-apps` ends once none remain.
-- One start step moves the machine records:
-  - `apps.installed` and `apps.enabled`, and the adapter records, become plugin records;
-  - `app-data/<id>` stays where it is;
-  - secret values move from owner `tagma-apps` to the plugin owner;
-  - schedule grids keyed `app:<id>` move to the new owner, with no period shift.
-- The `apps` skill becomes a `plugins` skill describing the SDK. Rule 7cb3c1cf follows it to the new paths.
-- The block naming "app" as a product term ([[b540be67]]) and the apps feature ([[15a61526]]) are rewritten when the code lands.
+**Each start sub-step** is idempotent, verifies its target before it removes the source (as `secrets()` in `tagma-apps/steps/data.ts` does), and writes the records last.
+- **Records.** `apps.installed` and `apps.enabled` map to plugin records:
+  - an app enabled in a set of projects becomes enabled in those projects;
+  - the machine-wide `enabled: false` becomes off everywhere;
+  - an id that stands both as an app and as a plugin stops that app's migration, and its row names the collision.
+- **Adapter records** move to plugin records.
+- **Data.** `app-data/<id>` and `agent-plugin-data/` keep their place, so no data moves.
+- **Secrets.** Values under owner `tagma-apps` move to the plugin owner. Settings → Apps → Secrets moves onto the plugin's card.
+- **Schedules.** Grids keyed `app:<id>` move to the new owner with no period shift.
+
+**Stored identifiers.** A third form step renames, in threads, settings and agent definitions:
+- tool names `app__<id>__<tool>` to `plugin__<id>__<tool>`;
+- `bindings.app` to `bindings.plugin`;
+- the `apps` and `app:<id>` capabilities, and the `app__…` allowlists;
+- the `agent.approves` lists.
+
+Earlier steps renamed these identifiers from `plugin__` to `app__` (`tagma-apps/steps/toolNames.ts`, `threads/steps/appBinding.ts`, `native-harness/steps/appCapabilities.ts`). The new step reverses them the same way, so approvals and the endings of bound threads keep matching.
+
+**Agents.** Agents in Tagma's format keep `<plugin>.<agent>`, and agents in the Claude Code and Codex formats keep `<plugin>-<agent>`. Each format keeps its own birth mode (explanations 871ec3c6, fe6dbfb8).
+
+**Directories.**
+- `.tagma-apps/<id>/` becomes `.tagma-plugins/<id>/`.
+- The personal `apps/<id>/` in the data directory becomes `plugins/<id>/` there.
+- Existing app directories keep working through the `tagma` reader and their page views until their owners rebuild them on the SDK. `tagma-app.json` is then read no longer.
+
+**Text that follows.**
+- The system prompt's Apps section (`tagma-apps/doctrine/apps.ts`) and the `apps` skill become a `plugins` section and skill that describe the SDK. Rule 7cb3c1cf follows them.
+- Rules eeaf88ec and 931cfbf1 lose their `TagmaApp` exception in the change that renames the code.
+- These blocks are rewritten when the code lands: [[b540be67]], [[15a61526]], a9714f0d, 12e4c3cd, 871ec3c6, 464327ae and 38074044.
+
+`@runlith/tagma/rules` is unchanged, so every project's `tagma.config.ts` keeps working.
 
 ## Order of work
 
-1. **Identity.** The plugin grant and the bound scope (child spec).
-2. **SDK and one install act.** `/plugin` with `definePlugin`, the manifest build, the typed client and the process wrapper; `create-tagma`; the `tagma` reader; install from folder, git and npm; lazy process start; migration of records.
-3. **Depth 1 of the agent layer** (child spec).
-4. **The window's module host.** The compile pipeline, the host module table and the module route. Native views replace iframe views. MCP App windows move to the MCP client's view. Then the theme point, shortcuts and window kinds.
-5. **Depth 2:** our thread in a plugin (child spec).
-6. **Depth 3:** additions to our chat (child spec).
-7. **Providers as plugins:** adapters through the one install act, and the speech loader.
-8. **Publishing:** the SDK and `create-tagma` on npm; full plugins in Tagma's marketplace.
-
-The screen changes ship with the step that brings what they show.
+1. **Fold apps into `plugins` and its screen.** One install act, the records, the migration, and apps standing on the Plugins screen with their state. Today a failed app shows only in `read_apps` (feature 15a61526).
+2. **The SDK and `create-tagma`, as a prerelease on npm.** Contributions published from the manifest, idle and on-demand start, committed build output.
+3. **Themes, shortcuts and window entries**, as data or as a command the process serves.
+4. **Depth 1 of the agent layer** (child spec).
+5. **The window's module host:** Svelte views, bundled views, page views, the utilities sheet. MCP App windows move to the MCP client's module.
+6. **Depth 2** (child spec).
+7. **Depth 3** (child spec).
+8. **Providers through the one loader**, speech included.
+9. **The SDK's stable release**, and Tagma's marketplace carrying plugins in Tagma's format.
 
 ## Acceptance
 
 Performer checks, each through the same door a real caller uses:
-- `npm create tagma`, then an agent adds a tool, a schedule, a notification and a native section. Building it emits `tagma-plugin.json`. One `install_plugin` from the folder installs it, and the plugin's process starts at the first tool call, not at install.
-- A Claude Code plugin and a Codex plugin install through the same act, and `read_plugins` lists them beside the native one with their source and skipped parts. A plugin's MCP server shows in the server list marked with it.
-- Every existing app directory installs and runs through `install_plugin` with its data, secrets and schedule grid intact.
-- A native section imports a Tagma component from `@runlith/tagma-sdk/ui` and renders with the window's tokens. After Tagma moves to the next Svelte patch, it is recompiled and still renders.
-- A foreign React bundle mounts in a pane and shows a thread through `tagma.thread(element, id)`.
-- A theme plugin changes surfaces, text and syntax in both modes and the terminal palette, and leaves the state colours' meanings intact.
-- Mod+J from a plugin opens a frameless always-on-top window holding a grid of four threads on four providers.
-- A model provider and a speech provider install as plugins without a rebuild, and appear in their catalogs.
-- The SDK's typed client offers exactly the operations declared `external`.
+- **Authoring.** `npm create tagma`, then an agent adds a tool, a schedule, a notification and a Svelte section; the build emits `tagma-plugin.json`. One `install_plugin` from the folder installs it. The tool stands in an agent's catalog before the process ever ran, and the first call starts the process.
+- **Idle and resident.** A plugin idle past its quiet period stops, and its next tick starts it again. A `resident` plugin stays up.
+- **Installing.** Plugins in Tagma's format install from git, from npm and from a marketplace entry. A Claude Code plugin and a Codex plugin install through the same act and are listed beside it, with their source and skipped parts. A plugin's MCP server stands in the server list marked with it.
+- **The plugin's own server.** A plugin's process calls a tool of the server it brought under that server's sign-in, with no secret of its own.
+- **Enabling.** Enable in one project, enable in all projects, switch off here, switch off everywhere and remove each have the effects of the scope table. Removing keeps the data; the separate act deletes it.
+- **Updating.** An update installs a new revision while a run still holds the old provider code.
+- **A collaborator.** A collaborator opening a project with a committed `.tagma-plugins/<id>/` is offered the plugin, and it runs with no build on their machine. A plugin the project lists in `.tagma-plugins/plugins.json` from a marketplace, npm or git is offered too, within its version range.
+- **Existing apps.** Every existing app directory installs and runs through `install_plugin`. Its page views draw, and its data, secrets, schedule grid, bound threads and approvals stay intact.
+- **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A change of the compiler's identity recompiles it, counted through the compile cache.
+- **Bundled views.** A React bundle mounts in a pane and shows a thread through `tagma.mountThread`.
+- **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, and keeps the state colours' meanings.
+- **Windows and shortcuts.** A shortcut on a chord the keymap leaves free opens a frameless, always-on-top window holding a grid of four threads on four providers. A plugin claiming a chord Tagma uses is refused, and its card names the chord.
+- **Providers.** A model provider and a speech provider install as plugins with no rebuild and appear in their catalogs.
+- **The screen.** A plugin's card shows its process state, its refusals and what it brings.
 
 ## Open for the operator
 
-- Whether a project can declare the plugins it uses, so a collaborator opening it is offered them.
-- The child spec's questions: a one-shot model call for plugins; whether a separate program beside Tagma is the operator or a caller he names; whether hooks ever reach a foreign CLI's own tools.
-- The `TagmaApp` exception in rule eeaf88ec loses its subject once "app" leaves the product. Changing the rule is his.
-- Registering `create-tagma` and publishing on npm are acts outside the machine.
+- **Publishing.** Registering `create-tagma`, and publishing on npm, are acts outside the machine.
 
 ## Risks
 
-- **A public contract.** The SDK surface, the slot faces and the host module table become a versioned contract. That goes against the practice of one form changed in one commit, and only the surface listed above is promised.
-- **Svelte versions.** A Svelte major version recompiles every native plugin and may refuse some.
-- **Shipping weight.** The server ships the Svelte compiler and Tailwind's native binary on every platform.
-- **Hangs and leaks.** A hung native module hangs the window, and a leak lives until reload. The Vigla idea [[6b792682]] would address both later; nothing here waits for it.
-- **Lazy start.** It moves process start cost onto the first call.
+- **A public contract.** The SDK surface, the host protocol, the slot faces and the host modules become a versioned contract. That goes against the practice of one form changed in one commit; only the surface the SDK lists is promised.
+- **Svelte majors.** A new Svelte major recompiles every Svelte view and may refuse some.
+- **A shared window.** A hung Svelte or bundled module hangs the window, and a leak lives until reload. The Vigla idea [[6b792682]] would address this later, and nothing here waits for it.
+- **Weight.** The server ships the Svelte compiler and Tailwind on every platform, and regenerates one sheet on every install and every removal.
 
 ## Not established
 
-- That the window's Vite build can emit `svelte` and `svelte/internal/client` as stable chunks the app imports through an import map.
-- The cost of compiling one plugin, and the order of its stylesheet against `app.css`.
-- That the desktop window loads from the local door's origin, which serving modules same-origin assumes.
-- Whether Electron shortcuts reach the window while focus is in an iframe, and whether the window survives a hung iframe.
-- The memory of a plugin process at rest.
+- That the window's Vite build emits the host modules with their signatures kept, and imports them itself. This is reasoned from Rollup's `emitFile`, and not run.
+- The cost of compiling one plugin, and of regenerating the utilities sheet.
+- Whether Electron shortcuts reach the window while focus is inside an iframe, and whether the window survives a hung iframe.
+- The memory a plugin process holds at rest.
+
+These points are settled by the review: the desktop window loads the local door's origin (`desktop/src/config.ts`); the stdio spawn hands a plugin an allowlist of variables, never the server's environment (`packages/mcp/src/McpSession.ts`); child processes already run on `process.execPath`.

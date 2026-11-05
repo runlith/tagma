@@ -3,6 +3,25 @@ id: 01a1ad3a-f940-7727-920c-1581a3d3b323
 title: A new migration that renames, drops or rewrites what the build before reads carries a back.sql that returns it
 ord: 8
 tags: ["rule"]
+fields:
+  {
+    "enforcement": {
+      "debt": [],
+      "escaped": [],
+      "inspection": "migration-backs",
+      "on": [
+        {
+          "op": "submit_work",
+          "phase": "before"
+        },
+        {
+          "op": "merge_worktree",
+          "phase": "before"
+        }
+      ],
+      "strictness": "gate"
+    }
+  }
 sources:
   - kind: dir
     ref: apps/tagma/server/drizzle

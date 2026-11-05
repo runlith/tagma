@@ -10,7 +10,7 @@ fields:
 ---
 Question: make Tagma a platform where a user asks and agents build an application right inside Tagma — a game, a trainer, a tool.
 
-Spec [[d2b5f488]] now carries this as the plugin, written against a published SDK. Where it differs from what follows, the spec decides: views run as modules in the window rather than on a separate origin, the process calls Tagma's operations rather than callbacks over `@runlith/ndjson-rpc`, and "app" is no product term.
+Spec [[d2b5f488]] now carries this as the plugin, written against a published SDK. Where it differs from what follows, the spec decides: views run in the window as Svelte or bundled modules, with HTML pages kept framed on their own origin, the process calls Tagma's operations rather than callbacks over `@runlith/ndjson-rpc`, and "app" is no product term.
 
 The app model:
 - a package with a manifest: agents, skills, workflows, the tag dictionary, tools, widgets and their mount places, permissions;
