@@ -2,6 +2,7 @@ import { access, mkdir, readFile, readdir, realpath, rename, rm, rmdir, stat, wr
 import { dirname, join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
+import { COOKIE_GLOB } from '@runlith/watch/cookie';
 import { gitAnswer, identityOf, OwnGitFailed, quietGit, type RunGitOptions, runGit, runGitBytes } from '../../platform/git/ownGit.js';
 import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { unmergedPaths } from '../../platform/git/unmerged.js';
@@ -24,6 +25,8 @@ export type ShadowMerge = {
 const FORKS_FILE = 'tagma-forks.json';
 const ORIGINS = TREE_ORIGINS;
 const SERVED = TREE_SERVED;
+const COOKIES = `:(glob)${COOKIE_GLOB}`;
+const NO_COOKIES = `:(exclude,glob)${COOKIE_GLOB}`;
 
 const fsDone = <A>(work: () => Promise<A>): Effect.Effect<A> => Effect.promise(work);
 
@@ -171,6 +174,24 @@ const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) 
       const forks = new Map(held);
       return forks.delete(branch) ? writeForks(forks) : Effect.void;
     });
+  const stage = Effect.fnUntraced(function* (treeRoot: string) {
+    yield* run('uncookie', ['-C', treeRoot, 'rm', '-r', '-q', '-f', '--ignore-unmatch', '--', COOKIES]);
+    yield* run('add', ['-C', treeRoot, 'add', '-A', '--', '.', STAGING_PATHSPEC, NO_COOKIES]);
+  });
+  const mergeInProgress = (treeRoot: string) =>
+    Effect.flatMap(mergeHeadAbsent(treeRoot), (absent) =>
+      absent
+        ? Effect.succeed(false)
+        : Effect.map(
+            gitAnswer(git, 'merge-state', ['-C', treeRoot, 'rev-parse', '-q', '--verify', 'MERGE_HEAD']),
+            (answer) => answer.status === 0,
+          ),
+    );
+  const concludeMerge = Effect.fnUntraced(function* (treeRoot: string) {
+    yield* stage(treeRoot);
+    yield* run('commit', ['-C', treeRoot, 'commit', '--no-edit'], { env: identityOf(AGENT_PERSON) });
+    return yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
+  });
 
   return {
     gitDir,
@@ -236,7 +257,7 @@ const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) 
       yield* attach(treeRoot, branch);
     }),
     commitAct: Effect.fnUntraced(function* (treeRoot: string, message: string) {
-      yield* run('add', ['-C', treeRoot, 'add', '-A', '--', '.', STAGING_PATHSPEC]);
+      yield* stage(treeRoot);
       const staged = yield* run('staged', ['-C', treeRoot, 'diff', '--cached', '--name-only']);
       if (staged === '') return null;
       yield* run('commit', ['-C', treeRoot, 'commit', '-m', message], { env: identityOf(AGENT_PERSON) });
@@ -258,11 +279,13 @@ const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) 
     recordFork,
     dropFork,
     merge: Effect.fnUntraced(function* (treeRoot: string, branch: string, message: string) {
-      const attempt = yield* gitAnswer(git, 'merge', ['-C', treeRoot, 'merge', '--no-ff', '-m', message, branch], {
+      const attempt = yield* gitAnswer(git, 'merge', ['-C', treeRoot, 'merge', '--no-ff', '--no-commit', '-m', message, branch], {
         env: identityOf(AGENT_PERSON),
       });
       if (attempt.status === 0) {
-        const merged = yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
+        const merged = (yield* mergeInProgress(treeRoot))
+          ? yield* concludeMerge(treeRoot)
+          : yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
         return { merged, conflicts: [] };
       }
       const conflicts = yield* unmergedPaths(git, treeRoot);
@@ -272,22 +295,10 @@ const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) 
       return { merged: null, conflicts };
     }),
     quiet: (op: string, args: readonly string[]) => quietGit(git, op, args),
-    mergeInProgress: (treeRoot: string) =>
-      Effect.flatMap(mergeHeadAbsent(treeRoot), (absent) =>
-        absent
-          ? Effect.succeed(false)
-          : Effect.map(
-              gitAnswer(git, 'merge-state', ['-C', treeRoot, 'rev-parse', '-q', '--verify', 'MERGE_HEAD']),
-              (answer) => answer.status === 0,
-            ),
-      ),
+    mergeInProgress,
     stagedSides: (treeRoot: string, path: string) => stagedSides(git, treeRoot, path),
     stagePath: (treeRoot: string, path: string) => Effect.asVoid(run('add-path', ['-C', treeRoot, 'add', '--', path])),
-    concludeMerge: Effect.fnUntraced(function* (treeRoot: string) {
-      yield* run('add', ['-C', treeRoot, 'add', '-A', '--', '.', STAGING_PATHSPEC]);
-      yield* run('commit', ['-C', treeRoot, 'commit', '--no-edit'], { env: identityOf(AGENT_PERSON) });
-      return yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
-    }),
+    concludeMerge,
     log: (treeRoot: string, path?: string) =>
       Effect.map(
         run('log', ['-C', treeRoot, 'log', '--format=%H%x1f%an%x1f%s', ...(path === undefined ? [] : ['--follow', '--', path])]),

@@ -93,11 +93,7 @@ const mergesAt = (shadow: ShadowGit, treeRoot: string) => {
       await writeFile(draft, JSON.stringify(record));
       await rename(draft, file);
     });
-  const clean = Effect.fnUntraced(function* (record: Record) {
-    if (existsSync(join(record.path, '.git')))
-      yield* shadow.run('recovery-remove', ['--git-dir', shadow.gitDir, 'worktree', 'remove', record.path]);
-    yield* io(() => rm(file, { force: true }));
-  });
+  const clean = (record: Record) => discard(shadow, file, record);
   const publish = Effect.fnUntraced(function* (record: Record, commit: string) {
     const branch = yield* shadow.run('recovery-target', ['-C', treeRoot, 'symbolic-ref', '--short', 'HEAD']);
     if (branch !== record.branch) return yield* failed(`the served tree stands on ${branch}; restore ${record.branch} before publishing`);

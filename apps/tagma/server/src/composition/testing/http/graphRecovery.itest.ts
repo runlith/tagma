@@ -82,7 +82,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
   excludeTestServices: true,
 })('graph recovery', (it) => {
   it.effect(
-    'the notification action starts a project recovery thread, its graph tool reads the incident, and retry reuses the thread',
+    'the notification action starts a project recovery thread, its graph tool reads the incident, retry reuses the thread, and the resolution publishes no watch cookie',
     () =>
       Effect.gen(function* () {
         const { world, projectId, inspected } = yield* Place;
@@ -109,9 +109,13 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         const incoming = join(world.root, 'incoming-graph');
         yield* shadow.attach(incoming, 'incoming');
         yield* files.writeFileString(join(incoming, row.path), original.replace('initial knowledge', 'incoming knowledge'));
-        yield* shadow.commitAct(incoming, 'incoming knowledge');
+        yield* files.writeFileString(join(incoming, '.watch-cookie-4242-7'), '');
+        yield* suiteGit(incoming, 'add', '-A');
+        yield* suiteGit(incoming, 'commit', '-q', '-m', 'incoming knowledge');
         yield* files.writeFileString(path, original.replace('initial knowledge', 'current knowledge'));
-        yield* shadow.commitAct(graph.layout.treeRoot, 'current knowledge');
+        yield* files.writeFileString(join(graph.layout.treeRoot, '.watch-cookie-4242-8'), '');
+        yield* suiteGit(graph.layout.treeRoot, 'add', '-A');
+        yield* suiteGit(graph.layout.treeRoot, 'commit', '-q', '-m', 'current knowledge');
         const merges = TreeMerges.at(shadow, graph.layout.treeRoot);
         yield* merges.merge('incoming');
         const pending = yield* merges.read();
@@ -130,9 +134,11 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         expect(snapshot.body).toMatchObject({ snapshot: { thread: { id: threadId } } });
         expect((yield* merges.read())?.threadId).toBe(threadId);
         yield* files.writeFileString(join(pending.path, row.path), original.replace('initial knowledge', 'current and incoming knowledge'));
+        yield* files.writeFileString(join(pending.path, '.watch-cookie-4242-9'), '');
         const finished = yield* world.op('resolve_graph_conflict', { branch: 'main' }, query);
         expect(finished.status).toBe(200);
         expect(finished.body).toMatchObject({ status: 'ok', resolved: [row.path] });
+        expect(yield* suiteGit(graph.layout.treeRoot, 'ls-tree', '-r', '--name-only', 'HEAD')).not.toContain('.watch-cookie-');
         const notice = yield* world.op('read_graph_recovery', { branch: 'main' }, query);
         expect(notice.body).toMatchObject({ status: 'ok', recovery: null });
         const restored = yield* world.op('read_block', { blockIds: [name] }, query);
