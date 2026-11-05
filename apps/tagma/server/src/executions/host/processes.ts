@@ -69,13 +69,24 @@ const table = Effect.fn('FixtureProcesses.table')(function* () {
   });
 });
 
-const childGroups = Effect.fn('FixtureProcesses.children')(function* (holders: ReadonlySet<number>) {
-  if (holders.size === 0) return [];
-  const children = (yield* table()).filter((row) => holders.has(row.parent));
-  const ungrouped = children.find((row) => !Number.isSafeInteger(row.group) || row.group <= 0);
+const descendantGroups = Effect.fn('FixtureProcesses.descendants')(function* (hosts: ReadonlySet<number>) {
+  if (hosts.size === 0) return [];
+  const rows = yield* table();
+  const family = new Set(hosts);
+  const descendants: (typeof rows)[number][] = [];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const row of rows) {
+      if (family.has(row.pid) || !family.has(row.parent)) continue;
+      family.add(row.pid);
+      descendants.push(row);
+      grew = true;
+    }
+  }
+  const ungrouped = descendants.find((row) => !Number.isSafeInteger(row.group) || row.group <= 0);
   if (ungrouped !== undefined)
     return yield* new ProcessesUnmeasured({ command: PROCESS_TABLE, detail: `ps returned no process group for ${ungrouped.pid}` });
-  return children.map((row) => row.group);
+  return descendants.map((row) => row.group);
 });
 
 const membersOf = Effect.fn('FixtureProcesses.members')(function* (groups: ReadonlySet<number>) {
@@ -87,12 +98,7 @@ export const hostsUnder = (root: string) => Effect.map(hosts(root), (standing) =
 
 export const endHosts = Effect.fn('FixtureProcesses.end')(function* (root: string) {
   const standing = yield* hosts(root);
-  const holders = new Set(standing.filter((host) => host.holder).map((host) => host.pid));
-  const groups = new Set([
-    ...standing.filter((host) => host.holder).map((host) => host.group),
-    ...standing.filter((host) => !host.holder).map((host) => host.group),
-    ...(yield* childGroups(holders)),
-  ]);
+  const groups = new Set([...standing.map((host) => host.group), ...(yield* descendantGroups(new Set(standing.map((host) => host.pid))))]);
   for (const group of groups) {
     yield* Effect.try({
       try: () => {
