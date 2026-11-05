@@ -3,15 +3,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import type { Finding } from '@runlith/tagma/rules';
-import { Option, Result, Schema } from 'effect';
-import {
-  ASIDE_FILE,
-  AsideDeclared,
-  DROPPING,
-  migrationIssues,
-  renamedIn,
-  unreturnedIssues,
-} from '../../apps/tagma/server/src/platform/store/migrationLaw';
+import { Option, Schema } from 'effect';
+import { ASIDE_FILE, migrationIssues, stepBackLosses } from '../../apps/tagma/server/src/platform/store/migrationLaw';
 import { BACK_SCRIPT } from '@runlith/sqlite-process/chainReturn';
 import type { Declaration } from './declarations';
 import { blobTexts, changedBetween, type Entry, entriesAt, git, mentioning, present } from './git';
@@ -326,102 +319,27 @@ const migrationsAt = (snapshot: Snapshot, root: string, folder: string) => {
 
 const statementsOf = (text: string): string[] => text.split('--> statement-breakpoint').filter((one) => one.trim() !== '');
 
-const backFailure = (chain: readonly string[], back: string): string | null => {
-  const db = new Database(':memory:');
-  try {
-    db.run('PRAGMA foreign_keys = OFF');
-    for (const text of chain) for (const statement of statementsOf(text)) db.run(statement);
-    for (const statement of statementsOf(back)) db.run(statement);
-    return null;
-  } catch (failure) {
-    return failure instanceof Error ? failure.message : String(failure);
-  } finally {
-    db.close();
-  }
-};
-
-type Shape = ReadonlyMap<string, ReadonlySet<string>>;
-
-const shapeOf = (db: Database): Shape =>
-  new Map(
-    db
-      .query<{ name: string }, []>(
-        `select name from pragma_table_list where schema = 'main' and type = 'table' and name not like 'sqlite_%'`,
-      )
-      .all()
-      .map(({ name }) => [
-        name.toLowerCase(),
-        new Set(
-          db
-            .query<{ name: string }, [string]>('select name from pragma_table_info(?)')
-            .all(name)
-            .map((column) => column.name.toLowerCase()),
-        ),
-      ]),
-  );
-
-type Dropped = { readonly table: string; readonly columns: readonly string[] | null };
-
-const droppedBy = (before: Shape, after: Shape, statements: readonly string[]): readonly Dropped[] => {
-  const renamed = renamedIn(statements);
-  return [...before].flatMap(([table, columns]): Dropped[] => {
-    if (renamed.tables.has(table)) return [];
-    const standing = after.get(table);
-    if (standing === undefined) return [{ table, columns: null }];
-    const gone = [...columns].filter((column) => !standing.has(column) && renamed.columns.get(table)?.has(column) !== true);
-    return gone.length === 0 ? [] : [{ table, columns: gone }];
-  });
-};
-
-const decodeAside = Schema.decodeUnknownResult(Schema.fromJsonString(AsideDeclared));
-
-const unkept = (tree: Snapshot, migrations: ReturnType<typeof migrationsAt>, added: ReadonlySet<string>): readonly Finding[] => {
-  const asides = [...added].map((path) => path.replace(/migration\.sql$/, ASIDE_FILE)).filter((path) => migrations.listed.has(path));
-  tree.load([...migrations.paths, ...asides]);
-  const findings: Finding[] = [];
-  const db = new Database(':memory:');
-  try {
-    db.run('PRAGMA foreign_keys = OFF');
-    for (const path of migrations.paths) {
-      const statements = statementsOf(tree.read(path));
-      const before = added.has(path) ? shapeOf(db) : null;
-      for (const statement of statements) db.run(statement);
-      if (before === null) continue;
-      const at = path.replace(/migration\.sql$/, ASIDE_FILE);
-      const read = migrations.listed.has(at) ? decodeAside(tree.read(at)) : null;
-      if (read !== null && Result.isFailure(read)) {
-        findings.push({
-          path: at,
-          line: 1,
-          fingerprint: `${path}: aside unread`,
-          message: `${ASIDE_FILE} does not read, so it keeps nothing: ${String(read.failure)}`,
-        });
-        continue;
-      }
-      const declared = read === null ? null : read.success;
-      const kept = new Set([...(declared?.tables ?? []), ...(declared?.derived ?? [])].map((table) => table.toLowerCase()));
-      for (const drop of droppedBy(before, shapeOf(db), statements)) {
-        if (kept.has(drop.table)) continue;
-        const what = drop.columns === null ? 'the migration drops the table' : `the migration drops ${drop.columns.join(', ')}`;
-        findings.push({
-          path,
-          line: 1,
-          fingerprint: `${path}: drops ${drop.table}${drop.columns === null ? '' : ` ${drop.columns.join(',')}`}`,
-          message: `${drop.table}: ${what}, and no ${ASIDE_FILE} beside it keeps the table or names it derived, so a step back would bring it back empty`,
-        });
-      }
-    }
-  } catch (failure) {
-    findings.push({
-      path: [...added][0]!,
-      line: 1,
-      fingerprint: `${[...added][0]}: chain unapplied`,
-      message: `the chain does not apply in memory, so what its new migrations drop cannot be judged: ${failure instanceof Error ? failure.message : String(failure)}`,
-    });
-  } finally {
-    db.close();
-  }
-  return findings;
+const lossesOf = (tree: Snapshot, migrations: ReturnType<typeof migrationsAt>, added: readonly string[]): readonly Finding[] => {
+  const judged = new Set(added);
+  const beside = (path: string, file: string): string => path.replace(/migration\.sql$/, file);
+  const besides = added
+    .flatMap((path) => [beside(path, BACK_SCRIPT), beside(path, ASIDE_FILE)])
+    .filter((path) => migrations.listed.has(path));
+  tree.load([...migrations.paths, ...besides]);
+  const text = (path: string, file: string): string | null =>
+    judged.has(path) && migrations.listed.has(beside(path, file)) ? tree.read(beside(path, file)) : null;
+  const chain = migrations.paths.map((path) => ({
+    name: path,
+    sql: tree.read(path),
+    back: text(path, BACK_SCRIPT),
+    aside: text(path, ASIDE_FILE),
+  }));
+  return stepBackLosses(chain, judged).map((loss) => ({
+    path: loss.file === 'migration' ? loss.migration : beside(loss.migration, loss.file === 'back' ? BACK_SCRIPT : ASIDE_FILE),
+    line: 1,
+    fingerprint: `${loss.migration}: ${loss.fingerprint}`,
+    message: loss.message,
+  }));
 };
 
 const foreignKeys = (
@@ -535,34 +453,7 @@ export const storedJudge = (root: string, treeAt: string, baseAt: string | null)
       for (const folder of params.folders) {
         const migrations = migrationsAt(tree, root, folder);
         const added = addedMigrations(migrations, base === null ? null : migrationsAt(base, root, folder), params.cut);
-        const scripted = added.filter((path) => migrations.listed.has(path.replace(/migration\.sql$/, BACK_SCRIPT)));
-        if (scripted.length > 0) {
-          tree.load(migrations.paths);
-          for (const path of scripted) {
-            const failure = backFailure(
-              migrations.paths.slice(0, migrations.paths.indexOf(path) + 1).map((one) => tree.read(one)),
-              tree.read(path.replace(/migration\.sql$/, BACK_SCRIPT)),
-            );
-            if (failure !== null)
-              findings.push({
-                path: path.replace(/migration\.sql$/, BACK_SCRIPT),
-                line: 1,
-                fingerprint: `${path}: back script ${failure}`,
-                message: `${BACK_SCRIPT} does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${failure}`,
-              });
-          }
-        }
-        if (added.length > 0) findings.push(...unkept(tree, migrations, new Set(added)));
-        const unscripted = added.filter((path) => !scripted.includes(path));
-        tree.load(unscripted);
-        for (const path of unscripted)
-          for (const issue of unreturnedIssues(statementsOf(tree.read(path))).filter((one) => !DROPPING.has(one.reason)))
-            findings.push({
-              path,
-              line: 1,
-              fingerprint: `${path}: back ${issue.table ?? 'unresolved'} ${issue.statement.trim()}`,
-              message: `${issue.table ?? 'unknown target'}: ${issue.reason}, and no ${BACK_SCRIPT} stands beside it to return it: ${issue.statement.trim()}`,
-            });
+        if (added.length > 0) findings.push(...lossesOf(tree, migrations, added));
       }
       return [{ key: key.key, side: 'tree', findings }];
     }

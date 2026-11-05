@@ -15,9 +15,11 @@ import { refusalLines } from '@runlith/agent/tool/refusal';
 import { compareReleases, isRelease, newestOf, releaseAfter, type StoreMarks } from '../installation/contract/wire/feed.js';
 import { dataDirectory } from '../installation/contract/wire/layout.js';
 import { DESKTOP, IRREVERSIBLE_STORES, type IrreversibleChange, MIGRATIONS } from '../installation/contract/wire/manifest.js';
-import type { Composition, Publisher } from './descriptor.js';
+import type { Composition, Publisher, SourceRoots } from './descriptor.js';
 import { archiveTrouble, developerInputs, type Label, sourceComments } from './proof.js';
-import { checkoutTags, highestOf } from './published.js';
+import { checkoutTags, highestOf, precedingOf } from './published.js';
+import { BACK_SCRIPT } from '@runlith/sqlite-process/chainReturn';
+import { ASIDE_FILE, type StepBackLoss, stepBackLosses } from '../platform/store/migrationLaw.js';
 import { INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
 import { BRAND, type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
@@ -79,6 +81,35 @@ export const storesOf = Effect.fnUntraced(function* ({ roots, steps }: Compositi
     journal: steps.journal,
   };
   return stores;
+});
+
+const CHAINS = [
+  ['machine-store', (roots: SourceRoots) => join(roots.server, MIGRATIONS)],
+  ['host-store', (roots: SourceRoots) => join(roots.packages, 'execution-host', MIGRATIONS)],
+] as const;
+
+const lossesPast = Effect.fnUntraced(function* (roots: SourceRoots, stores: StoreMarks, boundary: StoreMarks) {
+  const files = yield* FileSystem.FileSystem;
+  const beside = (path: string) =>
+    Effect.flatMap(files.exists(path), (there) =>
+      there ? Effect.map(files.readFileString(path), (text): string | null => text) : Effect.succeed(null),
+    );
+  const losses: StepBackLoss[] = [];
+  for (const [store, folderOf] of CHAINS) {
+    const folder = folderOf(roots);
+    const judged = new Set(stores[store].filter((name) => !boundary[store].includes(name)));
+    if (judged.size === 0) continue;
+    const chain = yield* Effect.forEach(stores[store], (name) =>
+      Effect.all({
+        name: Effect.succeed(name),
+        sql: files.readFileString(join(folder, name, 'migration.sql')),
+        back: beside(join(folder, name, BACK_SCRIPT)),
+        aside: beside(join(folder, name, ASIDE_FILE)),
+      }),
+    );
+    losses.push(...stepBackLosses(chain, judged));
+  }
+  return losses;
 });
 
 export type Cut = {
@@ -149,6 +180,22 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
       `${newest.release} is published with ${dropped.length} migrations and steps this cut lacks: ${dropped.slice(0, TOLD).join(', ')}`,
       [`bring them back: a store ${newest.release} wrote reaches the newest form only through every migration and step it ran`],
     );
+  }
+  if (newest !== null) {
+    const preceding = precedingOf(latest, tags, newest.release);
+    const boundary = latest?.releases.find((one) => one.release === preceding) ?? newest;
+    const losses = yield* lossesPast(composition.roots, stores, boundary.stores).pipe(
+      Effect.mapError((error) => refusal('backs', `the migrations this cut carries could not be read: ${error.reason._tag}`)),
+    );
+    if (losses.length > 0)
+      return yield* refuse(
+        'backs',
+        `a step back from ${release} to ${boundary.release} would lose what ${losses.length} of its migrations change: ${losses
+          .slice(0, TOLD)
+          .map((loss) => `${loss.migration}: ${loss.message}`)
+          .join('; ')}`,
+        [`add the back.sql or aside.json each names beside its migration, then bun run tagma:release`],
+      );
   }
   const irreversible = irreversibleOf(release, stores, newest === null ? null : { stores: newest.stores, changes: newest.changes });
 

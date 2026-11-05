@@ -25,9 +25,9 @@ const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning,
 const git = (cwd: string, args: readonly string[]) =>
   expect(Bun.spawnSync(['git', '-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args]).exitCode).toBe(0);
 
-const migration = (folder: string, name: string): void => {
+const migration = (folder: string, name: string, sql = 'select 1;\n'): void => {
   mkdirSync(join(folder, name), { recursive: true });
-  writeFileSync(join(folder, name, 'migration.sql'), 'select 1;\n');
+  writeFileSync(join(folder, name, 'migration.sql'), sql);
 };
 
 const unplaced = () => Effect.die('a refused cut places no application');
@@ -66,12 +66,49 @@ const published: Feed = {
   ],
 };
 
-const publisher: Publisher = {
+const publisherOf = (feed: Feed): Publisher => ({
   place: 'the test shelf',
-  latest: Effect.succeed(published),
+  latest: Effect.succeed(feed),
   address: (release, file) => `https://shelf.test/${release}/${file}`,
   served: () => Effect.die('a refused cut publishes nothing'),
   publish: () => Effect.die('a refused cut publishes nothing'),
+});
+
+const committed = (checkout: string): void => {
+  git(checkout, ['init', '-q', '-b', 'main']);
+  git(checkout, ['add', '-A']);
+  git(checkout, ['commit', '-q', '-m', 'cut']);
+};
+
+const cutAt = (checkout: string, feed: Feed) => {
+  const source = join(checkout, 'apps/tagma/server');
+  const composition: Composition = {
+    conditions: [],
+    channel: CHANNELS.stable,
+    workshop: CHANNELS.dev,
+    applications,
+    platform: inertPlatform,
+    roots: { checkout, server: source, packages: join(checkout, 'packages'), desktop: join(checkout, 'apps/tagma/desktop') },
+    entries: { cli: join(source, 'src/composition/release/cli.ts'), server: join(source, 'src/composition/release/server.ts') },
+    client: { root: join(checkout, 'apps/tagma/app'), config: null },
+    brand: { assets: join(checkout, 'apps/tagma/desktop/assets') },
+    signing: { team: null, notary: 'test' },
+    plugins: [],
+    feed: null,
+    publisher: publisherOf(feed),
+    steps: { graph: [], journal: [] },
+    stores: [],
+    processes: testProcesses,
+  };
+  return (asked: string | null) =>
+    Effect.flip(
+      cutRelease({
+        composition,
+        asked,
+        out: join(scratch, 'release'),
+        cache: { runtimes: join(scratch, 'runtimes'), packages: join(scratch, 'packages') },
+      }),
+    ).pipe(Effect.provide(machine));
 };
 
 it.live(
@@ -83,36 +120,8 @@ it.live(
       migration(join(source, 'drizzle'), '20261010115509_baseline');
       migration(join(source, 'drizzle'), '20261021000000_newer');
       migration(join(checkout, 'packages/execution-host/drizzle'), '20260908052548_gateway');
-      git(checkout, ['init', '-q', '-b', 'main']);
-      git(checkout, ['add', '-A']);
-      git(checkout, ['commit', '-q', '-m', 'cut']);
-      const composition: Composition = {
-        conditions: [],
-        channel: CHANNELS.stable,
-        workshop: CHANNELS.dev,
-        applications,
-        platform: inertPlatform,
-        roots: { checkout, server: source, packages: join(checkout, 'packages'), desktop: join(checkout, 'apps/tagma/desktop') },
-        entries: { cli: join(source, 'src/composition/release/cli.ts'), server: join(source, 'src/composition/release/server.ts') },
-        client: { root: join(checkout, 'apps/tagma/app'), config: null },
-        brand: { assets: join(checkout, 'apps/tagma/desktop/assets') },
-        signing: { team: null, notary: 'test' },
-        plugins: [],
-        feed: null,
-        publisher,
-        steps: { graph: [], journal: [] },
-        stores: [],
-        processes: testProcesses,
-      };
-      const cut = (asked: string | null) =>
-        Effect.flip(
-          cutRelease({
-            composition,
-            asked,
-            out: join(scratch, 'release'),
-            cache: { runtimes: join(scratch, 'runtimes'), packages: join(scratch, 'packages') },
-          }),
-        ).pipe(Effect.provide(machine));
+      committed(checkout);
+      const cut = cutAt(checkout, published);
 
       const behind = yield* cut('0.2.0');
       const lacking = yield* cut(null);
@@ -120,5 +129,38 @@ it.live(
       expect(behind.step).toBe('version');
       expect(lacking.step).toBe('stores');
       expect(lacking.detail).toContain('machine-store 20261020000000_published');
+    }),
+);
+
+it.live(
+  'a cut is refused when a migration it carries past the release before the newest published one would lose data on a step back to it',
+  () =>
+    Effect.gen(function* () {
+      const checkout = join(scratch, 'backs');
+      const drizzle = join(checkout, 'apps/tagma/server/drizzle');
+      migration(drizzle, '20261010115509_baseline', 'CREATE TABLE notes (id integer PRIMARY KEY, body text);\n');
+      migration(drizzle, '20261020000000_published', 'CREATE TABLE later (id integer PRIMARY KEY);\n');
+      migration(drizzle, '20261021000000_dropping', 'DROP TABLE notes;\n');
+      migration(join(checkout, 'packages/execution-host/drizzle'), '20260908052548_gateway');
+      committed(checkout);
+      const marks = (machine: readonly string[]) => ({
+        'machine-store': machine,
+        'host-store': ['20260908052548_gateway'],
+        graph: [],
+        journal: [],
+      });
+      const release = published.releases[0];
+      const feed: Feed = {
+        releases: [
+          { ...release, release: '0.2.0', stores: marks(['20261010115509_baseline']) },
+          { ...release, release: '0.2.1', stores: marks(['20261010115509_baseline', '20261020000000_published']) },
+        ],
+      };
+
+      const refused = yield* cutAt(checkout, feed)(null);
+
+      expect(refused.step).toBe('backs');
+      expect(refused.detail).toContain('to 0.2.0');
+      expect(refused.detail).toContain('20261021000000_dropping: notes');
     }),
 );
