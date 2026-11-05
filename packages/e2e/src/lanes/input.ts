@@ -18,22 +18,8 @@ export const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools:
         const stop = holding();
         try {
           const child = spawn(
-            '/usr/sbin/taskpolicy',
-            [
-              '-l',
-              '0',
-              '-t',
-              '0',
-              tools.companion,
-              '--udid',
-              device.udid,
-              '--only',
-              'simulator',
-              '--device-set-path',
-              device.set,
-              '--grpc-port',
-              '0',
-            ],
+            tools.companion,
+            ['--udid', device.udid, '--only', 'simulator', '--device-set-path', device.set, '--grpc-port', '0'],
             { stdio: ['ignore', 'pipe', 'pipe'] },
           );
           child.stderr.on('data', (data: Buffer) => {
