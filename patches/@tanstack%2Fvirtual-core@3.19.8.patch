@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca595bff184 100644
+index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b9b7650b1b35ef1afa0825bf06c97cf0438b172d 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -202,6 +202,8 @@ class Virtualizer {
@@ -11,6 +11,26 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..b3bcc6c4b9d8414ca7ac553c93c57ca5
      this.prevLanes = void 0;
      this.lanesChangedFlag = false;
      this.lanesSettling = false;
+@@ -222,15 +224,15 @@ class Virtualizer {
+       // write has yet to report: that moved it.
+       tailStillMoving: () => {
+         const state = this.scrollState;
+-        if ((state == null ? void 0 : state.phase) !== "queued" || this.pendingWrite !== null) {
+-          return false;
+-        }
++        if (this.pendingWrite !== null) return false;
+         const now = this._readElementOffset();
+         if (now === null || this._lastElementOffset === null || Math.abs(now - this._lastElementOffset) < 1) {
+           return false;
+         }
+         this._lastElementOffset = now;
+-        state.samples = [...state.samples ?? [], { t: this.now(), offset: now }];
++        if ((state == null ? void 0 : state.phase) === "queued") {
++          state.samples = [...state.samples ?? [], { t: this.now(), offset: now }];
++        }
+         return true;
+       },
+       onTailClosed: () => {
 @@ -244,6 +246,7 @@ class Virtualizer {
        }
      });
@@ -204,6 +224,19 @@ index a997104ee5f27b4d15b5d4ae1ae4ba1f92bed879..2aab0ce8fff2a43ed88558b9ee8dac16
      private _readElementOffset;
      private _canWriteScroll;
      private _flushHoldIfReady;
+diff --git a/dist/cjs/ios-gesture.cjs b/dist/cjs/ios-gesture.cjs
+index 6523e4d0d88599203897f2619ededb095bc7fed6..35c83c686492080a3a6210074bbe0de9f4e4a3bc 100644
+--- a/dist/cjs/ios-gesture.cjs
++++ b/dist/cjs/ios-gesture.cjs
+@@ -43,7 +43,7 @@ class IosGesture {
+       external
+     }) => {
+       var _a, _b, _c;
+-      if (isScrolling && ((_a = this._touch) == null ? void 0 : _a.phase) === "tail") {
++      if ((isScrolling || moved) && ((_a = this._touch) == null ? void 0 : _a.phase) === "tail") {
+         this._openTail(this._touch.moved || !ownReadBack, false);
+       } else if (((_b = this._touch) == null ? void 0 : _b.phase) === "lateFling") {
+         if (this.host.now() > this._touch.until) {
 diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
 index d838733d11c3c649212c5174ec22ae9b0ab4935c..80bdd9b80b1b77cfb6a9213efe5e62b1e8e7eba8 100644
 --- a/dist/esm/index.d.ts
@@ -233,7 +266,7 @@ index d838733d11c3c649212c5174ec22ae9b0ab4935c..80bdd9b80b1b77cfb6a9213efe5e62b1
      private _canWriteScroll;
      private _flushHoldIfReady;
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0eb0ff48ee 100644
+index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..6d8d033d22781a5736df371e1c07f3e15123a64e 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -201,6 +201,8 @@ class Virtualizer {
@@ -245,6 +278,26 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0e
      this.prevLanes = void 0;
      this.lanesChangedFlag = false;
      this.lanesSettling = false;
+@@ -221,15 +223,15 @@ class Virtualizer {
+       // write has yet to report: that moved it.
+       tailStillMoving: () => {
+         const state = this.scrollState;
+-        if ((state == null ? void 0 : state.phase) !== "queued" || this.pendingWrite !== null) {
+-          return false;
+-        }
++        if (this.pendingWrite !== null) return false;
+         const now = this._readElementOffset();
+         if (now === null || this._lastElementOffset === null || Math.abs(now - this._lastElementOffset) < 1) {
+           return false;
+         }
+         this._lastElementOffset = now;
+-        state.samples = [...state.samples ?? [], { t: this.now(), offset: now }];
++        if ((state == null ? void 0 : state.phase) === "queued") {
++          state.samples = [...state.samples ?? [], { t: this.now(), offset: now }];
++        }
+         return true;
+       },
+       onTailClosed: () => {
 @@ -243,6 +245,7 @@ class Virtualizer {
        }
      });
@@ -410,8 +463,21 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..5a2248a19a98deebee87de5bd2ea5b0e
        this.itemSizeCache.clear();
        this.laneAssignments.clear();
        this.itemSizeCacheVersion++;
+diff --git a/dist/esm/ios-gesture.js b/dist/esm/ios-gesture.js
+index 1ce90f4b77764371716f831f8ca2d48814203e55..de0d851634b793033261ada9b42a77bb3b4fb99c 100644
+--- a/dist/esm/ios-gesture.js
++++ b/dist/esm/ios-gesture.js
+@@ -41,7 +41,7 @@ class IosGesture {
+       external
+     }) => {
+       var _a, _b, _c;
+-      if (isScrolling && ((_a = this._touch) == null ? void 0 : _a.phase) === "tail") {
++      if ((isScrolling || moved) && ((_a = this._touch) == null ? void 0 : _a.phase) === "tail") {
+         this._openTail(this._touch.moved || !ownReadBack, false);
+       } else if (((_b = this._touch) == null ? void 0 : _b.phase) === "lateFling") {
+         if (this.host.now() > this._touch.until) {
 diff --git a/src/index.ts b/src/index.ts
-index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd148e7d3b 100644
+index 83386f31ee894399bc6731128194ebaf2812f6fa..aa8db991462047c46cbb84e1dc990cefca61d1a2 100644
 --- a/src/index.ts
 +++ b/src/index.ts
 @@ -391,6 +391,7 @@ export interface VirtualizerOptions<
@@ -431,7 +497,40 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
    private prevLanes: number | undefined = undefined
    private lanesChangedFlag = false
    private lanesSettling = false
-@@ -592,6 +595,7 @@ export class Virtualizer<
+@@ -550,15 +553,14 @@ export class Virtualizer<
+     now: () => this.now(),
+     // The end of a fling can move less than a pixel per scroll event, so
+     // events can stop for 150ms while the fling is still running (seen on
+-    // an iPhone, 27.0.1). A command waiting for it would then be written
+-    // into the fling and overridden. The element having moved since the
+-    // last event means it has not ended: wait again. Not while our own
+-    // write has yet to report: that moved it.
++    // an iPhone, 27.0.1), or longer while the page's main thread is busy. A
++    // command or a held correction waiting for it would then be written
++    // into the fling and stop or be overridden by it. The element having
++    // moved since the last event means it has not ended: wait again. Not
++    // while our own write has yet to report: that moved it.
+     tailStillMoving: () => {
+       const state = this.scrollState
+-      if (state?.phase !== 'queued' || this.pendingWrite !== null) {
+-        return false
+-      }
++      if (this.pendingWrite !== null) return false
+       const now = this._readElementOffset()
+       if (
+         now === null ||
+@@ -570,7 +572,9 @@ export class Virtualizer<
+       this._lastElementOffset = now
+       // It moved with no event: a sample, so the speed `flingCaught` reads
+       // when it stops is not the one from before the silence.
+-      state.samples = [...(state.samples ?? []), { t: this.now(), offset: now }]
++      if (state?.phase === 'queued') {
++        state.samples = [...(state.samples ?? []), { t: this.now(), offset: now }]
++      }
+       return true
+     },
+     onTailClosed: () => {
+@@ -592,6 +596,7 @@ export class Virtualizer<
    // coordinates. The tail compares it with the element (`tailStillMoving`
    // above).
    private _lastElementOffset: number | null = null
@@ -439,7 +538,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
    // Our last write to the element, from `_scrollToOffset` until the next
    // scroll event reports it (the only place it is cleared). Until then
    // `scrollOffset` may still hold the old position.
-@@ -782,6 +786,7 @@ export class Virtualizer<
+@@ -782,6 +787,7 @@ export class Virtualizer<
        merged.anchorTo === 'end' &&
        this.scrollElement !== null
      ) {
@@ -447,7 +546,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
        const prevCount = prevOptions.count
        const nextCount = merged.count
        const measurements = this.getMeasurements()
-@@ -798,8 +803,8 @@ export class Virtualizer<
+@@ -798,8 +804,8 @@ export class Virtualizer<
            (merged.getItemKey(0) !== prevFirstKey ||
              merged.getItemKey(nextCount - 1) !== prevLastKey))
  
@@ -458,7 +557,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
          const item =
            prevCount > 0
              ? (this.getVirtualItemForOffset(this.getScrollOffset()) ??
-@@ -845,6 +850,7 @@ export class Virtualizer<
+@@ -845,6 +851,7 @@ export class Virtualizer<
      // unchanged `count` would let getMeasurements() return the old layout.
      if (edgeKeysChanged) {
        this.pendingMin = 0
@@ -466,7 +565,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
        this.itemSizeCacheVersion++
      }
  
-@@ -1025,6 +1031,8 @@ export class Virtualizer<
+@@ -1025,6 +1032,8 @@ export class Virtualizer<
      this._clampedAdjustment = null
      // A write to the old element will never be read back.
      this.pendingWrite = null
@@ -475,7 +574,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
      this.scrollElement = null
      this.targetWindow = null
    }
-@@ -1068,7 +1076,7 @@ export class Virtualizer<
+@@ -1068,7 +1077,7 @@ export class Virtualizer<
        )
  
        this.unsubs.push(
@@ -484,7 +583,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
            // Past the top is never a resting position. Past the bottom is
            // judged only while scrolling: at rest the element has clamped,
            // and a stale sizer makes no bounce.
-@@ -1215,6 +1223,7 @@ export class Virtualizer<
+@@ -1215,6 +1224,7 @@ export class Virtualizer<
  
      // The consumer has committed the sizer.
      this._noteClampMax()
@@ -492,7 +591,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
  
      const anchor = this.pendingScrollAnchor
      this.pendingScrollAnchor = null
-@@ -1336,6 +1345,19 @@ export class Virtualizer<
+@@ -1336,6 +1346,19 @@ export class Virtualizer<
      this.scheduleScrollReconcile()
    }
  
@@ -512,7 +611,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
    // The element's position as the offset observers report it, or null for a
    // scroll element that is neither an element nor a window.
    private _readElementOffset = (): number | null => {
-@@ -1364,7 +1386,9 @@ export class Virtualizer<
+@@ -1364,7 +1387,9 @@ export class Virtualizer<
    // A write that is unwanted for another reason (a travelling smooth scroll
    // owns the position) is a separate check at the call sites.
    private _canWriteScroll = () =>
@@ -523,7 +622,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
  
    // Write a held correction once a write is possible, from the scroll
    // handler, the touch tail timer, `_willUpdate` and a resize notify. The
-@@ -1660,6 +1684,45 @@ export class Virtualizer<
+@@ -1660,6 +1685,45 @@ export class Virtualizer<
          this.lanesSettling = false
        }
  
@@ -569,7 +668,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
        // ─── Fast path: single-lane lazy materialization ────────────────────
        // For lanes === 1 (the default and most common case), skip the
        // per-item VirtualItem object allocation. We write start/size pairs
-@@ -1975,6 +2038,7 @@ export class Virtualizer<
+@@ -1975,6 +2039,7 @@ export class Virtualizer<
  
    resizeItem = (index: number, size: number) => {
      if (!this.isIndexInRange(index)) return
@@ -577,7 +676,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
  
      // An earlier entry in this ResizeObserver batch moved `scrollOffset`.
      // Outside a batch its sync notify would have re-rendered and rebuilt the
-@@ -2009,6 +2073,7 @@ export class Virtualizer<
+@@ -2009,6 +2074,7 @@ export class Virtualizer<
      if (delta !== 0) {
        const wasAtEnd =
          this.options.anchorTo === 'end' &&
@@ -585,7 +684,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
          !isSmoothScroll(this.scrollState) &&
          this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold
        const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0
-@@ -2053,6 +2118,7 @@ export class Virtualizer<
+@@ -2053,6 +2119,7 @@ export class Virtualizer<
          this.pendingMin = index
        }
        this.itemSizeCache.set(key, size)
@@ -593,7 +692,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
        this.itemSizeCacheVersion++
  
        // Before a command's read-back, an index or end target is retargeted
-@@ -2625,6 +2691,7 @@ export class Virtualizer<
+@@ -2625,6 +2692,7 @@ export class Virtualizer<
        { behavior, adjustments },
        this,
      )
@@ -601,7 +700,7 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
      return write
    }
  
-@@ -2674,6 +2741,7 @@ export class Virtualizer<
+@@ -2674,6 +2742,7 @@ export class Virtualizer<
      // Without this, a prior resizeItem() that left pendingMin > 0 would
      // cause the rebuild to preserve stale items before that index.
      this.pendingMin = null
@@ -609,3 +708,21 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..16fd5c1f95d4c8d0edf2ba3c80064ccd
      this.itemSizeCache.clear()
      this.laneAssignments.clear() // Clear lane cache for full re-layout
      this.itemSizeCacheVersion++
+diff --git a/src/ios-gesture.ts b/src/ios-gesture.ts
+index e33787e1b69faadd3036f208073e888a996f35ea..04652666c878b1aabe234591bc408accdf83d688 100644
+--- a/src/ios-gesture.ts
++++ b/src/ios-gesture.ts
+@@ -132,8 +132,11 @@ export class IosGesture {
+     // Momentum after touchend fires a scroll event per frame but no touch
+     // events, so each one re-arms the tail to span the fling. Only an open
+     // tail is extended: a scroll event with no touch before it (our own
+-    // write's read-back) never opens one.
+-    if (isScrolling && this._touch?.phase === 'tail') {
++    // write's read-back) never opens one. The at-rest report the offset
++    // observer sends 150ms after a scroll event runs before the tail timer
++    // and, after a busy main thread, can find the fling moved on: that
++    // movement keeps the tail open too.
++    if ((isScrolling || moved) && this._touch?.phase === 'tail') {
+       this._openTail(this._touch.moved || !ownReadBack, false)
+     } else if (this._touch?.phase === 'lateFling') {
+       // A drag's fling reporting after its tail closed reopens it.

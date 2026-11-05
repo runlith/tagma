@@ -20,6 +20,10 @@
     "resized-positions": {
       "markers": ["_resizedIndexes", "_measuredWith"],
       "tests": [{ "package": "packages/virtual-list", "file": "./src/positions.test.ts" }]
+    },
+    "moving-tail": {
+      "markers": ["(isScrolling || moved)", "if (this.pendingWrite !== null) return false", "if (state?.phase === 'queued') {"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/touchTail.test.ts" }]
     }
   }
 }
