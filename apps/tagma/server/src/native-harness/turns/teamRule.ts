@@ -1,7 +1,9 @@
 import { agentRule, type AgentRule } from '@runlith/agent/AgentRuntimePolicy';
 import { reviewers, reviewWords, teamModelsWords } from '@runlith/agent/collaboration/team';
+import { capabilityHolds } from '@runlith/agent/thread/agents/AgentDefinitions';
 import { Effect, Hash, Schema } from 'effect';
 import { toldState } from './guidance.js';
+import { PEERS_CAPABILITY } from '../../threads/contract/wire/capability.js';
 import type { ThreadTeams } from '../../threads/contract/service/team.js';
 import type { ThreadContext } from './context.js';
 import type { NativeRuleSource } from '../contract/service/rules.js';
@@ -21,7 +23,7 @@ export function teamRule(teams: ThreadTeams['Service']): AgentRule<ThreadContext
     TOLD,
     (ctx) =>
       Effect.gen(function* () {
-        if (ctx.hook !== 'beforeStep') return null;
+        if (ctx.hook !== 'beforeStep' || !capabilityHolds(ctx.thread.profile?.overlay, { id: PEERS_CAPABILITY })) return null;
         const place = { threadId: ctx.thread.id, projectId: ctx.projectId };
         const layers = yield* teams.layers(place);
         const models = Hash.combine(Hash.string(JSON.stringify(layers.edits)), layers.connected.revision);

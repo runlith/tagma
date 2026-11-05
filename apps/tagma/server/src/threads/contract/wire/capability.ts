@@ -1,5 +1,7 @@
 import type { CapabilityDeclaration } from '../../../platform/contract/wire/capability.js';
 
+export const PEERS_CAPABILITY = 'peers';
+
 export const THREAD_CAPABILITIES = [
   {
     id: 'threads',
@@ -7,7 +9,7 @@ export const THREAD_CAPABILITIES = [
     sections: ['threads-as-evidence'],
   },
   {
-    id: 'peers',
+    id: PEERS_CAPABILITY,
     description: 'spawning and speaking to other agents',
     sections: ['keep-warm'],
     runtimeSources: ['collaboration'],
