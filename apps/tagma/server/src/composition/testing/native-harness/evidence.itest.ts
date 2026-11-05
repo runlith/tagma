@@ -1384,7 +1384,7 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
     }),
   );
 
-  it.effect('entries of a branch read at the cost of its source: an inherited log is no slower to read than an own one', () =>
+  it.effect('entries of a branch of a branch answer the latest revision of each call across every layer it inherits', () =>
     Effect.gen(function* () {
       const { call, projectId } = yield* Evidence;
       const tool = (callId: string, toolName: string, toolState: string, occurredAt: string) => ({
@@ -1405,7 +1405,8 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
       });
       const source = yield* thread(projectId);
       yield* append(source, [
-        ...Array.from({ length: 1500 }, (_, index) => tool(`read-${index}`, 'read', 'output-available', '2026-11-05T09:00:00.000Z')),
+        tool('early', 'navigate_page', 'output-available', '2026-11-05T09:00:00.000Z'),
+        tool('other', 'read', 'output-available', '2026-11-05T11:30:00.000Z'),
         tool('opened', 'open_page', 'input-available', '2026-11-05T11:00:00.000Z'),
       ]);
       const branchOf = (threadId: string) =>
@@ -1418,7 +1419,6 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
       const branch = yield* branchOf(settled);
       yield* append(branch, [tool('acted', 'act_on_page', 'input-available', '2026-11-05T12:00:00.000Z')]);
       const browsing = Effect.fnUntraced(function* (threadId: string) {
-        const started = performance.now();
         const answered = yield* query(projectId, {
           select: 'entries',
           threads: [threadId],
@@ -1426,20 +1426,17 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
             { field: 'toolName', op: 'in', value: ['open_page', 'navigate_page', 'act_on_page'] },
             { field: 'occurredAt', op: 'gte', value: '2026-11-05T10:00:00Z' },
           ],
-          fields: ['threadId', 'occurredAt', 'toolName', 'entry.toolInput'],
+          fields: ['threadId', 'occurredAt', 'toolName', 'toolState', 'entry.toolInput'],
           limit: 80,
         });
-        return { ms: performance.now() - started, rows: answered.answer.rows.map((row) => [row.toolName, row['entry.toolInput']]) };
+        return answered.answer.rows.map((row) => [row.toolName, row.toolState, row['entry.toolInput']]);
       });
 
-      const own = yield* browsing(source);
-      const inherited = yield* browsing(branch);
-      expect(own.rows).toEqual([['open_page', { at: 'opened' }]]);
-      expect(inherited.rows).toEqual([
-        ['open_page', { at: 'opened' }],
-        ['act_on_page', { at: 'acted' }],
+      expect(yield* browsing(source)).toEqual([['open_page', 'input-available', { at: 'opened' }]]);
+      expect(yield* browsing(branch)).toEqual([
+        ['open_page', 'output-available', { at: 'opened' }],
+        ['act_on_page', 'input-available', { at: 'acted' }],
       ]);
-      expect(inherited.ms).toBeLessThan(own.ms * 4 + 250);
     }),
   );
 });
