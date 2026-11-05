@@ -5,7 +5,7 @@ ord: 5
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "done"
   }
 edges:
   - kind: discovered-from
