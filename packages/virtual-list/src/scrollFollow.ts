@@ -26,6 +26,10 @@ export function wheelCrossesOut(input: ScrollMetrics & { delta: number }): boole
   return input.delta > max - input.scrollTop;
 }
 
+export function wheelMoves(input: ScrollMetrics & { delta: number }): boolean {
+  return input.delta < 0 ? input.scrollTop >= 1 : input.delta > 0 && bottomDistance(input) >= 1;
+}
+
 export function bottomDistance(metrics: ScrollMetrics): number {
   return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop;
 }

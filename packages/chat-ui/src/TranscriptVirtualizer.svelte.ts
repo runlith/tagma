@@ -10,6 +10,7 @@ import type { ChatTimelineItem, RowModel } from './timeline';
 const ESTIMATED_ROW_PX = 60;
 export const TRANSCRIPT_END_THRESHOLD_PX = 80;
 const ROW_LANDING_GAP_PX = 12;
+const RUNWAY_VIEWPORTS = 3;
 const MOVED_PX = 1.5;
 const UNPLACED_PX = 1e12;
 const EMPTY_ROWS: RowModel = {
@@ -40,6 +41,7 @@ export class TranscriptVirtualizer {
   private building = false;
   private clearance = 0;
   private margin = 0;
+  private reserved = 0;
   private release: (() => void) | undefined;
   private root: HTMLElement | undefined;
   private list: HTMLElement | undefined;
@@ -72,6 +74,7 @@ export class TranscriptVirtualizer {
     if (key === this.threadKey) return;
     this.remember();
     this.threadKey = key;
+    this.reserved = 0;
     this.dropVirtualizer();
   }
 
@@ -82,6 +85,7 @@ export class TranscriptVirtualizer {
     shape: number;
     clearance: number;
     disclosure: number;
+    older: boolean;
   }): void {
     const held = this.virtualizer !== undefined && input.root === this.root && !this.keepsEnd ? this.anchorAt(this.virtualizer) : undefined;
     this.rows_ = input.model;
@@ -90,10 +94,10 @@ export class TranscriptVirtualizer {
       reshaped && held !== undefined && this.aim === undefined && this.rows_.indexOf(held.key) < 0
         ? this.survivor(this.virtualizer!, held)
         : undefined;
-    if (reshaped) {
-      this.shape = input.shape;
-      this.itemKey = (index) => this.rows_.keyAt(index) ?? index;
-    }
+    const runway = input.older && input.root ? this.reserved || RUNWAY_VIEWPORTS * input.root.clientHeight : 0;
+    if (reshaped) this.shape = input.shape;
+    if (reshaped || runway !== this.reserved) this.itemKey = (index) => this.rows_.keyAt(index) ?? index;
+    this.reserved = runway;
     this.clearance = input.clearance;
     const rebuilt = input.root !== this.root;
     if (rebuilt) {
@@ -123,6 +127,14 @@ export class TranscriptVirtualizer {
     if (reshaped) this.reaim(virtualizer);
     if (successor !== undefined) this.relocate(virtualizer, successor);
     this.holdTail();
+  }
+
+  get runway(): number {
+    return this.reserved;
+  }
+
+  answersWrite(): boolean {
+    return this.virtualizer?.answersWrite() ?? false;
   }
 
   holdWrites(hold: WriteHold, held: boolean): void {
@@ -405,11 +417,12 @@ export class TranscriptVirtualizer {
       rangeExtractor: (range: Range) => this.window(range),
       scrollMargin: this.margin,
       scrollPaddingStart: ROW_LANDING_GAP_PX,
+      paddingStart: this.reserved,
       paddingEnd: this.clearance,
       anchorTo: 'end' as const,
       followOnAppend: keeps,
       scrollEndThreshold: keeps ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY,
-      initialOffset: () => (this.keepsEnd ? Number.MAX_SAFE_INTEGER : 0),
+      initialOffset: () => (this.keepsEnd ? Number.MAX_SAFE_INTEGER : this.reserved),
       onMeasure: (node) => this.measured(node),
       onResize: () => this.resized(),
       onScroll: (_offset, scrolling) => {

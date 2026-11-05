@@ -1,4 +1,4 @@
-import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@runlith/virtual-list/scrollFollow';
+import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance, wheelMoves } from '@runlith/virtual-list/scrollFollow';
 import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/virtual-list/FollowingViewport.svelte';
 import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
@@ -25,7 +25,7 @@ export class TranscriptViewport {
   private refused = false;
   private request = 0;
   private wheelAt = Number.NEGATIVE_INFINITY;
-  private wheeling: 'none' | 'armed' | 'scrolling' = 'none';
+  private wheeling = false;
   private readerMoved = false;
   private inputRoot: HTMLElement | undefined;
   private pressing = false;
@@ -48,7 +48,10 @@ export class TranscriptViewport {
       this.readPosition();
       this.askForOlder(root);
     },
-    onAnchor: (anchored) => this.window.keepEnd(anchored),
+    onAnchor: (anchored) => {
+      if (anchored) this.endWheel();
+      this.window.keepEnd(anchored);
+    },
   });
 
   constructor(memory: FeedMemory) {
@@ -96,7 +99,6 @@ export class TranscriptViewport {
     this.inputRoot = root;
     if (!root) return;
     root.addEventListener('wheel', this.onWheel, { passive: true });
-    root.addEventListener('scroll', this.onScroll, { passive: true });
     root.addEventListener('scrollend', this.onScrollEnd, { passive: true });
     root.addEventListener('touchstart', this.onTouchStart, { passive: true });
     root.addEventListener('touchmove', this.onTouchMove, { passive: true });
@@ -239,24 +241,23 @@ export class TranscriptViewport {
     if (delta === 0) return;
     const starts = event.timeStamp - this.wheelAt >= WHEEL_PAUSE_MS;
     this.wheelAt = event.timeStamp;
-    if (event.isTrusted && this.wheeling === 'none' && 'onscrollend' in root) this.wheeling = 'armed';
-    this.input(event.target, delta, starts);
-  };
-
-  private readonly onScroll = (): void => {
-    if (this.wheeling !== 'armed') return;
-    this.wheeling = 'scrolling';
-    this.window.holdWrites('wheel', true);
+    if (!this.reaches(event.target, delta)) return;
+    const moves = wheelMoves({ clientHeight: root.clientHeight, scrollHeight: root.scrollHeight, scrollTop: root.scrollTop, delta });
+    if (event.isTrusted && moves && 'onscrollend' in root) {
+      this.wheeling = true;
+      this.window.holdWrites('wheel', true);
+    }
+    this.window.letGo();
+    this.heard(delta, starts);
   };
 
   private readonly onScrollEnd = (): void => {
-    if (this.wheeling !== 'scrolling') return;
-    this.wheeling = 'none';
-    this.window.holdWrites('wheel', false);
+    if (this.window.answersWrite() || !this.wheeling) return;
+    this.endWheel();
   };
 
   private endWheel(): void {
-    this.wheeling = 'none';
+    this.wheeling = false;
     this.window.holdWrites('wheel', false);
   }
 
@@ -337,20 +338,17 @@ export class TranscriptViewport {
   }
 
   private input(target: EventTarget | null, delta: number, starts: boolean): void {
-    const root = this.inputRoot;
-    if (!root) return;
-    const nested = target instanceof Element ? target.closest('[data-scrollable]') : null;
-    if (nested instanceof HTMLElement && nested !== root) {
-      const crosses = wheelCrossesOut({
-        clientHeight: nested.clientHeight,
-        scrollHeight: nested.scrollHeight,
-        scrollTop: nested.scrollTop,
-        delta,
-      });
-      if (!crosses) return;
-    }
+    if (!this.reaches(target, delta)) return;
     this.window.letGo();
     this.heard(delta, starts);
+  }
+
+  private reaches(target: EventTarget | null, delta: number): boolean {
+    const root = this.inputRoot;
+    if (!root) return false;
+    const nested = target instanceof Element ? target.closest('[data-scrollable]') : null;
+    if (!(nested instanceof HTMLElement) || nested === root) return true;
+    return wheelCrossesOut({ clientHeight: nested.clientHeight, scrollHeight: nested.scrollHeight, scrollTop: nested.scrollTop, delta });
   }
 
   private heard(delta: number, starts: boolean): void {
@@ -363,8 +361,8 @@ export class TranscriptViewport {
   private askForOlder(root: HTMLElement): void {
     if (this.paging || this.refused) return;
     if (this.following) {
-      if (!canScroll({ clientHeight: root.clientHeight, scrollHeight: root.scrollHeight, scrollTop: root.scrollTop }))
-        this.page(this.fill, true);
+      const loaded = root.scrollHeight - this.window.runway;
+      if (!canScroll({ clientHeight: root.clientHeight, scrollHeight: loaded, scrollTop: root.scrollTop })) this.page(this.fill, true);
       return;
     }
     if (this.window.head < HEAD_REACH_VIEWPORTS * root.clientHeight) this.page(this.head, false);
@@ -395,7 +393,6 @@ export class TranscriptViewport {
     const root = this.inputRoot;
     if (!root) return;
     root.removeEventListener('wheel', this.onWheel);
-    root.removeEventListener('scroll', this.onScroll);
     root.removeEventListener('scrollend', this.onScrollEnd);
     this.endWheel();
     root.removeEventListener('touchstart', this.onTouchStart);

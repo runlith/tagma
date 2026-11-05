@@ -197,6 +197,7 @@
       shape: rows.shape,
       clearance: clearance + FEED_BOTTOM_GAP_PX,
       disclosure: rendering.context.revision,
+      older: hasOlder,
     };
     untrack(() => virtualizer.sync(input));
   });

@@ -224,7 +224,15 @@ async function opened(keys: readonly string[] = numbered(0, 200), messages: read
     if (next !== model) shape += 1;
     if (worth !== undefined) disclosure += 1;
     model = next;
-    viewport.window.sync({ root: browser.root, list: browser.list, model: modelOf(next, worth), shape, clearance: 0, disclosure });
+    viewport.window.sync({
+      root: browser.root,
+      list: browser.list,
+      model: modelOf(next, worth),
+      shape,
+      clearance: 0,
+      disclosure,
+      older: false,
+    });
     browser.paint(viewport);
   };
   sync(keys);

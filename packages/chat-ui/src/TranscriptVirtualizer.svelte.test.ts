@@ -98,7 +98,7 @@ function opened(
   if (options.tail === false) virtualizer.keepEnd(false);
   const root = container();
   const held = list(root);
-  const input = { root, list: held, clearance: options.clearance ?? 0 };
+  const input = { root, list: held, clearance: options.clearance ?? 0, older: false };
   const sync = (next: readonly ChatTimelineItem[], disclosure = 0) =>
     virtualizer.sync({ ...input, model: modelOf(next), shape: shapeOf(next), disclosure });
   sync(items);

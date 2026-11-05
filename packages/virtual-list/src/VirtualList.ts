@@ -24,6 +24,7 @@ export interface ListOptions {
   rangeExtractor?(range: Range): number[];
   gap?: number;
   scrollMargin?: number;
+  paddingStart?: number;
   paddingEnd?: number;
   scrollPaddingStart?: number;
   anchorTo?: 'start' | 'end';
@@ -57,6 +58,7 @@ export class VirtualList extends Virtualizer<HTMLElement, HTMLElement> {
   private measuring = false;
   private unpublished = false;
   private flushing = false;
+  private written = false;
   private release: (() => void) | undefined;
 
   constructor(options: ListOptions) {
@@ -238,7 +240,17 @@ export class VirtualList extends Virtualizer<HTMLElement, HTMLElement> {
     const target = offset + (options.adjustments ?? 0);
     const end = this.listHeight + this.options.scrollMargin - (this.scrollRect?.height ?? 0);
     if (target > Math.max(0, end)) this.size();
+    const element = instance.scrollElement;
+    const before = element?.scrollTop ?? 0;
     elementScroll(offset, options, instance);
+    if (element !== null && (options.behavior === 'smooth' ? Math.abs(target - before) >= 1 : element.scrollTop !== before))
+      this.written = true;
+  };
+
+  readonly answersWrite = (): boolean => {
+    const written = this.written;
+    this.written = false;
+    return written;
   };
 
   private readonly changed = (_instance: Core, sync: boolean): void => {
