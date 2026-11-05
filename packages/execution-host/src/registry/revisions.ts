@@ -40,7 +40,7 @@ export const standingDeadline = Effect.fnUntraced(function* (
     const open = yield* calls.deadline(operation).pipe(Effect.catchTag('CallMissing', () => Effect.succeed(undefined)));
     if (open !== undefined) return liveDeadline(ref, open);
   }
-  const filed = yield* Effect.result(store.revisionOf(ref.execution));
+  const filed = yield* Effect.result(store.appliedRevisionOf(ref.execution));
   if (filed._tag === 'Failure') {
     if (filed.failure._tag === 'StoredExecutionMissing') return admittedDeadline(ref, admission);
     return yield* new ExecutionUnreadable({ execution: ref.execution, reason: filed.failure._tag });

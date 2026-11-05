@@ -31,7 +31,7 @@ export const unreadStore = ExecutionStore.of({
   recordRevision: unused,
   resolveRevision: unused,
   endRevisionsOf: unused,
-  revisionOf: unused,
+  appliedRevisionOf: unused,
   revisionAt: unused,
   recordCall: unused,
   callOf: unused,

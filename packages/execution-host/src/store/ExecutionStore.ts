@@ -220,7 +220,7 @@ export class ExecutionStore extends Context.Service<
       outcome: 'applied' | 'ended',
     ) => Effect.Effect<CommandRevisionRecord, StoreLost | StoreUnreadable | StoreFailure>;
     readonly endRevisionsOf: (execution: ExecutionId) => Effect.Effect<void, StoreLost | StoreFailure>;
-    readonly revisionOf: (
+    readonly appliedRevisionOf: (
       execution: ExecutionId,
     ) => Effect.Effect<CommandRevisionRecord | undefined, StoreLost | StoredExecutionMissing | StoreUnreadable | StoreFailure>;
     readonly revisionAt: (
@@ -1222,13 +1222,13 @@ const open = Effect.fn('ExecutionStore.open')(function* (registration: Registrat
         ),
       ),
 
-    revisionOf: (execution) =>
+    appliedRevisionOf: (execution) =>
       unit(
         Effect.gen(function* () {
           const rows = yield* db
             .select()
             .from(commandRevisionTable)
-            .where(eq(commandRevisionTable.executionId, execution))
+            .where(and(eq(commandRevisionTable.executionId, execution), eq(commandRevisionTable.outcome, 'applied')))
             .orderBy(desc(commandRevisionTable.revision))
             .limit(1);
           return yield* revisionFrom(rows[0]);
