@@ -49,6 +49,12 @@ const offerLine = (offer: NextOffer): string => {
   return `        ${offer.title}${facts.length === 0 ? '' : ` · ${facts.join(' · ')}`} — ${offer.why ?? offer.disabled ?? offer.update}`;
 };
 
+export const readOnlyWarning = (offer: NextOffer): string | null => {
+  const names = offer.readOnlyGraphs ?? [];
+  if (names.length === 0) return null;
+  return `${offer.label} would serve the ${names.length === 1 ? 'graph' : 'graphs'} of ${names.join(', ')} read-only: ${names.length === 1 ? 'it has' : 'they have'} passed a format step it does not know`;
+};
+
 export function renderMachine(standing: MachineState, url: string): string {
   const now = Date.parse(standing.readAt);
   const { server, host } = standing;
@@ -65,7 +71,11 @@ export function renderMachine(standing: MachineState, url: string): string {
   lines.push(`next    ${next.standing.said.map((part) => part.text).join('')}`);
   if (next.issue !== null) lines.push(`        ${next.issue.reason}`);
   for (const offer of next.offers) lines.push(offerLine(offer));
-  if (next.back !== null) lines.push(offerLine(next.back));
+  if (next.back !== null) {
+    lines.push(offerLine(next.back));
+    const warned = readOnlyWarning(next.back);
+    if (warned !== null) lines.push(`          ${warned}`);
+  }
   if (next.installing !== null) {
     const installing = next.installing;
     const step = installing.steps.find((one) => one.id === installing.step)?.title ?? installing.step;

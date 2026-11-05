@@ -92,6 +92,7 @@ import { expectsRelease, replaced, serving, standBy, type StoodBy } from '../ins
 import { successionLayer } from '../installation/process/succession.js';
 import { attemptOf, startFailure } from './attempt.js';
 import { journalsServed, stepBackSettledAt } from './returning.js';
+import { graphMarksOf } from './backGraphs.js';
 import { ThreadRollouts } from '../threads/contract/service/rollouts.js';
 import { successorPlan } from './successorPlan.js';
 import { connectLaunch } from '../installation/process/launch.js';
@@ -580,6 +581,7 @@ export const serve = async (build: Build): Promise<void> => {
                 downgrade: Context.get(tagma.door, DowngradeSteps),
                 roots: Context.get(tagma.workspace, FileRoots),
                 watch: Context.get(tagma.workspace, CheckoutWatch),
+                graphs: graphMarksOf(tagma.graph, storePath),
               })
               .pipe(
                 Layer.provide(

@@ -15,6 +15,7 @@ import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { type InstallationRole, MIGRATIONS, SERVER_ENTRY } from '../../../installation/contract/wire/manifest.js';
 import { testProcesses } from '../../../installation/testing/processes.js';
 import { swapCurrent } from '../../../platform/lock/versionedDirectories.js';
+import { GRAPH_STEPS } from '../../../graph/steps/sequence.js';
 import { ENTRY_KINDS } from '../composed.js';
 import { checkoutInstalled, LEAVING_MIGRATION, leavingCopy } from './installed.js';
 import { freePorts, healthAt, op, served, servingBuild, worldEnv } from './serving.js';
@@ -23,6 +24,8 @@ const STEPS = ENTRY_KINDS.steps.map((step) => step.name);
 const NEWEST = STEPS.at(-1)!;
 const PREVIOUS = STEPS.at(-2)!;
 const UNKNOWN_STEP = `${NEWEST.slice(0, -1)}${NEWEST.endsWith('z') ? 'y' : 'z'}`;
+const GRAPH_NEWEST = GRAPH_STEPS.at(-1)!.id;
+const UNKNOWN_GRAPH = `${GRAPH_NEWEST.slice(0, -1)}${GRAPH_NEWEST.endsWith('z') ? 'y' : 'z'}`;
 const BROKEN_MIGRATION = '29991231000001_cannot_apply';
 
 const wrote = (path: string, text: string): void => {
@@ -75,11 +78,14 @@ const stepBackWorld = Effect.fnUntraced(function* () {
       part.kind === 'file' &&
       part.path.startsWith('bin/') &&
       /\.(js|ts)$/u.test(part.path) &&
-      readFileSync(join(landed.root, part.path), 'utf8').includes(NEWEST),
+      [NEWEST, GRAPH_NEWEST].some((step) => readFileSync(join(landed.root, part.path), 'utf8').includes(step)),
   );
   expect(patched.map((part) => part.path)).toContain(SERVER_ENTRY);
   for (const part of patched)
-    writeFileSync(join(landed.root, part.path), readFileSync(join(landed.root, part.path), 'utf8').replaceAll(NEWEST, UNKNOWN_STEP));
+    writeFileSync(
+      join(landed.root, part.path),
+      readFileSync(join(landed.root, part.path), 'utf8').replaceAll(NEWEST, UNKNOWN_STEP).replaceAll(GRAPH_NEWEST, UNKNOWN_GRAPH),
+    );
   const repatched = yield* Effect.forEach(patched, (part) => partsAt(landed.root, part.role as InstallationRole, part.path));
   yield* writeInstallation(landed.root, landed.manifest.platform, beforeBuild, [
     ...landed.manifest.parts.filter((part) => !patched.includes(part)),
@@ -123,6 +129,11 @@ it.live(
       const born = yield* op(origin, `create_thread?project=${projectId}`, { approvalMode: 'trust' });
       const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
       expect(mark(store, threadId)).toBe(NEWEST);
+      const offered = yield* op(origin, 'read_machine_state', {});
+      expect(
+        (offered.body.machine as { server: { next: { back: { readOnlyGraphs?: readonly string[] } | null } } }).server.next.back
+          ?.readOnlyGraphs,
+      ).toContain('tools');
       const writing = new Database(store);
       writing.run(`INSERT INTO meta (key, value) VALUES ('users-work', 'kept')`);
       writing.close();

@@ -38,6 +38,10 @@ export const nextOfferSchema = Schema.Struct({
   why: Schema.NullOr(Schema.String).annotate({ description: 'What made it disabled, for an agent or a report.' }),
   update: Schema.String,
   install: Schema.String,
+  readOnlyGraphs: Schema.optionalKey(Schema.Array(Schema.String)).annotate({
+    description:
+      'The projects whose graph the installation this leads to would serve read-only: their graph passed a format step it does not know.',
+  }),
 });
 export type NextOffer = typeof nextOfferSchema.Type;
 

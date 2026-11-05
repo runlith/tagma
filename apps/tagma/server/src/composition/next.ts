@@ -1,10 +1,11 @@
-import { type Effect, Layer } from 'effect';
+import { Effect, Layer } from 'effect';
 import { unofferedLayer } from '../installation/unoffered.js';
 import type { HttpClient } from 'effect/http';
 import type { ProcessProvenance } from '../platform/contract/wire/provenance.js';
 import type { Installation, InstallationFailure } from '../installation/contract/wire/manifest.js';
-import type { NextInstallation, RestartRefused } from '../installation/contract/service/next.js';
-import type { DowngradeSteps } from '../installation/contract/service/steps.js';
+import { NextInstallation, type RestartRefused } from '../installation/contract/service/next.js';
+import type { DowngradeSteps, GraphMarks } from '../installation/contract/service/steps.js';
+import { withBackGraphs } from './backGraphs.js';
 import type { Settings } from '../settings/contract/service/values.js';
 import type { FileRoots } from '../workspace/contract/service/roots.js';
 import type { CheckoutWatch } from '../workspace/contract/service/watch.js';
@@ -38,6 +39,7 @@ export type NextPlace = SourcePlace & {
   readonly downgrade: DowngradeSteps['Service'];
   readonly roots: FileRoots['Service'];
   readonly watch: CheckoutWatch['Service'];
+  readonly graphs: GraphMarks;
 };
 
 export type NextNeeds = Settings | HttpClient.HttpClient;
@@ -63,6 +65,12 @@ export type BindingChoice = {
 };
 
 export const boundOf = (choice: BindingChoice): Bindings => ({
-  nextInstallation: choice.nextInstallation ?? (() => unofferedLayer),
+  nextInstallation: (place) =>
+    Layer.effect(
+      NextInstallation,
+      Effect.gen(function* () {
+        return withBackGraphs(yield* NextInstallation, place.installations, place.graphs);
+      }),
+    ).pipe(Layer.provide((choice.nextInstallation ?? (() => unofferedLayer))(place))),
   door: choice.door ?? (() => Layer.empty),
 });
