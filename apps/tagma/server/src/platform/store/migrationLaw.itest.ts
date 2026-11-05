@@ -9,14 +9,26 @@ const BASE = [
   'CREATE TABLE `owners` (`id` integer PRIMARY KEY)',
 ];
 
-const lossesOf = (statements: readonly string[], aside: string | null = null) =>
+const lossesOf = (statements: readonly string[], aside: string | null = null, back: string | null = null) =>
   stepBackLosses(
     [
       { name: 'base', sql: BASE.join('\n--> statement-breakpoint\n'), back: null, aside: null },
-      { name: 'judged', sql: statements.join('\n--> statement-breakpoint\n'), back: null, aside },
+      { name: 'judged', sql: statements.join('\n--> statement-breakpoint\n'), back, aside },
     ],
     new Set(['judged']),
   ).map((loss) => loss.fingerprint);
+
+test('a back.sql covers a rename only when it names the table or column back', () => {
+  const renamed = ['ALTER TABLE `entities` RENAME COLUMN `name` TO `title`', 'ALTER TABLE `labels` RENAME TO `tags`'];
+  expect(lossesOf(renamed, null, 'SELECT 1')).toEqual(['back leaves labels renamed', 'back leaves entities.name renamed']);
+  expect(
+    lossesOf(
+      renamed,
+      null,
+      'ALTER TABLE `tags` RENAME TO `labels`;\n--> statement-breakpoint\nALTER TABLE `entities` RENAME COLUMN `title` TO `name`',
+    ),
+  ).toEqual([]);
+});
 
 test('a migration that only adds, or rebuilds a table through a copy renamed into its place, loses nothing on a step back', () => {
   expect(

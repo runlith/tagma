@@ -133,17 +133,28 @@ const decodeAside = Schema.decodeUnknownResult(Schema.fromJsonString(AsideDeclar
 
 const reasonOf = (failure: unknown): string => (failure instanceof Error ? failure.message : String(failure));
 
-const backFailure = (db: Database, back: string): string | null => {
+const backed = (db: Database, back: string): { readonly shape: Shape } | { readonly failure: string } => {
   db.run('SAVEPOINT judged_back');
   try {
     for (const statement of statementsOf(back)) db.run(statement);
-    return null;
+    return { shape: shapeOf(db) };
   } catch (failure) {
-    return reasonOf(failure);
+    return { failure: reasonOf(failure) };
   } finally {
     db.run('ROLLBACK TO judged_back');
     db.run('RELEASE judged_back');
   }
+};
+
+const unrenamed = (before: Shape, after: Shape, statements: readonly string[]): readonly string[] => {
+  const renamed = renamedIn(statements);
+  const tables = [...renamed.tables].filter((table) => before.has(table) && !after.has(table));
+  const columns = [...renamed.columns].flatMap(([table, names]) =>
+    before.has(table)
+      ? [...names].filter((name) => before.get(table)!.has(name) && after.get(table)?.has(name) !== true).map((name) => `${table}.${name}`)
+      : [],
+  );
+  return [...tables, ...columns];
 };
 
 export const stepBackLosses = (chain: readonly ChainedMigration[], judged: ReadonlySet<string>): readonly StepBackLoss[] => {
@@ -168,13 +179,20 @@ export const stepBackLosses = (chain: readonly ChainedMigration[], judged: Reado
             `${issue.table ?? 'unknown target'}: ${issue.reason}, and no back.sql stands beside it to return it: ${issue.statement.trim()}`,
           );
       } else {
-        const failure = backFailure(db, migration.back);
-        if (failure !== null)
+        const ran = backed(db, migration.back);
+        if ('failure' in ran)
           loss(
             'back',
-            `back script ${failure}`,
-            `back.sql does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${failure}`,
+            `back script ${ran.failure}`,
+            `back.sql does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${ran.failure}`,
           );
+        else
+          for (const name of unrenamed(before, ran.shape, statements))
+            loss(
+              'back',
+              `back leaves ${name} renamed`,
+              `${name}: the migration renames it and back.sql does not name it back, so a step back would bring it back empty`,
+            );
       }
       const read = migration.aside === null ? null : decodeAside(migration.aside);
       if (read !== null && Result.isFailure(read)) {
