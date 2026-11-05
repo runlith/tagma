@@ -418,6 +418,7 @@ ios(
   async (phone) => {
     const measured = measuredOf(phone);
     await open(phone);
+    await away(phone);
     const paused = await quiet(phone, 'streaming-paused', (port) => port.stream(24), measured.envelope);
     expect(paused.frames.every((frame) => frame.anchor?.kind === 'paused')).toBe(true);
   },
