@@ -148,12 +148,7 @@ it.live('a linked worktree removed with git worktree remove ends its observation
         const subscriber = yield* following(watches, linked);
         yield* head(subscriber.events, state.first);
         yield* state.run(['worktree', 'remove', '--force', linked]);
-        yield* Effect.race(
-          Fiber.await(subscriber.fiber),
-          Effect.forEach(Array.from({ length: 500 }), () => TestClock.adjust(2000).pipe(Effect.andThen(Effect.yieldNow)), {
-            discard: true,
-          }),
-        );
+        yield* Effect.race(Fiber.await(subscriber.fiber), Effect.forever(TestClock.adjust(2000).pipe(Effect.andThen(Effect.yieldNow))));
         expect(subscriber.fiber.pollUnsafe()).toBeDefined();
         expect(tickets.standing().active).toBe(0);
       }).pipe(Effect.provideService(WatchTickets, tickets), Effect.provide(TestClock.layer()));

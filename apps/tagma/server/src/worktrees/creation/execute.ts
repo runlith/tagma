@@ -219,7 +219,10 @@ export const makeWorktreeCreator = Effect.gen(function* () {
             message: `${common} no longer holds ${opened.base}, which this creation was prepared to stand on.`,
           });
         }
-        yield* checks.free(opened, standing);
+        const vacancy = yield* Effect.result(checks.free(opened, standing));
+        const current = Result.isFailure(vacancy) ? yield* recovery.read(operationId, request.projectId) : opened;
+        if (current.status !== 'pending' || current.reserved) return current;
+        if (Result.isFailure(vacancy)) return yield* vacancy.failure;
         const inherited = yield* graphBase(opened, common, standing.head.ref);
         const outcome = yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
