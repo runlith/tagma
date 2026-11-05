@@ -44,12 +44,10 @@ it.live(
       writeFileSync(join(checkout, 'package.json'), JSON.stringify({ packageManager: 'bun@1.2.3' }));
       const cache = join(scratch, 'cache');
       const at = `http://127.0.0.1:${origin.port}`;
-      const target = { os: 'darwin', arch: 'x64' } as const;
-
-      const carried = yield* releaseRuntime(checkout, '1.2.3', target, cache, at);
+      const carried = yield* releaseRuntime(checkout, '1.2.3', name, cache, at);
       const asked = served;
-      const offline = yield* releaseRuntime(checkout, '1.2.3', target, cache, 'http://127.0.0.1:1');
-      const elsewhere = yield* Effect.exit(releaseRuntime(checkout, '1.2.4', target, cache, at));
+      const offline = yield* releaseRuntime(checkout, '1.2.3', name, cache, 'http://127.0.0.1:1');
+      const elsewhere = yield* Effect.exit(releaseRuntime(checkout, '1.2.4', name, cache, at));
 
       expect(readFileSync(carried, 'utf8')).toBe('the official binary\n');
       expect(asked).toBe(2);

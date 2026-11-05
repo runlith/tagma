@@ -9,7 +9,7 @@ import { runCut } from '../../cut/command.js';
 import type { Composition } from '../../cut/descriptor.js';
 import type { InstanceHosts } from '../../cut/port.js';
 import { cutCommand, notarizeCommand, shipCommand } from '../../cut/publish.js';
-import { transitionCommand } from '../../cut/transition.js';
+import { transitionCommand } from '../../mac-release/transition.js';
 import { tryout } from '../../cut/try.js';
 import type { Channel } from '../../installation/contract/wire/channel.js';
 import { readRemoteStartup } from '../../installation/process/serverStart.js';

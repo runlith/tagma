@@ -13,7 +13,7 @@ import type { Feed } from '../installation/contract/wire/feed.js';
 import type { Composition, Publisher } from './descriptor.js';
 import { KEPT_MAPS } from './pipeline.js';
 import { MAPS, RELEASE_RECORD, type ReleaseRecord } from './stage.js';
-import type { Notary } from './notarize.js';
+import type { Notary } from './platform.js';
 import { needsReleaseSource, publishRelease, shipCommand } from './publish.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-publish-')));

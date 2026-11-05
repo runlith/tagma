@@ -16,13 +16,15 @@ import { type FeedRelease, releaseAfter } from '../installation/contract/wire/fe
 import { dataDirectory } from '../installation/contract/wire/layout.js';
 import { hostBundle } from '../mac-applications/bundle.js';
 import { DESKTOP } from '../installation/contract/wire/manifest.js';
+import type { Composition } from '../cut/descriptor.js';
+import { cutCache, flagsOf, irreversibleOf, RELEASE_DIRECTORY, storesOf } from '../cut/pipeline.js';
+import { releaseRuntime } from '../cut/runtime.js';
+import { targetName } from '../cut/target.js';
+import { decodeRecord, digestOf, feedEntry, RELEASE_RECORD } from '../cut/stage.js';
+import { ReleaseRefused, releaseStaged } from '../cut/release.js';
+import { packRelease } from './packing.js';
 import { releaseIdentity } from './signing.js';
-import type { Composition } from './descriptor.js';
-import { cutCache, flagsOf, irreversibleOf, packRelease, RELEASE_DIRECTORY, storesOf } from './pipeline.js';
-import { releaseRuntime } from './runtime.js';
-import { machineTarget, targetName } from './target.js';
-import { decodeRecord, digestOf, feedEntry, RELEASE_RECORD } from './stage.js';
-import { ReleaseRefused, releaseStaged } from './release.js';
+import { machineTarget, runtimeName } from './target.js';
 import { transitionTrouble, trialStart } from './trial.js';
 import {
   carried,
@@ -222,7 +224,7 @@ export const transitionCommand = Effect.fnUntraced(function* (given: readonly st
       });
     }
     const cache = cutCache(data);
-    const runtime = yield* releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
+    const runtime = yield* releaseRuntime(checkout, Bun.version, runtimeName(target), cache.runtimes).pipe(
       Effect.mapError((trouble) => new ReleaseRefused({ step: 'runtime', detail: trouble.detail, log: '', unblock: trouble.unblock })),
     );
     const landed = yield* releaseStaged(join(out, 'stage'), composition, {

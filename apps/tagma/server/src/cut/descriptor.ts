@@ -7,6 +7,7 @@ import type { OwnStore } from '../platform/contract/service/ownStore.js';
 import type { Applications } from '../installation/contract/service/applications.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Feed } from '../installation/contract/wire/feed.js';
+import type { ReleasePlatform } from './platform.js';
 import type { ReleaseRecord } from './stage.js';
 
 export type CutMachine = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git;
@@ -42,6 +43,7 @@ export type Distribution = {
   readonly conditions: readonly string[];
   readonly inputs?: readonly string[];
   readonly applications: Applications;
+  readonly platform: ReleasePlatform;
   readonly roots: SourceRoots;
   readonly entries: { readonly cli: string; readonly server: string };
   readonly client: Client;

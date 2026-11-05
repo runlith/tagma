@@ -9,6 +9,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
 import type { Applications } from '../installation/contract/service/applications.js';
+import { inertPlatform } from './testing/platform.js';
 import { CHANNELS } from '../installation/contract/wire/channel.js';
 import type { Feed } from '../installation/contract/wire/feed.js';
 import type { Composition, Publisher } from './descriptor.js';
@@ -90,6 +91,7 @@ it.live(
         channel: CHANNELS.stable,
         workshop: CHANNELS.dev,
         applications,
+        platform: inertPlatform,
         roots: { checkout, server: source, packages: join(checkout, 'packages'), desktop: join(checkout, 'apps/tagma/desktop') },
         entries: { cli: join(source, 'src/composition/release/cli.ts'), server: join(source, 'src/composition/release/server.ts') },
         client: { root: join(checkout, 'apps/tagma/app'), config: null },

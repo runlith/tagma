@@ -8,10 +8,11 @@ import { Deferred, Effect, Fiber, Layer } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { type Apple, NotarizationRefused, sealingNotary } from './notarize.js';
-import { packRelease } from './pipeline.js';
-import { notarizeRelease } from './publish.js';
-import { RELEASE_RECORD, type ReleaseRecord } from './stage.js';
+import { NotarizationRefused } from '../cut/platform.js';
+import { notarizeRelease } from '../cut/publish.js';
+import { RELEASE_RECORD, type ReleaseRecord } from '../cut/stage.js';
+import { type Apple, sealingNotary } from './notarize.js';
+import { packRelease } from './packing.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-notarize-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));

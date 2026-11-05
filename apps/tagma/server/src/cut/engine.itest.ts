@@ -25,13 +25,12 @@ it.live('a closure whose engine toolchain is missing carries the absence and its
     );
     const root = join(tree, 'closure');
     const outcome = yield* carriedEngine(process.execPath, packages, root, null).pipe(Effect.provide(world));
-    const mac = process.platform === 'darwin';
-    const reason = mac ? 'cmake is not installed' : outcome._tag === 'absent' ? outcome.reason : '';
+    const reason = 'cmake is not installed';
     expect([outcome, readFileSync(join(root, WHISPER_ABSENCE_PART), 'utf8'), engineLayout(outcome)]).toEqual([
       { _tag: 'absent', reason },
       reason,
       [['server', WHISPER_ABSENCE_PART]],
     ]);
-    if (mac) expect(readdirSync(join(packages, 'speech-whisper/native/.build'))).toEqual([]);
+    expect(readdirSync(join(packages, 'speech-whisper/native/.build'))).toEqual([]);
   }),
 );

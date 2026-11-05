@@ -2,7 +2,6 @@ import { Clock, Data, Effect, FileSystem, type PlatformError, Schema } from 'eff
 import type { ChildProcessSpawner } from 'effect/process';
 import { realpathSync } from 'node:fs';
 import { basename, dirname, relative as relativePath, resolve } from 'node:path';
-import { sealRelease } from './sealing.js';
 import { capturedSource } from './source.js';
 import type { CapturedSource } from '../installation/contract/wire/capture.js';
 import { bundle } from '@runlith/bundle/bundle';
@@ -12,7 +11,7 @@ import { verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { type GitAnswerInvalid, type GitRefused, type GitUnreadable, troubleOf } from '@runlith/git/repository';
 import { gitCut, gitText, gitTree } from '../platform/git/readings.js';
 import type { Composition } from './descriptor.js';
-import { hostBinary } from '../mac-applications/bundle.js';
+import type { Signer } from './platform.js';
 import {
   SURFACE_INDEX,
   CLI_ENTRY,
@@ -48,7 +47,6 @@ import {
 import { partsAt } from '../installation/closure/read.js';
 import { writeInstallation } from '../installation/closure/write.js';
 import { LauncherWriteFailed, type LauncherWritten, writeLauncher, writeLauncherBeside } from '../installation/setup/launcher.js';
-import { type SigningIdentity, signingIdentity, signingNotice } from './signing.js';
 import { HOST_REFUSAL_ENV, HostRefusal } from '../installation/contract/wire/hostRefusal.js';
 import { type CommandUnavailable, output } from './command.js';
 import { carriedEngine, engineLayout } from './engine.js';
@@ -70,14 +68,14 @@ import type { RecordUnreadable } from '../installation/closure/attempt.js';
 import { carrySkills, skillInputs } from './skills.js';
 import { carryRipgrep, carryTypescript } from './tools.js';
 import { installedPackages, lockedPackages } from './locked.js';
-import { type Target, targetName, targetTrouble } from './target.js';
+import { type Target, targetName } from './target.js';
 import { PROGRAM_FEED_DEFINE, PROGRAM_RELEASE_DEFINE } from '../platform/contract/wire/program.js';
 
 export const RELEASE_LOG = 'release.log';
 
 export type ReleaseCut = {
   readonly number: string;
-  readonly signer: SigningIdentity;
+  readonly signer: Signer;
   readonly maps: string;
   readonly inputs: string;
   readonly irreversible: readonly IrreversibleChange[];
@@ -261,7 +259,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   origin: InstallationProvenance | null | undefined,
   release: ReleaseCut | null,
 ): Effect.fn.Return<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> {
-  const { conditions, roots, client, entries } = composition;
+  const { conditions, roots, client, entries, platform: releasePlatform } = composition;
   const sourcePath = roots.server;
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
@@ -307,12 +305,8 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       Effect.fail(new ReleaseRefused({ step, detail: withTrouble(detail), log, unblock })),
     );
 
-  if (platform.os !== 'darwin') {
-    return yield* refuseEarly(
-      'platform',
-      `a closure carries a desktop application and an execution host, and both are darwin's; this machine is ${platform.os}`,
-    );
-  }
+  const unbuilt = releasePlatform.refusal(platform.os);
+  if (unbuilt !== null) return yield* refuseEarly('platform', unbuilt);
   const app = client.root;
   const { desktop, checkout, packages } = roots;
   const captured = yield* capturedSource(checkout).pipe(
@@ -320,7 +314,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   );
   const host = `${packages}/execution-host`;
   if (release !== null) {
-    const trouble = yield* targetTrouble(release.target, checkout);
+    const trouble = yield* releasePlatform.trouble(release.target, checkout);
     if (trouble !== null) return yield* refuseEarly('target', trouble.detail, trouble.unblock);
   }
   const platformPackages =
@@ -561,9 +555,11 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     (error) => (typeof error === 'string' ? error : unrunnable(error)),
   );
   if (release !== null && engine._tag === 'absent') {
-    return yield* refuse('speech engine', `a release carries the Whisper engine, and it was not built: ${engine.reason}`, [
-      'install cmake and the Xcode command line tools on this Mac, then cut the release again',
-    ]);
+    return yield* refuse(
+      'speech engine',
+      `a release carries the Whisper engine, and it was not built: ${engine.reason}`,
+      releasePlatform.speech,
+    );
   }
 
   const labels = yield* step('revision', labelled(git, checkout, release === null ? stamp : staged.version, captured), troubleOf);
@@ -603,7 +599,11 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   );
 
   if (release !== null) {
-    yield* step('sealing', sealRelease(root, release.signer.fingerprint, [RUNTIME_PART, EXECUTIONS, DESKTOP]), (error: string) => error);
+    yield* step(
+      'sealing',
+      releasePlatform.seal(root, release.signer.fingerprint, [RUNTIME_PART, EXECUTIONS, DESKTOP]),
+      (error: string) => error,
+    );
   }
 
   const manifest = yield* step(
@@ -620,11 +620,11 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   );
 
   yield* section('signing');
-  const signing = yield* Effect.result(release === null ? signingIdentity : Effect.succeed(release.signer));
+  const signing = yield* Effect.result(release === null ? releasePlatform.signer : Effect.succeed(release.signer));
   if (signing._tag === 'Failure') return yield* refuse('signing', signing.failure.detail, signing.failure.unblock);
   const signer = signing.success;
-  yield* note(`${signingNotice(signer)}\n`);
-  yield* said(signingNotice(signer));
+  yield* note(`${releasePlatform.notice(signer)}\n`);
+  yield* said(releasePlatform.notice(signer));
   yield* producer(
     'desktop',
     [...conditions.map((condition) => `--conditions=${condition}`), `${desktop}/scripts/build-host.ts`],
@@ -637,7 +637,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       [SIGNING_IDENTITY_ENV]: signer.fingerprint,
       ...producedBy(release, DESKTOP),
     },
-    at(`${DESKTOP}/${hostBinary(composition.channel.name)}`),
+    at(`${DESKTOP}/${releasePlatform.application(composition.channel.name).binary}`),
     at(HOST_REFUSAL_FILE),
   );
 

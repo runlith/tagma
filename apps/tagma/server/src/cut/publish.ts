@@ -15,10 +15,9 @@ import {
   tagOf,
 } from '../installation/contract/wire/feed.js';
 import { dataDirectory } from '../installation/contract/wire/layout.js';
-import { developerTeam, releaseIdentity } from './signing.js';
 import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
 import { keepMaps, keptMapsOf } from './maps.js';
-import { appleNotary, type Notary } from './notarize.js';
+import type { Notary } from './platform.js';
 import { flagsOf, KEPT_MAPS, publishedBy, RELEASE_DIRECTORY, releaseCommand } from './pipeline.js';
 import { releaseNotes } from './notes.js';
 import { checkoutTags, highestOf, precedingOf } from './published.js';
@@ -271,16 +270,14 @@ const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning,
 type Told = (code: string, reason: string, unblock?: readonly string[]) => never;
 
 const notaryOf = Effect.fnUntraced(function* (composition: Composition, told: Told): Effect.fn.Return<Notary> {
-  const signer = yield* Effect.result(releaseIdentity(composition.signing.team).pipe(Effect.provide(machine)));
+  const { platform } = composition;
+  const signer = yield* Effect.result(platform.releaseSigner(composition.signing.team).pipe(Effect.provide(machine)));
   if (signer._tag === 'Failure') return told('signing-refused', signer.failure.detail, signer.failure.unblock);
-  const team = developerTeam(signer.success);
-  if (team === null) return told('signing-refused', `"${signer.success.name}" names no Developer ID team`);
-  return yield* appleNotary({
-    signing: { identity: signer.success.fingerprint, timestamp: true },
-    team,
-    assets: composition.brand.assets,
-    profile: composition.signing.notary,
-  }).pipe(Effect.provide(machine));
+  const notary = yield* Effect.result(
+    platform.notary(signer.success, composition.brand.assets, composition.signing.notary).pipe(Effect.provide(machine)),
+  );
+  if (notary._tag === 'Failure') return told('signing-refused', notary.failure.detail, notary.failure.unblock);
+  return notary.success;
 });
 
 const NOTARIZE_USAGE = 'bun run tagma:release notarize [--out <dir>] [--json]';

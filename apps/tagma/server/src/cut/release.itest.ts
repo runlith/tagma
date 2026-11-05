@@ -24,6 +24,7 @@ import { CHANNELS } from '../installation/contract/wire/channel.js';
 import { SERVER_ENTRY, SURFACE } from '../installation/contract/wire/manifest.js';
 import { RELEASE_LOG, releaseInstallation } from './release.js';
 import { testProcesses } from '../installation/testing/processes.js';
+import { inertPlatform } from './testing/platform.js';
 
 const treed = Effect.acquireRelease(
   Effect.sync(() => realpathSync(mkdtempSync('/tmp/tagma-release-'))),
@@ -97,6 +98,7 @@ const refusalOf = (where: ReturnType<typeof checkout>) =>
       channel: CHANNELS.dev,
       workshop: CHANNELS.dev,
       applications: inert,
+      platform: inertPlatform,
       roots: {
         checkout: where.root,
         server: where.source,

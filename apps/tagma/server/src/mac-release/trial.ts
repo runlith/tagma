@@ -1,11 +1,8 @@
 import { join } from 'node:path';
-import { Effect, type Layer, Result, Schema } from 'effect';
-import type { Processes } from '@runlith/execution-host/ProcessReader';
+import { Effect, Result, Schema } from 'effect';
 import { knownAnswer } from '../platform/contract/wire/operation.js';
 import { PROVIDER_OPERATIONS } from '../providers/contract/wire/operations.js';
-import type { Channel } from '../installation/contract/wire/channel.js';
-import type { FeedRelease } from '../installation/contract/wire/feed.js';
-import type { Label } from './proof.js';
+import type { Trial } from '../cut/platform.js';
 import {
   cli,
   closed,
@@ -22,17 +19,6 @@ import {
 } from './world.js';
 
 const decodeSignIns = Schema.decodeUnknownResult(Schema.fromJsonString(knownAnswer(PROVIDER_OPERATIONS.read_sign_in.answer)));
-
-export type Trial = {
-  readonly channel: Channel;
-  readonly archive: string;
-  readonly offer: FeedRelease;
-  readonly predecessor: string | null;
-  readonly labels: readonly Label[];
-  readonly scratch: string;
-  readonly log: (line: string) => void;
-  readonly processes: Layer.Layer<Processes>;
-};
 
 export const transitionTrouble = (seen: Seen, release: string, terminals: boolean): string | null => {
   const troubles = [

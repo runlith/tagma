@@ -4,18 +4,14 @@ import { join } from 'node:path';
 import { Clock, Cause, Data, Effect, Exit, FileSystem, Option, type PlatformError } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { type LockBusy, type LockUnavailable, withFileLock } from '@runlith/file-lock/FileLock';
-import { type CommandAnswer, type CommandUnavailable, output } from './command.js';
+import { type CommandAnswer, type CommandUnavailable, output } from '../cut/command.js';
+import type { PlatformTrouble, Signer } from '../cut/platform.js';
 
 export const SIGNING_NAME = 'Tagma Local Signing';
 
-export class SigningRefused extends Data.TaggedError('SigningRefused')<{
-  readonly detail: string;
-  readonly unblock: readonly string[];
-}> {}
+export class SigningRefused extends Data.TaggedError('SigningRefused')<PlatformTrouble> {}
 
-export type SigningIdentity = { readonly fingerprint: string; readonly name: string; readonly created: boolean };
-
-export const signingNotice = (identity: SigningIdentity): string =>
+export const signingNotice = (identity: Signer): string =>
   `signing with "${identity.name}" ${identity.fingerprint}${identity.created ? ', created for this machine now' : ''}; if macOS asks whether codesign may use its key, answer "Always Allow" — "Allow" asks again at every signature`;
 
 type Row = { readonly fingerprint: string; readonly name: string; readonly trouble: string | null };
@@ -259,11 +255,11 @@ const exclusive = <A>(work: Effect.Effect<A, SigningRefused, Machine>): Effect.E
 
 const DEVELOPER_ID = /^Developer ID Application: .+ \(([A-Z0-9]{10})\)$/;
 
-export const developerTeam = (identity: SigningIdentity): string | null => DEVELOPER_ID.exec(identity.name)?.[1] ?? null;
+export const developerTeam = (identity: Signer): string | null => DEVELOPER_ID.exec(identity.name)?.[1] ?? null;
 
 export const releaseIdentity = Effect.fn('installation.releaseIdentity')(function* (
   team: string | null,
-): Effect.fn.Return<SigningIdentity, SigningRefused, Machine> {
+): Effect.fn.Return<Signer, SigningRefused, Machine> {
   const keychain = yield* loginKeychain;
   const rows = (yield* identities(keychain)).filter(
     (row) => DEVELOPER_ID.test(row.name) && (team === null || DEVELOPER_ID.exec(row.name)?.[1] === team),
@@ -297,7 +293,7 @@ export const releaseIdentity = Effect.fn('installation.releaseIdentity')(functio
   return { fingerprint: one.fingerprint, name: one.name, created: false };
 });
 
-export const signingIdentity: Effect.Effect<SigningIdentity, SigningRefused, Machine> = Effect.gen(function* () {
+export const signingIdentity: Effect.Effect<Signer, SigningRefused, Machine> = Effect.gen(function* () {
   const keychain = yield* loginKeychain;
   const first = yield* Effect.result(standing(keychain));
   if (first._tag === 'Success' && first.success._tag === 'One')

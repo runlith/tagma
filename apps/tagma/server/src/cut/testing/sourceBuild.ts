@@ -8,6 +8,7 @@ import { BUILD_SOURCE_ENV } from '../../installation/contract/wire/layout.js';
 import type { BuildServer } from '../port.js';
 import { releaseSource } from '../entry.js';
 import type { Distribution } from '../descriptor.js';
+import { inertPlatform } from './platform.js';
 
 const unused: BuildServer = {
   ask: () => Effect.die('the fixture does not contact a running server'),
@@ -67,6 +68,7 @@ export const runSourceRelease = async (root: string, args: readonly string[]): P
       forget: () => undefined,
       signature: unread,
     },
+    platform: inertPlatform,
     roots: { checkout: root, server: root, packages: root, desktop: root },
     entries: { cli: join(root, 'release.ts'), server: join(root, 'producer.ts') },
     client: { root, config: null },

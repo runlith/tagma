@@ -7,8 +7,8 @@ import { Effect, Layer } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { packRelease } from './pipeline.js';
-import { archiveTrouble } from './proof.js';
+import { archiveTrouble } from '../cut/proof.js';
+import { packRelease } from './packing.js';
 
 const scratched = Effect.acquireRelease(
   Effect.sync(() => realpathSync(mkdtempSync(join(tmpdir(), 'tagma-packing-')))),

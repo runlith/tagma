@@ -31,8 +31,6 @@ export const carriedEngine = (
           ),
           { _tag: 'absent', reason } as const,
         );
-      if (process.platform !== 'darwin')
-        return yield* absent(`the Whisper engine is built on macOS; this ${process.platform} closure carries none`);
       const source = `${packages}/speech-whisper`;
       const directory = `${source}/native/.build`;
       yield* files

@@ -453,9 +453,9 @@
       "node": "./src/installation/contract/wire/probe.ts",
       "default": "./src/installation/contract/wire/probe.ts"
     },
-    "./cut/signing": {
-      "types": "./src/cut/signing.ts",
-      "bun": "./src/cut/signing.ts"
+    "./mac-release/signing": {
+      "types": "./src/mac-release/signing.ts",
+      "bun": "./src/mac-release/signing.ts"
     },
     "./installation/contract/wire/channel": {
       "types": "./src/installation/contract/wire/channel.ts",
@@ -1488,6 +1488,11 @@
       "default": null
     },
     "./cut/testing/*": null,
+    "./mac-release/*": {
+      "types": "./src/mac-release/*.ts",
+      "bun": "./src/mac-release/*.ts",
+      "default": null
+    },
     "./desktop-browser/contract/*": {
       "types": "./src/desktop-browser/contract/*.ts",
       "bun": "./src/desktop-browser/contract/*.ts",

@@ -1,21 +1,13 @@
 import { basename, join } from 'node:path';
-import { type Context, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
+import { type Context, Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Signing } from '@runlith/codesign/codesign';
-import { output } from './command.js';
-import { diskImage } from './dmg.js';
-import { packRelease } from './pipeline.js';
-import { BRAND, type ReleaseRecord, replaced, type Weight, weigh } from './stage.js';
+import { output } from '../cut/command.js';
+import { NotarizationRefused, type Notary } from '../cut/platform.js';
+import { BRAND, type ReleaseRecord, replaced, type Weight, weigh } from '../cut/stage.js';
 import type { FeedArchive } from '../installation/contract/wire/feed.js';
-
-export class NotarizationRefused extends Data.TaggedError('NotarizationRefused')<{
-  readonly detail: string;
-  readonly unblock: readonly string[];
-}> {}
-
-export type Notary = {
-  readonly seal: (cut: string, into: string, record: ReleaseRecord) => Effect.Effect<ReleaseRecord, NotarizationRefused>;
-};
+import { diskImage } from './dmg.js';
+import { packRelease } from './packing.js';
 
 export type Developer = { readonly signing: Signing; readonly team: string; readonly assets: string; readonly profile: string };
 

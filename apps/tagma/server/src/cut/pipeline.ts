@@ -12,34 +12,25 @@ import { troubleOf } from '@runlith/git/repository';
 import { developerLabels } from '@runlith/tagma/adapter/host-modules';
 import { gitCut, gitTree } from '../platform/git/readings.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import { compareReleases, isRelease, newestOf, releaseAfter, type StoreMarks } from '../installation/contract/wire/feed.js';
-import type { Channel } from '../installation/contract/wire/channel.js';
 import { dataDirectory } from '../installation/contract/wire/layout.js';
-import { hostBundle, RELEASE_INSIDE } from '../mac-applications/bundle.js';
-import { diskImage } from './dmg.js';
 import { DESKTOP, IRREVERSIBLE_STORES, type IrreversibleChange, MIGRATIONS } from '../installation/contract/wire/manifest.js';
-import { releaseIdentity } from './signing.js';
-import { output } from './command.js';
 import type { Composition, Publisher } from './descriptor.js';
 import { archiveTrouble, developerInputs, type Label, sourceComments } from './proof.js';
 import { checkoutTags, highestOf } from './published.js';
 import { INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
 import { BRAND, type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
-import { machineTarget, type Target, TARGETS, targetName } from './target.js';
-import { trialStart } from './trial.js';
+import { type Target, targetName } from './target.js';
 
 export const RELEASE_DIRECTORY = 'release';
 export const KEPT_MAPS = 'maps';
-export const diskImageFile = (channel: Channel, release: string, target: Target): string => `${channel.name}-${release}-${target.arch}.dmg`;
 export type CutCache = { readonly runtimes: string; readonly packages: string };
 export const cutCache = (data: string): CutCache => ({
   runtimes: join(data, 'cut-cache', 'runtimes'),
   packages: join(data, 'cut-cache', 'packages'),
 });
 
-const PACK_FLAGS = ['--no-xattrs', '--no-mac-metadata', '--no-acls', '--no-fflags', '--uid', '0', '--gid', '0', '--numeric-owner'];
 const MIGRATION = /^\d{14}_/u;
 const TOLD = 10;
 
@@ -71,18 +62,6 @@ export const machinePaths = (checkout: string, out: string): readonly string[] =
   const spelled = [homedir(), checkout, out, scratch, real, real.replace(/^\/private\//u, '/')];
   return [...new Set(spelled)].filter((path, _, all) => !all.some((other) => other !== path && within(path, other)));
 };
-
-export const packRelease = (
-  root: string,
-  archive: string,
-  entry = '.',
-): Effect.Effect<void, string, ChildProcessSpawner.ChildProcessSpawner> =>
-  output('/usr/bin/tar', [...PACK_FLAGS, '--exclude', `./${EXECUTIONS_RUNTIME}`, '-czf', archive, '-C', root, entry], root, {
-    COPYFILE_DISABLE: '1',
-  }).pipe(
-    Effect.mapError((failure) => failure.detail),
-    Effect.flatMap((ran) => (ran.status === 0 ? Effect.void : Effect.fail(`tar exited ${ran.status}: ${ran.text.trim()}`))),
-  );
 
 export const storesOf = Effect.fnUntraced(function* ({ roots, steps }: Composition) {
   const files = yield* FileSystem.FileSystem;
@@ -173,15 +152,16 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
   }
   const irreversible = irreversibleOf(release, stores, newest === null ? null : { stores: newest.stores, changes: newest.changes });
 
-  const runtimes = yield* Effect.forEach(TARGETS, (target) =>
-    releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
+  const { platform } = composition;
+  const runtimes = yield* Effect.forEach(platform.targets, (target) =>
+    releaseRuntime(checkout, Bun.version, platform.runtime(target), cache.runtimes).pipe(
       Effect.map((runtime) => ({ target, runtime })),
       Effect.mapError((trouble) => refusal('runtime', trouble.detail, trouble.unblock)),
     ),
   );
-  const signer = yield* releaseIdentity(composition.signing.team).pipe(
-    Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)),
-  );
+  const signer = yield* platform
+    .releaseSigner(composition.signing.team)
+    .pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
 
   const manifests = [
     ...(yield* files.readDirectory(packages).pipe(Effect.mapError(unreadable(packages)))).map((name) =>
@@ -197,7 +177,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
   });
   const labels: Label[] = declared.flatMap((one) => one.labels.map((text) => ({ text, by: relative(checkout, one.manifest) })));
 
-  const application = hostBundle(composition.channel.name);
+  const application = platform.application(composition.channel.name).bundle;
 
   const built = Effect.fnUntraced(function* (home: string, target: Target, runtime: string) {
     const inputs = join(home, INPUTS);
@@ -212,7 +192,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
       packages: cache.packages,
     });
     const archive = join(home, `tagma-${release}-${targetName(target)}.tar.gz`);
-    const image = join(home, diskImageFile(composition.channel, release, target));
+    const image = join(home, platform.image.name(composition.channel, release, target));
 
     const comments = yield* Effect.gen(function* () {
       const recorded: string[] = [];
@@ -234,11 +214,10 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
         );
       }
       const kept = yield* sourceComments(recorded, checkout).pipe(Effect.mapError((failure) => refusal('comments', failure)));
-      yield* packRelease(join(landed.root, DESKTOP), archive, application).pipe(Effect.mapError((failure) => refusal('pack', failure)));
-      yield* diskImage(join(landed.root, DESKTOP, application), image, composition.brand.assets, composition.channel.name, {
-        identity: signer.fingerprint,
-        timestamp: true,
-      }).pipe(Effect.mapError((failure) => refusal('disk image', failure)));
+      yield* platform.pack(join(landed.root, DESKTOP), archive, application).pipe(Effect.mapError((failure) => refusal('pack', failure)));
+      yield* platform.image
+        .make(join(landed.root, DESKTOP, application), image, composition.brand.assets, composition.channel.name, signer)
+        .pipe(Effect.mapError((failure) => refusal('disk image', failure)));
       return kept;
     }).pipe(Effect.ensuring(Effect.sync(() => rmSync(landed.root, { recursive: true, force: true }))));
 
@@ -246,7 +225,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
       labels,
       paths: machinePaths(checkout, out),
       comments,
-      root: `${application}/${RELEASE_INSIDE}`,
+      root: composition.applications.inside(application),
     });
     if (trouble.length > 0) {
       return yield* refuse('proof', `the archive is refused: ${trouble.join('; ')}`, [`${archive} — the refused archive, kept to be read`]);
@@ -264,41 +243,43 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
     return { platforms };
   });
 
-  const native = machineTarget();
+  const native = platform.native();
   const tried = (trying: Trying, target: Target): Effect.Effect<void, ReleaseRefused> => {
     const name = targetName(target);
     const offered = trying.offer.platforms[name];
     if (offered === undefined) {
       return refuse('trial', `the release offers no ${name} archive to try`, [`${trying.log} — the cut it built`]);
     }
-    return trialStart({
-      channel: composition.channel,
-      archive: fileURLToPath(offered.archive),
-      offer: trying.offer,
-      predecessor: native !== null && targetName(native) === name ? (trying.predecessors[name] ?? null) : null,
-      labels,
-      scratch: tmpdir(),
-      log: (line) => appendFileSync(trying.log, `\n=== trial ${name} ===\n${line}\n`),
-      processes: composition.processes,
-    }).pipe(
-      Effect.flatMap((trouble) =>
-        trouble === null
-          ? Effect.void
-          : Effect.fail(
-              new ReleaseRefused({
-                step: 'trial',
-                detail: `the ${name} release installed and started in a world of its own refuses: ${trouble}`,
-                log: trying.log,
-                unblock: [`${trying.log} — what the trial printed; bun run tagma:release again takes up the cut it built`],
-              }),
-            ),
-      ),
-    );
+    return platform
+      .trial({
+        channel: composition.channel,
+        archive: fileURLToPath(offered.archive),
+        offer: trying.offer,
+        predecessor: native !== null && targetName(native) === name ? (trying.predecessors[name] ?? null) : null,
+        labels,
+        scratch: tmpdir(),
+        log: (line) => appendFileSync(trying.log, `\n=== trial ${name} ===\n${line}\n`),
+        processes: composition.processes,
+      })
+      .pipe(
+        Effect.flatMap((trouble) =>
+          trouble === null
+            ? Effect.void
+            : Effect.fail(
+                new ReleaseRefused({
+                  step: 'trial',
+                  detail: `the ${name} release installed and started in a world of its own refuses: ${trouble}`,
+                  log: trying.log,
+                  unblock: [`${trying.log} — what the trial printed; bun run tagma:release again takes up the cut it built`],
+                }),
+              ),
+        ),
+      );
   };
 
   const stages: Stages = {
     build: (home) => build(home).pipe(Effect.provideContext(context)),
-    trial: (trying) => Effect.forEach(TARGETS, (target) => tried(trying, target), { discard: true, concurrency: 'unbounded' }),
+    trial: (trying) => Effect.forEach(platform.targets, (target) => tried(trying, target), { discard: true, concurrency: 'unbounded' }),
   };
   return yield* stagedCut(out, { release, commit: cut.head, stores, irreversible }, stages);
 }, Effect.scoped);

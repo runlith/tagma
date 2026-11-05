@@ -2,11 +2,8 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import type { Target } from './target.js';
 
 export const OFFICIAL_RUNTIMES = 'https://github.com/oven-sh/bun/releases/download';
-
-const ARCHES: Readonly<Record<Target['arch'], string>> = { arm64: 'aarch64', x64: 'x64' };
 
 export type RuntimeTrouble = { readonly detail: string; readonly unblock: readonly string[] };
 
@@ -88,7 +85,7 @@ const official = async (version: string, name: string, origin: string, cache: st
 export const releaseRuntime = (
   checkout: string,
   running: string,
-  target: Target,
+  name: string,
   cache: string,
   origin: string = OFFICIAL_RUNTIMES,
 ): Effect.Effect<string, RuntimeTrouble> =>
@@ -114,7 +111,7 @@ export const releaseRuntime = (
           unblock: [`bun upgrade --version ${version}, then cut the release again`],
         };
       }
-      return official(version, `bun-darwin-${ARCHES[target.arch]}`, origin, cache);
+      return official(version, name, origin, cache);
     }),
     (answer) => (typeof answer === 'string' ? Effect.succeed(answer) : Effect.fail(answer)),
   );

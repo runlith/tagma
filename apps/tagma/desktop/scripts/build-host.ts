@@ -27,7 +27,7 @@ import {
 import { hostBundle, RELEASE_INSIDE } from '@tagma/server/mac-applications/bundle';
 import { DESKTOP, EXECUTIONS } from '@tagma/server/installation/contract/wire/manifest';
 import { EXECUTIONS_RUNTIME } from '@tagma/server/installation/contract/wire/archive';
-import { signingIdentity, signingNotice } from '@tagma/server/cut/signing';
+import { signingIdentity, signingNotice } from '@tagma/server/mac-release/signing';
 import { channelSchema } from '@tagma/server/installation/contract/wire/channel';
 import { Effect, Layer, Schema } from 'effect';
 import { type BuildOptions, build, context } from 'esbuild';

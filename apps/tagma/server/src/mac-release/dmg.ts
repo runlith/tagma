@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { type Signing, signCode } from '@runlith/codesign/codesign';
 import { cloneTree } from '../platform/durable/clone.js';
-import { output } from './command.js';
+import { output } from '../cut/command.js';
 
 const HAS_CUSTOM_ICON = `${'0'.repeat(16)}0400${'0'.repeat(44)}`;
 
