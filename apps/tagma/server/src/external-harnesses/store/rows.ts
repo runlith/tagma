@@ -1,5 +1,6 @@
 import { and, eq, exists, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { StoreDb } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
@@ -17,6 +18,7 @@ import { readExternalSession, writeSession } from '../session.js';
 import { SessionRows, type StandingSession } from '../contract/service/sessionRows.js';
 
 export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly db: StoreDb<'machine'> }) {
+  const kinds = yield* ThreadEntryKinds;
   const units = yield* MachineUnits;
   const spells = yield* WorkSpells;
   const records = yield* ThreadRecords;
@@ -196,11 +198,11 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
           (row) => row?.threadId ?? null,
         ),
       ),
-    road: (id) => units.read((unit) => roadOf(db, unit, id)),
+    road: (id) => units.read((unit) => roadOf(db, kinds, unit, id)),
     choose: (id, asked, switches, account, unit) =>
       models.record(unit, id, asked ?? {}, chooseModel(db, unit, id, asked, switches, account)),
     switches: (id, unit) => switchesOf(db, unit, id),
-    capabilities: (id) => units.read((unit) => capabilitiesOf(db, unit, id)),
-    binding: (id, unit) => bindingOf(db, unit, id),
+    capabilities: (id) => units.read((unit) => capabilitiesOf(db, kinds, unit, id)),
+    binding: (id, unit) => bindingOf(db, kinds, unit, id),
   });
 });

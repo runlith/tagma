@@ -1,4 +1,5 @@
-import { parseThreadBornOf } from '@runlith/agent/thread/persisted';
+import { readThreadBornOf } from '@runlith/agent/thread/persisted';
+import { type DegradedReads, degradedReads } from '@runlith/agent/contracts';
 import { and, count, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { MachineStore, type StoreDb } from '../platform/contract/service/store.js';
@@ -14,7 +15,7 @@ export const factsWhere = (db: StoreDb<'machine'>, where: SQL) => db.select().fr
 
 type FactRow = Effect.Success<ReturnType<typeof factsWhere>>[number];
 
-export const factsOf = (row: FactRow): ThreadRecordFacts => ({
+export const factsOf = (reads: DegradedReads, row: FactRow): ThreadRecordFacts => ({
   id: row.id as ThreadId,
   projectId: row.projectId,
   origin: row.projectId === null ? 'unscoped' : 'scoped',
@@ -29,7 +30,7 @@ export const factsOf = (row: FactRow): ThreadRecordFacts => ({
   titleRevision: row.titleRevision,
   harness: (row.harness ?? NATIVE_HARNESS) as HarnessId,
   agentId: row.agentId,
-  bornOf: parseThreadBornOf(row.bornOf),
+  bornOf: readThreadBornOf(reads, row.id, row.bornOf),
   spawnedByRunId: row.spawnedByRunId,
   createdBy: row.createdBy,
   scopeBlockUuid: row.scopeBlockUuid,
@@ -45,6 +46,7 @@ export const factsOf = (row: FactRow): ThreadRecordFacts => ({
 
 export const makeIdentityReads = Effect.gen(function* () {
   const { db } = yield* MachineStore;
+  const reads = degradedReads();
   const byId = factsWhere(db, eq(recordFacts.id, sql.placeholder('id'))).prepare();
   const projectById = db
     .select({ projectId: recordFacts.projectId })
@@ -54,9 +56,10 @@ export const makeIdentityReads = Effect.gen(function* () {
   return {
     facts: (unit: Unit<'machine'>, id: string) =>
       Effect.flatMap(unit.run(byId.get({ id })), (row) =>
-        row === undefined ? Effect.succeed(undefined) : trusted('ThreadRecords.facts', () => factsOf(row)),
+        row === undefined ? Effect.succeed(undefined) : trusted('ThreadRecords.facts', () => factsOf(reads, row)),
       ),
     projectOf: (unit: Unit<'machine'>, id: string) => Effect.map(unit.run(projectById.get({ id })), (row) => row?.projectId ?? undefined),
+    readDegraded: reads.witnessing,
   };
 });
 

@@ -116,7 +116,7 @@ export const sourceFactFingerprint = Effect.fn('ThreadRollout.sourceFactFingerpr
     const events = yield* factsOfThread(db, input.threadId, layers, position, input.parts, PAGE);
     for (const event of events) {
       const whole = yield* wholeFact(event);
-      const payload = fingerprintedPayload(kinds, whole.payload);
+      const payload = fingerprintedPayload(kinds, input.threadId, whole.payload);
       hash.update(sourceEventText({ position: event.fact.position, id: event.fact.id, kind: event.fact.kind, payload }));
     }
     position = events.at(-1)?.fact.position ?? position;

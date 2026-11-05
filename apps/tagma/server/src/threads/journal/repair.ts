@@ -83,7 +83,7 @@ export const makeThreadRolloutRepair = Effect.fnUntraced(function* ({
                 });
               }
               try {
-                decodeThreadEventPayload(kinds, fact.payload);
+                decodeThreadEventPayload(kinds, threadId, fact.payload);
               } catch (error) {
                 throw new ThreadProjectionRefused({
                   reason: 'corrupt',

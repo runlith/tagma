@@ -146,6 +146,7 @@ const setup = Effect.gen(function* () {
           titleRecorded: unused,
           statusPublished: unused,
           shelfRecorded: unused,
+          readDegraded: unused,
         }),
         Layer.mock(ThreadList, {
           subscribeAttention: unused,

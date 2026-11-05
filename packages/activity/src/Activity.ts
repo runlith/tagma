@@ -132,7 +132,7 @@ export function degradedSync<A>(witness: ActivityWitness, place: string, why: st
   }
 }
 
-export function toldDegraded(witness: ActivityWitness, place: string, why: string, defect: unknown): void {
+export function toldDegraded(witness: ActivityWitness, place: string, why: string, defect: unknown): number {
   const at = witness.clock.currentTimeMillisUnsafe();
   const id = mint(at);
   const { log, thread, run } = witness;
@@ -151,6 +151,7 @@ export function toldDegraded(witness: ActivityWitness, place: string, why: strin
   });
   log.record({ _tag: 'Noted', activity: id, at, note: degradedNote(place, why, Cause.die(defect)) });
   log.record({ _tag: 'Ended', activity: id, at, outcome: 'ok', reason: null, message: null, result: {} });
+  return at;
 }
 
 export function body(recorded: ActivityBody): Effect.Effect<number | null> {

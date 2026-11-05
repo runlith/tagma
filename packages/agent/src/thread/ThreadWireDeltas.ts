@@ -21,7 +21,8 @@ export const threadWireDeltas = Effect.fnUntraced(function* <TTx>(
   let cursor = afterPosition;
   for (;;) {
     const page = yield* log.eventsAfter(threadId, cursor, WIRE_DELTA_PAGE, tx);
-    for (const record of page) deltas.push({ position: record.position, ...transcriptFact(kinds, record.kind, record.id, record.payload) });
+    for (const record of page)
+      deltas.push({ position: record.position, ...transcriptFact(kinds, threadId, record.kind, record.id, record.payload) });
     if (page.length < WIRE_DELTA_PAGE) return deltas;
     cursor = page[page.length - 1]?.position ?? cursor;
   }

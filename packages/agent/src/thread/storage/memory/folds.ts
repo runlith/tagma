@@ -11,7 +11,7 @@ import type { HeldThread } from './state';
 import type { ThreadEntryReader } from '../../../transcript/kinds';
 
 function bodyOf(kinds: ThreadEntryReader, event: ThreadEventRow): { kind: string; payload: ThreadEventPayload } {
-  return { kind: event.kind, payload: decodeThreadEventPayload(kinds, event.payload) };
+  return { kind: event.kind, payload: decodeThreadEventPayload(kinds, event.threadId, event.payload) };
 }
 
 export function placed(fact: ThreadEventFact): boolean {

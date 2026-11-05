@@ -105,22 +105,29 @@ export function threadEventFact(event: ThreadEventBody): ThreadEventFact {
   };
 }
 
-export function transcriptFact(kinds: ThreadEntryReader, kind: string, eventId: string, value: unknown): ThreadEventFact {
+export function transcriptFact(
+  kinds: ThreadEntryReader,
+  thread: string | null,
+  kind: string,
+  eventId: string,
+  value: unknown,
+): ThreadEventFact {
   const formed = kinds.formEvent(value);
-  if (Result.isFailure(formed)) return unplacedFact(kinds, kind, eventId, formed.failure.message);
+  if (Result.isFailure(formed)) return unplacedFact(kinds, thread, kind, eventId, formed.failure.message);
   const facets = decodeThreadTranscriptFacetsResult(formed.success);
-  if (Result.isFailure(facets)) return unplacedFact(kinds, kind, eventId, facets.failure.message);
+  if (Result.isFailure(facets)) return unplacedFact(kinds, thread, kind, eventId, facets.failure.message);
   const { entry: shape, ...marks } = facets.success;
   if (shape === undefined) return threadEventFact({ kind, payload: marks });
-  const entry = kinds.storedForm(shape);
+  const entry = kinds.storedForm(thread, shape);
   return Result.isSuccess(entry)
     ? threadEventFact({ kind, payload: { ...marks, entry: entry.success } })
-    : unplacedFact(kinds, kind, eventId, entry.failure.message);
+    : unplacedFact(kinds, thread, kind, eventId, entry.failure.message);
 }
 
-function unplacedFact(kinds: ThreadEntryReader, kind: string, eventId: string, issue: string): ThreadEventFact {
+function unplacedFact(kinds: ThreadEntryReader, thread: string | null, kind: string, eventId: string, issue: string): ThreadEventFact {
   const line = { type: kind, id: eventId };
   kinds.degraded({
+    thread,
     place: 'thread entry',
     why: 'a stored event this build cannot place in the transcript stands in the thread as a diagnostic line, the journal keeping it',
     repeat: `${kind}\n${issue}`,

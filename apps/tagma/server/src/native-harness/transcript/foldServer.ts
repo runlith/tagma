@@ -147,7 +147,7 @@ async function certify(rollout: RolloutFiles, kinds: ThreadEntryReader, read: Re
       yield data;
     }
   }
-  const decode = (value: unknown) => Result.succeed(fingerprintedPayload(kinds, value));
+  const decode = (thread: string | null, value: unknown) => Result.succeed(fingerprintedPayload(kinds, thread, value));
   for await (const line of wholeLinesOf(hashed())) {
     if (line === '') continue;
     if (opening) {
@@ -261,7 +261,7 @@ async function history(
   read: ReadRollout,
 ): Promise<{ readonly history: ReturnType<HistoryFold['take']>; readonly bytes: number }> {
   const fold = new HistoryFold();
-  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+  const decode = (thread: string | null, value: unknown) => decodeThreadEventPayloadResult(kinds, thread, value);
   for await (const fact of facts(rollout, boundary, read, (line) => factOf(line, decode)))
     fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
   const folded = fold.take();
@@ -368,9 +368,15 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
   const totals = totalledReads();
   const read = totals.observe;
   const degraded = new Map<string, RestedDegraded>();
-  const leave = kinds.witnessing(({ place, why, repeat, failure }) => {
+  const leave = kinds.witnessing(({ thread, place, why, repeat, failure }) => {
     if (degraded.size < FOLD_DEGRADED)
-      degraded.set(repeat, { place, why, repeat, message: failure instanceof Error ? failure.message : String(failure) });
+      degraded.set(`${thread}\n${repeat}`, {
+        thread,
+        place,
+        why,
+        repeat,
+        message: failure instanceof Error ? failure.message : String(failure),
+      });
   });
   try {
     if (ask.kind === 'certify') return { id: ask.id, kind: 'certified', frontier: await certify(ask.rollout, kinds, read) };

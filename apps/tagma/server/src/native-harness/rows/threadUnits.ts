@@ -1,15 +1,15 @@
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Predicate } from 'effect';
 import type { ThreadAuthority, ThreadHistory, ThreadMetadataRow } from '@runlith/agent/thread/rows';
 import type { ThreadTranscript } from '@runlith/agent/transcript/rows';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadInsertValues, ThreadPatch } from '@runlith/agent/thread/storage/aggregate';
 import {
-  parseThreadAuthority,
-  parseThreadBornOf,
   parseThreadContextReading,
   parseThreadPendingInteraction,
-  parseTransportBinding,
-  parseTransportCapabilities,
+  readThreadAuthority,
+  readThreadBornOf,
+  readTransportBinding,
+  readTransportCapabilities,
   readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { and, eq, sql } from 'drizzle-orm';
@@ -116,35 +116,31 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
 });
 
 export function threadRowOf<T extends ThreadMetadataRow>(kinds: ThreadEntryReader, row: T): Effect.Effect<T, ThreadStorageFailed> {
-  const subject = `Thread ${row.id}`;
   return trusted<T>('threadRow', () => ({
     ...row,
-    authority: parseThreadAuthority(row.authority),
-    bornOf: readableRowFact(
-      kinds,
-      subject,
-      'a birth record this build cannot read stands as none',
-      () => parseThreadBornOf(row.bornOf),
-      null,
-    ),
+    authority: readThreadAuthority(kinds, row.id, row.authority),
+    bornOf: readThreadBornOf(kinds, row.id, row.bornOf),
     pendingInteraction: readableRowFact(
       kinds,
-      subject,
+      row.id,
       'a parked question this build cannot read stands as none, so its thread still opens and its run can be stopped',
       () => parseThreadPendingInteraction(kinds, row.pendingInteraction),
       null,
     ),
     contextReading: readableRowFact(
       kinds,
-      subject,
+      row.id,
       'a context reading this build cannot read stands as none until the next step measures it',
       () => parseThreadContextReading(kinds, row.contextReading),
       null,
     ),
-    transport: parseTransportBinding(row.transport),
-    capabilities: parseTransportCapabilities(row.capabilities),
+    transport: readTransportBinding(kinds, row.id, row.transport),
+    capabilities: readTransportCapabilities(kinds, row.id, row.capabilities),
   }));
 }
+
+const storedAdapter = (transport: unknown): string | null =>
+  Predicate.isObject(transport) && 'adapter' in transport && typeof transport.adapter === 'string' ? transport.adapter : null;
 
 export const makeThreadMetadata = Effect.gen(function* () {
   const { db } = yield* MachineStore;
@@ -173,11 +169,17 @@ export const makeThreadMetadata = Effect.gen(function* () {
         Effect.flatMap(unit.run(metadataById.get({ id })), (row) => (row ? threadRowOf(kinds, row) : Effect.succeed(undefined)));
       const program = tx === undefined ? null : programOf(tx);
       if (program === null) return stored('metadata')(tx ? read(tx) : units.read(read));
-      return stored('metadata')(
-        Effect.tap(units.read(read), (row) =>
+      const readWithAdapter = (unit: Unit<'machine'>) =>
+        Effect.flatMap(unit.run(metadataById.get({ id })), (row) =>
           row === undefined
-            ? program.guard(bindQuery(absent, { id }), 0)
-            : program.guard(bindQuery(sameTransport, { id, adapter: row.transport.adapter }), 1),
+            ? Effect.succeed(undefined)
+            : Effect.map(threadRowOf(kinds, row), (read) => ({ read, adapter: storedAdapter(row.transport) })),
+        );
+      return stored('metadata')(
+        Effect.flatMap(units.read(readWithAdapter), (found) =>
+          found === undefined
+            ? Effect.as(program.guard(bindQuery(absent, { id }), 0), undefined)
+            : Effect.as(program.guard(bindQuery(sameTransport, { id, adapter: found.adapter }), 1), found.read),
         ),
       );
     },

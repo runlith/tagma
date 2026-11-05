@@ -105,7 +105,10 @@ export const threadHistory = (kinds: ThreadEntryReader) =>
   makeHistoryStore({ reads: undefined }).pipe(Effect.provideService(ThreadEntryKinds, kinds));
 
 export const nativeThreadRows = (threads: ThreadStore, records: ThreadRecords['Service']) =>
-  makeNativeThreadRows({ threads }).pipe(Effect.provideService(ThreadRecords, records));
+  makeNativeThreadRows({ threads }).pipe(
+    Effect.provideService(ThreadRecords, records),
+    Effect.provideService(ThreadEntryKinds, CORE_KINDS),
+  );
 
 export const threadRunStores = (records: ThreadRecords['Service'], kinds: ThreadEntryReader) => served(makeRunStores, records, kinds);
 

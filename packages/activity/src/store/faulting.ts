@@ -36,21 +36,24 @@ const groupsSince = (since: number): SQL => sql`occurred as (
     from occurred o window held as (partition by o.fingerprint)
   ), latest as (select * from grouped where newest = 1)`;
 
-export function activityFaults(
+export const activityFaults = Effect.fnUntraced(function* (
   db: EffectSQLiteBunDatabase,
   fresh: Effect.Effect<ActivityFreshness>,
   hours: () => number,
   lane: Semaphore.Semaphore,
   moved: PubSub.PubSub<void>,
-): ActivityFaults['Service'] {
+) {
+  const [mark] = yield* readOnly(db.all<{ readonly at: number }>(sql`select at from mark where name = ${CLEARED}`)).pipe(
+    Effect.mapError(unreadable),
+  );
+  let cleared = mark?.at ?? 0;
+  const windowFrom = (now: number) => Math.max(now - hours() * HOUR_MS, cleared);
   return ActivityFaults.of({
+    since: windowFrom,
     read: Effect.fn('ActivityFaults.read')(function* ({ limit, after }) {
       const freshness = yield* fresh;
       const now = yield* Clock.currentTimeMillis;
-      const [cleared] = yield* readOnly(db.all<{ readonly at: number }>(sql`select at from mark where name = ${CLEARED}`)).pipe(
-        Effect.mapError(unreadable),
-      );
-      const since = Math.max(now - hours() * HOUR_MS, cleared?.at ?? 0);
+      const since = windowFrom(now);
       const taken = Math.max(1, limit);
       const rows = yield* readOnly(
         db.all<FaultRow>(sql`with ${groupsSince(since)}
@@ -91,11 +94,12 @@ export function activityFaults(
       yield* db
         .run(sql`insert into mark (name, at) values (${CLEARED}, ${now}) on conflict (name) do update set at = excluded.at`)
         .pipe(Effect.mapError(unreadable), lane.withPermit);
+      cleared = now;
       yield* PubSub.publish(moved, undefined);
     }).pipe(Effect.withSpan('ActivityFaults.clear')),
     changes: Stream.fromPubSub(moved),
   });
-}
+});
 
 export function faultsAging(
   db: EffectSQLiteBunDatabase,

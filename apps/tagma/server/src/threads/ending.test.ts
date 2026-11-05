@@ -65,6 +65,7 @@ const stand = Effect.fnUntraced(function* (
       titleRecorded: unexpected,
       statusPublished: unexpected,
       shelfRecorded: unexpected,
+      readDegraded: unexpected,
     }),
     Layer.mock(ThreadList, {
       subscribeAttention: unexpected,

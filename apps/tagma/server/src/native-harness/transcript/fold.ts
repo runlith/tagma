@@ -59,7 +59,7 @@ export const makeEntryFold = Effect.fnUntraced(function* ({ reads }: { readonly 
     const bodies = new Map<number, ThreadTranscriptEntry>();
     for (const chunk of chunked(ords)) {
       const rows = yield* stored.layered.rows(unit, id, inArray(threadEntry.ord, chunk));
-      for (const row of rows) bodies.set(row.ord, yield* storedEntry(kinds, row.entry));
+      for (const row of rows) bodies.set(row.ord, yield* storedEntry(kinds, id, row.entry));
     }
     return taken.flatMap((candidate): Placed[] => {
       const body = candidate.entry ?? bodies.get(candidate.ord);
@@ -205,7 +205,7 @@ export const makeEntryFold = Effect.fnUntraced(function* ({ reads }: { readonly 
         ),
       );
       const seed = new Map<string, ThreadTranscriptEntry>();
-      for (const row of rows) seed.set(row.entryId, yield* storedEntry(kinds, row.entry));
+      for (const row of rows) seed.set(row.entryId, yield* storedEntry(kinds, id, row.entry));
       for (const entry of yield* stored.seedFor(unit, id, suffix)) seed.set(entry.id, entry);
       const fold = new TranscriptFold([...seed.values()]);
       for (const fact of suffix) fold.place(fact);
@@ -298,7 +298,7 @@ export const makeEntryFold = Effect.fnUntraced(function* ({ reads }: { readonly 
         const { through, head, suffix } = yield* logTail(unit, id);
         yield* Effect.annotateCurrentSpan({ events: suffix.length });
         if (suffix.length === 0) return { claimed: EMPTY_IDS, head };
-        const facts = yield* Effect.forEach(suffix, (event) => factOf(kinds, event.kind, event.payload));
+        const facts = yield* Effect.forEach(suffix, (event) => factOf(kinds, id, event.kind, event.payload));
         const seed = yield* stored.seedFor(unit, id, facts);
         const fold = new TranscriptFold(seed);
         const placements: ThreadEntryPlacement[] = [];

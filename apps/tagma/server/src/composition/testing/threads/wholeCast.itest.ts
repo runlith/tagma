@@ -73,7 +73,7 @@ const standing = Effect.fn('testing.standingRows')(function* (threadId: string, 
     step: mark?.step ?? null,
     events: events.map((row) => row.payload.entry),
     entries: entries.map((row) => row.entry),
-    tail: parseThreadStreamTail(ENTRY_KINDS, run?.tail ?? null),
+    tail: parseThreadStreamTail(ENTRY_KINDS, threadId, run?.tail ?? null),
     stored: run?.tail ?? null,
     file: yield* files.readFileString(path),
   };

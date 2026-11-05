@@ -20,6 +20,7 @@ import {
   fileSize,
   lineStartFrom,
   readRolloutLine,
+  type RolloutEvent,
   rolloutEventOf,
   wholeLinesAfter,
   wholeLinesBefore,
@@ -56,7 +57,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
-  const decode: PayloadDecode = (value) => decodeThreadEventPayloadResult(kinds, value);
+  const decode: PayloadDecode = (thread, value) => decodeThreadEventPayloadResult(kinds, thread, value);
   const indexed = new Map<string, Indexed>();
   let clock = 0;
   const facetById = db
@@ -310,7 +311,7 @@ function rowOf(decode: PayloadDecode, line: string): ThreadEventRow | null {
   const event = eventOfLine(line);
   if (event === null) return null;
   const row = revived(event);
-  const decoded = decode(row.payload);
+  const decoded = decode(threadOfEvent(event), row.payload);
   return { ...row, payload: Result.isSuccess(decoded) ? decoded.success : row.payload } as ThreadEventRow;
 }
 
@@ -374,7 +375,9 @@ async function positionIn(
   return named;
 }
 
-export type PayloadDecode = (value: unknown) => Result.Result<ThreadEventPayload, { readonly message: string }>;
+export type PayloadDecode = (thread: string | null, value: unknown) => Result.Result<ThreadEventPayload, { readonly message: string }>;
+
+const threadOfEvent = (event: RolloutEvent): string | null => (typeof event.threadId === 'string' ? event.threadId : null);
 
 function eventOfLine(line: string) {
   if (line === '') return null;
@@ -388,7 +391,9 @@ function eventOfLine(line: string) {
 
 export function transcriptFactOf(line: string, kinds: ThreadEntryReader) {
   const event = eventOfLine(line);
-  return event === null ? null : { position: event.position, fact: transcriptFact(kinds, event.kind, event.id, revived(event).payload) };
+  return event === null
+    ? null
+    : { position: event.position, fact: transcriptFact(kinds, threadOfEvent(event), event.kind, event.id, revived(event).payload) };
 }
 
 export function factOf(
@@ -404,7 +409,7 @@ export function factOf(
   const event = eventOfLine(line);
   if (event === null) return null;
   const row = revived(event);
-  const decoded = decode(row.payload);
+  const decoded = decode(threadOfEvent(event), row.payload);
   if (Result.isFailure(decoded)) {
     throw new RolloutLineUnreadable(`the event at position ${event.position} cannot be read: ${decoded.failure.message}`);
   }

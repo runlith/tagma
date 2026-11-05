@@ -50,7 +50,13 @@ export type RestedAnswer = { readonly id: number } & (
   | { readonly kind: 'failed'; readonly reason: string }
 );
 
-export type RestedDegraded = { readonly place: string; readonly why: string; readonly repeat: string; readonly message: string };
+export type RestedDegraded = {
+  readonly thread: string | null;
+  readonly place: string;
+  readonly why: string;
+  readonly repeat: string;
+  readonly message: string;
+};
 
 export type RestedRead = {
   readonly id: number;

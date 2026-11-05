@@ -74,7 +74,7 @@ describe('persisted thread contract', () => {
   });
 
   test('an event facet this build does not know refuses the payload, while a known facet keeps reading extras', () => {
-    const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+    const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, 'thread-1', value);
     expect(decode({ entry: { type: 'message', id: 'm-1', role: 'user' }, spliced: { from: 0, to: 1 } })._tag).toBe('Failure');
     expect(decode({ withdrawn: { runId: 'run-1', keepMessages: 1, since: 'later' } })._tag).toBe('Success');
     expect(decode({ compacted: { keepFrom: -1, messages: [] } })._tag).toBe('Failure');
@@ -82,15 +82,15 @@ describe('persisted thread contract', () => {
 
   test('a stored stream tail keeps an entry no kind reads as a line beside its neighbours, and refuses a value with no identity', () => {
     const said = { type: 'message', id: 'message-1', role: 'user', text: 'hi' };
-    const [read, neighbour] = parseThreadStreamTail(kinds, [{ type: 'language-task', id: 'task-1' }, said]) ?? [];
+    const [read, neighbour] = parseThreadStreamTail(kinds, 'thread-1', [{ type: 'language-task', id: 'task-1' }, said]) ?? [];
     expect(read).toMatchObject({ type: 'entry-unreadable', id: 'task-1' });
     expect(neighbour).toEqual(said);
-    expect(() => parseThreadStreamTail(kinds, [{ type: 'message' }])).toThrow('stream tail cannot be read');
+    expect(() => parseThreadStreamTail(kinds, 'thread-1', [{ type: 'message' }])).toThrow('stream tail cannot be read');
   });
 
   test('nullable slots answer null and refuse malformed bytes', () => {
     expect(parseThreadPendingInteraction(kinds, null)).toBeNull();
-    expect(parseThreadStreamTail(kinds, null)).toBeNull();
+    expect(parseThreadStreamTail(kinds, 'thread-1', null)).toBeNull();
     expect(parseThreadRunUsage(null)).toBeNull();
     const question: ThreadQuestionEntry = {
       type: 'question',

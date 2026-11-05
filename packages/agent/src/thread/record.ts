@@ -166,3 +166,29 @@ export const NATIVE_CAPABILITIES: TransportCapabilities = {
   usage: 'measured',
   aside: 'request',
 };
+
+//! A stored binding that does not read names this adapter, which no transport registers.
+export const UNREAD_BINDING: TransportBinding = { adapter: 'unreadable', profile: null, agent: null };
+
+export const UNREAD_CAPABILITIES: TransportCapabilities = {
+  messaging: false,
+  judgedModel: false,
+  steer: 'none',
+  withdraw: false,
+  history: 'none',
+  copies: { whole: 'none', point: 'none' },
+  compaction: 'none',
+  modelMove: 'pinned',
+  openings: 'core',
+  pictures: false,
+  web: 'none',
+  law: null,
+  touch: null,
+  authorship: null,
+  callEnvelopeMs: null,
+  screen: false,
+  continue: false,
+  feed: 'turns',
+  usage: 'none',
+  aside: 'none',
+};

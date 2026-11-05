@@ -2,7 +2,12 @@ import { Clock, Context, Effect } from 'effect';
 import { mintCursor, readCursor } from '@runlith/paging';
 import { THREAD_LIST, type ThreadDirectoryRow, type ThreadListQuery } from '@runlith/agent/collaboration/threads';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
-import { parseThreadContextReading, parseThreadRunFailure, readableRowFact } from '@runlith/agent/thread/persisted';
+import {
+  parseThreadContextReading,
+  parseThreadRunFailure,
+  readTransportCapabilities,
+  readableRowFact,
+} from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { currentRunOf } from '@runlith/agent/thread/state';
@@ -121,6 +126,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   ? mintCursor(THREAD_LIST, [last.life, last.movedAt.getTime(), last.threadId])
                   : null,
               rows: page.map((row): ThreadDirectoryRow => {
+                const capabilities = readTransportCapabilities(kinds, row.threadId, row.capabilities);
                 const current =
                   row.runId === null ||
                   row.runStatus === null ||
@@ -137,14 +143,14 @@ export const makeThreadDirectory = Effect.gen(function* () {
                           handedOverAt: row.handedOverAt,
                           progress: row.progress,
                         },
-                        { updatedAt: row.movedAt, capabilities: row.capabilities },
+                        { updatedAt: row.movedAt, capabilities },
                         now,
                         LEASE_RHYTHM,
                       );
                 const run =
                   current === null || current.life !== 'awaiting'
                     ? current
-                    : { ...current, askPrompt: nativeAsk(kinds, row.pendingInteraction, current.runId)?.text ?? null };
+                    : { ...current, askPrompt: nativeAsk(kinds, row.threadId, row.pendingInteraction, current.runId)?.text ?? null };
                 return {
                   threadId: row.threadId,
                   projectId: row.projectId,
@@ -160,10 +166,10 @@ export const makeThreadDirectory = Effect.gen(function* () {
                       ? null
                       : { provider: row.provider, model: row.model, reasoning: row.reasoning, account: row.account },
                   provider: row.provider,
-                  capabilities: row.capabilities,
+                  capabilities,
                   contextReading: readableRowFact(
                     kinds,
-                    `Thread ${row.threadId}`,
+                    row.threadId,
                     'a context reading this build cannot read leaves its directory row without it',
                     () => parseThreadContextReading(kinds, row.contextReading),
                     null,
@@ -172,7 +178,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   failureReason: row.failureReason,
                   failure: readableRowFact(
                     kinds,
-                    `Thread ${row.threadId}`,
+                    row.threadId,
                     'a run failure this build cannot read leaves its directory row with the failure reason alone',
                     () => parseThreadRunFailure(row.failure),
                     null,

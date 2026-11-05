@@ -22,7 +22,7 @@ it.effect('wire ingress reads installed entries and preserves a refusal for an u
 it.effect('an entry the store could not read crosses the wire as its diagnosis, without its body', () =>
   Effect.gen(function* () {
     const stored = { type: 'placed', id: 'placed:1', runId: 'run', occurredAt: 'then', rootId: 'a body the reader never sees' };
-    const held = makeThreadEntryReader({ products: [] }).stored(stored);
+    const held = makeThreadEntryReader({ products: [] }).stored('thread-1', stored);
     const carried = Result.getOrThrow(held);
     const sent = yield* Schema.encodeEffect(threadEntryWireSchema)(carried);
     const crossed = JSON.parse(JSON.stringify(sent));

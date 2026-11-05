@@ -15,7 +15,7 @@ const question = (questions: readonly Record<string, unknown>[]) => ({
   status: 'open',
 });
 
-const answersOf = (pending: unknown) => nativeAsk(CORE, pending, 'run-1')?.options.map((option) => option.answers);
+const answersOf = (pending: unknown) => nativeAsk(CORE, 'thread-1', pending, 'run-1')?.options.map((option) => option.answers);
 
 const CONFIRM_OPTIONS = [
   { value: THREAD_TOOL_CONFIRM_VALUE, label: 'Run it' },
@@ -51,10 +51,10 @@ test('one single-choice question answers by each option; anything a tap cannot a
 test('the ask carries the question header, the unconfirmed delivery and its reason from the stored question', () => {
   const choice = { prompt: 'Allow `git push`?', header: 'No call id was named', options: [{ value: 'allow', label: 'Allow' }] };
   const stored = { ...question([choice]), deliveryUnknown: true, deliveryNote: 'The answer was typed but never confirmed.' };
-  expect(nativeAsk(CORE, stored, 'run-1')).toMatchObject({
+  expect(nativeAsk(CORE, 'thread-1', stored, 'run-1')).toMatchObject({
     header: 'No call id was named',
     deliveryUnknown: true,
     deliveryNote: 'The answer was typed but never confirmed.',
   });
-  expect(nativeAsk(CORE, question([choice]), 'run-1')?.deliveryUnknown).toBeUndefined();
+  expect(nativeAsk(CORE, 'thread-1', question([choice]), 'run-1')?.deliveryUnknown).toBeUndefined();
 });

@@ -205,3 +205,37 @@ export type ToolCaller = {
   readonly ownerId: string;
   readonly thread: ToolCallerThread | null;
 };
+
+type ThreadReadDegraded = {
+  readonly thread: string | null;
+  readonly place: string;
+  readonly why: string;
+  readonly repeat: string;
+  readonly failure: unknown;
+};
+
+export type ThreadReadWitness = (told: ThreadReadDegraded) => void;
+
+export type DegradedReads = {
+  readonly degraded: ThreadReadWitness;
+  readonly witnessing: (witness: ThreadReadWitness) => () => void;
+};
+
+//! Reads made before the error list stands wait for it, and a reader in a worker, which nobody witnesses, stays bounded.
+const UNWITNESSED_READS = 256;
+
+export const degradedReads = (): DegradedReads => {
+  const witnesses = new Set<ThreadReadWitness>();
+  const unwitnessed: ThreadReadDegraded[] = [];
+  return {
+    degraded: (told) => {
+      if (witnesses.size > 0) for (const witness of witnesses) witness(told);
+      else if (unwitnessed.length < UNWITNESSED_READS) unwitnessed.push(told);
+    },
+    witnessing: (witness) => {
+      witnesses.add(witness);
+      for (const told of unwitnessed.splice(0)) witness(told);
+      return () => void witnesses.delete(witness);
+    },
+  };
+};

@@ -28,7 +28,7 @@ export const threadToolSettlementsLayer = Layer.effectContext(
         append: (event, tx) =>
           Effect.tap(journal.append(event, tx), () => {
             if (event.kind !== 'tool' && event.kind !== 'run-end') return Effect.void;
-            const { entry } = decodeThreadEventPayload(kinds, event.payload);
+            const { entry } = decodeThreadEventPayload(kinds, event.threadId, event.payload);
             return entry === undefined ? Effect.void : tx.afterCommit(Effect.sync(() => recordedToolEntry(settlements, entry)));
           }),
       }),

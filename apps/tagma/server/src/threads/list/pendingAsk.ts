@@ -25,22 +25,22 @@ export function askKey(kind: ThreadAsk['kind'], tools: readonly string[], text: 
     .slice(0, 32);
 }
 
-const readableAsk = (kinds: ThreadEntryReader, pending: unknown): ReturnType<typeof parseThreadPendingInteraction> =>
+const readableAsk = (kinds: ThreadEntryReader, thread: string, pending: unknown): ReturnType<typeof parseThreadPendingInteraction> =>
   readableRowFact(
     kinds,
-    'A parked question',
+    thread,
     'a parked question this build cannot read leaves its list row without the question',
     () => parseThreadPendingInteraction(kinds, pending),
     null,
   );
 
-export function standaloneAsk(kinds: ThreadEntryReader, pending: unknown): ThreadAsk | null {
-  const parsed = readableAsk(kinds, pending);
-  return parsed === null || parsed.action === undefined ? null : nativeAsk(kinds, pending, parsed.runId);
+export function standaloneAsk(kinds: ThreadEntryReader, thread: string, pending: unknown): ThreadAsk | null {
+  const parsed = readableAsk(kinds, thread, pending);
+  return parsed === null || parsed.action === undefined ? null : nativeAsk(kinds, thread, pending, parsed.runId);
 }
 
-export function nativeAsk(kinds: ThreadEntryReader, pending: unknown, parkedRunId: string): ThreadAsk | null {
-  const parsed = readableAsk(kinds, pending);
+export function nativeAsk(kinds: ThreadEntryReader, thread: string, pending: unknown, parkedRunId: string): ThreadAsk | null {
+  const parsed = readableAsk(kinds, thread, pending);
   if (parsed === null) return null;
   const entry = parsed;
   if (entry.status !== 'open' || entry.runId !== parkedRunId) return null;

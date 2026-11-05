@@ -6,10 +6,13 @@ import type { RunHalt, RunLife } from '@runlith/agent/transcript/live';
 import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { LEASE_RHYTHM } from '../contract/wire/rhythm.js';
 import {
-  parseThreadBornOf,
   parseThreadContextReading,
   parseThreadRunFailure,
   parseThreadRunProgress,
+  readThreadAuthority,
+  readThreadBornOf,
+  readTransportBinding,
+  readTransportCapabilities,
   readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { thread } from '../store/kernel.js';
@@ -90,11 +93,11 @@ export function saidLineOf(said: string | null): string | null {
   return line === '' ? null : line;
 }
 
-export function askOf(kinds: ThreadEntryReader, pending: unknown, running: ThreadActiveRun | null): ThreadAsk | null {
-  const standing = standaloneAsk(kinds, pending);
+export function askOf(kinds: ThreadEntryReader, thread: string, pending: unknown, running: ThreadActiveRun | null): ThreadAsk | null {
+  const standing = standaloneAsk(kinds, thread, pending);
   if (standing !== null) return standing;
   if (running === null || !running.awaitingQuestion) return null;
-  return nativeAsk(kinds, pending, running.id);
+  return nativeAsk(kinds, thread, pending, running.id);
 }
 
 export type SummaryRow = {
@@ -170,7 +173,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
   const readable = <A>(parse: () => A, otherwise: A): A =>
     readableRowFact(
       kinds,
-      `Thread ${row.thread.id}`,
+      row.thread.id,
       'a fact of a thread this build cannot read leaves its list row without that fact, so one thread never blanks the list',
       parse,
       otherwise,
@@ -180,6 +183,9 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     cacheGroup: row.thread.cacheGroup ?? row.thread.id,
     provider: row.thread.provider ?? 'external',
     switches: row.thread.switches ?? {},
+    authority: readThreadAuthority(kinds, row.thread.id, row.thread.authority),
+    transport: readTransportBinding(kinds, row.thread.id, row.thread.transport),
+    capabilities: readTransportCapabilities(kinds, row.thread.id, row.thread.capabilities),
   };
   const progress = row.progress === null ? null : readable(() => parseThreadRunProgress(row.progress), null);
   const harness = readable(() => parseExternalSession(row.harness), null);
@@ -215,7 +221,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     ...thread,
     life: signals?.life ?? 'idle',
     owes: false,
-    bornOf: readable(() => parseThreadBornOf(thread.bornOf), null),
+    bornOf: readThreadBornOf(kinds, thread.id, thread.bornOf),
     contextReading: readable(() => parseThreadContextReading(kinds, thread.contextReading), null),
     title: row.title ?? DEFAULT_TITLE,
     titleOrigin: row.titleOrigin ?? 'random',
@@ -246,7 +252,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
             finishedAt: row.outcomeFinishedAt,
             isSeen: row.outcomeRunId === row.seenRunId,
           },
-    ask: askOf(kinds, thread.pendingInteraction, activeRun),
+    ask: askOf(kinds, thread.id, thread.pendingInteraction, activeRun),
     saidLine: saidLineOf(row.said),
     recap:
       !recapShown || row.recap === null || row.recapStatus === null ? null : readable(() => recapLineOf(row.recap, row.recapStatus), null),

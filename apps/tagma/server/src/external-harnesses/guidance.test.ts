@@ -61,6 +61,7 @@ const fixture = Effect.fnUntraced(function* () {
         titleRecorded: unobserved,
         statusPublished: unobserved,
         shelfRecorded: unobserved,
+        readDegraded: unobserved,
       }),
       Layer.mock(WorkPlaces, {}),
       Layer.mock(ThreadInbox, { writes: writes('testing.guidance', []) }),

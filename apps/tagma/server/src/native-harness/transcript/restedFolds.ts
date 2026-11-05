@@ -23,7 +23,13 @@ import {
 } from './restedWork.js';
 import type { ReadRollout } from '../../threads/contract/service/rolloutReads.js';
 
-export type RestedTranscript = { readonly path: string; readonly entries: number; readonly bodies: number; readonly open: number };
+export type RestedTranscript = {
+  readonly thread: string;
+  readonly path: string;
+  readonly entries: number;
+  readonly bodies: number;
+  readonly open: number;
+};
 
 const FOLD_CEILING_BYTES = 128 * 1024 * 1024;
 
@@ -131,10 +137,10 @@ export const makeRestedFolds = Effect.gen(function* () {
       const rollout = yield* reads.restedRollout(threadId, tx);
       if (rollout === null) return null;
       const path = rollout.transcript;
-      const standing = yield* lineRead('restedTranscript.open', (observe) => footerOf(path, rollout.key, observe));
+      const standing = yield* lineRead('restedTranscript.open', (observe) => footerOf(threadId, path, rollout.key, observe));
       if (standing !== null) return standing;
       yield* built(rollout);
-      const rebuilt = yield* lineRead('restedTranscript.open', (observe) => footerOf(path, rollout.key, observe));
+      const rebuilt = yield* lineRead('restedTranscript.open', (observe) => footerOf(threadId, path, rollout.key, observe));
       if (rebuilt !== null) return rebuilt;
       return yield* new ThreadStorageFailed({
         call: 'restedTranscript.open',
@@ -158,7 +164,7 @@ export const makeRestedFolds = Effect.gen(function* () {
             const start = slots.offset(first);
             const end = slots.offset(last + 1);
             bytes += end - start;
-            return bodiesOf(kinds, await rangeOf(transcript.path, start, end - start, observe), first);
+            return bodiesOf(kinds, transcript.thread, await rangeOf(transcript.path, start, end - start, observe), first);
           }),
         (oldest) => Effect.succeed(oldest > 0),
       );
@@ -238,7 +244,7 @@ async function rangeOf(path: string, start: number, length: number, observe: Rea
   }
 }
 
-async function footerOf(path: string, key: TranscriptKey, observe: ReadRollout): Promise<RestedTranscript | null> {
+async function footerOf(thread: string, path: string, key: TranscriptKey, observe: ReadRollout): Promise<RestedTranscript | null> {
   let handle;
   try {
     handle = await open(path, 'r');
@@ -258,7 +264,7 @@ async function footerOf(path: string, key: TranscriptKey, observe: ReadRollout):
     if (footer.readDoubleLE(40) !== TRANSCRIPT_FORM) return null;
     if (!sameKey({ bytes: footer.readDoubleLE(24), position: footer.readDoubleLE(32) }, key)) return null;
     if (bodies + entries * TRANSCRIPT_SLOT_BYTES + open * TRANSCRIPT_OPEN_BYTES + TRANSCRIPT_FOOTER_BYTES !== size) return null;
-    return { path, entries, bodies, open };
+    return { thread, path, entries, bodies, open };
   } finally {
     await handle.close();
   }
@@ -281,17 +287,17 @@ async function slotsOf(transcript: RestedTranscript, floor: number, roof: number
   };
 }
 
-function fileEntry(kinds: ThreadEntryReader, line: string): ThreadTranscriptEntry {
-  const read = kinds.stored(JSON.parse(line));
+function fileEntry(kinds: ThreadEntryReader, thread: string, line: string): ThreadTranscriptEntry {
+  const read = kinds.stored(thread, JSON.parse(line));
   if (Result.isFailure(read)) throw read.failure;
   return read.success;
 }
 
-function bodiesOf(kinds: ThreadEntryReader, bytes: Buffer, first: number): Placed[] {
+function bodiesOf(kinds: ThreadEntryReader, thread: string, bytes: Buffer, first: number): Placed[] {
   const placed: Placed[] = [];
   let from = 0;
   for (let newline = bytes.indexOf(0x0a); newline !== -1; newline = bytes.indexOf(0x0a, from)) {
-    placed.push({ ord: first + placed.length, entry: fileEntry(kinds, bytes.toString('utf8', from, newline)) });
+    placed.push({ ord: first + placed.length, entry: fileEntry(kinds, thread, bytes.toString('utf8', from, newline)) });
     from = newline + 1;
   }
   return placed;
@@ -312,7 +318,7 @@ async function openOf(kinds: ThreadEntryReader, transcript: RestedTranscript, ob
     for (let at = 0; at < table.length; at += TRANSCRIPT_OPEN_BYTES) {
       const start = table.readDoubleLE(at + 8);
       const body = await readAt(handle, transcript.path, start, table.readDoubleLE(at + 16) - start - 1, observe);
-      const entry = fileEntry(kinds, body.toString('utf8'));
+      const entry = fileEntry(kinds, transcript.thread, body.toString('utf8'));
       if (entryOf('question')(entry)) found.push(entry);
     }
     return found;
@@ -333,7 +339,7 @@ async function scanned(
   for await (const { line, end } of wholeLinesAfter(transcript.path, 0, observe)) {
     if (end > transcript.bodies) break;
     if (!line.includes(needle)) continue;
-    const entry = fileEntry(kinds, line);
+    const entry = fileEntry(kinds, transcript.thread, line);
     if (!wanted(entry)) continue;
     found.push(entry);
     if (one) break;

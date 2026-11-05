@@ -120,6 +120,7 @@ export const servedOver = (ports: ServedPorts) =>
         titleRecorded: () => () => undefined,
         statusPublished: () => () => undefined,
         shelfRecorded: () => () => undefined,
+        readDegraded: () => () => undefined,
       }),
     ),
     Effect.provideContext(

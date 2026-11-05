@@ -29,8 +29,8 @@ test('a record in an old form leaves the reader in the current form, and a curre
   expect(Result.isFailure(makeThreadEntryReader({ products: [] }).decode(old))).toBe(true);
   expect(kinds.decode(old)).toEqual(Result.succeed(current));
   expect(kinds.decode(current)).toEqual(Result.succeed(current));
-  expect(decodeThreadEventPayloadResult(kinds, { entry: old })).toEqual(Result.succeed({ entry: current }));
-  expect(parseThreadStreamTail(kinds, [old, current])).toEqual([current, current]);
+  expect(decodeThreadEventPayloadResult(kinds, 'thread-1', { entry: old })).toEqual(Result.succeed({ entry: current }));
+  expect(parseThreadStreamTail(kinds, 'thread-1', [old, current])).toEqual([current, current]);
 });
 
 test('a step that moves a field queries over many threads read is refused on every record it would move', () => {

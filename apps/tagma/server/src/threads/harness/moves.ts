@@ -6,6 +6,7 @@ import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadModelSelection } from '@runlith/agent/thread/record';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { NATIVE_BINDING } from '@runlith/agent/thread/record';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
@@ -77,6 +78,7 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
   readonly harness: Effect.Effect<ThreadHarness['Service']>;
 }) {
   const { db } = yield* MachineStore;
+  const kinds = yield* ThreadEntryKinds;
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
   const registry = yield* HarnessRegistry;
@@ -223,7 +225,7 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
   const hostedRow = (threadId: string) =>
     units.read((unit) =>
       Effect.all({
-        bound: bindingOf(db, unit, threadId),
+        bound: bindingOf(db, kinds, unit, threadId),
         row: unit.run(
           db
             .select({ provider: thread.provider, model: thread.model, reasoning: thread.reasoning, account: thread.account })
@@ -238,8 +240,8 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
     function* (threadId: string, asked: HarnessMoveTo) {
       const to = { ...asked, switches: asked.switches ?? (yield* kept(threadId, asked)) };
       const facet = yield* sessionOf(threadId);
-      const bound = facet === null ? undefined : yield* units.read((unit) => bindingOf(db, unit, threadId));
-      const capabilities = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, unit, threadId));
+      const bound = facet === null ? undefined : yield* units.read((unit) => bindingOf(db, kinds, unit, threadId));
+      const capabilities = facet === null ? undefined : yield* units.read((unit) => capabilitiesOf(db, kinds, unit, threadId));
       if (facet !== null && capabilities?.modelMove === 'pinned') return yield* pinned(threadId, facet.name);
       if (facet !== null && bound?.agent == null) return yield* within(threadId, facet, to);
       const road = yield* registry.seating(to, models());

@@ -1,5 +1,6 @@
 import type { ThreadBornOf } from '@runlith/agent/protocol/birth';
 import type { ThreadStatus } from '@runlith/agent/thread/rows';
+import type { ThreadReadWitness } from '@runlith/agent/contracts';
 import { Context, Effect } from 'effect';
 import type { Raised } from '@runlith/agent/permissions';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
@@ -139,6 +140,7 @@ export class ThreadRecords extends Context.Service<
     titleRecorded(subscriber: (event: TitleRecorded) => Effect.Effect<void>): () => void;
     statusPublished(subscriber: (event: StatusPublished) => Effect.Effect<void>): () => void;
     shelfRecorded(subscriber: (event: ShelfRecorded) => Effect.Effect<void>): () => void;
+    readDegraded(witness: ThreadReadWitness): () => void;
   }
 >()('tagma/thread-record/ThreadRecords') {}
 

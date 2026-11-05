@@ -103,6 +103,7 @@ export const hookReports = Effect.fnUntraced(function* ({
         titleRecorded: uncalled,
         statusPublished: uncalled,
         shelfRecorded: uncalled,
+        readDegraded: uncalled,
       }),
       Layer.mock(WorkPlaces, {}),
       suppliedAccess === undefined ? Layer.mock(Environments, {}) : Layer.succeed(Environments, suppliedAccess),

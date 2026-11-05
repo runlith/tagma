@@ -112,7 +112,7 @@ export function describeThreadEventLogPort<TTx, TWrite extends TTx = TTx, R = ne
         const whole = yield* harness.eventLog.revisionsAsOf(thread.id, { head: settled.position, afterPosition: 0, limit: 100 });
         expect(whole.map((row) => row.id)).toEqual([message.id, settled.id]);
         expect(whole.map((row) => row.identity)).toEqual(['message-1', 'tool:run-1:one']);
-        expect(whole.map((row) => threadEntryIdentity(decodeThreadEventPayload(harness.kinds, row.payload)))).toEqual([
+        expect(whole.map((row) => threadEntryIdentity(decodeThreadEventPayload(harness.kinds, thread.id, row.payload)))).toEqual([
           'message-1',
           'tool:run-1:one',
         ]);

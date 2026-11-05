@@ -130,7 +130,7 @@ export const makeFootprintFolding = Effect.gen(function* () {
             let removed = 0;
             for (const row of batch) {
               const payload = yield* Effect.try({
-                try: () => decodeThreadEventPayload(kinds, row.payload),
+                try: () => decodeThreadEventPayload(kinds, threadId, row.payload),
                 catch: (cause) => new ThreadStorageFailed({ call: 'ThreadFootprintFolding.fold', cause }),
               });
               if (footprintTools(payload) === null) continue;

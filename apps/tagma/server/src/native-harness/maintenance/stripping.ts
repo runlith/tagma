@@ -139,7 +139,7 @@ export const makeEventStripping = Effect.gen(function* () {
           row === undefined
             ? Effect.succeed(undefined)
             : Effect.try({
-                try: () => ({ payload: decodeThreadEventPayload(kinds, row.payload) }),
+                try: () => ({ payload: decodeThreadEventPayload(kinds, threadId, row.payload) }),
                 catch: (cause) => new ThreadStorageFailed({ call: 'ThreadEventStripping.factAt', cause }),
               }),
         ),
@@ -157,7 +157,7 @@ export const makeEventStripping = Effect.gen(function* () {
       .pipe(
         Effect.flatMap((row) => {
           if (row === undefined) return Effect.succeed(undefined);
-          const current = kinds.stored(row.entry);
+          const current = kinds.stored(threadId, row.entry);
           return Result.isFailure(current)
             ? Effect.fail(new ThreadStorageFailed({ call: 'ThreadEventStripping.rowOf', cause: current.failure }))
             : Effect.succeed({ entry: current.success });

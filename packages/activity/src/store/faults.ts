@@ -34,6 +34,7 @@ export class ActivityFaults extends Context.Service<
   ActivityFaults,
   {
     read(query: ActivityFaultsQuery): Effect.Effect<ActivityFaultsPage, ActivityUnreadable>;
+    since(now: number): number;
     readonly clear: Effect.Effect<void, ActivityUnreadable>;
     readonly changes: Stream.Stream<void>;
   }

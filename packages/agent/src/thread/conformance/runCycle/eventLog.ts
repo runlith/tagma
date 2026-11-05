@@ -41,7 +41,7 @@ export function recordingJournal(refuses: (event: ThreadEventInsert) => boolean 
       Effect.sync(() => {
         const latest = new Map<string, ThreadEventRevision>();
         for (const row of records(threadId, { ...window, limit: Number.MAX_SAFE_INTEGER })) {
-          const identity = threadEntryIdentity(decodeThreadEventPayload(kinds, row.payload));
+          const identity = threadEntryIdentity(decodeThreadEventPayload(kinds, threadId, row.payload));
           if (identity !== null) latest.set(identity, { ...row, identity });
         }
         return [...latest.values()].sort((a, b) => a.position - b.position).slice(0, window.limit);

@@ -113,7 +113,7 @@ export const makeEntryBounding = Effect.gen(function* () {
       .pipe(
         Effect.flatMap((row) => {
           if (row === undefined) return Effect.succeed(undefined);
-          const current = kinds.stored(row.entry);
+          const current = kinds.stored(threadId, row.entry);
           return Result.isFailure(current)
             ? Effect.fail(new BoundingMoveFailed({ threadId, message: current.failure.message }))
             : Effect.succeed({ entry: current.success });
@@ -137,7 +137,7 @@ export const makeEntryBounding = Effect.gen(function* () {
       .pipe(
         Effect.flatMap((rows) =>
           Effect.try({
-            try: () => rows.map((row) => ({ ...row, payload: decodeThreadEventPayload(kinds, row.payload) })),
+            try: () => rows.map((row) => ({ ...row, payload: decodeThreadEventPayload(kinds, threadId, row.payload) })),
             catch: (cause) => new BoundingMoveFailed({ threadId, message: said(cause) }),
           }),
         ),

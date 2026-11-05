@@ -39,14 +39,14 @@ test('restored context evidence names current operation IDs and keeps the origin
       evidence: { tools: before, instructions: 'claim_task was written into this frozen prompt', profileId: null, approvalMode: 'review' },
     },
   };
-  const read = decodeThreadEventPayloadResult(ENTRY_KINDS, payload);
+  const read = decodeThreadEventPayloadResult(ENTRY_KINDS, 'thread-1', payload);
   if (Result.isFailure(read)) throw read.failure;
   const evidence = read.success.contextChange?.evidence;
   if (evidence === undefined) throw new Error('the published context has no evidence');
   expect(evidence.tools).toEqual(after);
   expect(evidence.instructions).toBe(payload.contextChange.evidence.instructions);
   expect(payload.contextChange.evidence.tools).toEqual(before);
-  const again = decodeThreadEventPayloadResult(ENTRY_KINDS, read.success);
+  const again = decodeThreadEventPayloadResult(ENTRY_KINDS, 'thread-1', read.success);
   if (Result.isFailure(again)) throw again.failure;
   expect(again.success).toEqual(read.success);
 });

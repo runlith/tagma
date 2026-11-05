@@ -201,7 +201,7 @@ export async function planCarry(
       records.push({ record: verdict.record, row });
       continue;
     }
-    const decoded = decodeThreadEventPayloadResult(kinds, row.payload);
+    const decoded = decodeThreadEventPayloadResult(kinds, threadId, row.payload);
     if (Result.isFailure(decoded))
       return refused('record-shape', `the event at position ${verdict.position} cannot be read: ${decoded.failure.message}`);
     const { entry } = decoded.success;

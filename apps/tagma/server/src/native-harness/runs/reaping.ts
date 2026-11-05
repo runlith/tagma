@@ -462,8 +462,8 @@ export const makeReaping = Effect.gen(function* () {
 });
 
 export function trustedRun(kinds: ThreadEntryReader, call: string, row: ThreadRunRow): Effect.Effect<ThreadRunRow, ThreadStorageFailed> {
-  const subject = `Run ${row.id}`;
-  const readable = <A>(why: string, parse: () => A, otherwise: A): A => readableRowFact(kinds, subject, why, parse, otherwise);
+  const readable = <A>(why: string, parse: () => A, otherwise: A): A =>
+    readableRowFact(kinds, row.threadId, why, parse, otherwise, `Run ${row.id} of thread ${row.threadId}`);
   return trusted(call, () => ({
     ...row,
     progress: readable('a run progress this build cannot read stands as no stage', () => parseThreadRunProgress(row.progress), {
@@ -471,7 +471,11 @@ export function trustedRun(kinds: ThreadEntryReader, call: string, row: ThreadRu
       message: null,
     }),
     usage: readable('a run usage this build cannot read stands as unmeasured', () => parseThreadRunUsage(row.usage), null),
-    streamTail: parseThreadStreamTail(kinds, row.streamTail),
+    streamTail: readable(
+      'a stream tail this build cannot read stands as none, so the run closes without the streamed lines it held',
+      () => parseThreadStreamTail(kinds, row.threadId, row.streamTail),
+      null,
+    ),
     failure: readable(
       'a run failure this build cannot read leaves the run with its failure reason alone',
       () => parseThreadRunFailure(row.failure),

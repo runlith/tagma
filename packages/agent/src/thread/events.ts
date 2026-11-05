@@ -107,8 +107,8 @@ export type ThreadEventDraft = {
 
 export type ThreadEventInput = ThreadEventBody | ThreadEventDraft;
 
-export function decodeThreadEventPayload(kinds: ThreadEntryReader, value: unknown): ThreadEventPayload {
-  const parsed = decodeThreadEventPayloadResult(kinds, value);
+export function decodeThreadEventPayload(kinds: ThreadEntryReader, thread: string, value: unknown): ThreadEventPayload {
+  const parsed = decodeThreadEventPayloadResult(kinds, thread, value);
   if (parsed._tag === 'Failure') throw eventPayloadFailure(value, parsed.failure);
   return parsed.success;
 }
@@ -258,14 +258,14 @@ export const readThreadContextEvidence = Effect.fnUntraced(function* <TTx>(
   return rows[0]?.payload.contextChange ?? null;
 });
 
-function decoded<Row extends { readonly payload: ThreadEventPayloadValue }>(
+function decoded<Row extends { readonly threadId: string; readonly payload: ThreadEventPayloadValue }>(
   kinds: ThreadEntryReader,
   call: string,
   read: Effect.Effect<readonly Row[], ThreadPortFailure>,
 ): Effect.Effect<readonly (Omit<Row, 'payload'> & { payload: ThreadEventPayload })[], ThreadPortFailure> {
   return Effect.flatMap(read, (rows) =>
     Effect.try({
-      try: () => rows.map((row) => ({ ...row, payload: decodeThreadEventPayload(kinds, row.payload) })),
+      try: () => rows.map((row) => ({ ...row, payload: decodeThreadEventPayload(kinds, row.threadId, row.payload) })),
       catch: (cause) => new ThreadStorageFailed({ call, cause }),
     }),
   );

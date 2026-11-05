@@ -134,10 +134,11 @@ export const makeThreadInbox = Effect.gen(function* () {
     rows.flatMap((row) =>
       readableRowFact(
         kinds,
-        `Inbox item ${row.id}`,
+        row.threadId,
         'an inbox item this build cannot read is passed over, so it neither stalls its thread nor every waiting wake',
         () => [parseThreadInboxItem(row)],
         [],
+        `Inbox item ${row.id} of thread ${row.threadId}`,
       ),
     );
   const { db } = yield* MachineStore;

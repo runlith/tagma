@@ -2,6 +2,8 @@ import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
 import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities, TransportCopies } from '@runlith/agent/thread/record';
+import { readTransportBinding, readTransportCapabilities } from '@runlith/agent/thread/persisted';
+import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
@@ -104,12 +106,12 @@ export const declareHistory = Effect.fn('ThreadSeat.declareHistory')(function* (
 
 export const capabilitiesOf = (
   db: StoreDb<'machine'>,
+  kinds: ThreadEntryReader,
   unit: Unit<'machine'>,
   threadId: string,
 ): Effect.Effect<TransportCapabilities | undefined, StoreFailure> =>
-  Effect.map(
-    unit.run(db.select({ capabilities: thread.capabilities }).from(thread).where(eq(thread.id, threadId)).get()),
-    (row) => row?.capabilities,
+  Effect.map(unit.run(db.select({ capabilities: thread.capabilities }).from(thread).where(eq(thread.id, threadId)).get()), (row) =>
+    row === undefined ? undefined : readTransportCapabilities(kinds, threadId, row.capabilities),
   );
 
 export const chooseModel = Effect.fn('ThreadSeat.chooseModel')(function* (
@@ -180,15 +182,20 @@ export const switchesOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, thread
 
 export const bindingOf = (
   db: StoreDb<'machine'>,
+  kinds: ThreadEntryReader,
   unit: Unit<'machine'>,
   threadId: string,
 ): Effect.Effect<TransportBinding | undefined, StoreFailure> =>
-  Effect.map(
-    unit.run(db.select({ transport: thread.transport }).from(thread).where(eq(thread.id, threadId)).get()),
-    (row) => row?.transport,
+  Effect.map(unit.run(db.select({ transport: thread.transport }).from(thread).where(eq(thread.id, threadId)).get()), (row) =>
+    row === undefined ? undefined : readTransportBinding(kinds, threadId, row.transport),
   );
 
-export const roadOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadId: string): Effect.Effect<HarnessRoad, StoreFailure> =>
+export const roadOf = (
+  db: StoreDb<'machine'>,
+  kinds: ThreadEntryReader,
+  unit: Unit<'machine'>,
+  threadId: string,
+): Effect.Effect<HarnessRoad, StoreFailure> =>
   Effect.flatMap(
     unit.run(
       db
@@ -203,7 +210,14 @@ export const roadOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadId: 
         .where(eq(thread.id, threadId))
         .get(),
     ),
-    (row) => (row === undefined ? Effect.die(new Error(`Thread ${threadId} stands without its kernel row.`)) : Effect.succeed(row)),
+    (row) =>
+      row === undefined
+        ? Effect.die(new Error(`Thread ${threadId} stands without its kernel row.`))
+        : Effect.succeed({
+            ...row,
+            transport: readTransportBinding(kinds, threadId, row.transport),
+            capabilities: readTransportCapabilities(kinds, threadId, row.capabilities),
+          }),
   );
 
 export const askedOf = (

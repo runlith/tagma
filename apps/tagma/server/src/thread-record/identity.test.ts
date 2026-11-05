@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { degradedReads } from '@runlith/agent/contracts';
 import { factsOf } from './identity.js';
 
 const row = {
@@ -32,8 +33,10 @@ const row = {
   createdAt: new Date(1_000),
 };
 
+const kinds = degradedReads();
+
 test('a record with no project reads as unscoped, and its stored tagma harness as native', () => {
-  expect(factsOf(row)).toMatchObject({
+  expect(factsOf(kinds, row)).toMatchObject({
     origin: 'unscoped',
     projectId: null,
     harness: 'tagma',
@@ -45,7 +48,7 @@ test('a record with no project reads as unscoped, and its stored tagma harness a
 });
 
 test('a facet supplies the project, the title and the harness it names', () => {
-  const facts = factsOf({
+  const facts = factsOf(kinds, {
     ...row,
     projectId: 7,
     title: 'named',

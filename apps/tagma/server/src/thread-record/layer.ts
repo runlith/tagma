@@ -54,7 +54,7 @@ const feed = <E>() => {
 export const makeThreadRecords = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
-  const { facts, projectOf } = yield* makeIdentityReads;
+  const { facts, projectOf, readDegraded } = yield* makeIdentityReads;
   const births = feed<RecordAddress>();
   const removals = feed<RecordAddress>();
   const titles = feed<TitleRecorded>();
@@ -135,6 +135,7 @@ export const makeThreadRecords = Effect.gen(function* () {
     titleRecorded: titles.subscribe,
     statusPublished: statuses.subscribe,
     shelfRecorded: shelves.subscribe,
+    readDegraded,
   });
 });
 

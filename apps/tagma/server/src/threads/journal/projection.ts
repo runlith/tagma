@@ -144,7 +144,7 @@ export const makeThreadProjection = Effect.gen(function* () {
           }
         } else {
           const payload = yield* Effect.try({
-            try: () => decodeThreadEventPayload(kinds, fact.payload),
+            try: () => decodeThreadEventPayload(kinds, threadId, fact.payload),
             catch: (error) =>
               new ThreadProjectionRefused({
                 reason: 'corrupt',

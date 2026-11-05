@@ -139,7 +139,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
 
   const entriesWhere = Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string, where: SQL | undefined) {
     const rows = yield* layered.rows(unit, id, where);
-    return yield* Effect.forEach(rows, (row) => storedEntry(kinds, row.entry));
+    return yield* Effect.forEach(rows, (row) => storedEntry(kinds, id, row.entry));
   });
 
   const chunkedRows = Effect.fnUntraced(function* (
@@ -238,7 +238,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
           unit,
           id,
           yield* Effect.forEach(above, (row) =>
-            Effect.map(storedEntry(kinds, row.entry), (entry) => {
+            Effect.map(storedEntry(kinds, id, row.entry), (entry) => {
               const next = change(entry);
               return { ...row, runId: runIdOf(next), type: typeOf(next), entry: next };
             }),
@@ -431,7 +431,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
           ),
     suffix: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {
       const rows = yield* unit.run(planned.suffix.all({ threadId: id }));
-      const facts = rows.map((row) => transcriptFact(kinds, row.kind, row.id, row.payload));
+      const facts = rows.map((row) => transcriptFact(kinds, id, row.kind, row.id, row.payload));
       return facts.filter(
         (fact) => fact.entry !== undefined || fact.withdrawn !== undefined || fact.rewound !== undefined || fact.restored !== undefined,
       );
@@ -463,7 +463,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
         if (held !== undefined) return held;
         const rows = yield* layered.rows(unit, id);
         yield* Effect.annotateCurrentSpan({ rows: rows.length });
-        const transcript: ThreadTranscript = yield* Effect.forEach(rows, (row) => storedEntry(kinds, row.entry));
+        const transcript: ThreadTranscript = yield* Effect.forEach(rows, (row) => storedEntry(kinds, id, row.entry));
         heldIn(unit).set(id, transcript);
         return transcript;
       },
@@ -512,7 +512,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
       }
       return yield* Effect.forEach(
         [...found].sort(([left], [right]) => left - right),
-        ([, entry]) => storedEntry(kinds, entry),
+        ([, entry]) => storedEntry(kinds, id, entry),
       );
     }),
     rowById: (unit: Unit<'machine'>, id: string, entryId: string): Effect.Effect<ThreadTranscriptEntry | undefined, StoredFailure> =>
@@ -577,15 +577,24 @@ export function* chunked<T>(values: readonly T[]): Generator<T[]> {
   for (let at = 0; at < values.length; at += BINDS) yield values.slice(at, at + BINDS);
 }
 
-export function factOf(kinds: ThreadEntryReader, kind: string, payload: unknown): Effect.Effect<ThreadEventFact, ThreadStorageFailed> {
-  const read = decodeThreadEventPayloadResult(kinds, payload);
+export function factOf(
+  kinds: ThreadEntryReader,
+  thread: string,
+  kind: string,
+  payload: unknown,
+): Effect.Effect<ThreadEventFact, ThreadStorageFailed> {
+  const read = decodeThreadEventPayloadResult(kinds, thread, payload);
   return Result.isFailure(read)
     ? Effect.fail(new ThreadStorageFailed({ call: 'transcript.event', cause: read.failure }))
     : Effect.succeed(threadEventFact({ kind, payload: read.success }));
 }
 
-export function storedEntry(kinds: ThreadEntryReader, value: unknown): Effect.Effect<ThreadTranscriptEntry, ThreadStorageFailed> {
-  const read = kinds.stored(value);
+export function storedEntry(
+  kinds: ThreadEntryReader,
+  thread: string,
+  value: unknown,
+): Effect.Effect<ThreadTranscriptEntry, ThreadStorageFailed> {
+  const read = kinds.stored(thread, value);
   return Result.isFailure(read)
     ? Effect.fail(new ThreadStorageFailed({ call: 'transcript.entry', cause: read.failure }))
     : Effect.succeed(read.success);

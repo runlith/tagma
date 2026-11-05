@@ -31,7 +31,7 @@ test('a core entry is closed over its schema: a field it does not declare is ref
 test('a stored entry no kind reads stays a line, and what a writer stores is the record it stood on, its mark included', () => {
   const core = makeThreadEntryReader({ products: [] });
   const body = { type: 'placed', id: 'placed:1', runId: 'run', occurredAt: 'then', rootId: 'root-1' };
-  const read = successOf(core.stored(body)) as ThreadTranscriptEntry;
+  const read = successOf(core.stored('thread-1', body)) as ThreadTranscriptEntry;
 
   expect(ThreadEntryUnreadable.is(read)).toBe(true);
   expect(read).toMatchObject({ id: 'placed:1', runId: 'run', occurredAt: 'then', refusal: { type: 'placed' } });
@@ -44,15 +44,15 @@ test('a stored entry no kind reads stays a line, and what a writer stores is the
   expect(JSON.parse(JSON.stringify(markThreadEntry(marked, null)))).toEqual(body);
 
   const strange = { ...body, rewound: { by: 'a later build', scope: 'elsewhere' } };
-  expect(JSON.parse(JSON.stringify(successOf(core.stored(strange))))).toEqual(strange);
+  expect(JSON.parse(JSON.stringify(successOf(core.stored('thread-1', strange))))).toEqual(strange);
 
   const installed = makeThreadEntryReader({ products: [{ type: 'placed', schema: placed }] });
-  expect(successOf(installed.stored({ type: 'placed', id: 'placed:1', rootId: 'root-1' }))).toEqual({
+  expect(successOf(installed.stored('thread-1', { type: 'placed', id: 'placed:1', rootId: 'root-1' }))).toEqual({
     type: 'placed',
     id: 'placed:1',
     rootId: 'root-1',
   });
-  expect(failureOf(core.stored({ type: 'placed' }))).toBeInstanceOf(ThreadEntryUndecodable);
+  expect(failureOf(core.stored('thread-1', { type: 'placed' }))).toBeInstanceOf(ThreadEntryUndecodable);
 });
 
 test('a kind declared twice is refused when the set is built', () => {

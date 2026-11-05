@@ -82,6 +82,7 @@ const fixture = Effect.gen(function* () {
     titleRecorded: unobserved,
     statusPublished: unobserved,
     shelfRecorded: unobserved,
+    readDegraded: unobserved,
   });
   let share = 0.4;
   const settings = Settings.of({

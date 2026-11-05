@@ -119,7 +119,7 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
               (rows) => Effect.forEach(rows, rowOf),
             ),
           ),
-    capabilities: (id: string) => work.read('capabilities', undefined, (unit) => capabilitiesOf(db, unit, id)),
+    capabilities: (id: string) => work.read('capabilities', undefined, (unit) => capabilitiesOf(db, kinds, unit, id)),
     systemPromptOf: (id: string, tx?: Unit<'machine'>) =>
       work.read('systemPromptOf', tx, (unit) =>
         unit.run(

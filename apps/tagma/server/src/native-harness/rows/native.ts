@@ -14,6 +14,8 @@ import { HARNESS_AGENT_ID } from '../../threads/contract/wire/harness/names.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities } from '@runlith/agent/thread/record';
+import { readTransportBinding, readTransportCapabilities } from '@runlith/agent/thread/persisted';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { recordFacts } from '../../thread-record/facts.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { writeMandate } from '../../threads/mandate.js';
@@ -89,6 +91,7 @@ export type NativeThreadRows = Effect.Success<ReturnType<typeof makeNativeThread
 
 export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { readonly threads: ThreadStore }) {
   const { db } = yield* MachineStore;
+  const kinds = yield* ThreadEntryKinds;
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
 
@@ -133,7 +136,11 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
               scopeBlockUuid: row.scopeBlockUuid,
               title: row.title ?? DEFAULT_TITLE,
               archivedAt: row.archivedAt,
-              harness: seatOf(parseExternalSession(row.harness), row),
+              harness: seatOf(parseExternalSession(row.harness), {
+                ...row,
+                seated: row.seated === null ? null : readTransportBinding(kinds, id, row.seated),
+                capabilities: row.capabilities === null ? null : readTransportCapabilities(kinds, id, row.capabilities),
+              }),
               contextEventId: row.contextEventId ?? 0,
               worldStateSnapshot: row.worldStateSnapshot ?? {},
               worldStateCheckpointId: row.worldStateCheckpointId,
@@ -261,7 +268,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
           (rows) => rows.flatMap((row) => (row.projectId === null ? [] : [{ ...row, projectId: row.projectId }])),
         ),
       ),
-    road: (id: string): Effect.Effect<HarnessRoad, StoreFailure> => units.read((unit) => roadOf(db, unit, id)),
+    road: (id: string): Effect.Effect<HarnessRoad, StoreFailure> => units.read((unit) => roadOf(db, kinds, unit, id)),
     graphCursor: (id: string): Effect.Effect<GraphCursor | undefined, StoreFailure> =>
       units.read((unit) =>
         unit.run(

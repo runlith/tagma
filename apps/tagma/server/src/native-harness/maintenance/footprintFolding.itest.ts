@@ -107,7 +107,7 @@ it.live('a superseded measurement keeps its bill and gives up its tools; the new
       expect({ ...now, footprint: undefined }).toEqual({ ...was, footprint: undefined });
     }
 
-    const decoded = decodeThreadEventPayload(CORE_KINDS, after[0]!.payload) as { measurement?: Record<string, unknown> };
+    const decoded = decodeThreadEventPayload(CORE_KINDS, 'thread-1', after[0]!.payload) as { measurement?: Record<string, unknown> };
     expect(decoded.measurement?.footprint).toBeUndefined();
     expect(decoded.measurement?.usage).toEqual(expect.objectContaining({ inputTokens: 1000 }));
     expect(decoded.measurement?.sentAt).toBe('2026-09-14T10:00:00.000Z');

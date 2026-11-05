@@ -1,4 +1,5 @@
 import { Context, Data, Layer, Predicate, Result, Schema } from 'effect';
+import { degradedReads } from '../agent/contracts';
 import { THREAD_CORE_ENTRIES, type ThreadEntry } from './entries';
 import { ThreadRewindMark } from './eventFold';
 import type { ThreadProductEntry, ThreadTranscriptEntry } from './rows';
@@ -207,18 +208,6 @@ export type ThreadReaderInput = {
 
 export type ThreadReaderWorker = () => Worker;
 
-type ThreadReadDegraded = {
-  readonly place: string;
-  readonly why: string;
-  readonly repeat: string;
-  readonly failure: unknown;
-};
-
-export type ThreadReadWitness = (told: ThreadReadDegraded) => void;
-
-//! Reads made before the error list stands wait for it, and a reader in a worker, which nobody witnesses, stays bounded.
-const UNWITNESSED_READS = 256;
-
 export type ThreadEntryReader = ReturnType<typeof makeThreadEntryReader>;
 
 type KindTable = {
@@ -307,24 +296,15 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null, worke
       ? Result.succeed(result.success)
       : Result.fail(new ThreadEntryUndecodable({ type, id, issue: result.failure.message }));
   };
-  const witnesses = new Set<ThreadReadWitness>();
-  const unwitnessed: ThreadReadDegraded[] = [];
-  const degraded = (told: ThreadReadDegraded): void => {
-    if (witnesses.size > 0) for (const witness of witnesses) witness(told);
-    else if (unwitnessed.length < UNWITNESSED_READS) unwitnessed.push(told);
-  };
-  const witnessing = (witness: ThreadReadWitness): (() => void) => {
-    witnesses.add(witness);
-    for (const told of unwitnessed.splice(0)) witness(told);
-    return () => void witnesses.delete(witness);
-  };
-  const carrying = (value: unknown, read: Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable>) => {
+  const { degraded, witnessing } = degradedReads();
+  const carrying = (thread: string | null, value: unknown, read: Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable>) => {
     if (Result.isSuccess(read)) return read;
     if (Predicate.isObject(value) && ThreadEntryUnreadable.is(value as ThreadTranscriptEntry))
       return Result.succeed(value as unknown as ThreadTranscriptEntry);
     const carried = isHeld(value) ? unreadableEntry(value, read.failure, value) : null;
     if (carried === null) return read;
     degraded({
+      thread,
       place: 'thread entry',
       why: 'a stored entry this build cannot read stands in the thread as a diagnostic line, its stored body kept',
       repeat: `${read.failure.type}\n${read.failure.issue}`,
@@ -334,8 +314,10 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null, worke
     });
     return Result.succeed<ThreadTranscriptEntry>(carried);
   };
-  const stored = (value: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> => carrying(value, decode(value));
-  const storedForm = (formed: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> => carrying(formed, read(formed));
+  const stored = (thread: string | null, value: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> =>
+    carrying(thread, value, decode(value));
+  const storedForm = (thread: string | null, formed: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> =>
+    carrying(thread, formed, read(formed));
   const readWire = (value: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> => {
     const { type, id } = identified(value);
     const wire = wireOf(type);

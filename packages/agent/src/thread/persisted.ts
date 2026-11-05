@@ -9,9 +9,11 @@ import { Usage } from '@runlith/llm/schema/events';
 import type { ThreadContextReading, ThreadHistory, ThreadPendingInteraction, ThreadRunProgress, ThreadAuthority } from './rows';
 import type { ThreadTranscript, ThreadTranscriptEntry } from '../transcript/rows';
 import { type ThreadEntryReader, ThreadEntryUndecodable } from '../transcript/kinds';
+import type { DegradedReads } from '../agent/contracts';
 import { agentProfileSchema, type ThreadProfileBirth } from './agents/AgentProfile';
-import { transportBindingSchema, type TransportBinding } from './record';
-import { transportCapabilitiesSchema, type TransportCapabilities } from './record';
+import { transportBindingSchema, type TransportBinding, UNREAD_BINDING } from './record';
+import { transportCapabilitiesSchema, type TransportCapabilities, UNREAD_CAPABILITIES } from './record';
+import { review } from '../modes/builtin';
 import { ThreadQuestionEntry, ThreadFailureDiagnostics, WithdrawnWords } from '../transcript/entries';
 import type { ThreadEventPayload } from './events';
 import { threadInboxItemSchema, type ThreadInboxItem, type ThreadInboxRow } from './storage/inbox';
@@ -147,22 +149,26 @@ export const decodeThreadTranscriptFacetsResult = Schema.decodeUnknownResult(
   }),
 );
 
-const eventPayloadThrough =
-  (entryOf: (kinds: ThreadEntryReader, shape: unknown) => Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable>) =>
-  (kinds: ThreadEntryReader, value: unknown): Result.Result<ThreadEventPayload, Schema.SchemaError | ThreadEntryUndecodable> => {
-    const formed = kinds.formEvent(value);
-    if (Result.isFailure(formed)) return Result.fail(new ThreadEntryUndecodable({ type: null, id: null, issue: formed.failure.message }));
-    const facets = decodeThreadEventFacetsResult(formed.success);
-    if (Result.isFailure(facets)) return facets;
-    const { entry: shape, ...rest } = facets.success;
-    if (shape === undefined) return Result.succeed(rest);
-    const entry = entryOf(kinds, shape);
-    return Result.isFailure(entry) ? Result.fail(entry.failure) : Result.succeed({ ...rest, entry: entry.success });
-  };
+const eventPayloadThrough = (
+  kinds: ThreadEntryReader,
+  value: unknown,
+  entryOf: (shape: unknown) => Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable>,
+): Result.Result<ThreadEventPayload, Schema.SchemaError | ThreadEntryUndecodable> => {
+  const formed = kinds.formEvent(value);
+  if (Result.isFailure(formed)) return Result.fail(new ThreadEntryUndecodable({ type: null, id: null, issue: formed.failure.message }));
+  const facets = decodeThreadEventFacetsResult(formed.success);
+  if (Result.isFailure(facets)) return facets;
+  const { entry: shape, ...rest } = facets.success;
+  if (shape === undefined) return Result.succeed(rest);
+  const entry = entryOf(shape);
+  return Result.isFailure(entry) ? Result.fail(entry.failure) : Result.succeed({ ...rest, entry: entry.success });
+};
 
-export const decodeThreadEventPayloadResult = eventPayloadThrough((kinds, shape) => kinds.storedForm(shape));
+export const decodeThreadEventPayloadResult = (kinds: ThreadEntryReader, thread: string | null, value: unknown) =>
+  eventPayloadThrough(kinds, value, (shape) => kinds.storedForm(thread, shape));
 
-export const admitThreadEventPayloadResult = eventPayloadThrough((kinds, shape) => kinds.read(shape));
+export const admitThreadEventPayloadResult = (kinds: ThreadEntryReader, value: unknown) =>
+  eventPayloadThrough(kinds, value, (shape) => kinds.read(shape));
 
 export const threadContextReadingSchema = Schema.Struct({
   usage: Usage,
@@ -197,11 +203,11 @@ export function parseThreadHistory(value: unknown): ThreadHistory {
   return parsed.success;
 }
 
-export function parseThreadStreamTail(kinds: ThreadEntryReader, value: unknown): ThreadTranscript | null {
+export function parseThreadStreamTail(kinds: ThreadEntryReader, thread: string, value: unknown): ThreadTranscript | null {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) throw new Error('Persisted thread stream tail cannot be read — expected a list of entries');
   return value.map((entry) => {
-    const read = kinds.stored(entry);
+    const read = kinds.stored(thread, entry);
     if (Result.isFailure(read)) throw new Error(`Persisted thread stream tail cannot be read — ${read.failure.message}`);
     return read.success;
   });
@@ -304,12 +310,19 @@ export function parseThreadContextReading(kinds: ThreadEntryReader, value: unkno
   return parsed.success;
 }
 
-export function readableRowFact<A>(kinds: ThreadEntryReader, subject: string, why: string, parse: () => A, otherwise: A): A {
+export function readableRowFact<A>(
+  reads: DegradedReads,
+  thread: string,
+  why: string,
+  parse: () => A,
+  otherwise: A,
+  subject = `Thread ${thread}`,
+): A {
   try {
     return parse();
   } catch (failure) {
     const said = failure instanceof Error ? failure.message : String(failure);
-    kinds.degraded({ place: 'thread row', why, repeat: said, failure: new Error(`${subject}: ${said}`) });
+    reads.degraded({ thread, place: 'thread row', why, repeat: said, failure: new Error(`${subject}: ${said}`) });
     return otherwise;
   }
 }
@@ -322,7 +335,7 @@ export const threadBornOfSchema = Schema.Struct({
 
 const decodeBornOf = Schema.decodeUnknownResult(threadBornOfSchema);
 
-export function parseThreadBornOf(value: unknown): ThreadBornOf | null {
+function parseThreadBornOf(value: unknown): ThreadBornOf | null {
   if (value === null || value === undefined) return null;
   const parsed = decodeBornOf(value);
   if (parsed._tag !== 'Success') refuse('born-of', parsed.failure);
@@ -336,7 +349,7 @@ export const threadAuthoritySchema = Schema.Struct({
 
 const decodeAuthority = Schema.decodeUnknownResult(threadAuthoritySchema);
 
-export function parseThreadAuthority(value: unknown): ThreadAuthority {
+function parseThreadAuthority(value: unknown): ThreadAuthority {
   const parsed = decodeAuthority(value);
   if (parsed._tag !== 'Success') refuse('authority', parsed.failure);
   return parsed.success;
@@ -344,7 +357,7 @@ export function parseThreadAuthority(value: unknown): ThreadAuthority {
 
 const decodeTransport = Schema.decodeUnknownResult(transportBindingSchema);
 
-export function parseTransportBinding(value: unknown): TransportBinding {
+function parseTransportBinding(value: unknown): TransportBinding {
   const parsed = decodeTransport(value);
   if (parsed._tag !== 'Success') refuse('transport binding', parsed.failure);
   return parsed.success;
@@ -352,11 +365,43 @@ export function parseTransportBinding(value: unknown): TransportBinding {
 
 const decodeCapabilities = Schema.decodeUnknownResult(transportCapabilitiesSchema);
 
-export function parseTransportCapabilities(value: unknown): TransportCapabilities {
+function parseTransportCapabilities(value: unknown): TransportCapabilities {
   const parsed = decodeCapabilities(value);
   if (parsed._tag !== 'Success') refuse('transport capabilities', parsed.failure);
   return parsed.success;
 }
+
+export const readThreadBornOf = (reads: DegradedReads, thread: string, value: unknown): ThreadBornOf | null =>
+  readableRowFact(reads, thread, 'a birth record this build cannot read stands as none', () => parseThreadBornOf(value), null);
+
+const UNREAD_AUTHORITY: ThreadAuthority = { mode: review.id, bypassFrom: null };
+
+export const readThreadAuthority = (reads: DegradedReads, thread: string, value: unknown): ThreadAuthority =>
+  readableRowFact(
+    reads,
+    thread,
+    'an authority this build cannot read stands as review, so every call that is not a pure read asks until the mode is set again',
+    () => parseThreadAuthority(value),
+    UNREAD_AUTHORITY,
+  );
+
+export const readTransportBinding = (reads: DegradedReads, thread: string, value: unknown): TransportBinding =>
+  readableRowFact(
+    reads,
+    thread,
+    'a transport this build cannot read stands as one no transport serves, so the thread opens and every run it starts is refused',
+    () => parseTransportBinding(value),
+    UNREAD_BINDING,
+  );
+
+export const readTransportCapabilities = (reads: DegradedReads, thread: string, value: unknown): TransportCapabilities =>
+  readableRowFact(
+    reads,
+    thread,
+    'capabilities this build cannot read stand as none, so every act that needs one is refused until they read again',
+    () => parseTransportCapabilities(value),
+    UNREAD_CAPABILITIES,
+  );
 
 export const threadProfileBirthSchema = Schema.Struct({
   id: Schema.String,

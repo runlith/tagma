@@ -214,10 +214,7 @@ const opened = Effect.fnUntraced(function* (config: ActivityStoreConfig) {
       ActivityRecord,
       activityReading(db, bodies, flushing.fresh, () => config.keeping().hours, lane, config.readingsMax ?? 256),
     ),
-    Context.add(
-      ActivityFaults,
-      activityFaults(db, flushing.fresh, () => config.keeping().hours, lane, moved),
-    ),
+    Context.add(ActivityFaults, yield* activityFaults(db, flushing.fresh, () => config.keeping().hours, lane, moved)),
   );
 });
 
@@ -509,6 +506,6 @@ function unavailable(database: string, reason: string): Context.Context<Activity
         body: () => failed,
       }),
     ),
-    Context.add(ActivityFaults, ActivityFaults.of({ read: () => failed, clear: failed, changes: Stream.empty })),
+    Context.add(ActivityFaults, ActivityFaults.of({ read: () => failed, since: () => 0, clear: failed, changes: Stream.empty })),
   );
 }

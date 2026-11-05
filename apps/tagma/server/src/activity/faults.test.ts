@@ -34,6 +34,7 @@ it.effect('the faults feed answers the page on subscribe and the page again afte
     const moved = yield* PubSub.sliding<void>({ capacity: 1, replay: 1 });
     const faults = ActivityFaults.of({
       read: () => Effect.sync(() => page),
+      since: () => 0,
       clear: Effect.die('clear is not reached'),
       changes: Stream.fromPubSub(moved),
     });

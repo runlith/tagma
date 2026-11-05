@@ -24,8 +24,8 @@ import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 
 export type Row = Record<string, unknown>;
 
-export const fingerprintedPayload = (kinds: ThreadEntryReader, value: unknown): ThreadEventPayload => {
-  const read = decodeThreadEventPayloadResult(kinds, value);
+export const fingerprintedPayload = (kinds: ThreadEntryReader, thread: string | null, value: unknown): ThreadEventPayload => {
+  const read = decodeThreadEventPayloadResult(kinds, thread, value);
   return Result.isSuccess(read) ? read.success : (value as ThreadEventPayload);
 };
 
