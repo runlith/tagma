@@ -9569,10 +9569,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutFile.ts#RolloutEvent",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutFile.ts#RolloutRecordVerdict",
           "owner": "5a3bed29"
         },
@@ -11809,10 +11805,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/modes/ApprovalModes.ts#builtinModeRegistry",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/modes/builtin.ts#review",
           "owner": "5a3bed29"
         },
         {
@@ -19417,22 +19409,6 @@ fields:
         },
         {
           "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutCarry.ts#CarryOpening",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 23,
-          "path": "apps/tagma/server/src/threads/journal/rolloutCarry.ts",
-          "said": "exported type `CarryOpening` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 159,
-          "path": "packages/agent/src/transcript/kinds.ts",
-          "said": "exported type `ThreadReaderWorker` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -19678,6 +19654,22 @@ fields:
           "line": 23,
           "path": "packages/utils/src/worker.ts",
           "said": "exported type `WorkerLink` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutCarry.ts#CarryOpening",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 23,
+          "path": "apps/tagma/server/src/threads/journal/rolloutCarry.ts",
+          "said": "exported type `CarryOpening` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 159,
+          "path": "packages/agent/src/transcript/kinds.ts",
+          "said": "exported type `ThreadReaderWorker` is imported by no production file"
         }
       ],
       "inspection": "dead-code",
