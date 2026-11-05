@@ -133,7 +133,7 @@ const held = <Brand extends string>(store: Store<Brand>) =>
     lines: store.db.all(sql`select id, call_id, said from line order by id`),
   });
 
-const adopting = (files: readonly string[]): StoreOptions => ({ adopting: { files, after: Effect.void } });
+const adopting = (files: readonly string[]): StoreOptions => ({ adopting: { by: 'calls', files, after: Effect.void } });
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('tables a migration sets aside', (it) => {
   it.effect(
@@ -230,7 +230,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('tables a migration se
       planted(emptied, ['create table emptied (id text, note text)', "insert into emptied values (null, 'nameless')"]);
       planted(clashing, ['create table titled (id text, title text)', "insert into titled values ('y', 'same')"]);
       const go = yield* Deferred.make<void>();
-      const options = { adopting: { files: [keyless, unkeyed, emptied, clashing], after: Deferred.await(go) } };
+      const options = { adopting: { by: 'calls', files: [keyless, unkeyed, emptied, clashing], after: Deferred.await(go) } };
       const rows = yield* using(CallStore, join(data, 'calls.sqlite'), chain, options, (store) =>
         Effect.gen(function* () {
           yield* store.db.run(sql`insert into titled values ('x', 'same')`);

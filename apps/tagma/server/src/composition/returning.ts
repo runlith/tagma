@@ -225,7 +225,7 @@ const journalsHanded = Effect.fnUntraced(function* (handing: JournalsServing, as
     for (const left of unreturned)
       console.error(`[tagma] the thread ${left.threadId} stays in the form ${basename(release)} wrote: ${left.reason}`);
   }
-  const marked = yield* Effect.result(journalsMarked(installRoot, asked));
+  const marked = yield* Effect.result(journalsMarked(installRoot, asked, true));
   if (Result.isFailure(marked)) {
     console.error(
       `[tagma] the threads' return to ${asked.to} was not recorded, so the next start returns them again: ${String(marked.failure)}`,
@@ -237,5 +237,10 @@ const journalsHanded = Effect.fnUntraced(function* (handing: JournalsServing, as
   const handed = yield* Effect.result(succession.restart());
   if (Result.isSuccess(handed)) return true;
   console.error(`[tagma] the step back to ${asked.to} waits for the next start: ${handed.failure.detail}`);
+  const unmarked = yield* Effect.result(journalsMarked(installRoot, asked, false));
+  if (Result.isFailure(unmarked) || !unmarked.success)
+    console.error(
+      `[tagma] the threads this build writes from now on may stay in its form after the step back: the return could not be unmarked: ${Result.isFailure(unmarked) ? String(unmarked.failure) : 'the step back changed'}`,
+    );
   return false;
 });

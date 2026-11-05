@@ -3,10 +3,17 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs
 import { basename, join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { Clock, Data, Effect, Result, Schedule, Schema } from 'effect';
-import { type ChainFills, type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
+import {
+  type ChainFills,
+  type ChainKept,
+  type ChainLoss,
+  type ChainTarget,
+  chainFits,
+  returnToChain,
+} from '@runlith/sqlite-process/chainReturn';
 import { prepareEngine, selectEngine } from '@runlith/sqlite-process/engine';
 import type { Words } from '../../platform/contract/wire/refusal.js';
-import { adoptedPath, setAsideDirectory, setAsidePath } from '../../platform/contract/service/ownStore.js';
+import { ownStorePath, setAsideDirectory, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { cloneFile, type DurableWriteFailed, moveFile, removeFile } from '../../platform/durable/files.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
 import { ASIDE_FILE, AsideDeclared } from '../../platform/store/migrationLaw.js';
@@ -93,13 +100,36 @@ const snapshotsDropped = (path: string): void => {
   for (const at of [`${path}.snapshot.json`, `${path}.snapshots`]) rmSync(at, { recursive: true, force: true });
 };
 
-const keptAside = (storePath: string, migration: string): string | undefined => {
-  const fresh = setAsidePath(storePath, migration);
-  if (existsSync(fresh)) return fresh;
-  return existsSync(adoptedPath(fresh)) ? adoptedPath(fresh) : undefined;
+const ASIDE = /^(\d{14}_[^.]+)(?:\.adopted\.(.+))?\.sqlite$/u;
+
+const tablesIn = (path: string): ReadonlySet<string> => {
+  const db = new Database(path, { readonly: true });
+  try {
+    return new Set(
+      db
+        .query<{ name: string }, []>(`select name from sqlite_master where type = 'table' and name not like 'sqlite_%'`)
+        .all()
+        .map((row) => row.name.toLowerCase()),
+    );
+  } finally {
+    db.close();
+  }
 };
 
-const ASIDE = /^(\d{14}_[^.]+)(\.adopted)?\.sqlite$/u;
+const keptAside = (storePath: string, migration: string): ChainKept | undefined => {
+  const fresh = setAsidePath(storePath, migration);
+  if (existsSync(fresh)) return { file: fresh, tables: null };
+  const directory = setAsideDirectory(storePath);
+  const adopted = existsSync(directory)
+    ? readdirSync(directory).flatMap((name) => {
+        const matched = ASIDE.exec(name);
+        return matched?.[1] === migration && matched[2] !== undefined ? [{ copy: join(directory, name), by: matched[2] }] : [];
+      })[0]
+    : undefined;
+  if (adopted === undefined) return undefined;
+  const live = ownStorePath(storePath, adopted.by);
+  return existsSync(live) ? { file: live, tables: tablesIn(adopted.copy) } : { file: adopted.copy, tables: null };
+};
 
 const movedAside = (migration: string): boolean => {
   const declared = join(migration, ASIDE_FILE);
@@ -260,8 +290,8 @@ const journalsWritten = (installRoot: string, back: StepBack, journals: NonNulla
 export const journalsDeferred = (installRoot: string, back: StepBack) =>
   journalsWritten(installRoot, back, { starts: (back.journals?.starts ?? 0) + 1, returned: false });
 
-export const journalsMarked = (installRoot: string, back: StepBack) =>
-  journalsWritten(installRoot, back, { starts: back.journals?.starts ?? 0, returned: true });
+export const journalsMarked = (installRoot: string, back: StepBack, returned: boolean) =>
+  journalsWritten(installRoot, back, { starts: back.journals?.starts ?? 0, returned });
 
 const setAside = Effect.fn('installation.stepBackSetAside')(function* (place: ReturnPlace, unread: RecordUnreadable) {
   const stamp = yield* Clock.currentTimeMillis;

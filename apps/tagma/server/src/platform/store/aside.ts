@@ -101,6 +101,7 @@ const adoptFile = Effect.fn('Store.adopt')(function* (
   db: EffectSQLiteBunDatabase,
   transaction: Store<StoreBrand>['transaction'],
   file: string,
+  by: string,
 ) {
   if (!existsSync(file)) return { outcome: 'absent' } satisfies Adoption;
   const alias = `aside_${++attachments}`;
@@ -126,7 +127,7 @@ const adoptFile = Effect.fn('Store.adopt')(function* (
       }),
     );
   }).pipe(Effect.ensuring(Effect.orDie(db.run(sql.raw(`DETACH DATABASE ${quoted(alias)}`)))));
-  yield* moveFile(file, adoptedPath(file)).pipe(Effect.mapError(unwritten));
+  yield* moveFile(file, adoptedPath(file, by)).pipe(Effect.mapError(unwritten));
   return { outcome: 'adopted', rows } satisfies Adoption;
 });
 
@@ -141,7 +142,7 @@ export const adopting = Effect.fnUntraced(function* (
   const adopt = (file: string) =>
     watched(
       `store.adopt ${file}`,
-      Effect.tap(adoptFile(db, transaction, file), (adopted) =>
+      Effect.tap(adoptFile(db, transaction, file, plan.by), (adopted) =>
         Effect.sync(() => {
           if (adopted.outcome === 'adopted') console.log(`[tagma] ${file}: ${adopted.rows} rows adopted`);
         }),

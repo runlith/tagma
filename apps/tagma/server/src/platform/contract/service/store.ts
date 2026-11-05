@@ -86,7 +86,7 @@ export class SetAsideFailed extends Data.TaggedError('SetAsideFailed')<{ readonl
   }
 }
 
-export type Adopting = { readonly files: readonly string[]; readonly after: Effect.Effect<void> };
+export type Adopting = { readonly by: string; readonly files: readonly string[]; readonly after: Effect.Effect<void> };
 
 export type StoreOpenFailure =
   | SetAsideFailed

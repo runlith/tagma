@@ -22,4 +22,4 @@ export const setAsideDirectory = (storePath: string): string => join(ownStoreDir
 
 export const setAsidePath = (storePath: string, migration: string): string => join(setAsideDirectory(storePath), `${migration}.sqlite`);
 
-export const adoptedPath = (setAside: string): string => setAside.replace(/\.sqlite$/u, '.adopted.sqlite');
+export const adoptedPath = (setAside: string, by: string): string => setAside.replace(/\.sqlite$/u, `.adopted.${by}.sqlite`);

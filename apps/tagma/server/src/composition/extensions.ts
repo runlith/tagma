@@ -54,7 +54,9 @@ const ownStores = (modules: readonly Manifest[], machine: MachineStore['Service'
         const adopts = store.adopts ?? [];
         if (adopts.length === 0 || machine.path === IN_MEMORY) return ownStore(store, machine, seeds);
         const files = adopts.map((migration) => setAsidePath(machine.path, migration));
-        return Layer.unwrap(Effect.map(Maintenance, ({ opened }) => ownStore(store, machine, seeds, { files, after: opened })));
+        return Layer.unwrap(
+          Effect.map(Maintenance, ({ opened }) => ownStore(store, machine, seeds, { by: store.id, files, after: opened })),
+        );
       }),
     ),
   );

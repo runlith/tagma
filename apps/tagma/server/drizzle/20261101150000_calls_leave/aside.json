@@ -7,5 +7,6 @@
     "transcript_line",
     "transcript_entry",
     "transcript_staged"
-  ]
+  ],
+  "moved": true
 }

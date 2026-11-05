@@ -9,6 +9,7 @@ import {
   readdirSync,
   readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -18,7 +19,7 @@ import { it } from '@runlith/effect-test';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { Effect, Result } from 'effect';
 import { returnToChain } from '@runlith/sqlite-process/chainReturn';
-import { adoptedPath, setAsidePath } from '../../platform/contract/service/ownStore.js';
+import { adoptedPath, ownStorePath, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { beginAttempt, readStepBack, writeStepBack } from '../closure/attempt.js';
 import { MIGRATIONS } from '../contract/wire/manifest.js';
@@ -198,11 +199,34 @@ it.live('a step back puts back the rows a leaving migration dropped, from the co
   }),
 );
 
+it.live('a step back takes a moved table from the module store that adopted it, as the person left it there', () =>
+  Effect.gen(function* () {
+    const { installRoot, store, place } = dropping('adopted');
+    const copy = new Database(setAsidePath(store, DROP));
+    copy.run(`INSERT INTO tag (id, name) VALUES (3, 'deleted after the move')`);
+    copy.close();
+    renameSync(setAsidePath(store, DROP), adoptedPath(setAsidePath(store, DROP), 'calls'));
+    const adopter = new Database(ownStorePath(store, 'calls'));
+    adopter.run('CREATE TABLE tag (id integer PRIMARY KEY, name text)');
+    adopter.run(`INSERT INTO tag (id, name) VALUES (1, 'crimson'), (2, 'blue')`);
+    adopter.close();
+    const back = { from: NEW, to: OLD, carried: false };
+    writeStepBack(installRoot, back);
+    expect(yield* stepBackCarried(place, back)).toBe(true);
+    const db = new Database(store, { readonly: true });
+    expect(db.query('select id, name from tag order by id').all()).toEqual([
+      { id: 1, name: 'crimson' },
+      { id: 2, name: 'blue' },
+    ]);
+    db.close();
+  }),
+);
+
 test('what a migration kept aside is released once every standing installation carries it, and a moved copy waits for its adopter', () => {
   const { installRoot, store, files } = dropping('released');
   for (const [name, moved] of [
     [MOVE, setAsidePath(store, MOVE)],
-    [ADOPTED, adoptedPath(setAsidePath(store, ADOPTED))],
+    [ADOPTED, adoptedPath(setAsidePath(store, ADOPTED), 'calls')],
   ] as const) {
     migration(join(installRoot, NEW), name, 'SELECT 1;');
     writeFileSync(join(installRoot, NEW, MIGRATIONS, name, 'aside.json'), '{"tables":["tag"],"moved":true}');
@@ -212,7 +236,7 @@ test('what a migration kept aside is released once every standing installation c
   expect(asidesReleased(installRoot, ownRoot, files)).toEqual([]);
   rmSync(join(installRoot, OLD), { recursive: true, force: true });
   expect(asidesReleased(installRoot, ownRoot, files).toSorted()).toEqual(
-    [setAsidePath(store, DROP), adoptedPath(setAsidePath(store, ADOPTED))].toSorted(),
+    [setAsidePath(store, DROP), adoptedPath(setAsidePath(store, ADOPTED), 'calls')].toSorted(),
   );
   expect(existsSync(setAsidePath(store, MOVE))).toBe(true);
 });

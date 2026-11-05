@@ -77,7 +77,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('a module store adopti
 
       yield* Deferred.succeed(door, undefined);
       yield* store.adopted;
-      expect([existsSync(adopted), existsSync(adoptedPath(adopted))]).toEqual([false, true]);
+      expect([existsSync(adopted), existsSync(adoptedPath(adopted, 'calls'))]).toEqual([false, true]);
       expect(yield* held).toEqual([
         { id: 'a', title: 'call a' },
         { id: 'b', title: 'call b' },
