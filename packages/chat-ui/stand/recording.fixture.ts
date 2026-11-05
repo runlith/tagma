@@ -197,6 +197,7 @@ export const Recording: Schema.Codec<DOM.Recording> = Schema.suspend(() =>
     wheels: Schema.mutable(Schema.Array(WheelRun)),
     writes: Schema.optional(Schema.mutable(Schema.Array(ScrollWrite))),
     scrolls: Schema.optional(Schema.mutable(Schema.Array(ScrollStep))),
+    scrollEnds: Schema.optional(numbers),
     timings: Schema.optional(numbers),
     ticks: Schema.optional(numbers),
     commands: Schema.optional(Schema.mutable(Schema.Array(Navigation))),

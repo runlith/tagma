@@ -40,6 +40,7 @@
       endWheel: () => recorder.endWheel(),
       pressed: () => recorder.pressed(),
       released: () => recorder.released(),
+      wheelSettled: () => recorder.wheelSettled(),
       landed: () => recorder.landed(),
       remount: async () => {
         recorder.dispose();

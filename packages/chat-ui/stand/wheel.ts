@@ -82,6 +82,7 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
   const writes = ownWrites.map((write) => write.time);
   const nativeScrolls = [...(recording.scrolls ?? [])].sort((a, b) => a.stamp - b.stamp);
   const scrolls = nativeScrolls.map((scroll) => scroll.stamp);
+  const ends = [...(recording.scrollEnds ?? [])].sort((a, b) => a - b);
   const ticks = recording.ticks?.length ? recording.ticks : recording.frames.map((frame) => frame.time);
   const intervals = ticks
     .slice(1)
@@ -129,7 +130,9 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
       let uncertainDelta = delta;
       if (judgement === 'full' || lag <= refresh) {
         const first = judgement === 'full' ? step.frame : Math.max(run.fromFrame + 1, lowerBound(frameTimes, step.stamp));
-        const deadline = judgement === 'full' ? step.frame : Math.max(first, lowerBound(frameTimes, step.received, true));
+        const settled = ends[lowerBound(ends, step.stamp)];
+        const delivered = judgement === 'full' ? step.frame : Math.max(first, lowerBound(frameTimes, step.received, true));
+        const deadline = settled === undefined ? delivered : Math.max(delivered, lowerBound(frameTimes, settled));
         if (deadline >= frameTimes.length) problems.push({ frame: step.frame, reason: 'wheel-frame-missing' });
         const last = Math.min(deadline, frameTimes.length - 1);
         deltas.set(last, (deltas.get(last) ?? 0) + delta);

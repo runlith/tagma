@@ -109,20 +109,23 @@ export async function fling(
       await frames(page);
     }
     await afterRelease?.();
+    await settled(page);
     await frames(page, 2);
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.endWheel());
   }
 }
 
+const settled = (page: Page): Promise<void> => page.evaluate(() => (globalThis as StandGlobal).feedStand!.wheelSettled());
+
 async function pause(page: Page): Promise<void> {
   const { x, y } = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.point());
   await page.mouse.move(x, y);
   await page.mouse.wheel(0, -1800);
-  await frames(page, 8);
-  await page.waitForFunction(() => {
-    const state = (globalThis as StandGlobal).feedStand!.state();
-    return state.height - state.viewport - state.top > state.viewport;
-  });
+  await settled(page);
+  await frames(page, 2);
+  const state = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.state());
+  if (state.height - state.viewport - state.top <= state.viewport)
+    throw new Error(`A settled 1800 px wheel left the reader at the tail: ${JSON.stringify(state)}`);
 }
 
 async function toggleDisclosure(page: Page): Promise<void> {

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test } from 'vitest';
 import { controlEnvelope, displacement } from './displacement';
 import type { Drag, Frame, Navigation, Recording, Rect, RowRect, RowSignature, WheelRun } from './recording';
 
@@ -635,6 +635,42 @@ test('prompt WebKit wheels conserve their full delta across native and delivered
     );
     expect(doubled.failures.some((failure) => failure.kind === 'wheel')).toBe(true);
   }
+});
+
+test('an animated wheel is conserved once its scroll settles and never exceeds what was delivered', () => {
+  const animated = (tops: number[], scrollEnds?: number[]): Recording => ({
+    ...recording(
+      'animated-wheel',
+      tops.map((top, index) => frame(index * 10, top, { moving: index > 0 })),
+    ),
+    wheels: [{ fromFrame: 0, toFrame: 4, steps: [{ frame: 1, deltaY: -100, deltaMode: 0, stamp: 4, received: 5 }] }],
+    scrollEnds,
+  });
+  const settled = displacement(animated([100, 140, 180, 200, 200], [31]));
+  expect(settled.failures).toEqual([]);
+  expect(settled.unchecked).toEqual([]);
+  expect(displacement(animated([100, 140, 180, 200, 200])).failures).toContainEqual({
+    kind: 'wheel',
+    frame: 1,
+    sentinel: null,
+    pixels: 60,
+    limit: 1,
+  });
+  expect(displacement(animated([100, 140, 180, 220, 220], [31])).failures).toContainEqual({
+    kind: 'wheel',
+    frame: 3,
+    sentinel: null,
+    pixels: 20,
+    limit: 1,
+  });
+  expect(displacement(animated([100, 140, 180, 180, 180], [31])).failures).toContainEqual({
+    kind: 'wheel',
+    frame: 4,
+    sentinel: null,
+    pixels: 20,
+    limit: 1,
+  });
+  expect(displacement(animated([100, 140, 180, 200, 200], [41])).unchecked).toContainEqual({ frame: 1, reason: 'wheel-frame-missing' });
 });
 
 test('control calibration discards dirty recordings and requires five clean, observed flings', () => {

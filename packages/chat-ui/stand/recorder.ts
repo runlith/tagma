@@ -91,6 +91,8 @@ export class Recorder {
   private previousKeys = new Set<string>();
   private readonly cleanups: (() => void)[] = [];
   private readonly waiters: { remaining: number; resolve(): void }[] = [];
+  private lastWheel: number | null = null;
+  private readonly settles: (() => void)[] = [];
 
   constructor(
     private readonly entries: ObservedEntries,
@@ -114,6 +116,21 @@ export class Recorder {
       this.endGap = Math.max(0, root.scrollHeight - root.clientHeight - root.scrollTop);
     };
     for (const name of ['wheel', 'keydown']) listen(root, name, reader, true);
+    listen(
+      root,
+      'wheel',
+      (event) => {
+        if (event.isTrusted) this.lastWheel = event.timeStamp;
+      },
+      true,
+    );
+    listen(root, 'scrollend', (event) => {
+      if (!event.isTrusted) return;
+      this.recording?.scrollEnds?.push(event.timeStamp);
+      if (this.lastWheel === null || event.timeStamp < this.lastWheel) return;
+      this.lastWheel = null;
+      for (const resolve of this.settles.splice(0)) resolve();
+    });
     listen(
       root,
       'wheel',
@@ -310,6 +327,7 @@ export class Recorder {
       wheels: [],
       writes: this.clockOnly ? undefined : [],
       scrolls: this.clockOnly ? undefined : [],
+      scrollEnds: this.clockOnly ? undefined : [],
       commands: [],
       timings: this.clockOnly ? [] : undefined,
       ticks: this.clockOnly ? undefined : [],
@@ -370,6 +388,9 @@ export class Recorder {
   }
   released(): Promise<void> {
     return this.declaredTouchEnd ? Promise.resolve() : new Promise((resolve) => this.releases.push(resolve));
+  }
+  wheelSettled(): Promise<void> {
+    return this.lastWheel === null ? Promise.resolve() : new Promise((resolve) => this.settles.push(resolve));
   }
   async landed(): Promise<void> {
     const command = this.recording?.commands?.at(-1);

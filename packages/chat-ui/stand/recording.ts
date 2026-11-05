@@ -110,6 +110,7 @@ export type Recording = {
   wheels: WheelRun[];
   writes?: ScrollWrite[];
   scrolls?: ScrollStep[];
+  scrollEnds?: number[];
   timings?: number[];
   ticks?: number[];
   commands?: Navigation[];

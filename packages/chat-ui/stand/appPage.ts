@@ -125,6 +125,7 @@ function install(): void {
     endWheel: () => held().endWheel(),
     pressed: () => held().pressed(),
     released: () => held().released(),
+    wheelSettled: () => held().wheelSettled(),
     landed: () => held().landed(),
     stop(): Recording {
       recording = null;

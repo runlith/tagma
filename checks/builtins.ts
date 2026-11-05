@@ -64,9 +64,9 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the scripted ACP agent the protocol system tests run as a process; its configuration, keywords and control files drive that one agent over the same prompt, steer and cancel state.',
           },
           {
-            lines: 847,
+            lines: 868,
             path: 'packages/chat-ui/stand/recorder.ts',
-            why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
+            why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing with the scrollend that settles each wheel, and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
           },
           {
             lines: 784,

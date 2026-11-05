@@ -26,7 +26,11 @@ export async function controls(
 export async function prepareControls(page: Page): Promise<ControlRegion> {
   await page.locator('[data-scrollable][role="group"]').hover();
   await page.mouse.wheel(0, -1800);
-  await page.evaluate(() => (globalThis as StandGlobal).feedStand!.frames(8));
+  await page.evaluate(async () => {
+    const port = (globalThis as StandGlobal).feedStand!;
+    await port.wheelSettled();
+    await port.frames(8);
+  });
   const reach = 12000;
   const measured = await page.evaluate((reach) => (globalThis as StandGlobal).feedStand!.warm(reach), reach);
   return { measured, reach };

@@ -22,6 +22,7 @@ export type StandPort = {
   endWheel(): void;
   pressed(): Promise<void>;
   released(): Promise<void>;
+  wheelSettled(): Promise<void>;
   landed(): Promise<void>;
   stop(): Recording;
   frames(count?: number): Promise<void>;

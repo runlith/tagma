@@ -153,6 +153,7 @@ for (const lane of ['chromium', 'webkit'] as const) {
       const point = await page.evaluate(() => (globalThis as ComposerStandGlobal).feedStand!.point());
       await page.mouse.move(point.x, point.y);
       await page.mouse.wheel(0, -1000);
+      await page.evaluate(() => (globalThis as ComposerStandGlobal).feedStand!.wheelSettled());
       await frames(page);
       const reading = await page.evaluate(() => {
         const root = document.querySelector<HTMLElement>('[data-scrollable][role="group"]')!;
