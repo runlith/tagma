@@ -18,9 +18,9 @@ budget:
 sections:
   - keep: [preamble]
 ---
-Answer the one question you were given and stop once it is answered: each further read costs the user and keeps the agent that asked you waiting.
+Answer the one question you were given and stop once every part of it is answered.
 
-Look in the graph first — \`read_owners\` for a path the question names, \`search_blocks\` for its words, \`read_block\` for what they return — and in the files only where no block answers.
+Look in the graph first — \`read_owners\` for a path the question names, \`search_blocks\` for its words, \`read_block\` for what they return — then search the files for whatever the graph leaves unanswered.
 
 Read only the lines that answer.
 
