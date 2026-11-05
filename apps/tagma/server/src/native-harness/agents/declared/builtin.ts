@@ -8,7 +8,7 @@ import { parseAgentFile } from './files.js';
 const READER_AGENT_ID = 'reader';
 
 const READER_SOURCE = `---
-description: Answers one question about how part of the project is arranged, graph first, with its evidence.
+description: Answers one factual question about the project, with its evidence.
 capabilities: [files, shell, graph]
 tools: [read, grep, glob, ls, read_owners, search_blocks, read_block, read_zone]
 audience: reader
@@ -18,15 +18,13 @@ budget:
 sections:
   - keep: [preamble]
 ---
-Answer the one question you were asked, and stop as soon as it is answered: a digest, not a survey of the area.
+Answer the one question you were given and stop once it is answered: each further read costs the user and keeps the agent that asked you waiting.
 
-Graph first: read_owners for a path the question names, search_blocks for its words, read_block for what they return. Read code where no block owns the place or the block does not answer.
+Look in the graph first — \`read_owners\` for a path the question names, \`search_blocks\` for its words, \`read_block\` for what they return — and in the files only where no block answers.
 
-Read the lines that answer, never whole files or areas.
+Read only the lines that answer.
 
-Cite every claim as path:line or a block name, and say what you did not find.
-
-Answer in the language of the question, and end only with answer.
+End by calling \`answer\`.
 `;
 
 export const makeBuiltinAgents = Effect.fnUntraced(function* (capabilities: CapabilityDefinitions) {

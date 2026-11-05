@@ -13,9 +13,7 @@ export const ASK_QUESTIONS_MAX = 8;
 
 export const DEFAULT_READER = 'reader';
 
-export const ANSWER =
-  'Your final answer to the agent that gave you this question; it ends your work. `text` answers the one question, `evidence` names where each claim stands — `path:line` or a block name — ' +
-  'and `complete: false` with `missing` says what you could not establish.';
+export const ANSWER = 'Your answer to the question you were given; calling it ends your work.';
 
 export const answerInput = Schema.Struct({
   text: CollaborationText.annotate({ description: 'The answer, in the language of the question.' }),
@@ -31,26 +29,25 @@ export function answerOf(input: typeof answerInput.Type): ThreadAnswer {
 }
 
 export const ASK =
-  'Put narrow questions about the project to readers and get every answer back in this call: one reader takes one question, they work in parallel, and you continue this step with all the answers, each with its evidence. ' +
-  'Ask for facts — how a part is arranged, where something lives, what owns a place, what a contract or decision says — and put independent questions in one call. ' +
-  'A reader starts with none of your conversation, so each question stands alone and names what it is about: a path, a symbol, a block. ' +
-  'Design, judgement and every change stay with you: ask what you need to know, then decide, and verify only the claims your decision rests on. ' +
-  'An entry is `answered`, `partial` with what is missing, or `failed` with its diagnosis.';
+  'Answers factual questions about a project without you reading it: each question goes to an agent of its own, which reads the project and answers with evidence. ' +
+  'It pays when a fact would take you several reads or searches whose output then stays in your context; a fact one read gives, read yourself, since each question runs a model on the user’s account. ' +
+  'Ask what is — how a part is arranged, where something lives, what owns a place, what a contract or decision says — never for a design, a judgement or a change, and put independent questions in one call. ' +
+  'Before acting on an answer, check the evidence of the claims your decision rests on, and only those.';
 
 export const askInput = Schema.Struct({
   questions: Schema.Array(CollaborationText)
     .check(Schema.isMinLength(1), Schema.isMaxLength(ASK_QUESTIONS_MAX))
     .annotate({
-      description: `One line each, at most ${ASK_QUESTIONS_MAX}: every question is an agent running on this server at once.`,
+      description: `One question each, at most ${ASK_QUESTIONS_MAX}. Its agent sees none of your conversation: name the path, symbol or block the question is about.`,
     }),
   agent: Schema.optional(Named).annotate({
-    description: 'The reader definition, by id; absent, the setting `agent.ask`, else the built-in reader.',
+    description: 'The definition of the agents that answer, by id; absent, the setting `agent.ask`, else the built-in `reader`.',
   }),
   project: Schema.optional(Schema.Union([Named, Schema.Int])).annotate({
-    description: 'The project the readers read, by name or id; absent, yours.',
+    description: 'The project the agents read, by name or id; absent, yours.',
   }),
   worktree: Schema.optional(Named).annotate({
-    description: 'The checkout the readers read: `inherit` (the default, where you stand) or a worktree name in that project.',
+    description: 'The checkout the agents read: `inherit` (the default, where you stand) or a worktree name in that project.',
   }),
 });
 
