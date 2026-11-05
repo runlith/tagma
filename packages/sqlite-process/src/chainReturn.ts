@@ -184,7 +184,11 @@ const rebuilt = (db: Database, reference: Database, table: string, wanted: strin
       `INSERT OR IGNORE INTO ${quoted(table)} (${[...(kept ? ['rowid'] : []), ...into].join(', ')}) SELECT ${[...(kept ? ['rowid'] : []), ...from].join(', ')} FROM ${quoted(aside)}`,
     );
   db.run(`DROP TABLE ${quoted(aside)}`);
-  if (sequence !== null) db.run(`UPDATE sqlite_sequence SET seq = max(seq, ?) WHERE name = ?`, [sequence, table]);
+  if (sequence !== null && /\bautoincrement\b/iu.test(wanted)) {
+    db.run(`UPDATE sqlite_sequence SET seq = max(seq, ?) WHERE name = ?`, [sequence, table]);
+    if ((db.query<{ n: number }, []>('select changes() as n').get()?.n ?? 0) === 0)
+      db.run('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)', [table, sequence]);
+  }
   return before - (db.query<{ n: number }, []>(`select count(*) as n from ${quoted(table)}`).get()?.n ?? 0);
 };
 
@@ -198,20 +202,35 @@ const seeded = (db: Database, reference: Database, table: string): void => {
     );
 };
 
+const NAME = String.raw`("(?:[^"]|"")+"|\x60(?:[^\x60]|\x60\x60)+\x60|\[[^\]]+\]|[\w$]+)`;
+
 const uniqueHeld = (db: Database, name: string, sql: string, table: string): number => {
-  const keys = db
-    .query<{ name: string | null }, [string]>(`select name from pragma_index_xinfo(?) where "key" = 1 order by seqno`)
-    .all(name)
-    .map((column) => column.name);
-  if (keys.some((key) => key === null))
-    throw new Error(`the unique index ${name} is over an expression, and its duplicates cannot be named`);
-  const partial = /\bwhere\b(.*)$/isu.exec(sql)?.[1]?.trim();
-  const where = partial === undefined ? '' : `WHERE ${partial}`;
-  const group = keys.map((key) => quoted(key!)).join(', ');
+  const keep = `__chain_keep_${table}`;
+  const declared = db.query<{ sql: string }, [string]>(`select sql from sqlite_master where type = 'table' and name = ?`).get(table)?.sql;
+  if (declared === undefined || withoutRowid(db, table))
+    throw new Error(`the unique index ${name} cannot be restored: ${table} has no rowid to tell its duplicates apart`);
   db.run(
-    `DELETE FROM ${quoted(table)} ${where === '' ? 'WHERE' : `${where} AND`} rowid NOT IN (SELECT max(rowid) FROM ${quoted(table)} ${where} GROUP BY ${group})`,
+    declared.replace(
+      new RegExp(String.raw`^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?${NAME}`, 'iu'),
+      `CREATE TEMP TABLE ${quoted(keep)}`,
+    ),
   );
-  return db.query<{ n: number }, []>('select changes() as n').get()?.n ?? 0;
+  db.run(
+    sql.replace(
+      new RegExp(String.raw`^\s*CREATE\s+UNIQUE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?${NAME}\s+ON\s+${NAME}`, 'iu'),
+      `CREATE UNIQUE INDEX temp.${quoted(`${keep}_index`)} ON ${quoted(keep)}`,
+    ),
+  );
+  const columns = columnsOf(db, table)
+    .map((column) => quoted(column.name))
+    .join(', ');
+  db.run(
+    `INSERT OR IGNORE INTO temp.${quoted(keep)} (rowid, ${columns}) SELECT rowid, ${columns} FROM ${quoted(table)} ORDER BY rowid DESC`,
+  );
+  db.run(`DELETE FROM ${quoted(table)} WHERE rowid NOT IN (SELECT rowid FROM temp.${quoted(keep)})`);
+  const removed = db.query<{ n: number }, []>('select changes() as n').get()?.n ?? 0;
+  db.run(`DROP TABLE temp.${quoted(keep)}`);
+  return removed;
 };
 
 const indexed = (db: Database, name: string, sql: string, table: string, lost: Map<string, number>): void => {
@@ -219,37 +238,38 @@ const indexed = (db: Database, name: string, sql: string, table: string, lost: M
     db.run(sql);
   } catch (cause) {
     if (!/unique/iu.test(String(cause))) throw cause;
-    db.run(`DROP INDEX IF EXISTS ${quoted(name)}`);
-    const auto = sql.replace(/\bunique\b/iu, '');
-    db.run(auto);
     const removed = uniqueHeld(db, name, sql, table);
     lost.set(table, (lost.get(table) ?? 0) + removed);
-    db.run(`DROP INDEX ${quoted(name)}`);
     db.run(sql);
   }
 };
 
-const danglingRemoved = (db: Database, parents: ReadonlySet<string>, lost: Map<string, number>): void => {
-  const tables = db.query<{ name: string }, []>(`select name from sqlite_master where type = 'table' and name not like 'sqlite_%'`).all();
-  const children = tables.filter((table) =>
+const childrenOf = (db: Database, parents: ReadonlySet<string>): ReadonlySet<string> =>
+  new Set(
     db
-      .query<{ table: string }, [string]>('select "table" from pragma_foreign_key_list(?)')
-      .all(table.name)
-      .some((key) => parents.has(key.table.toLowerCase())),
+      .query<{ name: string }, []>(`select name from sqlite_master where type = 'table' and name not like 'sqlite_%'`)
+      .all()
+      .filter((table) =>
+        db
+          .query<{ table: string }, [string]>('select "table" from pragma_foreign_key_list(?)')
+          .all(table.name)
+          .some((key) => parents.has(key.table.toLowerCase())),
+      )
+      .map((table) => table.name.toLowerCase()),
   );
-  const next = new Set<string>();
-  for (const { name } of children) {
-    const violations = db
-      .query<{ rowid: number | null }, []>(`select rowid from pragma_foreign_key_check(${quoted(name).replaceAll('"', "'")})`)
-      .all();
+
+const orphansRemoved = (db: Database, checked: ReadonlySet<string>, lost: Map<string, number>): void => {
+  const emptied = new Set<string>();
+  for (const name of checked) {
+    const violations = db.query<{ rowid: number | null }, [string]>('select rowid from pragma_foreign_key_check(?)').all(name);
     for (const violation of violations) {
       if (violation.rowid === null) continue;
       db.run(`DELETE FROM ${quoted(name)} WHERE rowid = ?`, [violation.rowid]);
       lost.set(name, (lost.get(name) ?? 0) + 1);
-      next.add(name.toLowerCase());
+      emptied.add(name.toLowerCase());
     }
   }
-  if (next.size > 0) danglingRemoved(db, next, lost);
+  if (emptied.size > 0) orphansRemoved(db, childrenOf(db, emptied), lost);
 };
 
 const reshaped = (
@@ -321,12 +341,14 @@ const reshaped = (
     for (const [name, row] of wantedIndexes) {
       if (after.get(name)?.sql !== row.sql) indexed(db, row.name, row.sql!, row.tbl, lost);
     }
+    orphansRemoved(db, new Set([...remade, ...childrenOf(db, new Set([...lost.keys()].map((name) => name.toLowerCase())))]), lost);
+    const thinned = new Set([...lost.keys()].map((name) => name.toLowerCase()));
     for (const row of wanted) if (row.type === 'view' && row.sql !== null) db.run(row.sql);
     for (const row of wanted) if (row.type === 'trigger' && row.sql !== null) db.run(row.sql);
     for (const [name, want] of wantedTables) {
       if (!virtualWanted.has(name)) continue;
       const content = /\bcontent\s*=\s*["'`]?([\w$]+)/iu.exec(want.sql ?? '')?.[1]?.toLowerCase();
-      if (content !== undefined && (remade.has(content) || remade.has(name)))
+      if (content !== undefined && (remade.has(content) || remade.has(name) || thinned.has(content)))
         db.run(`INSERT INTO ${quoted(want.name)}(${quoted(want.name)}) VALUES ('rebuild')`);
     }
     db.run(`DELETE FROM ${CHAIN_LEDGER}`);
@@ -350,7 +372,6 @@ const reshaped = (
         carried.map(([, value]) => value),
       );
     }
-    if (lost.size > 0) danglingRemoved(db, new Set([...lost.keys()].map((name) => name.toLowerCase())), lost);
     db.run('COMMIT');
   } catch (cause) {
     db.run('ROLLBACK');

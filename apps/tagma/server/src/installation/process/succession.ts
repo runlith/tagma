@@ -411,12 +411,12 @@ const processSuccession = Effect.fnUntraced(function* (input: {
       if (first._tag === 'Success') return { successor, plan: first.success };
       if (first.failure._tag === 'SuccessionRefused') return yield* first.failure;
       if (successor._tag !== 'Installation' || runsFrom === undefined) {
-        return yield* new SuccessionRefused({ detail: first.failure.detail, reason: 'unreadable' });
+        return yield* new SuccessionRefused({ detail: first.failure.detail, reason: 'unfit' });
       }
       const returning = yield* returningOnto(runsFrom, successor.installation);
       const plan = yield* planned(returning).pipe(
         Effect.mapError((failure) =>
-          failure._tag === 'SuccessionRefused' ? failure : new SuccessionRefused({ detail: failure.detail, reason: 'unreadable' }),
+          failure._tag === 'SuccessionRefused' ? failure : new SuccessionRefused({ detail: failure.detail, reason: 'unfit' }),
         ),
       );
       return { successor: returning, plan };

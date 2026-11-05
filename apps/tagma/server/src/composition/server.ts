@@ -91,6 +91,7 @@ import { expectsRelease, replaced, serving, standBy, type StoodBy } from '../ins
 import { successionLayer } from '../installation/process/succession.js';
 import { attemptOf, startFailure } from './attempt.js';
 import { stepBackSettledAt } from './returning.js';
+import { successorPlan } from './successorPlan.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { migrationsFolder, refusalDetail } from '../installation/closure/read.js';
 import { EXECUTIONS, MIGRATIONS, type Installation } from '../installation/contract/wire/manifest.js';
@@ -387,40 +388,11 @@ export const serve = async (build: Build): Promise<void> => {
             },
             launch,
             restartRecord,
-            (next) =>
-              Effect.tryPromise({
-                try: () =>
-                  tagma.runtime.runPromise(
-                    readOnly(
-                      Effect.gen(function* () {
-                        const folder = next === null ? migrationsFolder : join(next.root, MIGRATIONS);
-                        const store = yield* MachineStore;
-                        const pending = yield* pendingMigrations(store.db, chain({ folder }), folder).pipe(
-                          Effect.map((steps) => Result.succeed(steps)),
-                          Effect.catchTag('MigrationChainInvalid', (invalid) => Effect.succeed(Result.fail(invalid))),
-                        );
-                        if (Result.isFailure(pending)) return { unfit: pending.failure.message };
-                        const heavy = yield* Context.get(tagma.bindings, StoreSnapshots).estimate(store, pending.success, folder);
-                        return {
-                          migrations: pending.success.length,
-                          ...(heavy === null ? {} : { heavy }),
-                          hostState: (yield* HostManagement).connection.address.state,
-                        };
-                      }),
-                    ),
-                  ),
-                catch: (cause) =>
-                  new SuccessionRefused({
-                    detail: `the successor's migration chain could not be read: ${String(cause)}`,
-                    reason: 'unreadable',
-                  }),
-              }).pipe(
-                Effect.flatMap((plan) =>
-                  'unfit' in plan
-                    ? Effect.fail(new SuccessorUnfit({ detail: plan.unfit ?? 'its migration chain is not this data' }))
-                    : Effect.succeed(plan),
-                ),
-              ),
+            successorPlan(
+              (work) => tagma.runtime.runPromise(work),
+              () => Context.get(tagma.bindings, StoreSnapshots),
+              storePath,
+            ),
             Effect.sync(() => Context.get(tagma.executions, SuccessionSteps)),
             undefined,
             userEnvironment.handoff,

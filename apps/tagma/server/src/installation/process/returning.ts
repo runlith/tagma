@@ -2,13 +2,22 @@ import { Database } from 'bun:sqlite';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { Data, Effect, Result, Schema } from 'effect';
+import { Clock, Data, Effect, Result, Schema } from 'effect';
 import { type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
 import { prepareEngine, selectEngine } from '@runlith/sqlite-process/engine';
 import type { Words } from '../../platform/contract/wire/refusal.js';
 import { cloneFile, type DurableWriteFailed, moveFile, removeFile } from '../../platform/durable/files.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
-import { clearStepBack, readAttempt, readStepBack, writeAttempt, writeStepBack, askedStepBack } from '../closure/attempt.js';
+import {
+  askedStepBack,
+  clearStepBack,
+  readAttempt,
+  readStepBack,
+  type RecordUnreadable,
+  setAsideStepBack,
+  writeAttempt,
+  writeStepBack,
+} from '../closure/attempt.js';
 import { carriedOnto, moving, undoneOnto } from '../closure/moves.js';
 import { STEP_BACK_SUFFIX, type StepBack } from '../contract/wire/stepBack.js';
 
@@ -25,6 +34,7 @@ export type ReturnPlace = {
   readonly own: string;
   readonly ownRoot: string;
   readonly files: () => readonly StoreFile[];
+  readonly kept: () => readonly StoreFile[];
 };
 
 const SIDES = ['-wal', '-shm'] as const;
@@ -43,6 +53,15 @@ const chainTarget = (folder: string): ChainTarget => {
   const receipt = existsSync(receiptAt) ? decodeReceipt(readFileSync(receiptAt, 'utf8')) : null;
   const folded = receipt === null || Result.isFailure(receipt) ? [] : [...receipt.success.chain, ...receipt.success.tail];
   return { steps: readMigrationFiles({ migrationsFolder: folder }), accepted: new Map(folded.map(({ name, hash }) => [name, hash])) };
+};
+
+export const storeUnfit = (files: readonly StoreFile[], toRoot: string): string | null => {
+  for (const { path, chain } of files) {
+    const folder = join(toRoot, chain);
+    if (existsSync(path) && existsSync(folder) && !chainFits(path, chainTarget(folder)))
+      return `${basename(path)} holds migrations ${basename(toRoot)} does not carry`;
+  }
+  return null;
 };
 
 const foldLog = (path: string): void => {
@@ -78,8 +97,9 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
   const fits = yield* Effect.try({ try: () => chainFits(path, target), catch: (cause) => failedOf(`${path} could not be read`, cause) });
   if (fits) return [];
   yield* copied(path).pipe(
-    Effect.catchTag('DurableWriteFailed', (failure: DurableWriteFailed) =>
-      Effect.sync(() => console.error(`[tagma] ${path} goes back without a copy of its data: ${failure.reason}`)),
+    Effect.mapError(
+      (failure: DurableWriteFailed) =>
+        new StepBackFailed({ detail: `${path} could not be copied aside before its return, so it stays as it stands: ${failure.reason}` }),
     ),
   );
   const leaving = join(fromRoot, chain);
@@ -95,16 +115,23 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
   return answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` }));
 });
 
-const restored = Effect.fnUntraced(function* (files: readonly StoreFile[]) {
-  for (const { path } of files) {
-    if (!existsSync(`${path}${STEP_BACK_SUFFIX}`)) continue;
-    for (const side of SIDES) yield* removeFile(`${path}${side}`);
-    yield* moveFile(`${path}${STEP_BACK_SUFFIX}`, path);
-  }
+const forEachCopy = Effect.fnUntraced(function* (
+  files: readonly StoreFile[],
+  work: (path: string) => Effect.Effect<unknown, DurableWriteFailed>,
+) {
+  for (const { path } of files) if (existsSync(`${path}${STEP_BACK_SUFFIX}`)) yield* work(path);
 });
 
+const restored = (files: readonly StoreFile[]) =>
+  forEachCopy(files, (path) =>
+    Effect.andThen(
+      Effect.forEach(SIDES, (side) => removeFile(`${path}${side}`), { discard: true }),
+      moveFile(`${path}${STEP_BACK_SUFFIX}`, path),
+    ),
+  );
+
 const copiesDropped = (files: readonly StoreFile[]): Effect.Effect<void> =>
-  Effect.forEach(files, ({ path }) => removeFile(`${path}${STEP_BACK_SUFFIX}`), { discard: true }).pipe(
+  forEachCopy(files, (path) => removeFile(`${path}${STEP_BACK_SUFFIX}`)).pipe(
     Effect.catchTag('DurableWriteFailed', (failure) =>
       Effect.sync(() =>
         console.error(`[tagma] the copies kept for the step back were not all removed: ${failure.path}: ${failure.reason}`),
@@ -133,13 +160,16 @@ const THE_TARGET_LEFT = (to: string): string => `release ${to} did not start, so
 
 const unwound = Effect.fn('installation.stepBackUnwound')(function* (place: ReturnPlace, back: StepBack, detail: string, words?: Words) {
   yield* restored(place.files()).pipe(
-    Effect.catchTag('DurableWriteFailed', (failure: DurableWriteFailed) =>
-      Effect.sync(() => console.error(`[tagma] the data from before the step back did not come back: ${failure.path}: ${failure.reason}`)),
+    Effect.mapError(
+      (failure: DurableWriteFailed) =>
+        new StepBackFailed({
+          detail: `the data from before the step back to ${back.to} did not all come back, and the step back stands for the next start to take up: ${failure.path}: ${failure.reason}`,
+        }),
     ),
   );
   yield* moving(place.installRoot, (lock) =>
     Effect.gen(function* () {
-      yield* undoneOnto(lock, place.own);
+      if (currentVersion(place.installRoot) === back.to) yield* undoneOnto(lock, place.own);
       const open = readAttempt(place.installRoot);
       if (Result.isSuccess(open) && open.success?.to === back.to && open.success.ended === null)
         writeAttempt(place.installRoot, { ...open.success, ended: { detail, data: 'restored', words } });
@@ -154,17 +184,33 @@ export const stepBackAsked = (installRoot: string, own: string): StepBack | null
   return asked !== null && asked.from === own && asked.to !== own ? asked : null;
 };
 
+const setAside = Effect.fn('installation.stepBackSetAside')(function* (place: ReturnPlace, unread: RecordUnreadable) {
+  const stamp = yield* Clock.currentTimeMillis;
+  yield* forEachCopy(place.files(), (path) => moveFile(`${path}${STEP_BACK_SUFFIX}`, `${path}${STEP_BACK_SUFFIX}.unread-${stamp}`)).pipe(
+    Effect.mapError(
+      (failure: DurableWriteFailed) =>
+        new StepBackFailed({ detail: `${unread.message}, and its data copies could not be set aside: ${failure.path}: ${failure.reason}` }),
+    ),
+  );
+  setAsideStepBack(place.installRoot, stamp);
+  console.error(`[tagma] ${unread.message}; it and the data copies it may name are set aside as *.unread-${stamp}`);
+});
+
 export const stepBackSettled = Effect.fn('installation.stepBackSettled')(function* (place: ReturnPlace) {
   const read = readStepBack(place.installRoot);
-  if (Result.isFailure(read)) {
-    console.error(`[tagma] ${read.failure.message}; the step back it named is given up`);
-    clearStepBack(place.installRoot);
-    return;
-  }
+  if (Result.isFailure(read)) return yield* setAside(place, read.failure);
   const record = read.success;
-  if (record === null || record.failed !== undefined) return;
+  if (record === null) return;
   if (!record.carried) {
-    if (askedStepBack(place.installRoot) === null) clearStepBack(place.installRoot);
+    yield* restored(place.files()).pipe(
+      Effect.mapError(
+        (failure: DurableWriteFailed) =>
+          new StepBackFailed({
+            detail: `the data copies a step back to ${record.to} left did not all come back: ${failure.path}: ${failure.reason}`,
+          }),
+      ),
+    );
+    if (record.failed === undefined && askedStepBack(place.installRoot) === null) clearStepBack(place.installRoot);
     return;
   }
   const open = readAttempt(place.installRoot);
@@ -175,7 +221,7 @@ export const stepBackSettled = Effect.fn('installation.stepBackSettled')(functio
   const attempt = open.success;
   if (record.to === place.own) {
     if (attempt === null) {
-      yield* copiesDropped(place.files());
+      yield* copiesDropped(place.kept());
       clearStepBack(place.installRoot);
     }
     return;
@@ -184,7 +230,7 @@ export const stepBackSettled = Effect.fn('installation.stepBackSettled')(functio
     yield* unwound(place, record, attempt.ended?.detail ?? THE_TARGET_LEFT(record.to), attempt.ended?.words);
     return;
   }
-  yield* copiesDropped(place.files());
+  yield* copiesDropped(place.kept());
   clearStepBack(place.installRoot);
 });
 
@@ -216,19 +262,21 @@ export const stepBackUnlisted = Effect.fn('installation.stepBackUnlisted')(funct
 ) {
   const detail = `the execution hosts could not be listed: ${failure.message}`;
   yield* moving(installRoot, () => Effect.sync(() => writeStepBack(installRoot, failedRecord(back, new StepBackFailed({ detail })))));
-  console.error(`[tagma] the step back to ${back.to} did not start, and this build keeps serving: ${detail}`);
+  console.error(`[tagma] the step back to ${back.to} did not start, and the server puts back what an earlier start left: ${detail}`);
 });
 
 export const stepBackPassed = Effect.fn('installation.stepBackPassed')(function* (place: ReturnPlace, back: StepBack) {
   const open = readAttempt(place.installRoot);
   if (Result.isFailure(open) || open.success !== null || currentVersion(place.installRoot) !== back.to) return;
-  yield* copiesDropped(place.files());
+  yield* copiesDropped(place.kept());
   clearStepBack(place.installRoot);
 });
 
-export const stepBackFailure = (installRoot: string): NonNullable<StepBack['failed']> | null => {
+type StepBackEnded = NonNullable<StepBack['failed']> & { readonly to: string };
+
+export const stepBackFailure = (installRoot: string): StepBackEnded | null => {
   const read = readStepBack(installRoot);
   if (Result.isFailure(read) || read.success === null || read.success.failed === undefined) return null;
   clearStepBack(installRoot);
-  return read.success.failed;
+  return { ...read.success.failed, to: read.success.to };
 };

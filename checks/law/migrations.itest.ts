@@ -140,6 +140,9 @@ test('a new migration of any judged chain that a step back cannot return without
     );
     rmSync(join(root, `drizzle/${next}/back.sql`));
     judge();
+    put(`drizzle/${next}/migration.sql`, 'alter table events rename column body to text;');
+    put(`drizzle/${next}/back.sql`, 'alter table events rename column missing to body;');
+    judge();
     expect(await inspectAll(root, law, trees, base)).toEqual([
       [
         expect.objectContaining({ path: `drizzle/${next}/migration.sql`, message: expect.stringContaining('back.sql') }),
@@ -147,6 +150,7 @@ test('a new migration of any judged chain that a step back cannot return without
       ],
       [],
       [],
+      [expect.objectContaining({ path: `drizzle/${next}/back.sql`, message: expect.stringContaining('missing') })],
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });

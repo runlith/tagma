@@ -129,7 +129,7 @@ const enter = async (file: string, start?: Meter, skip?: { readonly cpu: number;
   if (kindOf(file) !== 'unit' && bed.processes === undefined) bed.useProcesses(await openProcesses());
   bed.enter(file, start, skip);
   if (kindOf(file) !== 'unit' && !engineSelected) {
-    await engine();
+    await outside(engine);
     engineSelected = true;
   }
 };

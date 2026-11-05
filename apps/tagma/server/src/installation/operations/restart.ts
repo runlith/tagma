@@ -28,6 +28,11 @@ const REFUSED = {
     code: 'successor-unreadable',
     unblock: 'read_machine_state — the next installations this machine’s source offers; install another, then restart',
   },
+  unfit: {
+    code: 'successor-unfit',
+    unblock:
+      'read_machine_state — the next installations this machine’s source offers; start the installation that stands, which returns the data, or install a newer one',
+  },
   stopping: { code: 'server-stopping', unblock: 'read_machine_state — whether a server still answers here' },
 } as const;
 

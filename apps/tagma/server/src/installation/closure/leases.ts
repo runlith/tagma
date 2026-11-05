@@ -6,7 +6,7 @@ import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { pruneDirectories } from '../../platform/lock/versionLeases.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
 import { INSTALL_FILE } from '../contract/wire/layout.js';
-import { attemptHolds } from './attempt.js';
+import { attemptHolds, stepBackHolds } from './attempt.js';
 import { pendingHolds } from './pending.js';
 import { claimStaged, releasesNewestFirst, stagedVersions } from './versions.js';
 
@@ -32,6 +32,8 @@ export function pruneReleases(root: string, keep: readonly string[], forget: (di
   const standing = currentVersion(root);
   const held = attemptHolds(root);
   if (Result.isFailure(held)) throw held.failure;
-  const kept = new Set([...keep, ...(standing === null ? [] : [standing]), ...held.success, ...pendingHolds(root)]);
+  const stepping = stepBackHolds(root);
+  if (Result.isFailure(stepping)) throw stepping.failure;
+  const kept = new Set([...keep, ...(standing === null ? [] : [standing]), ...held.success, ...stepping.success, ...pendingHolds(root)]);
   pruneDirectories(root, [...releasesNewestFirst(root), ...stagedVersions(root)], kept, forget);
 }

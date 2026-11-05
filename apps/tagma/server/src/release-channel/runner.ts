@@ -483,8 +483,22 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   took = record?.took ?? null;
   const backFailed = stepBackFailure(place.installations);
   installed =
-    backFailed !== null && record?.installed != null
-      ? { ...record.installed, outcome: 'failed', build: null, detail: backFailed.detail, restartRefused: null }
+    backFailed !== null
+      ? {
+          offer: BACK,
+          title: BACK_TITLE,
+          target: releaseAt(place.installations, backFailed.to)?.identity.build ?? backFailed.to,
+          since: null,
+          tail: [],
+          then: null,
+          log: place.places.log,
+          ...(record?.installed?.offer === BACK ? record.installed : {}),
+          outcome: 'failed',
+          build: null,
+          detail: backFailed.detail,
+          endedAt: stamp(),
+          restartRefused: null,
+        }
       : record?.installing === null || record?.installing === undefined
         ? (record?.installed ?? null)
         : reconciled(record.installing, record.placement);

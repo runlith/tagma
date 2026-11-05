@@ -319,6 +319,20 @@ const migrationsAt = (snapshot: Snapshot, root: string, folder: string) => {
 
 const statementsOf = (text: string): string[] => text.split('--> statement-breakpoint').filter((one) => one.trim() !== '');
 
+const backFailure = (chain: readonly string[], back: string): string | null => {
+  const db = new Database(':memory:');
+  try {
+    db.run('PRAGMA foreign_keys = OFF');
+    for (const text of chain) for (const statement of statementsOf(text)) db.run(statement);
+    for (const statement of statementsOf(back)) db.run(statement);
+    return null;
+  } catch (failure) {
+    return failure instanceof Error ? failure.message : String(failure);
+  } finally {
+    db.close();
+  }
+};
+
 const foreignKeys = (
   store: Store,
   snapshot: Snapshot,
@@ -429,9 +443,25 @@ export const storedJudge = (root: string, treeAt: string, baseAt: string | null)
       const findings: Finding[] = [];
       for (const folder of params.folders) {
         const migrations = migrationsAt(tree, root, folder);
-        const unscripted = addedMigrations(migrations, base === null ? null : migrationsAt(base, root, folder), params.cut).filter(
-          (path) => !migrations.listed.has(path.replace(/migration\.sql$/, BACK_SCRIPT)),
-        );
+        const added = addedMigrations(migrations, base === null ? null : migrationsAt(base, root, folder), params.cut);
+        const scripted = added.filter((path) => migrations.listed.has(path.replace(/migration\.sql$/, BACK_SCRIPT)));
+        if (scripted.length > 0) {
+          tree.load(migrations.paths);
+          for (const path of scripted) {
+            const failure = backFailure(
+              migrations.paths.slice(0, migrations.paths.indexOf(path) + 1).map((one) => tree.read(one)),
+              tree.read(path.replace(/migration\.sql$/, BACK_SCRIPT)),
+            );
+            if (failure !== null)
+              findings.push({
+                path: path.replace(/migration\.sql$/, BACK_SCRIPT),
+                line: 1,
+                fingerprint: `${path}: back script ${failure}`,
+                message: `${BACK_SCRIPT} does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${failure}`,
+              });
+          }
+        }
+        const unscripted = added.filter((path) => !scripted.includes(path));
         tree.load(unscripted);
         for (const path of unscripted)
           for (const issue of unreturnedIssues(statementsOf(tree.read(path))))

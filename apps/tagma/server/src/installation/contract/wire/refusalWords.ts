@@ -22,4 +22,5 @@ export const REFUSAL_WORDS = {
   'source-unreadable': 'Source could not be read',
   'successor-left': 'New version did not start',
   'successor-unreadable': 'Version could not be read',
+  'successor-unfit': 'Version cannot open this data',
 } as const satisfies RefusalWords;

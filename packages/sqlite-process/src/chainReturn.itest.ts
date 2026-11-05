@@ -175,24 +175,63 @@ test('a row the target cannot hold is left out and counted, and rows that refere
   expect(read(path, (db) => db.query('select id from child').all())).toEqual([{ id: 1 }]);
 });
 
-test('a uniqueness the leaving build relaxed comes back with the newest of each duplicate; rows of an external-content index come back searchable', () => {
+test('a uniqueness the leaving build relaxed comes back with the newest of each duplicate as the index itself judges it, NULL keys, collation and expressions included; an external-content index follows the rows', () => {
   const base = step(
     '1000_base',
-    'CREATE TABLE doc (body text, slug text)',
+    'CREATE TABLE doc (body text, slug text, code text COLLATE NOCASE)',
     'CREATE UNIQUE INDEX doc_slug ON doc (slug)',
+    'CREATE UNIQUE INDEX doc_code ON doc (code)',
+    'CREATE UNIQUE INDEX doc_head ON doc (substr(body, 1, 5))',
     `CREATE VIRTUAL TABLE doc_search USING fts5(body, content='doc')`,
     `CREATE TRIGGER doc_in AFTER INSERT ON doc BEGIN INSERT INTO doc_search(rowid, body) VALUES (new.rowid, new.body); END`,
   );
-  const leaving = step('2000_loose', 'DROP INDEX doc_slug', 'ALTER TABLE doc ADD `tag` text', 'CREATE INDEX doc_tag ON doc (tag)');
+  const leaving = step(
+    '2000_loose',
+    'DROP INDEX doc_slug',
+    'DROP INDEX doc_code',
+    'DROP INDEX doc_head',
+    'ALTER TABLE doc ADD `tag` text',
+    'CREATE INDEX doc_tag ON doc (tag)',
+  );
   const path = store(
     [base, leaving],
-    (db) => void db.run(`INSERT INTO doc (body, slug) VALUES ('older words', 'same'), ('newer words', 'same')`),
+    (db) =>
+      void db.run(
+        `INSERT INTO doc (body, slug, code) VALUES ('older words', 'same', 'a'), ('newer words', 'same', 'b'), ('cat one', NULL, 'C'), ('dog two', NULL, 'c'), ('loner text', NULL, NULL), ('loner again', NULL, NULL)`,
+      ),
   );
   const answer = returnToChain(path, { steps: [base] }, { steps: [base, leaving], folder: null });
-  expect(answer.lost).toEqual([{ table: 'doc', rows: 1 }]);
+  expect(answer.lost).toEqual([{ table: 'doc', rows: 3 }]);
   expect(read(path, shapeOf)).toEqual(fresh([base]));
-  expect(read(path, (db) => db.query('select body from doc').all())).toEqual([{ body: 'newer words' }]);
+  expect(read(path, (db) => db.query('select body from doc order by rowid').all())).toEqual([
+    { body: 'newer words' },
+    { body: 'dog two' },
+    { body: 'loner again' },
+  ]);
   expect(read(path, (db) => db.query(`select rowid from doc_search where doc_search match 'newer'`).all().length)).toBe(1);
+  expect(read(path, (db) => db.query(`select rowid from doc_search where doc_search match 'older'`).all().length)).toBe(0);
+});
+
+test('a child the leaving build kept without its foreign key comes back without the rows that point nowhere', () => {
+  const base = step(
+    '1000_base',
+    'CREATE TABLE parent (id text PRIMARY KEY NOT NULL)',
+    'CREATE TABLE child (id integer PRIMARY KEY, parent text NOT NULL REFERENCES parent(id))',
+  );
+  const leaving = step(
+    '2000_unbound',
+    'CREATE TABLE __new_child (id integer PRIMARY KEY, parent text NOT NULL)',
+    'INSERT INTO __new_child SELECT * FROM child',
+    'DROP TABLE child',
+    'ALTER TABLE __new_child RENAME TO child',
+  );
+  const path = store([base, leaving], (db) => {
+    db.run(`INSERT INTO parent VALUES ('p')`);
+    db.run(`INSERT INTO child VALUES (1, 'p'), (2, 'ghost')`);
+  });
+  const answer = returnToChain(path, { steps: [base] }, { steps: [base, leaving], folder: null });
+  expect(answer.lost).toEqual([{ table: 'child', rows: 1 }]);
+  expect(read(path, (db) => db.query('select id from child').all())).toEqual([{ id: 1 }]);
 });
 
 test('a store whose ledger the target already holds is left untouched', () => {

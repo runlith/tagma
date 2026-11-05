@@ -24,5 +24,8 @@ export const RESTART_WORDS = {
   'successor-unreadable': {
     text: 'The version Tagma would restart onto cannot be read, so Tagma keeps running as it was. Install another version.',
   },
+  'successor-unfit': {
+    text: 'The version Tagma would restart onto cannot open your data, so Tagma keeps running as it was. Start the installed version, which brings the data back first.',
+  },
   'server-stopping': { text: 'Tagma is stopping, so it cannot restart now.' },
 } as const satisfies Readonly<Record<string, Words>>;

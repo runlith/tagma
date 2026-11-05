@@ -7,7 +7,7 @@ import type { PendingRefusal } from '../wire/pending.js';
 
 export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{
   readonly detail: string;
-  readonly reason: 'nothing-stands' | 'unreadable' | 'stopping';
+  readonly reason: 'nothing-stands' | 'unreadable' | 'unfit' | 'stopping';
 }> {}
 
 export class SuccessorUnfit extends Data.TaggedError('SuccessorUnfit')<{ readonly detail: string }> {}

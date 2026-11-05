@@ -5,11 +5,8 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
-import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { chainFits } from '@runlith/sqlite-process/chainReturn';
-import { databasePath, installationRoot, launcherPath } from '../installation/paths.js';
+import { installationRoot, launcherPath } from '../installation/paths.js';
 import { previousRelease } from '../installation/closure/versions.js';
-import { MIGRATIONS } from '../installation/contract/wire/manifest.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { BUILD_COMMAND, BUILD_REFUSED_ENV, BUILD_SOURCE_ENV, BUILD_SWAPPED_ENV } from '../installation/contract/wire/layout.js';
 import { CURRENT } from '../platform/contract/wire/versions.js';
@@ -115,39 +112,27 @@ const preparedDowngrade = Effect.fnUntraced(function* (api: BuildServer): Effect
   return { _tag: 'Ready', lines: downgradeLines(ready.success) } as const;
 });
 
-const dataFits = (channel: Channel, onto: string | null): boolean => {
-  if (onto === null) return false;
-  try {
-    return chainFits(databasePath(channel), {
-      steps: readMigrationFiles({ migrationsFolder: join(installationRoot(channel), onto, MIGRATIONS) }),
-    });
-  } catch {
-    return false;
-  }
-};
-
 const back = Effect.fnUntraced(function* (api: BuildServer, channel: Channel, json: boolean, restart: boolean) {
   const answering = (yield* api.healthOrNone()) !== null;
   const root = installationRoot(channel);
   const onto = previousRelease(root);
-  if (answering && restart) {
+  if (answering) {
     const asked = yield* Effect.result(
       api.ask((door) =>
-        door.operations.perform({ params: { id: 'install_next' }, query: {}, headers: {}, payload: { offer: 'back', then: 'restart' } }),
+        door.operations.perform({
+          params: { id: 'install_next' },
+          query: {},
+          headers: {},
+          payload: restart ? { offer: 'back', then: 'restart' } : { offer: 'back' },
+        }),
       ),
     );
     if (asked._tag === 'Failure') return askRefused(json, asked.failure);
     return print(json, { back: 'asked', onto }, [
-      `the running server steps back onto ${onto ?? 'the installation kept beside it'} and restarts onto it`,
+      restart
+        ? `the running server steps back onto ${onto ?? 'the installation kept beside it'} and restarts onto it`
+        : `the running server returns its data onto ${onto ?? 'the installation kept beside it'} at its next restart`,
     ]);
-  }
-  if (answering && !dataFits(channel, onto)) {
-    return refuse(
-      json,
-      'back-needs-update',
-      `the running server's build leaves its data in a shape ${onto ?? 'the installation kept beside it'} cannot open, and that build cannot return the data; moving current would strand this machine on a release that refuses its data`,
-      [`${channel.command} update --head — update the running server to a build that returns the data, then step back from it`],
-    );
   }
   const downgrade: string[] = [];
   const prepared = Effect.flatMap(preparedDowngrade(api), (answer) =>
@@ -156,7 +141,7 @@ const back = Effect.fnUntraced(function* (api: BuildServer, channel: Channel, js
       else downgrade.push(...answer.lines);
     }),
   );
-  const stepped = yield* Effect.result(steppedBack(root, null, answering ? onto : null, prepared, Effect.void));
+  const stepped = yield* Effect.result(steppedBack(root, null, null, prepared, Effect.void));
   if (stepped._tag === 'Failure') {
     const failure = stepped.failure;
     switch (failure._tag) {

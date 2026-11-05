@@ -5,6 +5,7 @@ import { holdDirectory } from '../../platform/lock/directoryLease.js';
 import type { Attempt } from '../contract/wire/attempt.js';
 import { INSTALL_LOCK } from '../contract/wire/layout.js';
 import {
+  askedStepBack,
   beginAttempt,
   clearReturn,
   clearStepBack,
@@ -14,6 +15,7 @@ import {
   writeReturn,
   writeStepBack,
 } from './attempt.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { type Claimed, claimLeased, pruneReleases } from './leases.js';
 import { releaseAt } from './manifests.js';
 import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
@@ -79,7 +81,6 @@ export const madeCurrent = Effect.fn('installation.makeCurrent')(function* (
   yield* done('current', () => {
     if (attempted) beginAttempt(lock.root, move.from, version);
     clearReturn(lock.root);
-    clearStepBack(lock.root);
     swapCurrent(lock.root, version);
   });
   const kept = [version, ...(move.from === null ? [] : [move.from])];
@@ -141,10 +142,17 @@ export const carriedOnto = Effect.fn('installation.stepBackCarried')(function* (
   leaving: string,
 ) {
   const { root } = lock;
+  const asked = askedStepBack(root);
+  if (asked === null || asked.from !== back.from || asked.to !== back.to || currentVersion(root) !== leaving) {
+    return yield* new MoveFailed({
+      step: 'current',
+      detail: `the step back to ${back.to} no longer stands as it was asked: another installation moved ${CURRENT} or cleared it`,
+    });
+  }
   yield* done('current', () => {
-    writeStepBack(root, { from: back.from, to: back.to, carried: true });
     beginAttempt(root, leaving, back.to);
     writeReturn(root, releaseAt(root, leaving)?.identity.build ?? leaving, back.to);
+    writeStepBack(root, { from: back.from, to: back.to, carried: true });
     swapCurrent(root, back.to);
   });
 });

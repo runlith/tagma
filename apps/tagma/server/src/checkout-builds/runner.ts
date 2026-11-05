@@ -19,6 +19,7 @@ import {
   BUILD_WORKTREE_ENV,
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
+import { releaseAt } from '../installation/closure/manifests.js';
 import { steppedBack } from '../installation/closure/moves.js';
 import { previousRelease } from '../installation/closure/versions.js';
 import { DowngradeSteps } from '../installation/contract/service/steps.js';
@@ -499,7 +500,9 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       started,
       'landed',
       build,
-      `${build === null ? 'the previous installation' : `installation ${build}`} comes up after the restart`,
+      options.runsFrom === undefined
+        ? `${build === null ? 'the previous installation' : `installation ${build}`} comes up when the installation next starts: a server run from its checkout does not carry a step back`
+        : `${build === null ? 'the previous installation' : `installation ${build}`} comes up after the restart`,
       [],
       endedAt,
     );
@@ -562,15 +565,33 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
             onFailure: (failure) => Effect.as(Effect.logWarning(`the build record could not be read: ${failure.message}`), null),
           }),
         );
-  const backFailed = options.installations === undefined ? null : stepBackFailure(options.installations);
+  const installations = options.installations;
+  const backFailed = installations === undefined ? null : stepBackFailure(installations);
+  const backEnded: BuildEnded | null =
+    backFailed === null || installations === undefined
+      ? null
+      : {
+          from: 'back',
+          revision: releaseAt(installations, backFailed.to)?.identity.build ?? backFailed.to,
+          outcome: 'failed',
+          build: null,
+          detail: backFailed.detail,
+          endedAt: yield* stamp,
+          log: options.log,
+          since: null,
+          tail: [],
+          then: null,
+          restartRefused: null,
+        };
+  if (kept === null && backEnded !== null) {
+    ended = backEnded;
+    yield* keep(null, ended);
+  }
   if (kept !== null) {
     took = kept.took;
     if (kept.running === null) {
-      ended =
-        backFailed !== null && kept.ended !== null
-          ? { ...kept.ended, outcome: 'failed', build: null, detail: backFailed.detail, restartRefused: null }
-          : kept.ended;
-      if (backFailed !== null) yield* keep(null, ended);
+      ended = backEnded ?? kept.ended;
+      if (backEnded !== null) yield* keep(null, ended);
     } else {
       ended = endedAs(kept.running, 'failed', null, 'the server that ran this build ended before the build did', [], yield* stamp);
       yield* keep(null, ended);

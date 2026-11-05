@@ -113,6 +113,14 @@ export const clearStepBack = (installRoot: string): void => {
   flushed(installRoot);
 };
 
+export const setAsideStepBack = (installRoot: string, stamp: number): void => {
+  renameSync(join(installRoot, STEP_BACK_FILE), join(installRoot, `${STEP_BACK_FILE}.unread-${stamp}`));
+  flushed(installRoot);
+};
+
+export const stepBackHolds = (installRoot: string): Result.Result<readonly string[], RecordUnreadable> =>
+  Result.map(readStepBack(installRoot), (record) => (record === null || record.failed !== undefined ? [] : [record.from, record.to]));
+
 export const askedStepBack = (installRoot: string): StepBack | null => {
   const read = readStepBack(installRoot);
   if (Result.isFailure(read) || read.success === null) return null;
