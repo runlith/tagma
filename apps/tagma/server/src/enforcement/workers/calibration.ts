@@ -1,13 +1,6 @@
 import type { Assembled } from '@tagma/inspection/builtins';
-import {
-  deriveCalibration,
-  fitsCalibration,
-  isCalibratedBuiltin,
-  probeOf,
-  spreadProbe,
-  type Calibration,
-} from '@tagma/inspection/node/budget';
-import { facetFor, selects } from '@tagma/inspection/node/implementations';
+import { type Calibration, calibratingOf, deriveCalibration, type ProbeSide, type Subject, subjectOf } from '@tagma/inspection/node/budget';
+import { facetFor } from '@tagma/inspection/node/implementations';
 import { MEMO_BYTES } from '@tagma/inspection/node/memo';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, type FacetMemo, parseAhead } from '@runlith/code-facts/blobs';
@@ -29,30 +22,26 @@ const rememberCalibration = (key: string, calibration: Calibration): void => {
   if (remembered.size > CALIBRATIONS_KEPT) remembered.delete(remembered.keys().next().value as string);
 };
 
-export const subjectOf = (sides: readonly Side[]): { readonly files: number; readonly bytes: number } => {
-  let files = 0;
-  let bytes = 0;
-  for (const side of sides) {
-    files += side.paths.length;
-    for (const path of side.paths) bytes += side.listed.sizes.get(path) ?? 0;
-  }
-  return { files, bytes };
-};
+const probeSidesOf = (sides: readonly Side[]): readonly ProbeSide[] =>
+  sides.map((side) => ({ object: (path: string) => side.listed.objects.get(path), size: (path: string) => side.listed.sizes.get(path) }));
 
-const probeSidesOf = (inspection: Assembled, sides: readonly Side[]): readonly Side[] => {
-  const rest = function* (): Iterable<string> {
-    for (const path of sides.at(-1)?.listed.ordered ?? []) if (selects(inspection, path)) yield path;
-  };
-  const paths = probeOf(
+export const subjectAt = (sides: readonly Side[]): Subject =>
+  subjectOf(
     sides.flatMap((side) => side.paths),
-    rest(),
-    (path) => sides.reduce((sum, side) => sum + (side.listed.sizes.get(path) ?? 0), 0),
+    probeSidesOf(sides),
   );
-  const spread = spreadProbe(
-    paths,
-    sides.map((side) => ({ object: (path: string) => side.listed.objects.get(path), size: (path: string) => side.listed.sizes.get(path) })),
-  );
-  return sides.map((side, at) => ({ ...side, paths: spread.held[at] ?? [] }));
+
+const storedAt = (cache: InspectionCache | undefined, builtin: string): Calibration | undefined => {
+  const stored = cache?.calibration.get(builtin);
+  return stored === undefined
+    ? undefined
+    : {
+        cbMsPerFile: stored.cbMsPerFile,
+        dbMsPerMib: stored.dbMsPerMib,
+        probeMs: stored.probeMs,
+        probeFiles: stored.probeFiles,
+        probeMib: stored.probeMib,
+      };
 };
 
 export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(function* (
@@ -62,29 +51,20 @@ export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(funct
   sides: readonly Side[],
   cache: InspectionCache | undefined,
 ) {
-  if (!isCalibratedBuiltin(inspection.builtin)) return undefined;
   const key = `${root}\0${inspection.builtin}`;
-  const full = subjectOf(sides);
-  const held = remembered.get(key);
-  if (held !== undefined) {
-    rememberCalibration(key, held);
-    return held;
+  const calibrating = calibratingOf(
+    inspection,
+    sides.flatMap((side) => side.paths),
+    probeSidesOf(sides),
+    sides.at(-1)?.listed.ordered ?? [],
+    remembered.get(key) ?? storedAt(cache, inspection.builtin),
+  );
+  if (calibrating.kind === 'none') return undefined;
+  if (calibrating.kind === 'known') {
+    rememberCalibration(key, calibrating.calibration);
+    return calibrating.calibration;
   }
-  const stored = cache?.calibration.get(inspection.builtin);
-  if (stored !== undefined && fitsCalibration(stored, full.files, full.bytes)) {
-    const calibration: Calibration = {
-      cbMsPerFile: stored.cbMsPerFile,
-      dbMsPerMib: stored.dbMsPerMib,
-      probeMs: stored.probeMs,
-      probeFiles: stored.probeFiles,
-      probeMib: stored.probeMib,
-    };
-    rememberCalibration(key, calibration);
-    return calibration;
-  }
-  const probe = probeSidesOf(inspection, sides);
-  const seen = subjectOf(probe);
-  if (seen.files === 0) return undefined;
+  const probe = sides.map((side, at) => ({ ...side, paths: calibrating.probe.held[at] ?? [] }));
   const started = performance.now();
   const fetched = yield* texts(git, root, probe);
   const facet = facetFor(inspection.builtin);
@@ -112,8 +92,7 @@ export const ensureCalibration = Effect.fn('inspecting.ensureCalibration')(funct
       Effect.withSpan('inspecting.parse', { attributes: { files: blobs.length } }),
     );
   }
-  const elapsed = performance.now() - started;
-  const calibration = deriveCalibration(elapsed, seen.files, seen.bytes);
+  const calibration = deriveCalibration(performance.now() - started, calibrating.probe.files, calibrating.probe.bytes);
   rememberCalibration(key, calibration);
   cache?.calibration.set(inspection.builtin, calibration);
   cache?.flush();

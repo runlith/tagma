@@ -66,7 +66,7 @@ export const size = {
     "The metric is the adapter's: `size` parses nothing itself. `non-import` is a file's lines less the lines of its import statements, so rewriting imports never moves it. A file whose language has no adapter, or whose adapter measures no declarations, is named in `unjudged` with the reason, never counted as zero. A selected file the adapter reads and fails on — text that is not UTF-8 or does not parse — fails the whole inspection, never reads as clean; `files.exclude` naming it is the way past.",
     'A file matching several globs is held to the lowest of their thresholds.',
     'The fingerprint is the file relative to `base` and carries the measure as its value: a file in debt stands whatever its size becomes, and its value is only the measure recorded for it. A change that deletes a file and adds one with the same text outside its import statements carries its violation to the new path, and the verdict names the pair.',
-    'A reading whose facts would pass the 120 s ask ceiling on this machine is refused as too large, never judged clean; the envelope is calibrated per machine from a cold parse of a bounded probe.',
+    'A reading whose facts would pass the 120 s ask ceiling on this machine is refused as too large, never judged clean; the envelope is calibrated on the machine that judges from a cold parse of a bounded probe, which the server keeps per repository until it restarts and reuses only while the subject fits it.',
   ],
   unblock: [
     'Code of another subject moves to the file or module that owns it; a split follows named subjects, never the line count.',

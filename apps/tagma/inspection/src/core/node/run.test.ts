@@ -3,7 +3,7 @@ import type { FacetMemo, ParseMemo } from '@runlith/code-facts/blobs';
 import { USAGE } from '@runlith/code-facts/js';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Inspection, Params } from '../../builtins';
-import { budgetOf, EnvelopeExceeded } from './budget';
+import { ASK_BUDGET_MS, budgetOf, deriveCalibration, EnvelopeExceeded, unbounded } from './budget';
 import { judge, judgeReadings } from './judge';
 import type { MemoValue } from './memo';
 import { listedOf, parseDiffTreeZero, parseTreeId } from './gitTrees';
@@ -115,7 +115,7 @@ describe('a check over named paths', () => {
     const built = over(new Map([['src/m/b.ts', { size: 30 }]]));
     const paths = ['src/m/b.ts'];
     const verdict = settled([base, built], [paths, paths], ([before, after]) =>
-      judge(inspection, { base: before as Tree, built: after as Tree, paths }, []),
+      judge(inspection, { base: before as Tree, built: after as Tree, paths }, [], unbounded()),
     );
     expect(verdict.violations.map(({ fingerprint }) => fingerprint)).toEqual(['S4 m:Row @ m/b.ts']);
     expect([...(built.tree(undefined).mentions?.(['Row']) ?? [])]).toEqual(['src/m/a.ts', 'src/m/b.ts']);
@@ -123,7 +123,7 @@ describe('a check over named paths', () => {
 
   it('charges only fetched blobs, reusing a warm fact without spending the source envelope', () => {
     const over = side([], []);
-    const budget = budgetOf('platforms', { files: 1, mib: 1 });
+    const budget = budgetOf('platforms', deriveCalibration(ASK_BUDGET_MS, 1, 1024 * 1024));
     expect(settled([over], [[]], ([tree]) => tree!.read('src/b.ts'), undefined, budget)).toBe(blobs.ob!);
     expect(settled([over], [[]], ([tree]) => tree!.read('src/b.ts'), undefined, budget)).toBe(blobs.ob!);
     expect(() => settled([over], [[]], ([tree]) => tree!.read('src/a.ts'), undefined, budget)).toThrow(EnvelopeExceeded);
@@ -262,9 +262,9 @@ it('judges divergent platform trees in independent bounded slices with the same 
   const after = slicedSide(inspection, built, [''], memo, envelope);
   const paths = ['packages/b/src/main.ts'];
   const reading = settled([base, built], [[], []], ([a, b]) =>
-    judgeReadings(inspection, { base: a!, built: b!, paths }, [], before, after),
+    judgeReadings(inspection, { base: a!, built: b!, paths }, [], before, after, unbounded()),
   );
-  const whole = settled([base, built], [[], []], ([a, b]) => judge(inspection, { base: a!, built: b!, paths }, []));
+  const whole = settled([base, built], [[], []], ([a, b]) => judge(inspection, { base: a!, built: b!, paths }, [], unbounded()));
   expect(reading).toEqual(whole);
   expect(reading.violations.map(({ fingerprint }) => fingerprint)).toEqual(['a [browser] -> sharp']);
 });
@@ -279,7 +279,7 @@ it('judges an indivisible platform package larger than the slice envelope on a s
 
 it('charges an on-demand blob before fetching it', () => {
   const reading = usageSide('on-demand', usageText('one'));
-  const budget = budgetOf('swallowed-failures', { files: 0, mib: 1 });
+  const budget = budgetOf('swallowed-failures', deriveCalibration(1, 0, 1024 * 1024));
   expect(() => settled([reading], [[]], ([tree]) => tree?.read(usagePath), undefined, budget)).toThrow(EnvelopeExceeded);
 });
 

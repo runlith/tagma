@@ -84,7 +84,7 @@ export const callServices = {
     'A `Context` built in one statement and provided in another — assigned to a variable, returned from a helper, or passed as a parameter — is not read; only a `Context.make` or `Context.add` written inside the provider call’s arguments is.',
     'The fingerprint names the file relative to `base`, the top-level declaration holding the site, the tag and the form; a second site with the same four carries a `#n` suffix in source order.',
     'Only files mentioning one of the tags’ names are read.',
-    'A reading past its calibrated envelope is refused as too large, never judged clean.',
+    'A reading past its calibrated envelope is refused as too large, never judged clean; the envelope is calibrated on the machine that judges from a cold parse of a bounded probe, which the server keeps per repository until it restarts and reuses only while the subject fits it.',
     'A selected file whose text does not parse fails the whole inspection, never reads as a file providing nothing.',
   ],
   unblock: [

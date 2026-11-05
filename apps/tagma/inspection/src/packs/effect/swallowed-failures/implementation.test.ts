@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
 import { ready } from '../../../builtins.node';
-import { UNBOUNDED } from '../../../core/node/budget';
+import { unbounded } from '../../../core/node/budget';
 import { judge } from '../../../core/node/judge';
 import type { InspectionMemo, MemoValue } from '../../../core/node/memo';
 import type { SwallowedFailuresParams } from './declaration';
@@ -36,7 +36,7 @@ const file = (...lines: readonly string[]) => [HEAD, ...lines, ''].join('\n');
 const digestOf = (fingerprint: string): string => fingerprint.slice(-8);
 
 const judged = (text: string, change: Partial<SwallowedFailuresParams> = {}) => {
-  const reading = swallowedFailures.read(params(change), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, UNBOUNDED);
+  const reading = swallowedFailures.read(params(change), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, unbounded());
   return {
     violations: reading.violations.map(({ fingerprint, line }) => `${fingerprint.replace(/ [0-9a-f]{8}(?=#|$)/, '')} @${line}`),
     unjudged: reading.unjudged.map(({ line, specifier }) => `${specifier.split(' ').slice(0, 2).join(' ')} @${line}`),
@@ -152,7 +152,7 @@ describe('swallowedFailures: exempt forms', () => {
       'packages/a/x.test.ts': file('export const x = (e: Effect.Effect<number, Error>) => e.pipe(Effect.ignore);'),
       'apps/other/x.ts': file('export const x = (e: Effect.Effect<number, Error>) => e.pipe(Effect.ignore);'),
     };
-    const reading = swallowedFailures.read(params(), tree(texts), Object.keys(texts), ADAPTERS, UNBOUNDED);
+    const reading = swallowedFailures.read(params(), tree(texts), Object.keys(texts), ADAPTERS, unbounded());
     expect(reading).toEqual({ violations: [], unjudged: [] });
   });
 });
@@ -205,7 +205,7 @@ describe('swallowedFailures: allowances', () => {
     'export const other = (x: Effect.Effect<void, Error>) => x.pipe(Effect.ignore);',
   );
   const siteOf = (message: string | undefined) => /site ([0-9a-f]{8})/.exec(message ?? '')?.[1] as string;
-  const reading = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, UNBOUNDED);
+  const reading = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, unbounded());
   const first = siteOf(reading.violations[0]?.message);
 
   it('passes exactly the named site its fix spells, and the site beside it in the same symbol stays a violation', () => {
@@ -230,7 +230,7 @@ describe('swallowedFailures: allowances', () => {
     const undecided = file(
       'export const a = (x: Effect.Effect<void, Error>) => Effect.andThen(x.pipe(Effect.catch(recover)), x.pipe(Effect.catch(other)));',
     );
-    const read = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': undecided }), ['packages/a/x.ts'], ADAPTERS, UNBOUNDED);
+    const read = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': undecided }), ['packages/a/x.ts'], ADAPTERS, unbounded());
     const site = read.unjudged[0]?.specifier.split(' ')[2] as string;
     expect(judged(undecided, { allow: [{ path: 'packages/a/x.ts', symbol: 'a', form: 'catch', site, why: 'cleanup' }] }).unjudged).toEqual([
       'Effect.catch a @2',
@@ -241,7 +241,7 @@ describe('swallowedFailures: allowances', () => {
 describe('swallowedFailures: judged against its debt', () => {
   const swallowing = file('export const x = (e: Effect.Effect<number, Error>) => e.pipe(Effect.ignore);');
   const fingerprintsOf = (text: string): readonly string[] => {
-    const reading = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, UNBOUNDED);
+    const reading = swallowedFailures.read(params(), tree({ 'packages/a/x.ts': text }), ['packages/a/x.ts'], ADAPTERS, unbounded());
     return reading.violations.map(({ fingerprint }) => fingerprint);
   };
   const fingerprintOf = (text: string): string => fingerprintsOf(text)[0] as string;
@@ -254,6 +254,7 @@ describe('swallowedFailures: judged against its debt', () => {
         paths: [...new Set([...Object.keys(base), ...Object.keys(built)])].filter((path) => base[path] !== built[path]),
       },
       debt,
+      unbounded(),
     ).violations.map(({ fingerprint }) => fingerprint);
 
   it('carries a debt entry with a file moved unchanged, and refuses a second swallow beside it', () => {
@@ -288,9 +289,9 @@ describe('swallowedFailures: cost', () => {
     const counted = tree(texts, () => {
       reads += 1;
     });
-    const first = swallowedFailures.read(params(), counted, ['packages/a/x.ts'], ADAPTERS, UNBOUNDED, memo, 'reach');
+    const first = swallowedFailures.read(params(), counted, ['packages/a/x.ts'], ADAPTERS, unbounded(), memo, 'reach');
     const before = reads;
-    const second = swallowedFailures.read(params(), counted, ['packages/a/x.ts'], ADAPTERS, UNBOUNDED, memo, 'reach');
+    const second = swallowedFailures.read(params(), counted, ['packages/a/x.ts'], ADAPTERS, unbounded(), memo, 'reach');
     expect(second).toEqual(first);
     expect(reads).toBe(before);
   });

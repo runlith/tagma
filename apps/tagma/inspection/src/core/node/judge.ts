@@ -5,7 +5,7 @@ import { facetOf, importsOf, sitesOf, type Tree } from '@runlith/code-facts/tree
 import { type Applied, locationsOf, relocated } from '../rule';
 import { type Debt, type Followed, newViolations, type Unjudged, type Verdict, type Violation } from '../verdict';
 import type { Budget } from './budget';
-import { affected, budgetFor, inspect, movable } from './implementations';
+import { affected, inspect, movable } from './implementations';
 import type { InspectionMemo } from './memo';
 import type { Reading } from './reading';
 import { ruleOf } from './registry';
@@ -61,21 +61,20 @@ const digestOf = (tree: Tree, path: string, adapters: Adapters, budget: Budget):
   }
 };
 
-export const movesOf = (change: Change, adapters: Adapters = ADAPTERS, budget?: Budget): readonly Move[] => {
+export const movesOf = (change: Change, budget: Budget, adapters: Adapters = ADAPTERS): readonly Move[] => {
   const gone = change.paths.filter((path) => change.base.has(path) && !change.built.has(path)).sort();
   const came = change.paths.filter((path) => change.built.has(path) && !change.base.has(path)).sort();
   if (gone.length === 0 || came.length === 0) return [];
-  const taking = budget ?? { take: () => undefined };
   const waiting = new Map<string, string[]>();
   for (const path of gone) {
-    const key = digestOf(change.base, path, adapters, taking);
+    const key = digestOf(change.base, path, adapters, budget);
     const held = waiting.get(key);
     if (held === undefined) waiting.set(key, [path]);
     else held.push(path);
   }
   const moves: Move[] = [];
   for (const path of came) {
-    const from = waiting.get(digestOf(change.built, path, adapters, taking))?.shift();
+    const from = waiting.get(digestOf(change.built, path, adapters, budget))?.shift();
     if (from !== undefined) moves.push({ from, to: path });
   }
   return moves;
@@ -129,14 +128,14 @@ export function judge(
   inspection: Applied,
   change: Change,
   debt: readonly (string | Debt)[],
+  budget: Budget,
   adapters: Adapters = ADAPTERS,
   memo?: InspectionMemo,
-  budget: Budget = budgetFor(inspection),
 ): Verdict {
-  const paths = [...new Set([...change.paths, ...affected(inspection, change.base, change.built, change.paths, adapters, budget, memo)])];
-  const base = inspect(inspection, standingOnly(change.base, adapters), paths, adapters, budget, memo, 'change');
-  const built = inspect(inspection, change.built, paths, adapters, budget, memo, 'change');
-  return judgeReadings(inspection, change, debt, base, built, adapters, budget, new Set(paths));
+  const paths = [...new Set([...change.paths, ...affected(inspection, change.base, change.built, change.paths, budget, adapters, memo)])];
+  const base = inspect(inspection, standingOnly(change.base, adapters), paths, budget, adapters, memo, 'change');
+  const built = inspect(inspection, change.built, paths, budget, adapters, memo, 'change');
+  return judgeReadings(inspection, change, debt, base, built, budget, adapters, new Set(paths));
 }
 
 export function judgeReadings(
@@ -145,8 +144,8 @@ export function judgeReadings(
   debt: readonly (string | Debt)[],
   base: Reading,
   built: Reading,
+  budget: Budget,
   adapters: Adapters = ADAPTERS,
-  budget: Budget = budgetFor(inspection),
   read: ReadonlySet<string> | null = null,
 ): Verdict {
   const unmeasured = new Set(base.unjudged.map(loose));
@@ -162,7 +161,7 @@ export function judgeReadings(
         paths,
         [...base.violations, ...fresh].map((one) => one.fingerprint),
       );
-    moves = movesOf({ ...change, paths: paths.filter((path) => movable(inspection, path) || locations.has(path)) }, adapters, budget);
+    moves = movesOf({ ...change, paths: paths.filter((path) => movable(inspection, path) || locations.has(path)) }, budget, adapters);
   }
   const { kept, followed } = following(inspection, moves, base, fresh, locations);
   const units = fresh.filter((one) => !kept.has(one));

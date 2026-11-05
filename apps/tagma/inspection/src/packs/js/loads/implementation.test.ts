@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Inspection } from '../../../builtins';
+import { unbounded } from '../../../core/node/budget';
 import { inspect } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { ready } from '../../../builtins.node';
@@ -59,6 +60,7 @@ describe('loads: reading a tree', () => {
         'app/src/ui/view.ts': "import { model } from '@acme/client/models';\nimport { gql } from 'heavy/graphql';\n",
       }),
       ['app/src/core/model.ts', 'app/src/core/store.ts', 'app/src/ui/view.ts'],
+      unbounded(),
     );
     expect(reading).toEqual({
       violations: [
@@ -92,7 +94,7 @@ describe('loads: reading a tree', () => {
       'app/src/core/parts.ts': "import '@acme/client/parts/light';\n",
       'app/src/core/model.ts': "import '@acme/client/models';\n",
     };
-    const reading = inspect(loads(), tree(texts), ['app/src/core/parts.ts', 'app/src/core/model.ts']);
+    const reading = inspect(loads(), tree(texts), ['app/src/core/parts.ts', 'app/src/core/model.ts'], unbounded());
     expect(reading.violations.map(({ fingerprint, chain, fix }) => ({ fingerprint, chain, fix }))).toEqual([
       {
         fingerprint: 'core/model.ts -> heavy',
@@ -118,24 +120,29 @@ describe('loads: reading a tree', () => {
         'app/src/core/d.ts': "import 'heavy';\n",
       }),
       ['app/src/core/a.ts'],
+      unbounded(),
     );
     expect(reading.violations.map(({ line, chain }) => ({ line, chain }))).toEqual([{ line: 2, chain: ['app/src/core/c.ts', 'heavy'] }]);
   });
 
   it('refuses a bare specifier alone when an entry ending in /* allows every subpath under it', () => {
     const texts = { ...workspace, 'app/src/core/barrel.ts': "import 'heavy';\n", 'app/src/core/door.ts': "import 'heavy/door';\n" };
-    const reading = inspect(loads({ allows: ['@acme/client/models', 'heavy/*'] }), tree(texts), [
-      'app/src/core/barrel.ts',
-      'app/src/core/door.ts',
-    ]);
+    const reading = inspect(
+      loads({ allows: ['@acme/client/models', 'heavy/*'] }),
+      tree(texts),
+      ['app/src/core/barrel.ts', 'app/src/core/door.ts'],
+      unbounded(),
+    );
     expect(reading.violations.map(({ fingerprint }) => fingerprint)).toEqual(['core/barrel.ts -> heavy']);
   });
 
   it('follows an import() call only when the reading is runtime', () => {
     const texts = { ...workspace, 'app/src/core/lazy.ts': "export const later = () => import('heavy');\n" };
-    expect(inspect(loads(), tree(texts), ['app/src/core/lazy.ts']).violations).toEqual([]);
+    expect(inspect(loads(), tree(texts), ['app/src/core/lazy.ts'], unbounded()).violations).toEqual([]);
     expect(
-      inspect(loads({ reads: 'runtime' }), tree(texts), ['app/src/core/lazy.ts']).violations.map(({ fingerprint }) => fingerprint),
+      inspect(loads({ reads: 'runtime' }), tree(texts), ['app/src/core/lazy.ts'], unbounded()).violations.map(
+        ({ fingerprint }) => fingerprint,
+      ),
     ).toEqual(['core/lazy.ts -> heavy']);
   });
 
@@ -154,6 +161,7 @@ describe('loads: reading a tree', () => {
         'app/src/lib/store.ts': "import 'heavy';\n",
       }),
       ['app/src/core/page.ts'],
+      unbounded(),
     );
     expect(reading.violations.map(({ fingerprint, chain }) => ({ fingerprint, chain }))).toEqual([
       { fingerprint: 'src/core/page.ts -> heavy', chain: ['app/src/lib/store.ts', 'heavy'] },
@@ -169,6 +177,7 @@ describe('loads: reading a tree', () => {
         'app/src/core/model.ts': "import '@acme/client/models/nowhere';\nimport './gone';\nimport '#internal';\nimport 'lodash';\n",
       }),
       ['app/src/core/model.ts'],
+      unbounded(),
     );
     expect(reading).toEqual({
       violations: [],
@@ -197,6 +206,7 @@ describe('judge: loads', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
   });
@@ -210,6 +220,7 @@ describe('judge: loads', () => {
         paths: ['app/src/core/view.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations.map(({ fingerprint, line, chain }) => ({ fingerprint, line, chain }))).toEqual([
       { fingerprint: 'core/view.ts -> heavy', line: 1, chain: ['app/src/core/store.ts', 'heavy'] },

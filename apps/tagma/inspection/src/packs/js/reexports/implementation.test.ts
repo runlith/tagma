@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Inspection } from '../../../builtins';
+import { unbounded } from '../../../core/node/budget';
 import { inspect } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { ready } from '../../../builtins.node';
@@ -38,7 +39,7 @@ describe('reexports: reading a tree', () => {
       'pkg/src/index.test.ts': "export * from './a';\n",
       'other/index.ts': "export * from './x';\n",
     };
-    expect(inspect(reexports, tree(texts), Object.keys(texts))).toEqual({
+    expect(inspect(reexports, tree(texts), Object.keys(texts), unbounded())).toEqual({
       violations: [
         {
           fingerprint: 'index.ts -> ./a',
@@ -81,6 +82,7 @@ describe('judge: reexports', () => {
         paths: ['pkg/src/index.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations.map(({ fingerprint, line }) => ({ fingerprint, line }))).toEqual([
       { fingerprint: 'index.ts -> ./b', line: 3 },

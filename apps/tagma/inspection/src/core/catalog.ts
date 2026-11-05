@@ -59,6 +59,8 @@ export const catalogOf = <const Packs extends readonly Pack[]>(packs: Packs) => 
           `the rule ${rule.id} is judged in slices, so it declares the envelope a slice is bounded by and which changed paths are relevant to it`,
         );
       }
+      if (rule.calibrated === true && rule.envelope !== undefined)
+        throw new Error(`the rule ${rule.id} is calibrated on the machine that judges it, so it declares no static envelope`);
       owners.set(rule.id, { rule, pack });
     }
   }

@@ -4,7 +4,7 @@ import { overlay, UnsupportedSource } from '@runlith/code-facts/imports';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Assembled, Params } from '../../../builtins';
 import type { MapModule, ModuleMap } from '../../../core/rule';
-import { budgetOf, EnvelopeExceeded } from '../../../core/node/budget';
+import { ASK_BUDGET_MS, budgetOf, deriveCalibration, EnvelopeExceeded, unbounded } from '../../../core/node/budget';
 import { inspect, remapped } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { memoWrites, type ReachTable, type ReachView } from '../../../core/node/memo';
@@ -89,7 +89,7 @@ describe('modules: reading a tree', () => {
         "import { goto } from '$app/navigation';\nimport { page } from '$app/state';\nimport { i } from '$app/owned';\nimport { missing } from '$lib/typo';\nimport root from '$app';\nimport near from '$application/state';\nimport env from '$env/static/public';\nimport privateEnv from '$env/static/private';\nimport type { Load } from './$types';\nimport type { Typo } from './$typo';\n",
     };
     const inspection = modules({ framework: ['$app/*', '$env/static/public', './$types'] });
-    const result = inspect(inspection, tree(texts), ['app/src/app/main.ts']);
+    const result = inspect(inspection, tree(texts), ['app/src/app/main.ts'], unbounded());
     expect(prints(result.violations)).toEqual([
       'app -> $app unresolved @ app/main.ts',
       'app -> $application/state unresolved @ app/main.ts',
@@ -109,7 +109,7 @@ describe('modules: reading a tree', () => {
       'app/src/app/main.ts': "import raw from '../store/cursor.svg?raw';\nimport url from '../store/cursor.svg?url';\n",
       'app/src/cli/main.ts': "import raw from '$lib/cursor.svg?raw';\n",
     };
-    const read = inspect(modules({ queries: ['?raw'] }), tree(texts), ['app/src/app/main.ts', 'app/src/cli/main.ts']);
+    const read = inspect(modules({ queries: ['?raw'] }), tree(texts), ['app/src/app/main.ts', 'app/src/cli/main.ts'], unbounded());
     expect(prints(read.violations)).toEqual([
       'app -> ../store/cursor.svg?url unresolved @ app/main.ts',
       'app -> store private @ app/main.ts',
@@ -156,14 +156,15 @@ describe('modules: reading a tree', () => {
         "import { publicValue } from 'kit/public';\nimport { privateValue } from 'kit/private';\nimport missing from 'kit/missing';\n",
     };
     const expected = ['app -> kit private @ app/main.ts', 'app -> kit/missing unresolved @ app/main.ts'];
-    expect(prints(inspect(inspection, tree(texts), ['app/main.ts']).violations)).toEqual(expected);
+    expect(prints(inspect(inspection, tree(texts), ['app/main.ts'], unbounded()).violations)).toEqual(expected);
     expect(
       prints(
-        inspect(inspection, tree({ ...texts, 'libs/kit/dist/public.js': '', 'libs/kit/dist/private.js': '' }), ['app/main.ts']).violations,
+        inspect(inspection, tree({ ...texts, 'libs/kit/dist/public.js': '', 'libs/kit/dist/private.js': '' }), ['app/main.ts'], unbounded())
+          .violations,
       ),
     ).toEqual(expected);
     const { 'libs/kit/src/contract/public.ts': _removed, ...missing } = texts;
-    expect(prints(inspect(inspection, tree(missing), ['app/main.ts']).violations)).toEqual([
+    expect(prints(inspect(inspection, tree(missing), ['app/main.ts'], unbounded()).violations)).toEqual([
       ...expected,
       'app -> kit/public unresolved @ app/main.ts',
     ]);
@@ -196,7 +197,7 @@ describe('modules: reading a tree', () => {
     const page = ['app/src/routes/page.ts'];
     const refusal = (inspection: Assembled, judged: Tree): unknown => {
       try {
-        inspect(inspection, judged, page);
+        inspect(inspection, judged, page, unbounded());
       } catch (error) {
         return error;
       }
@@ -204,11 +205,15 @@ describe('modules: reading a tree', () => {
     };
 
     it('is read as its declared tracked copy, and without one refuses naming the missing file', () => {
-      expect(prints(inspect(copy, tree(texts), page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(inspect(copy, tree(texts), page, unbounded()).violations)).toEqual([
+        'routes -> store private @ app/src/routes/page.ts',
+      ]);
       expect(refusal(generated(), tree(texts))).toMatchObject({ path: 'app/tsconfig.json', absent: 'app/.gen/tsconfig.json' });
       const unsuffixed = { ...texts, 'app/tsconfig.json': JSON.stringify({ extends: './.gen/tsconfig' }) };
       expect(refusal(generated(), tree(unsuffixed))).toMatchObject({ path: 'app/tsconfig.json', absent: 'app/.gen/tsconfig.json' });
-      expect(prints(inspect(copy, tree(unsuffixed), page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(inspect(copy, tree(unsuffixed), page, unbounded()).violations)).toEqual([
+        'routes -> store private @ app/src/routes/page.ts',
+      ]);
       const { 'app/gen.json': copied, ...uncopied } = texts;
       expect(refusal(copy, tree(uncopied))).toMatchObject({ path: 'app/tsconfig.json', absent: 'app/gen.json' });
       const unwatched = generated([{ output: 'app/.gen/tsconfig.json', source: 'app/gen.jsonc', why: 'A copy no config watch names.' }]);
@@ -221,7 +226,9 @@ describe('modules: reading a tree', () => {
         working: (path) => (path === 'app/.gen/tsconfig.json' ? generatedText : undefined),
       });
       const reformatted = JSON.stringify(JSON.parse(texts['app/gen.json']), null, '\t');
-      expect(prints(inspect(copy, checkout(reformatted), page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(inspect(copy, checkout(reformatted), page, unbounded()).violations)).toEqual([
+        'routes -> store private @ app/src/routes/page.ts',
+      ]);
       expect(refusal(copy, checkout(aliased('../src/kit/*')))).toMatchObject({ path: 'app/gen.json', output: 'app/.gen/tsconfig.json' });
       const ranked = (...keys: string[]) =>
         JSON.stringify({ compilerOptions: { paths: Object.fromEntries(keys.map((key) => [key, ['../src/lib/*']])) } });
@@ -253,7 +260,7 @@ describe('modules: reading a tree', () => {
         built: tree({ ...lib, 'app/gen.json': aliased('../src/lib/store/*') }),
         paths: ['app/gen.json'],
       };
-      expect(prints(judge(copy, change, []).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(judge(copy, change, [], unbounded()).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
     });
 
     it('reads a declared copy in place of an installed package config its link leads elsewhere, and refuses the copy the installed file contradicts', () => {
@@ -278,7 +285,9 @@ describe('modules: reading a tree', () => {
         };
       };
       const declared = generated([{ output, source: 'app/cfg.json', why: 'The committed copy of the installed base config.' }]);
-      expect(prints(inspect(declared, stored(copied), page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(inspect(declared, stored(copied), page, unbounded()).violations)).toEqual([
+        'routes -> store private @ app/src/routes/page.ts',
+      ]);
       expect(refusal(declared, stored(aliased('../../../app/src/kit/*')))).toMatchObject({ path: 'app/cfg.json', output });
     });
 
@@ -311,7 +320,7 @@ describe('modules: reading a tree', () => {
       };
       const judged = (base: Tree, built: Tree) => {
         const memo = memoWrites(new Map(), table);
-        const verdict = judge(generated(), { base, built, paths: ['app/tsconfig.json'] }, [], ADAPTERS, memo);
+        const verdict = judge(generated(), { base, built, paths: ['app/tsconfig.json'] }, [], unbounded(), ADAPTERS, memo);
         memo.commit();
         return prints(verdict.violations);
       };
@@ -319,7 +328,9 @@ describe('modules: reading a tree', () => {
       expect(judged(side({}, 'plain'), strict)).toEqual([]);
       installed = { ...installed, 'node_modules/@acme/tsconfig/base.json': aliasedIn('src/lib/store/*') };
       expect(judged(strict, side({ strict: true, noEmit: true }, 'quiet'))).toEqual([]);
-      expect(prints(inspect(generated(), strict, page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(prints(inspect(generated(), strict, page, unbounded()).violations)).toEqual([
+        'routes -> store private @ app/src/routes/page.ts',
+      ]);
     });
   });
 
@@ -336,7 +347,7 @@ describe('modules: reading a tree', () => {
       'app/lib/out.ts': 'export const out = 1;\n',
       'app/src/core/peek.test.ts': "import { x } from '../store/contract/x';\n",
     };
-    const read = inspect(modules(), tree(texts), Object.keys(texts));
+    const read = inspect(modules(), tree(texts), Object.keys(texts), unbounded());
     expect(read.violations.map(({ fingerprint, file, line, message, fix }) => ({ fingerprint, file, line, message, fix }))).toEqual([
       {
         fingerprint: 'uncovered @ loose.ts',
@@ -390,7 +401,7 @@ describe('modules: reading a tree', () => {
       'app/src/app/main.ts':
         "import { a } from '../store/contract/fresh.js';\nimport { b } from '../store/hidden.js';\nimport { c } from '../cli/tool.js';\n",
     };
-    const read = inspect(modules(), tree(texts), ['app/src/app/main.ts']);
+    const read = inspect(modules(), tree(texts), ['app/src/app/main.ts'], unbounded());
     expect(
       read.violations.map(({ fingerprint, absent }) => ({
         fingerprint,
@@ -410,7 +421,7 @@ describe('modules: reading a tree', () => {
       'app/src/store/data.json': '{}',
       'app/src/core/j.ts': "import x from '../loose/x.json';\nimport d from '../store/data.json';\n",
     };
-    expect(prints(inspect(modules(), tree(texts), ['app/src/core/j.ts']).violations)).toEqual([
+    expect(prints(inspect(modules(), tree(texts), ['app/src/core/j.ts'], unbounded()).violations)).toEqual([
       'core -> loose/x.json unowned @ core/j.ts',
       'core -> store @ core/j.ts',
     ]);
@@ -422,7 +433,7 @@ describe('modules: reading a tree', () => {
       'app/src/core/peek.ts': "import { i } from '../store/internal';\n",
       'app/src/other/free.ts': "import { i } from '../store/internal';\n",
     };
-    expect(prints(inspect(modules({}, { region: ['core/', 'store/'] }), tree(texts), Object.keys(texts)).violations)).toEqual([
+    expect(prints(inspect(modules({}, { region: ['core/', 'store/'] }), tree(texts), Object.keys(texts), unbounded()).violations)).toEqual([
       'core -> store @ core/peek.ts',
     ]);
   });
@@ -458,7 +469,7 @@ describe('modules: reading a tree', () => {
       'app/src/loose/model.ts': "import { fake } from '../core/testing/fake';\n",
       'app/src/loose/orphan.test.ts': '',
     };
-    expect(prints(inspect(testing, tree(texts), Object.keys(texts)).violations)).toEqual([
+    expect(prints(inspect(testing, tree(texts), Object.keys(texts), unbounded()).violations)).toEqual([
       'app -> store private @ app/main.test.ts',
       'cli -> core @ cli/run.ts',
       'cli -> store private @ cli/run.test.ts',
@@ -478,7 +489,7 @@ describe('modules: reading a tree', () => {
       'app/src/cli/tool.test.ts': "import { m } from '../core/model';\n",
       'app/src/cli/tool.ts': "import { m } from '../core/model';\n",
     };
-    expect(prints(inspect(related, tree(texts), Object.keys(texts)).violations)).toEqual(['cli -> core @ cli/tool.ts']);
+    expect(prints(inspect(related, tree(texts), Object.keys(texts), unbounded()).violations)).toEqual(['cli -> core @ cli/tool.ts']);
   });
 
   it('opens a `port` entry’s types to every related module and its values to the modules it names', () => {
@@ -499,16 +510,18 @@ describe('modules: reading a tree', () => {
       'app/src/app/values.ts': "import { port } from '../core/Port';\n",
       'app/src/store/fill.ts': "import { port } from '../core/Port';\n",
     };
-    expect(prints(inspect(ports, tree(texts), Object.keys(texts)).violations)).toEqual(['app -> core private @ app/values.ts']);
+    expect(prints(inspect(ports, tree(texts), Object.keys(texts), unbounded()).violations)).toEqual([
+      'app -> core private @ app/values.ts',
+    ]);
   });
+
+  const capped = (files: number) => budgetOf('modules', deriveCalibration(ASK_BUDGET_MS / files, 1, 1024 * 1024));
 
   it('refuses a reading past its envelope before parsing, never answering it clean', () => {
     const texts = { ...store, 'app/src/core/a.ts': '', 'app/src/core/b.ts': '' };
     const inspection = modules();
     if (inspection.builtin !== 'modules') throw new Error('modules');
-    expect(() =>
-      reading.read(inspection.params, tree(texts), Object.keys(texts), ADAPTERS, budgetOf('modules', { files: 2, mib: 1 })),
-    ).toThrow(EnvelopeExceeded);
+    expect(() => reading.read(inspection.params, tree(texts), Object.keys(texts), ADAPTERS, capped(2))).toThrow(EnvelopeExceeded);
   });
 
   it('keeps the source-probe ceiling when different files share one blob', () => {
@@ -516,9 +529,7 @@ describe('modules: reading a tree', () => {
     const inspection = modules();
     if (inspection.builtin !== 'modules') throw new Error('modules');
     const same: Tree = { ...tree(values), object: () => 'shared', size: () => 1 };
-    expect(() => reading.read(inspection.params, same, Object.keys(values), ADAPTERS, budgetOf('modules', { files: 1, mib: 1 }))).toThrow(
-      EnvelopeExceeded,
-    );
+    expect(() => reading.read(inspection.params, same, Object.keys(values), ADAPTERS, capped(1))).toThrow(EnvelopeExceeded);
   });
 
   it('gives a path to the module whose territory entry covering it is longest', () => {
@@ -533,12 +544,12 @@ describe('modules: reading a tree', () => {
       },
     );
     const texts = { 'app/src/core/store.ts': "import { m } from './model';\n", 'app/src/core/model.ts': "import { s } from './store';\n" };
-    expect(prints(inspect(nested, tree(texts), Object.keys(texts)).violations)).toEqual(['core -> store @ core/model.ts']);
+    expect(prints(inspect(nested, tree(texts), Object.keys(texts), unbounded()).violations)).toEqual(['core -> store @ core/model.ts']);
   });
 
   it('leaves an uncovered file and an unresolved import unjudged when the policy says so', () => {
     const texts = { 'app/src/loose.ts': '', 'app/src/app/main.ts': "import { g } from './gone';\n" };
-    expect(inspect(modules({ coverage: 'allow', unresolved: 'unjudged' }), tree(texts), Object.keys(texts))).toEqual({
+    expect(inspect(modules({ coverage: 'allow', unresolved: 'unjudged' }), tree(texts), Object.keys(texts), unbounded())).toEqual({
       violations: [],
       unjudged: [{ file: 'app/src/app/main.ts', line: 1, specifier: './gone' }],
     });
@@ -574,7 +585,7 @@ describe('modules: a module order', () => {
 
   it('refuses an import up the floors and across two entries of one floor, by the longest entry covering each file, and lets one down or inside its entry stand', () => {
     const inspection = ordered([['store/wire/'], ['store/plan/', 'store/split/', 'store/testing/'], ['store/']]);
-    const read = inspect(inspection, tree(texts), Object.keys(texts));
+    const read = inspect(inspection, tree(texts), Object.keys(texts), unbounded());
     expect(prints(read.violations)).toEqual([
       'store order store/plan/cost.ts -> store/split/',
       'store order store/split/split.ts -> store/plan/',
@@ -588,8 +599,8 @@ describe('modules: a module order', () => {
 
   it('leaves a file no order entry covers free, and a module without an order judges no import inside it', () => {
     const lower = ordered([['store/wire/'], ['store/plan/']]);
-    expect(prints(inspect(lower, tree(texts), Object.keys(texts)).violations)).toEqual([]);
-    expect(prints(inspect(ordered(undefined), tree(texts), Object.keys(texts)).violations)).toEqual([]);
+    expect(prints(inspect(lower, tree(texts), Object.keys(texts), unbounded()).violations)).toEqual([]);
+    expect(prints(inspect(ordered(undefined), tree(texts), Object.keys(texts), unbounded()).violations)).toEqual([]);
   });
 });
 
@@ -597,7 +608,7 @@ describe('modules: changing a card', () => {
   const before = modules();
   const texts = { ...store, 'app/src/app/main.ts': "import { x } from '../store/contract/x';" };
   const measure = (after: Assembled, side: Tree, fingerprints: readonly string[] = []) =>
-    inspect(after, side, remapped(after, before, side, fingerprints)?.paths ?? [...side.paths!()]);
+    inspect(after, side, remapped(after, before, side, fingerprints, unbounded())?.paths ?? [...side.paths!()], unbounded());
 
   it('opens an entry or relation without reading existing consumers', () => {
     const side = tree(texts, (path) => {
@@ -617,9 +628,9 @@ describe('modules: changing a card', () => {
     const prior = modules({ unresolved: 'unjudged' });
     const side = tree({ ...store, 'app/src/app/main.ts': "import { missing } from './missing';" });
     const after = modules();
-    expect(prints(inspect(after, side, remapped(after, prior, side, [])?.paths ?? [...side.paths!()]).violations)).toEqual([
-      'app -> ./missing unresolved @ app/main.ts',
-    ]);
+    expect(
+      prints(inspect(after, side, remapped(after, prior, side, [], unbounded())?.paths ?? [...side.paths!()], unbounded()).violations),
+    ).toEqual(['app -> ./missing unresolved @ app/main.ts']);
   });
 
   it('finds an importer when its entry, relation, or testing access is narrowed', () => {
@@ -656,7 +667,9 @@ describe('modules: changing a card', () => {
     };
     const after: Assembled = { builtin: 'modules', params: { ...before.params, map: { ...before.params.map, relations: [] } } };
     const side = tree({ 'src/domain/value.ts': 'export const x = 1;', 'src/domain/app/main.ts': "import { x } from '../value';" });
-    expect(prints(inspect(after, side, remapped(after, before, side, [])!.paths).violations)).toEqual(['app -> core @ app/main.ts']);
+    expect(prints(inspect(after, side, remapped(after, before, side, [], unbounded())!.paths, unbounded()).violations)).toEqual([
+      'app -> core @ app/main.ts',
+    ]);
     const unusual = tree({ ...store, 'app/src/core/a @ b.ts': "import { x } from '../store/contract/x';" });
     const opened = modules(
       {},
@@ -676,8 +689,8 @@ describe('modules: changing a card', () => {
       relations: RELATIONS.map((one) => (one.from === 'app' && one.to === 'core' ? { ...one, role: 'testing' } : one)),
     });
     const side = tree({ ...store, 'app/src/app/testing/fake.ts': "import { m } from '../../core/model';" });
-    const paths = remapped(after, prior, side, [])!.paths;
-    expect(prints(inspect(after, side, paths).violations)).toEqual(['app -> core @ app/testing/fake.ts']);
+    const paths = remapped(after, prior, side, [], unbounded())!.paths;
+    expect(prints(inspect(after, side, paths, unbounded()).violations)).toEqual(['app -> core @ app/testing/fake.ts']);
     const opened = modules({}, { relations: [...RELATIONS, { from: 'core', to: 'store' }] });
     const debt = tree({ ...store, 'app/src/core/old.ts': "import { x } from '../store/contract/x';" });
     expect(measure(opened, debt, ['core -> store @ core/old.ts'])).toEqual({ violations: [], unjudged: [] });
@@ -695,7 +708,7 @@ describe('judge: modules', () => {
       [path]: "import.meta.glob('../store/contract/*.ts');\nimport('../store/contract/x.ts');\n",
     });
     const change = { base: source, built, paths: [path] };
-    expect(judge(modules(), change, []).violations).toMatchObject([
+    expect(judge(modules(), change, [], unbounded()).violations).toMatchObject([
       {
         fingerprint: 'core -> store @ core/peek.ts',
         specifier: '../store/contract/*.ts',
@@ -706,7 +719,7 @@ describe('judge: modules', () => {
       },
     ]);
     const related = modules({}, { relations: [{ from: 'core', to: 'store' }] });
-    expect(judge(related, change, []).violations).toEqual([]);
+    expect(judge(related, change, [], unbounded()).violations).toEqual([]);
     expect(
       judge(
         modules(),
@@ -715,6 +728,7 @@ describe('judge: modules', () => {
           built: tree({ ...store, [path]: "import.meta.glob('../store/contract/*.ts', { eager: true });" }),
         },
         [],
+        unbounded(),
       ).violations,
     ).toMatchObject([{ fingerprint: 'core -> store @ core/peek.ts', specifier: '../store/contract/*.ts' }]);
   });
@@ -729,9 +743,11 @@ describe('judge: modules', () => {
     };
     const added = { ...texts, [target]: '' };
     const change = { base: tree(texts), built: tree(added), paths: [target] };
-    expect(prints(judge(modules(), change, []).violations)).toEqual(['core -> store @ core/peek.ts']);
-    expect(judge(modules(), { base: tree(added), built: tree(texts), paths: [target] }, []).violations).toEqual([]);
-    expect(judge(modules(), { base: tree({ [path]: texts[path] }), built: tree(texts), paths: [excluded] }, []).violations).toEqual([]);
+    expect(prints(judge(modules(), change, [], unbounded()).violations)).toEqual(['core -> store @ core/peek.ts']);
+    expect(judge(modules(), { base: tree(added), built: tree(texts), paths: [target] }, [], unbounded()).violations).toEqual([]);
+    expect(
+      judge(modules(), { base: tree({ [path]: texts[path] }), built: tree(texts), paths: [excluded] }, [], unbounded()).violations,
+    ).toEqual([]);
     const views = new Map<string, ReachView<unknown, unknown>>();
     const empty = { head: undefined, members: undefined, node: () => undefined, sources: () => [], watchers: () => [] };
     const table: ReachTable = {
@@ -750,15 +766,15 @@ describe('judge: modules', () => {
     const full = indexed(added, 'full');
     const removed = indexed(texts, 'removed');
     const seed = memoWrites(new Map(), table);
-    expect(judge(modules(), { base: full, built: removed, paths: [target] }, [], ADAPTERS, seed).violations).toEqual([]);
+    expect(judge(modules(), { base: full, built: removed, paths: [target] }, [], unbounded(), ADAPTERS, seed).violations).toEqual([]);
     seed.commit();
     const memo = memoWrites(new Map(), table);
-    expect(prints(judge(modules(), { base: removed, built: full, paths: [target] }, [], ADAPTERS, memo).violations)).toEqual([
+    expect(prints(judge(modules(), { base: removed, built: full, paths: [target] }, [], unbounded(), ADAPTERS, memo).violations)).toEqual([
       'core -> store @ core/peek.ts',
     ]);
     memo.commit();
     expect(
-      judge(modules(), { base: full, built: removed, paths: [target] }, [], ADAPTERS, memoWrites(new Map(), table)).violations,
+      judge(modules(), { base: full, built: removed, paths: [target] }, [], unbounded(), ADAPTERS, memoWrites(new Map(), table)).violations,
     ).toEqual([]);
   });
 
@@ -775,7 +791,9 @@ describe('judge: modules', () => {
     );
     const path = 'app/src/core/peek.ts';
     expect(
-      prints(inspect(inspection, tree({ ...store, [path]: "import.meta.glob('../store/contract/*.ts');" }), [path]).violations),
+      prints(
+        inspect(inspection, tree({ ...store, [path]: "import.meta.glob('../store/contract/*.ts');" }), [path], unbounded()).violations,
+      ),
     ).toEqual(['core -> store private @ core/peek.ts']);
   });
 
@@ -786,17 +804,17 @@ describe('judge: modules', () => {
       [path]: "import.meta.glob('/src/store/contract/*.ts');\nimport.meta.glob('../store/*.ts', { query: '?raw' });\nimport(name);",
     };
     for (const unresolved of ['refuse', 'unjudged'] as const) {
-      const loose = inspect(modules({ unresolved }), tree(texts), [path]);
+      const loose = inspect(modules({ unresolved }), tree(texts), [path], unbounded());
       expect(loose.violations).toEqual([]);
       expect(loose.unjudged.map(({ line }) => line).sort()).toEqual([1, 2, 3]);
     }
-    const rooted = inspect(modules({ roots: ['', 'app'] }), tree(texts), [path]);
+    const rooted = inspect(modules({ roots: ['', 'app'] }), tree(texts), [path], unbounded());
     expect(prints(rooted.violations)).toEqual(['core -> store @ core/peek.ts']);
     expect(rooted.unjudged.map(({ line }) => line).sort()).toEqual([2, 3]);
     const bracketed = Object.fromEntries(Object.entries(texts).map(([at, text]) => [at.replace(/^app\//, '[app]/'), text]));
-    const literal = inspect(modules({ base: '[app]/src', roots: ['[app]'] }), tree(bracketed), ['[app]/src/core/peek.ts']);
+    const literal = inspect(modules({ base: '[app]/src', roots: ['[app]'] }), tree(bracketed), ['[app]/src/core/peek.ts'], unbounded());
     expect(prints(literal.violations)).toEqual(['core -> store @ core/peek.ts']);
-    expect(inspect(modules({ reads: 'from' }), tree(texts), [path])).toEqual({ violations: [], unjudged: [] });
+    expect(inspect(modules({ reads: 'from' }), tree(texts), [path], unbounded())).toEqual({ violations: [], unjudged: [] });
   });
 
   it('judges a changed package door inside the source envelope when its unchanged consumer has a large shared blob', () => {
@@ -831,6 +849,7 @@ describe('judge: modules', () => {
         paths: ['libs/kit/package.json'],
       },
       [],
+      unbounded(),
     );
     expect(prints(verdict.violations)).toEqual(['app -> kit private @ app/main.ts']);
     expect(verdict.unjudged).toEqual([]);
@@ -870,7 +889,12 @@ describe('judge: modules', () => {
         [manifest]: JSON.stringify({ ...entry, exports: { ...entry.exports, './new/*': './*.ts' } }),
       },
     ]) {
-      const opening = judge(inspection, { base: tree(texts, forbidSource), built: tree(values, forbidSource), paths: [manifest] }, []);
+      const opening = judge(
+        inspection,
+        { base: tree(texts, forbidSource), built: tree(values, forbidSource), paths: [manifest] },
+        [],
+        unbounded(),
+      );
       expect([opening.violations, opening.unjudged]).toEqual([[], []]);
     }
     const users = { ...expanded, 'app/fresh.ts': "import { fresh } from 'kit/fresh';" };
@@ -882,6 +906,7 @@ describe('judge: modules', () => {
         paths: [manifest],
       },
       [],
+      unbounded(),
     );
     expect(prints(narrowing.violations)).toEqual(['app -> kit/fresh unresolved @ app/fresh.ts']);
   });
@@ -915,6 +940,7 @@ describe('judge: modules', () => {
         paths: [manifest],
       },
       [],
+      unbounded(),
     );
     expect(prints(result.violations)).toEqual(['app -> kit private @ app/main.ts']);
   });
@@ -934,6 +960,7 @@ describe('judge: modules', () => {
         paths: ['package.json'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
     expect(verdict.unjudged).toEqual([]);
@@ -953,6 +980,7 @@ describe('judge: modules', () => {
         paths: ['app/src/core/a.ts', 'app/src/core/b.ts'],
       },
       [],
+      unbounded(),
     );
     expect(prints(verdict.violations)).toEqual(['core -> store @ core/b.ts']);
   });
@@ -966,16 +994,22 @@ describe('judge: modules', () => {
       paths: ['app/src/core/a.ts', ...Object.keys(built)],
     });
     expect(
-      judge(modules(), change({ 'app/src/core/deep/a.ts': `import { x } from '../../store/contract/x';\n${body}` }), []).violations,
+      judge(modules(), change({ 'app/src/core/deep/a.ts': `import { x } from '../../store/contract/x';\n${body}` }), [], unbounded())
+        .violations,
     ).toEqual([]);
     expect(
-      prints(judge(modules(), change({ 'app/src/core/b.ts': `${upward}export function other() { return x * 2; }\n` }), []).violations),
+      prints(
+        judge(modules(), change({ 'app/src/core/b.ts': `${upward}export function other() { return x * 2; }\n` }), [], unbounded())
+          .violations,
+      ),
     ).toEqual(['core -> store @ core/b.ts']);
     expect(
-      prints(judge(modules(), change({ 'app/src/core/b.ts': `${upward}${body}`, 'app/src/core/c.ts': upward }), []).violations),
+      prints(
+        judge(modules(), change({ 'app/src/core/b.ts': `${upward}${body}`, 'app/src/core/c.ts': upward }), [], unbounded()).violations,
+      ),
     ).toEqual(['core -> store @ core/c.ts']);
     const elsewhere = modules({}, { relations: [{ from: 'app', to: 'core' }] });
-    expect(prints(judge(elsewhere, change({ 'app/src/app/a.ts': `${upward}${body}` }), []).violations)).toEqual([
+    expect(prints(judge(elsewhere, change({ 'app/src/app/a.ts': `${upward}${body}` }), [], unbounded()).violations)).toEqual([
       'app -> store @ app/a.ts',
     ]);
   });
@@ -995,6 +1029,7 @@ describe('judge: modules', () => {
         paths: ['app/src/core/a.ts', 'app/src/core/b.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
     expect(verdict.followed).toEqual([{ from: 'core -> store @ core/a.ts', to: 'core -> store @ core/b.ts' }]);
@@ -1003,7 +1038,9 @@ describe('judge: modules', () => {
   it('refuses an affected-consumer judgement when its built side cannot list paths', () => {
     const base = { ...store, 'app/src/app/main.ts': "import { x } from '../store/contract/x';" };
     const built: Tree = { ...tree({ 'app/src/app/main.ts': base['app/src/app/main.ts'] }), paths: undefined };
-    expect(() => judge(modules(), { base: tree(base), built, paths: ['app/src/store/contract/x.ts'] }, [])).toThrow(UnsupportedSource);
+    expect(() => judge(modules(), { base: tree(base), built, paths: ['app/src/store/contract/x.ts'] }, [], unbounded())).toThrow(
+      UnsupportedSource,
+    );
   });
 
   it('rejudges aliases when a nested config is removed or an inherited configuration changes', () => {
@@ -1013,7 +1050,9 @@ describe('judge: modules', () => {
     const options = (target: string) => JSON.stringify({ compilerOptions: { baseUrl: '..', paths: { $api: [target] } } });
     const before = { ...store, ...main, ...root, [nested]: options('store/contract/x.ts') };
     expect(
-      prints(judge(modules(), { base: tree(before), built: tree({ ...store, ...main, ...root }), paths: [nested] }, []).violations),
+      prints(
+        judge(modules(), { base: tree(before), built: tree({ ...store, ...main, ...root }), paths: [nested] }, [], unbounded()).violations,
+      ),
     ).toEqual(['app -> store private @ app/main.ts']);
     const inherited = {
       ...store,
@@ -1031,6 +1070,7 @@ describe('judge: modules', () => {
             paths: ['app/src/app/options.json'],
           },
           [],
+          unbounded(),
         ).violations,
       ),
     ).toEqual(['app -> store private @ app/main.ts']);
@@ -1050,6 +1090,7 @@ describe('judge: modules', () => {
         paths: ['app/src/store/contract/x.ts'],
       },
       [],
+      unbounded(),
     );
     expect(prints(verdict.violations)).toEqual(['app -> ../store/out.js unresolved @ app/main.ts']);
   });
@@ -1063,6 +1104,7 @@ describe('judge: modules', () => {
         paths: [...Object.keys(store), 'app/src/app/main.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
     expect(verdict.unjudged).toEqual([]);
@@ -1078,6 +1120,7 @@ describe('judge: modules', () => {
         paths: ['app/src/store/data.json'],
       },
       [],
+      unbounded(),
     );
     expect(prints(verdict.violations)).toEqual(['app -> ../store/data.json unresolved @ app/uses.ts']);
   });
@@ -1094,6 +1137,7 @@ describe('judge: modules', () => {
         paths: [added],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
     expect([...read]).toEqual([added]);
@@ -1109,6 +1153,7 @@ describe('judge: modules', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(prints(verdict.violations)).toEqual(['app -> ../core/model unresolved @ app/main.ts']);
   });
@@ -1124,6 +1169,7 @@ describe('judge: modules', () => {
         paths: ['app/src/app/main.ts'],
       },
       [],
+      unbounded(),
     );
     expect([verdict.violations, verdict.unjudged]).toEqual([[], []]);
     expect([...read]).toEqual(['app/src/app/main.ts']);

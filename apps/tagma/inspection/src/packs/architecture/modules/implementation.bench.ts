@@ -6,6 +6,7 @@ import { Schema } from 'effect';
 import { type Assembled, BUILTINS } from '../../../builtins';
 import { moduleMapSchema } from '../../../core/rule';
 import { modules as declared } from './declaration';
+import { unbounded } from '../../../core/node/budget';
 import { inspect, selects } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { liveAssembledParams } from './liveRule';
@@ -52,7 +53,7 @@ const timed = (work: () => unknown): number => {
 const median = (runs: readonly number[]): number => [...runs].sort((a, b) => a - b)[Math.floor(runs.length / 2)] as number;
 
 const cold = (inspection: Assembled, subject: Subject, paths: readonly string[]): number =>
-  median(Array.from({ length: RUNS }, () => timed(() => inspect(inspection, treeOf(subject, new Map()), paths))));
+  median(Array.from({ length: RUNS }, () => timed(() => inspect(inspection, treeOf(subject, new Map()), paths, unbounded()))));
 
 const SYNTHETIC_MODULES = 10;
 
@@ -112,8 +113,10 @@ const envelope = Math.floor((CAP_MS - FLOOR_MS) / (c + d * average));
 
 const whole = cold(inspection, repository, selected);
 const held: ParseMemo = new Map();
-inspect(inspection, treeOf(repository, held), selected);
-const memoised = median(Array.from({ length: RUNS }, () => timed(() => inspect(inspection, treeOf(repository, held), selected))));
+inspect(inspection, treeOf(repository, held), selected, unbounded());
+const memoised = median(
+  Array.from({ length: RUNS }, () => timed(() => inspect(inspection, treeOf(repository, held), selected, unbounded()))),
+);
 
 const edited = selected.filter((path) => /\.ts$/.test(path) && !/\.(test|itest|e2e|stest|spec|bench|fixture)\./.test(path)).slice(0, 4);
 const importedBy = new Map<string, number>();
@@ -138,14 +141,14 @@ const landing = (label: string, built: Subject, paths: readonly string[]) => {
   const fresh = median(
     Array.from({ length: RUNS }, () => {
       const shared: ParseMemo = new Map();
-      return timed(() => judge(inspection, { base: treeOf(repository, shared), built: treeOf(built, shared), paths }, []));
+      return timed(() => judge(inspection, { base: treeOf(repository, shared), built: treeOf(built, shared), paths }, [], unbounded()));
     }),
   );
   const memo: ParseMemo = new Map();
-  judge(inspection, { base: treeOf(repository, memo), built: treeOf(built, memo), paths }, []);
+  judge(inspection, { base: treeOf(repository, memo), built: treeOf(built, memo), paths }, [], unbounded());
   const warm = median(
     Array.from({ length: RUNS }, () =>
-      timed(() => judge(inspection, { base: treeOf(repository, memo), built: treeOf(built, memo), paths }, [])),
+      timed(() => judge(inspection, { base: treeOf(repository, memo), built: treeOf(built, memo), paths }, [], unbounded())),
     ),
   );
   console.log(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Assembled } from '../../builtins';
+import { unbounded } from './budget';
 import { lists } from './implementations';
 import { judge, movesOf } from './judge';
 import { ready } from '../../builtins.node';
@@ -50,6 +51,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict).toMatchObject({
       violations: [{ fingerprint: 'app order core/model.ts -> ui/', file: 'app/src/core/model.ts', line: 2, specifier: '../ui/panel' }],
@@ -66,6 +68,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/view.ts', 'app/src/core/model.ts'],
       },
       ['app order core/view.ts -> ui/'],
+      unbounded(),
     );
     expect(verdict.violations.map(({ fingerprint }) => fingerprint)).toEqual(['app order core/model.ts -> ui/']);
   });
@@ -76,11 +79,11 @@ describe('judge: a module order', () => {
       built: tree({ ...panel, 'app/src/core/view.ts': upward }),
     };
     const debt = ['app order core/view.ts -> ui/'];
-    expect(judge(order, { ...change, paths: ['app/src/core/view.ts'] }, debt).violations.map(({ fingerprint }) => fingerprint)).toEqual([
-      'app order core/view.ts -> ui/',
-    ]);
+    expect(
+      judge(order, { ...change, paths: ['app/src/core/view.ts'] }, debt, unbounded()).violations.map(({ fingerprint }) => fingerprint),
+    ).toEqual(['app order core/view.ts -> ui/']);
     const added = { base: tree(panel), built: tree({ ...panel, 'app/src/core/view.ts': upward }) };
-    expect(judge(order, { ...added, paths: ['app/src/core/view.ts'] }, debt).violations).toEqual([]);
+    expect(judge(order, { ...added, paths: ['app/src/core/view.ts'] }, debt, unbounded()).violations).toEqual([]);
   });
 
   it("does not count a file keeping its base's crossing", () => {
@@ -92,6 +95,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/view.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
   });
@@ -105,6 +109,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/view.ts', 'app/src/core/screen.ts'],
       },
       [],
+      unbounded(),
     );
     expect([verdict.violations, verdict.followed]).toEqual([
       [],
@@ -155,6 +160,7 @@ describe('judge: a module order', () => {
       inspection,
       { base: side(before), built: side(after), paths: [...new Set([...Object.keys(before), ...Object.keys(after)])] },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toMatchObject([
       { fingerprint: 'app order core/model.ts -> ui/', file: 'app/src/core/model.ts', line: 2, specifier: '../ui/panel' },
@@ -173,6 +179,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/a.ts', 'app/src/core/b.ts', 'app/src/core/c.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toMatchObject([
       { fingerprint: 'app order core/c.ts -> ui/', file: 'app/src/core/c.ts', line: 1, specifier: '../ui/panel' },
@@ -191,6 +198,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/view.ts', 'app/src/ui/panel.ts', 'app/src/ui/pane.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations).toEqual([]);
   });
@@ -208,6 +216,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/catalog.json', 'app/src/core/model.test.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict).toEqual({ violations: [], unjudged: [] });
   });
@@ -224,6 +233,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict).toEqual({ violations: [], unjudged: [] });
   });
@@ -238,6 +248,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.unjudged).toEqual([]);
   });
@@ -251,6 +262,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict.violations.map(({ fingerprint }) => fingerprint)).toEqual(['app order core/model.ts -> ui/']);
     expect(() =>
@@ -258,6 +270,7 @@ describe('judge: a module order', () => {
         order,
         { base: tree(panel), built: tree({ ...panel, 'app/src/core/model.ts': 'const = ;\n' }), paths: ['app/src/core/model.ts'] },
         [],
+        unbounded(),
       ),
     ).toThrow('app/src/core/model.ts');
   });
@@ -271,6 +284,7 @@ describe('judge: a module order', () => {
         paths: ['app/src/core/model.ts'],
       },
       [],
+      unbounded(),
     );
     expect(verdict).toEqual({
       violations: [],
@@ -317,6 +331,7 @@ describe('judge: a module order', () => {
           paths: ['libs/core/model.ts'],
         },
         [],
+        unbounded(),
       );
     expect(parts).toEqual(['']);
     const inKit = ordered('libs/ui');
@@ -330,6 +345,7 @@ describe('judge: a module order', () => {
           paths: ['libs/ui/core/own.ts'],
         },
         [],
+        unbounded(),
       ).unjudged,
     ).toEqual([{ file: 'libs/ui/core/own.ts', line: 1, specifier: '@acme/ui/gone' }]);
     expect([verdictOver(true), verdictOver(false)]).toMatchObject([
@@ -355,8 +371,8 @@ describe('movesOf', () => {
       paths: () => [path],
       object: () => 'b1',
     });
-    expect(movesOf({ base: binary('app/icon.png'), built: binary('web/icon.png'), paths: ['app/icon.png', 'web/icon.png'] })).toEqual([
-      { from: 'app/icon.png', to: 'web/icon.png' },
-    ]);
+    expect(
+      movesOf({ base: binary('app/icon.png'), built: binary('web/icon.png'), paths: ['app/icon.png', 'web/icon.png'] }, unbounded()),
+    ).toEqual([{ from: 'app/icon.png', to: 'web/icon.png' }]);
   });
 });

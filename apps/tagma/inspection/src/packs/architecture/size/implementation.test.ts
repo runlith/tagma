@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { Tree } from '@runlith/code-facts/tree';
 import { type Inspection, type Params } from '../../../builtins';
 import { ready } from '../../../builtins.node';
+import { unbounded } from '../../../core/node/budget';
 import { inspect } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 
@@ -47,6 +48,7 @@ const fresh = (
       paths: [...new Set([...Object.keys(base), ...Object.keys(built)])].filter((path) => base[path] !== built[path]),
     },
     debt,
+    unbounded(),
   );
 
 describe('size: reading', () => {
@@ -57,7 +59,7 @@ describe('size: reading', () => {
       'src/small.ts': body(1),
       'src/skipped.test.ts': body(9),
     };
-    const { violations, unjudged } = inspect(size(four), tree(texts), Object.keys(texts));
+    const { violations, unjudged } = inspect(size(four), tree(texts), Object.keys(texts), unbounded());
     expect(violations.map(({ fingerprint, value }) => [fingerprint, value])).toEqual([['a/big.ts', 5]]);
     expect(unjudged).toEqual([]);
   });
@@ -69,33 +71,38 @@ describe('size: reading', () => {
     ]);
     const texts = { 'src/strict/a.ts': body(3), 'src/loose/b.ts': body(5), 'src/loose/c.ts': body(7) };
     expect(
-      inspect(size(value), tree(texts), Object.keys(texts)).violations.map(({ fingerprint, value: measured }) => [fingerprint, measured]),
+      inspect(size(value), tree(texts), Object.keys(texts), unbounded()).violations.map(({ fingerprint, value: measured }) => [
+        fingerprint,
+        measured,
+      ]),
     ).toEqual([
       ['loose/c.ts', 7],
       ['strict/a.ts', 3],
     ]);
-    expect(inspect(size(value), tree(texts), ['src/strict/a.ts']).violations.map(({ message, fix }) => ({ message, fix }))).toEqual([
+    expect(
+      inspect(size(value), tree(texts), ['src/strict/a.ts'], unbounded()).violations.map(({ message, fix }) => ({ message, fix })),
+    ).toEqual([
       {
         message: 'holds 3 lines outside its imports, over 2',
         fix: 'Move the code of another subject to the file that owns it until this one holds at most the 2 lines `strict/**` allows; split by named subjects, never by the count.',
       },
     ]);
     const narrow = params([{ glob: 'strict/**', metric: 'non-import', lines: 2 }]);
-    expect(inspect(size(narrow), tree(texts), Object.keys(texts)).violations.map(({ fingerprint }) => fingerprint)).toEqual([
+    expect(inspect(size(narrow), tree(texts), Object.keys(texts), unbounded()).violations.map(({ fingerprint }) => fingerprint)).toEqual([
       'strict/a.ts',
     ]);
   });
 
   it('names a file no adapter reads as unjudged, never as zero lines', () => {
     const texts = { 'src/a.ts': body(20) };
-    const { violations, unjudged } = inspect(size(four), tree(texts), Object.keys(texts), []);
+    const { violations, unjudged } = inspect(size(four), tree(texts), Object.keys(texts), unbounded(), []);
     expect(violations).toEqual([]);
     expect(unjudged.map(({ file }) => file)).toEqual(['src/a.ts']);
   });
 
   it('fails the reading for a file its adapter reads and cannot parse, never dropping its violation', () => {
     const texts = { 'src/big.ts': `${body(9)}\nexport const = ;` };
-    expect(() => inspect(size(four), tree(texts), Object.keys(texts))).toThrow('does not parse');
+    expect(() => inspect(size(four), tree(texts), Object.keys(texts), unbounded())).toThrow('does not parse');
     expect(() => fresh(four, { 'src/big.ts': body(9) }, texts, [{ fingerprint: 'big.ts' }])).toThrow('does not parse');
   });
 });
