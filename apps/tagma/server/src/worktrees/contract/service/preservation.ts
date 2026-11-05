@@ -12,7 +12,7 @@ export type PreservationReceipt = {
 
 export class PreservationRefused extends Data.TaggedError('PreservationRefused')<{
   readonly key: RequestKey;
-  readonly reason: 'no-base' | 'nothing-changed' | 'mid-operation' | 'moved';
+  readonly reason: 'no-base' | 'nothing-changed' | 'mid-operation' | 'moved' | 'unsigned';
   readonly detail: string;
 }> {
   override get message(): string {

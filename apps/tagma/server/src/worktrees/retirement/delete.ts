@@ -84,6 +84,13 @@ const entering = writes('worktrees.deletion.enter', [worktreeDeletion]);
 const closing = writes('worktrees.deletion.close', [worktreeDeletion]);
 
 const preservationRefusal = (failure: PreservationFailure): WorktreeFinishRefused => {
+  if (failure._tag === 'PreservationRefused' && failure.reason === 'unsigned') {
+    return new WorktreeFinishRefused({
+      reason: 'commit-unsigned',
+      message: failure.message,
+      unblock: ['answer the signer commit.gpgsign names, or set gpg.format and user.signingkey so git can sign, then delete it again'],
+    });
+  }
   if (failure._tag === 'PreservationRefused') {
     return new WorktreeFinishRefused({
       reason: failure.reason === 'mid-operation' ? 'operation-in-progress' : failure.reason === 'no-base' ? 'no-branch' : 'git-refused',

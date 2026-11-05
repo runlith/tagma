@@ -3,6 +3,8 @@ import { Clock, Effect, Exit, Layer } from 'effect';
 import { Git } from '@runlith/git/Git';
 import type { PreparedChange } from '../../change-record/contract/service/prepared.js';
 import { gitAnswer, type OwnGitFailed, runGit, runGitBytes } from '../../platform/git/ownGit.js';
+import { commitConfig } from '../land/hooks.js';
+import { makeCommit } from '../land/publish.js';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import type { RequestKey } from '../../platform/contract/wire/ids.js';
@@ -87,12 +89,12 @@ export const preservation = Effect.fnUntraced(function* (input: { readonly lifec
   const stored = <A>(key: RequestKey, work: Effect.Effect<A, StoreFailure>) =>
     Effect.mapError(work, (failure) => new PreservationUnavailable({ key, cause: 'store', detail: failure.message }));
 
-  const asked = <A>(key: RequestKey, work: Effect.Effect<A, OwnGitFailed>) =>
-    Effect.mapError(work, (failure) =>
-      failure.ran
-        ? new PreservationFailed({ key, detail: `${failure.op}: ${failure.message}` })
-        : new PreservationUnavailable({ key, cause: 'git', detail: failure.message }),
-    );
+  const gitFailure = (key: RequestKey, failure: OwnGitFailed): PreservationFailed | PreservationUnavailable =>
+    failure.ran
+      ? new PreservationFailed({ key, detail: `${failure.op}: ${failure.message}` })
+      : new PreservationUnavailable({ key, cause: 'git', detail: failure.message });
+
+  const asked = <A>(key: RequestKey, work: Effect.Effect<A, OwnGitFailed>) => Effect.mapError(work, (failure) => gitFailure(key, failure));
 
   const proved = (key: RequestKey, repository: string) =>
     Effect.map(
@@ -227,49 +229,60 @@ export const preservation = Effect.fnUntraced(function* (input: { readonly lifec
           ? finish(key, intent)
           : resume(key, intent);
 
+  const made = Effect.fnUntraced(function* (
+    key: RequestKey,
+    intent: Intent,
+    message: string,
+  ): Effect.fn.Return<string, PreservationFailure> {
+    const { sign } = yield* asked(key, commitConfig(git, intent.checkout));
+    return yield* Effect.mapError(
+      makeCommit(git, intent.checkout, { tree: intent.tree, parents: [intent.base], message, sign }),
+      (failure) =>
+        failure._tag === 'GateRefusal'
+          ? new PreservationRefused({ key, reason: 'unsigned', detail: failure.reason })
+          : gitFailure(key, failure),
+    );
+  });
+
   const land = (key: RequestKey, intent: Intent, message: string): Effect.Effect<Witnessed, PreservationFailure> => {
     let witnessed = false;
-    return laned(
-      key,
-      intent.checkout,
-      Effect.gen(function* () {
-        const operation = yield* asked(key, openOperation(git, intent.checkout));
-        if (operation !== null) {
-          return yield* new PreservationRefused({
+    return Effect.flatMap(made(key, intent, message), (commit) =>
+      laned(
+        key,
+        intent.checkout,
+        Effect.gen(function* () {
+          const operation = yield* asked(key, openOperation(git, intent.checkout));
+          if (operation !== null) {
+            return yield* new PreservationRefused({
+              key,
+              reason: 'mid-operation',
+              detail: `a ${operation} is in progress in ${intent.checkout}`,
+            });
+          }
+          const ref = yield* asked(key, headRef(git, intent.checkout));
+          const now = yield* standing(key, intent.checkout, intent.ref);
+          if (ref !== intent.ref || now._tag !== 'present' || now.commit !== intent.base) {
+            return yield* new PreservationRefused({ key, reason: 'moved', detail: `${intent.ref} no longer stands at ${intent.base}` });
+          }
+          const witnessedAt = new Date(yield* Clock.currentTimeMillis);
+          yield* stored(key, lifecycle.witness(key, commit, witnessedAt));
+          witnessed = true;
+          const publishing: Witnessed = { ...intent, phase: 'publishing', commit, witnessedAt };
+          const sent = yield* asked(
             key,
-            reason: 'mid-operation',
-            detail: `a ${operation} is in progress in ${intent.checkout}`,
-          });
-        }
-        const ref = yield* asked(key, headRef(git, intent.checkout));
-        const now = yield* standing(key, intent.checkout, intent.ref);
-        if (ref !== intent.ref || now._tag !== 'present' || now.commit !== intent.base) {
-          return yield* new PreservationRefused({ key, reason: 'moved', detail: `${intent.ref} no longer stands at ${intent.base}` });
-        }
-        const commit = yield* asked(
-          key,
-          runGit(git, 'preservation-commit', ['-C', intent.checkout, 'commit-tree', intent.tree, '-p', intent.base, '-F', '-'], {
-            stdin: message,
-          }),
-        );
-        const witnessedAt = new Date(yield* Clock.currentTimeMillis);
-        yield* stored(key, lifecycle.witness(key, commit, witnessedAt));
-        witnessed = true;
-        const publishing: Witnessed = { ...intent, phase: 'publishing', commit, witnessedAt };
-        const sent = yield* asked(
-          key,
-          gitAnswer(git, 'preservation-publish', ['-C', intent.checkout, 'update-ref', '--stdin', '-m', `tagma preservation ${key}`], {
-            stdin: `update ${intent.ref} ${commit} ${intent.base}\ncreate ${keyRef(key)} ${commit}\n`,
-          }),
-        );
-        if (sent.status === 0) return publishing;
-        const proof = yield* proved(key, intent.repository);
-        if (proof._tag === 'present' && proof.commit === commit) return publishing;
-        const after = yield* standing(key, intent.checkout, intent.ref);
-        if (after._tag === 'present' && after.commit === intent.base)
-          return yield* new PreservationFailed({ key, detail: sent.stderr.trim() });
-        return yield* lost(key, publishing, proof);
-      }),
+            gitAnswer(git, 'preservation-publish', ['-C', intent.checkout, 'update-ref', '--stdin', '-m', `tagma preservation ${key}`], {
+              stdin: `update ${intent.ref} ${commit} ${intent.base}\ncreate ${keyRef(key)} ${commit}\n`,
+            }),
+          );
+          if (sent.status === 0) return publishing;
+          const proof = yield* proved(key, intent.repository);
+          if (proof._tag === 'present' && proof.commit === commit) return publishing;
+          const after = yield* standing(key, intent.checkout, intent.ref);
+          if (after._tag === 'present' && after.commit === intent.base)
+            return yield* new PreservationFailed({ key, detail: sent.stderr.trim() });
+          return yield* lost(key, publishing, proof);
+        }),
+      ),
     ).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) || witnessed ? Effect.void : stored(key, lifecycle.forget(key, intent.at)))));
   };
 
