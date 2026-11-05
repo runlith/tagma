@@ -21,6 +21,7 @@ import { recordMetaForm } from './steps/recordMeta.js';
 import { questionEndorsedForm } from './steps/questionEndorsed.js';
 import { appBindingForm } from './steps/appBinding.js';
 import { askPartialForm } from './steps/askPartial.js';
+import { messageIndexFill } from './store/messageIndex.js';
 
 const live: ThreadLive = liveOf(THREAD_FEEDS, (door) => {
   const feeds = Context.get(door, ThreadFeeds);
@@ -39,6 +40,7 @@ export const threads = manifest({
   verbs: threadsVerbs,
   entryKinds: THREADS_ENTRY_KINDS,
   formSteps: [recordMetaForm, questionEndorsedForm, appBindingForm, askPartialForm],
+  indexFills: [messageIndexFill],
   sections: Object.values(SECTIONS),
   contributions: [
     ...RELOCATIONS.of({
