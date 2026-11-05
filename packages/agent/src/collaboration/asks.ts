@@ -42,26 +42,10 @@ function entryOf(
       ...shared,
       status: 'failed',
       text: failureReason ?? `the reader ended ${assignment ?? 'without a report'} and gave no answer`,
-      evidence: [],
     };
   }
-  if (arrival.answer !== null) {
-    return {
-      ...shared,
-      status: arrival.answer.complete ? 'answered' : 'partial',
-      text: arrival.text,
-      evidence: arrival.answer.evidence,
-      missing: arrival.answer.missing,
-    };
-  }
-  if (assignment !== undefined && ENDED_BADLY.has(assignment)) return { ...shared, status: 'failed', text: arrival.text, evidence: [] };
-  return {
-    ...shared,
-    status: 'partial',
-    text: arrival.text,
-    evidence: [],
-    missing: 'the reader ended without calling `answer`; this is its last message',
-  };
+  const failed = assignment !== undefined && ENDED_BADLY.has(assignment);
+  return { ...shared, status: failed ? 'failed' : 'answered', text: arrival.text };
 }
 
 export type Asks = Effect.Success<ReturnType<typeof makeAsks>>;
@@ -178,7 +162,7 @@ export const makeAsks = Effect.fnUntraced(function* ({ acting }: { readonly acti
       return input.questions.map((question, position): ThreadAskEntry => {
         const reader = byPosition.get(position);
         if (reader === undefined) {
-          return { question, status: 'failed', text: causeSentence(failures.get(position)), evidence: [], threadId: null };
+          return { question, status: 'failed', text: causeSentence(failures.get(position)), threadId: null };
         }
         const row = endings.get(reader.id);
         return entryOf(question, reader, reports.get(reader.id), row?.assignment, row?.failureReason ?? null);

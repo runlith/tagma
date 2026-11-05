@@ -18,7 +18,6 @@ it.effect(
       envelopeId: 'envelope:final:r1',
       text: whole,
       report: 'final',
-      answer: null,
     };
     const unused = () => Effect.die('Waiting for workflow reports does not use this operation');
     const envelopes = ThreadEnvelopes.of({

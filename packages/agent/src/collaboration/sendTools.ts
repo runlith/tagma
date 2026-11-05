@@ -181,7 +181,7 @@ export function sendTools(agents: ThreadPlaneAccess, childVerbs: boolean): ToolC
   };
 }
 
-export function answered(
+function answered(
   call: { readonly json?: boolean },
   to: readonly string[],
   text: string,

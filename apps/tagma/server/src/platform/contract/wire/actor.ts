@@ -1,6 +1,35 @@
 import type { ThreadBornOf } from '@runlith/agent/protocol/birth';
 
-import { NATIVE_HARNESS, sessionToken, type SessionRef } from './session.js';
+import { NATIVE_HARNESS, sessionHarness, sessionToken, type SessionRef } from './session.js';
+
+export type ChangeRecord = { readonly writer: SessionRef | null; readonly at: number };
+
+export type ChangeActor =
+  | { readonly kind: 'operator' }
+  | { readonly kind: 'thread'; readonly threadId: string; readonly name: string | null }
+  | { readonly kind: 'session'; readonly session: string };
+
+export const changeActorOf = (writer: SessionRef | null, name: string | null = null): ChangeActor =>
+  writer === null
+    ? { kind: 'operator' }
+    : sessionHarness(writer.harness) === NATIVE_HARNESS
+      ? { kind: 'thread', threadId: writer.key, name }
+      : { kind: 'session', session: sessionToken(writer) };
+
+const actorWord = (actor: ChangeActor, reader: string | null): string =>
+  actor.kind === 'operator'
+    ? 'operator'
+    : actor.kind === 'session'
+      ? `session ${actor.session}`
+      : actor.threadId === reader
+        ? 'you'
+        : `[[${actor.threadId}${actor.name === null ? '' : `|${actor.name}`}]]`;
+
+export const changedBy = (actors: readonly ChangeActor[], reader: string | null): string => {
+  const words = [...new Set(actors.map((actor) => actorWord(actor, reader)))];
+  if (words.length === 0) return '';
+  return ` by ${words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`}`;
+};
 
 export const OPERATOR_PRINCIPAL = 'operator';
 

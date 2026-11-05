@@ -10,13 +10,12 @@ import type { ThreadView } from '../thread/agents/ThreadAgent';
 import { coreEntry } from '../transcript/kinds';
 import type { ThreadTranscriptEntry } from '../transcript/rows';
 import { FINAL_ANSWER_TOOL } from '../transcript/parts';
-import { ANSWER_TOOL } from './askVerbs';
 import { COLLABORATION_SOURCE } from './CollaborationConfig';
 import { THREAD_REQUEST_REQUESTER_GONE, type ThreadInboxRequest } from '../thread/storage/inbox';
 import { closingReminder } from './CollaborationVoice';
 import { Threads } from './threads';
 type Inbox = Context.Service.Shape<typeof ThreadInbox>;
-const MESSAGING_VERBS: ReadonlySet<string> = new Set(['send_message', 'send_task', 'interrupt_agent', ANSWER_TOOL]);
+const MESSAGING_VERBS: ReadonlySet<string> = new Set(['send_message', 'send_task', 'interrupt_agent']);
 export function requesterOf(request: ThreadInboxRequest): string | null {
   return request.sender.kind === 'thread' ? request.sender.threadId : null;
 }

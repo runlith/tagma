@@ -11,6 +11,7 @@ import {
 } from '../platform/contract/wire/setting.js';
 import { type SettingEntry, type SettingRejection } from './contract/wire/catalog.js';
 import type { Resolved } from './contract/service/values.js';
+import type { ChangeRecord } from '../platform/contract/wire/actor.js';
 import { shapeOf } from './shape.js';
 
 export type SettingLayer = {
@@ -18,6 +19,7 @@ export type SettingLayer = {
   readonly values: ReadonlyMap<string, unknown>;
   readonly declined: ReadonlySet<string>;
   readonly writers: ReadonlyMap<string, SessionRef>;
+  readonly changes?: ReadonlyMap<string, ChangeRecord>;
 };
 
 type Decoders = {
@@ -47,11 +49,14 @@ export function resolveSetting<A>(key: SettingKey<A>, layers: readonly SettingLa
   let value = key.fallback;
   let from: SettingScope = 'default';
   let writer: SessionRef | undefined;
+  let changed: ChangeRecord | undefined;
 
   for (const scope of SETTABLE_SCOPES) {
     if (!accepts.has(scope)) continue;
     for (const layer of layers) {
       if (layer.scope !== scope) continue;
+      const change = layer.changes?.get(key.id);
+      if (change !== undefined && (changed === undefined || change.at >= changed.at)) changed = change;
       const declined = layer.declined.has(key.id);
       if (declined) {
         value = key.fallback;
@@ -80,7 +85,7 @@ export function resolveSetting<A>(key: SettingKey<A>, layers: readonly SettingLa
     }
   }
 
-  return { value, from, writer, layers: answered, rejections };
+  return { value, from, writer, changed, layers: answered, rejections };
 }
 
 type Read<A> = { readonly value?: A; readonly rejections: readonly SettingRejection[] };

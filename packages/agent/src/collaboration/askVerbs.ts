@@ -1,32 +1,12 @@
 import { Schema } from 'effect';
 import type { ToolDisplay } from '../tool/display';
-import type { ThreadAnswer } from '../thread/storage/inbox';
 import { CollaborationText, Named } from './collaborationVerbs';
-
-export const ANSWER_TOOL = 'answer';
-
-export const ANSWER_SOURCE = 'answer';
 
 export const ASK_TOOL = 'ask';
 
 export const ASK_QUESTIONS_MAX = 8;
 
 export const DEFAULT_READER = 'reader';
-
-export const ANSWER = 'Your answer to the question you were given; calling it ends your work.';
-
-export const answerInput = Schema.Struct({
-  text: CollaborationText.annotate({ description: 'The answer, in the language of the question.' }),
-  evidence: Schema.Array(CollaborationText).annotate({
-    description: 'Where the claims stand, one `path:line` or block name each; empty only when the answer rests on none.',
-  }),
-  complete: Schema.Boolean.annotate({ description: 'False when the question is only partly answered.' }),
-  missing: Schema.optional(CollaborationText).annotate({ description: 'What stays unanswered, when `complete` is false.' }),
-});
-
-export function answerOf(input: typeof answerInput.Type): ThreadAnswer {
-  return { evidence: input.evidence, complete: input.complete, missing: input.missing };
-}
 
 export const ASK =
   'Answers factual questions about a project: each question goes to an agent that reads the project and answers with evidence. ' +
@@ -54,10 +34,8 @@ type AskInput = typeof askInput.Type;
 
 export type ThreadAskEntry = {
   readonly question: string;
-  readonly status: 'answered' | 'partial' | 'failed';
+  readonly status: 'answered' | 'failed';
   readonly text: string;
-  readonly evidence: readonly string[];
-  readonly missing?: string;
   readonly threadId: string | null;
   readonly projectId?: number;
 };
@@ -116,12 +94,9 @@ export function askedText(asked: ThreadAsked): string {
   return [
     head,
     ...asked.entries.map((entry, index) =>
-      [
-        `${index + 1}. ${entry.status}${entry.threadId === null ? '' : ` (thread ${entry.threadId})`} — ${entry.question}`,
-        entry.text,
-        ...(entry.evidence.length === 0 ? [] : [`evidence: ${entry.evidence.join('; ')}`]),
-        ...(entry.missing === undefined ? [] : [`missing: ${entry.missing}`]),
-      ].join('\n'),
+      [`${index + 1}. ${entry.status}${entry.threadId === null ? '' : ` (thread ${entry.threadId})`} — ${entry.question}`, entry.text].join(
+        '\n',
+      ),
     ),
     ...(asked.unarchived === undefined ? [] : [`The readers stay unarchived: ${asked.unarchived}`]),
   ].join('\n\n');

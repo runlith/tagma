@@ -1399,7 +1399,7 @@ describe('close', () => {
   it.live('continues the turn with the guidance the closing rules give and ends it once they give none', () =>
     Effect.gen(function* () {
       const door = new ScriptedDoor('v1', [{ context: null, prompt: null, web: 'vendor' }]);
-      door.guides.push('End by calling answer with your answer.');
+      door.guides.push('Send your final answer before you stop.');
       const session = yield* open({}, { door });
       const stopping = Effect.promise(() => {
         const hook = session.sdk.opened.at(-1)!.options.hooks?.Stop?.[0]?.hooks[0];
@@ -1412,7 +1412,7 @@ describe('close', () => {
         };
         return hook!(input as unknown as HookInput, undefined, { signal: new AbortController().signal });
       });
-      expect(yield* stopping).toEqual({ decision: 'block', reason: 'End by calling answer with your answer.' });
+      expect(yield* stopping).toEqual({ decision: 'block', reason: 'Send your final answer before you stop.' });
       expect(yield* stopping).toEqual({});
       expect(door.closed.map((closed) => closed.text)).toEqual(['the reply', 'the reply']);
       expect(new Set(door.closed.map((closed) => closed.id)).size).toBe(2);

@@ -24,7 +24,7 @@ Look in the graph first — \`read_owners\` for a path the question names, \`sea
 
 Read only the lines that answer.
 
-End by calling \`answer\`.
+Your last message is your whole answer: cite the paths and blocks it rests on, and say what you could not establish.
 `;
 
 export const makeBuiltinAgents = Effect.fnUntraced(function* (capabilities: CapabilityDefinitions) {

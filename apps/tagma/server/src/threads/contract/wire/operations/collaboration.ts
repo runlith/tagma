@@ -166,10 +166,8 @@ export type SpawnPrepared = { readonly asking: SpawnWorktrees | null; readonly h
 
 const AskEntry = Schema.Struct({
   question: Schema.String,
-  status: Schema.Literals(['answered', 'partial', 'failed']),
+  status: Schema.Literals(['answered', 'failed']),
   text: Schema.String,
-  evidence: Schema.Array(Schema.String),
-  missing: Schema.optional(Schema.String),
   threadId: Schema.NullOr(Schema.String),
   projectId: Schema.optional(Schema.Int),
 });

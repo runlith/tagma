@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { ThreadMandate } from '../../../threads/contract/service/mandate.js';
+import { signedBy } from '../../../invocation/testing/call.js';
 
 const CONNECTED = 'anthropic';
 const OPUS_HIGH = { provider: CONNECTED, model: 'claude-opus-5-5', reasoning: 'high' } as const;
@@ -175,6 +176,7 @@ it.live(
         hook: 'beforeStep',
         modelMessages: history,
         projectId: demo.projectId,
+        settings: demo.graph.settings,
         thread: { id: root },
       } as unknown as Parameters<typeof rule>[0]);
     const told = (directive: AgentRuleAnswer): void => {
@@ -199,5 +201,41 @@ it.live(
     told(yield* step());
     expect(reviewTold()).toBe(unreviewed);
     expect(yield* step()).toBeNull();
+  }),
+);
+
+it.live(
+  'a team line names who moved the list or the policy: the operator, another thread, or the thread itself clearing it',
+  Effect.fnUntraced(function* () {
+    const { demo, teams, root, child, write } = yield* standing();
+    const rule = teamRule(teams);
+    const history: Message[] = [Message.user('Build it.')];
+    const line = Effect.fnUntraced(function* () {
+      const directive = yield* rule({
+        hook: 'beforeStep',
+        modelMessages: history,
+        projectId: demo.projectId,
+        settings: demo.graph.settings,
+        thread: { id: root },
+      } as unknown as Parameters<typeof rule>[0]);
+      if (directive === null || !('type' in directive) || directive.type !== 'guide') return yield* Effect.die('expected a line');
+      history.push(agentRuntimeGuidanceMessage(directive.text, directive.state));
+      return directive.text;
+    });
+    expect(
+      yield* rule({ hook: 'beforeStep', modelMessages: history, projectId: demo.projectId, thread: { id: root } } as unknown as Parameters<
+        typeof rule
+      >[0]),
+    ).toBeNull();
+    yield* write('project', 'agent.models', [{ ...OPUS_HIGH, on: true }] satisfies TeamEdit[]);
+    expect(yield* line()).toStartWith('Changed by operator: Sub-agent models');
+    yield* signedBy({ harness: 'tagma', key: child })(
+      write('project', 'agent.models', [{ ...OPUS_HIGH, on: true, reviews: true }] satisfies TeamEdit[]),
+    );
+    expect(yield* line()).toContain(`Changed by [[${child}]]: `);
+    yield* signedBy({ harness: 'tagma', key: root })(
+      demo.graph.settings.write({ scope: 'project', projectId: demo.projectId, key: teamModels.id }).pipe(Effect.orDie),
+    );
+    expect(yield* line()).toStartWith('Changed by you: Sub-agent models');
   }),
 );

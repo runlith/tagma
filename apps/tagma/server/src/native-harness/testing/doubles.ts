@@ -59,6 +59,8 @@ import {
 } from '../turns/instructions.js';
 import { delegationRule as delegationRuleOver } from '../turns/delegationRule.js';
 import { teamRule as teamRuleOver } from '../turns/teamRule.js';
+import { availabilitySource, readCapabilitySettings } from '../capabilities/availability.js';
+import type { RuleSetup } from '../contract/service/rules.js';
 import { workspaceInputsLayer as workspaceInputsLayerOver } from '../inputs/cache.js';
 import { evidenceReads as evidenceReadsOver } from '../evidence/retained.js';
 import { evidenceReadsKind as evidenceReadsKindOver } from '../resources/evidenceReads.js';
@@ -247,6 +249,10 @@ export const delegationRule = (...input: Parameters<typeof delegationRuleOver>):
   delegationRuleOver(...input);
 
 export const teamRule = (...input: Parameters<typeof teamRuleOver>): ReturnType<typeof teamRuleOver> => teamRuleOver(...input);
+
+export const availabilityRule = (setup: RuleSetup) => availabilitySource.create(setup);
+
+export const capabilitySettings = (...input: Parameters<typeof readCapabilitySettings>) => readCapabilitySettings(...input);
 
 export const typeOf = (...input: Parameters<typeof typeOfOver>): ReturnType<typeof typeOfOver> => typeOfOver(...input);
 

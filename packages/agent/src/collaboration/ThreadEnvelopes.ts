@@ -11,7 +11,6 @@ import { ThreadCallBroke, threadCauseOf } from '../thread/ThreadBorder';
 import { ThreadInbox, ThreadOwnWork, ThreadResting } from '../thread/ThreadPorts';
 import {
   THREAD_REQUEST_REQUESTER_GONE,
-  type ThreadAnswer,
   type ThreadInboxItem,
   type ThreadInboxRequest,
   type ThreadInputAcceptance,
@@ -51,7 +50,6 @@ export type ThreadEnvelopeInput = {
   readonly text: string;
   readonly inReplyTo?: string | null;
   readonly context?: AgentSignalContext;
-  readonly answer?: ThreadAnswer;
 };
 
 export type ThreadEnvelopeRecipient = ThreadTarget & {
@@ -119,7 +117,6 @@ export type ThreadSendAsk = {
   readonly inReplyTo?: string;
   readonly final?: boolean;
   readonly wake?: boolean;
-  readonly answer?: ThreadAnswer;
 };
 
 export type ThreadRecipients = { readonly holder: ThreadRecord | null; readonly recipients: readonly ThreadRecord[] };
@@ -342,9 +339,7 @@ export const threadEnvelopesLayer = Layer.effect(
                       ? { refuse: null }
                       : {
                           apply: Effect.fnUntraced(function* (writes) {
-                            yield* writes.put(
-                              itemOf(recipient, finalEnvelope(holder, answering.id, text, context, input.answer), holder, text),
-                            );
+                            yield* writes.put(itemOf(recipient, finalEnvelope(holder, answering.id, text, context), holder, text));
                             written.closed = yield* writes.closeRequests(
                               held.map((request) => request.id),
                               threadFinalEnvelopeId(answering.id),
@@ -362,7 +357,7 @@ export const threadEnvelopesLayer = Layer.effect(
           const unfinished = yield* finishAccepted(holder, recipient, text, ['queued']);
           return unfinished ?? refused('no-open-request');
         }
-        const envelope = finalEnvelope(holder, outcome.result.requestId, text, context, input.answer);
+        const envelope = finalEnvelope(holder, outcome.result.requestId, text, context);
         if (outcome.acted) yield* notedClosed(held, written.closed, envelope.id, runId);
         const receipt = yield* deliver(recipient, envelope);
         return { ...receipt, closed: outcome.acted ? written.closed : outcome.result.closed };
@@ -542,7 +537,6 @@ export const threadEnvelopesLayer = Layer.effect(
         text: accepted.body.text,
         inReplyTo: accepted.body.inReplyTo,
         context: accepted.body.context,
-        answer: accepted.body.answer,
       });
       return { ...receipt, closed: [] };
     });
@@ -564,10 +558,7 @@ export const threadEnvelopesLayer = Layer.effect(
         finalKey(holder.id, input),
       );
       if (recorded.status === 'done' && recorded.result !== null) {
-        const delivered = yield* deliver(
-          recipient,
-          finalEnvelope(holder, recorded.result.requestId, message.trim(), undefined, input.answer),
-        );
+        const delivered = yield* deliver(recipient, finalEnvelope(holder, recorded.result.requestId, message.trim()));
         return {
           status: 'completed',
           output: { status: 'sent', deliveries: [{ ...delivered, closed: recorded.result.closed }] } satisfies ThreadSent,

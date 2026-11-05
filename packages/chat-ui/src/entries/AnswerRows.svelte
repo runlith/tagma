@@ -14,7 +14,6 @@
   const MARK = {
     working: 'animate-breathe bg-chat-live-mark',
     answered: 'bg-chat-success-mark',
-    partial: 'bg-chat-interrupted',
     failed: 'bg-chat-failure',
   } as const;
 </script>

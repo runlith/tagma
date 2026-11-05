@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import type { ChangeActor } from '../../../platform/contract/wire/actor.js';
 
 const instructionOriginSchema = Schema.Struct({ projectId: Schema.Number, block: Schema.String });
 
@@ -21,11 +22,6 @@ export const instructionSetSchema = Schema.Struct({
   journal: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
 });
 export type InstructionSet = typeof instructionSetSchema.Type;
-
-export type ChangeActor =
-  | { readonly kind: 'operator' }
-  | { readonly kind: 'thread'; readonly threadId: string; readonly name: string | null }
-  | { readonly kind: 'session'; readonly session: string };
 
 export type InstructionChanges = {
   readonly basis: 'none' | 'other-world' | 'same-world';

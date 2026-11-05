@@ -31,6 +31,8 @@ type Answer = {
 
 const LEAD = 'Work out how the floor is built.';
 const QUESTIONS = ['Where does the floor live?', 'What owns the beams?', 'Who laid the tiles?', 'How wide is the hall?'];
+const FLOOR = 'The floor lives in floor/index.ts:1.';
+const BEAMS = 'The frame module owns the beams; who maintains it I could not establish.';
 const HALL = 'The hall is four metres wide.';
 const CALL = 'ask-floor';
 
@@ -54,13 +56,9 @@ const said = (value: string): Stream.Stream<LLMEvent> =>
 const script: {
   hold: { readonly started: Deferred.Deferred<void>; seen: number } | null;
   asked: string | null;
-  tools: string;
-  reader: string;
 } = {
   hold: null,
   asked: null,
-  tools: '',
-  reader: '',
 };
 
 const setup = Effect.gen(function* () {
@@ -86,18 +84,9 @@ const setup = Effect.gen(function* () {
               if (script.hold.seen === QUESTIONS.length) Deferred.doneUnsafe(script.hold.started, Effect.void);
               return Stream.never;
             }
-            script.tools = Object.keys(call.tools).join(',');
-            script.reader = asked.slice(-1500);
             const question = QUESTIONS.findIndex((each) => asked.includes(each));
-            if (question === 0)
-              return toolCall('answer-0', 'answer', { text: 'The floor lives in floor/.', evidence: ['floor/index.ts:1'], complete: true });
-            if (question === 1)
-              return toolCall('answer-1', 'answer', {
-                text: 'The beams belong to the frame module.',
-                evidence: ['frame'],
-                complete: false,
-                missing: 'who maintains them',
-              });
+            if (question === 0) return said(FLOOR);
+            if (question === 1) return said(BEAMS);
             if (question === 3) return said(HALL);
             return Stream.fail(credentialMissing('fixture provider failure'));
           },
@@ -161,13 +150,12 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       yield* turnsOf(world.runtime.owners).send(asking, projectId, LEAD, undefined, { key: 'ask-lead' });
       yield* idle(asking);
       const result = script.asked ?? '';
-      expect(script.tools).toContain('answer');
       expect(result).toContain('1. answered');
-      expect(result.indexOf('2. partial')).toBeGreaterThan(result.indexOf('1. answered'));
-      expect(result.indexOf('3. failed')).toBeGreaterThan(result.indexOf('2. partial'));
+      expect(result.indexOf('2. answered')).toBeGreaterThan(result.indexOf('1. answered'));
+      expect(result.indexOf('3. failed')).toBeGreaterThan(result.indexOf('2. answered'));
       expect(result.slice(result.indexOf('3. failed'))).toContain('fixture provider failure');
       expect(result).toContain('floor/index.ts:1');
-      expect(result).toContain('who maintains them');
+      expect(result).toContain('I could not establish');
       expect(yield* runsOf(asking)).toHaveLength(1);
       const readers = yield* readersOf(asking);
       expect(readers).toHaveLength(QUESTIONS.length);
@@ -227,9 +215,9 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       });
       const answer = response.body as Answer;
       expect(answer).toMatchObject({ status: 'asked' });
-      expect(answer.entries?.map((entry) => entry.status)).toEqual(['answered', 'partial', 'failed', 'partial']);
+      expect(answer.entries?.map((entry) => entry.status)).toEqual(['answered', 'answered', 'failed', 'answered']);
       expect(answer.entries?.map((entry) => entry.question)).toEqual(QUESTIONS);
-      expect(answer.entries?.[3]?.text).toBe(`${HALL}\n\n${HALL}`);
+      expect(answer.entries?.[3]?.text).toBe(HALL);
     }),
   );
 

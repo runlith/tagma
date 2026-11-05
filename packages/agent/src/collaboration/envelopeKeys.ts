@@ -1,7 +1,7 @@
 import { barrierIdAhead } from '../thread/inboxItems';
 import { actDigest, callKey, type Evidence, type Keyed } from '../thread/keyed';
 import type { ThreadRecord } from '../thread/record';
-import type { ThreadAnswer, ThreadInboxItem } from '../thread/storage/inbox';
+import type { ThreadInboxItem } from '../thread/storage/inbox';
 import type { ThreadEnvelopeInput, ThreadSendAsk } from './ThreadEnvelopes';
 import { threadFinalEnvelopeId } from './ThreadObligations';
 import type { AgentSignalContext } from '../agent/contracts';
@@ -15,18 +15,12 @@ export function sendEvidence(holderId: string, key: string): Evidence {
 export function finalKey(holderId: string, input: ThreadSendAsk): Keyed {
   return {
     evidence: sendEvidence(holderId, input.key),
-    digest: actDigest({ to: input.to, intent: 'message', final: true, text: input.text.trim(), answer: input.answer }),
+    digest: actDigest({ to: input.to, intent: 'message', final: true, text: input.text.trim() }),
   };
 }
 
-export function finalEnvelope(
-  holder: ThreadRecord,
-  requestId: string,
-  text: string,
-  context?: AgentSignalContext,
-  answer?: ThreadAnswer,
-): ThreadEnvelopeInput {
-  return { id: threadFinalEnvelopeId(requestId), senderThreadId: holder.id, intent: 'report', text, inReplyTo: requestId, context, answer };
+export function finalEnvelope(holder: ThreadRecord, requestId: string, text: string, context?: AgentSignalContext): ThreadEnvelopeInput {
+  return { id: threadFinalEnvelopeId(requestId), senderThreadId: holder.id, intent: 'report', text, inReplyTo: requestId, context };
 }
 
 export function sameEnvelope(item: ThreadInboxItem, threadId: string, envelope: ThreadEnvelopeInput, text: string): boolean {

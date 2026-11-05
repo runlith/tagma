@@ -170,11 +170,6 @@ export type ThreadPlaneAccess = {
   ): Effect.Effect<ToolEffectSettlement<ThreadSpawnResult>, ThreadPlaneFailure>;
 };
 
-export type ThreadAnswering = {
-  readonly parent: string;
-  acting(caller: ToolCaller): Effect.Effect<ThreadVerbs, ThreadPlaneFailure>;
-};
-
 export type ThreadPlaneFailure =
   | ThreadBorderFailed
   | ThreadReadFailure

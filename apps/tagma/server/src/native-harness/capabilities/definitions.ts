@@ -1,5 +1,4 @@
 import { COLLABORATION_SOURCE } from '@runlith/agent/collaboration/CollaborationConfig';
-import { ANSWER_SOURCE, ANSWER_TOOL } from '@runlith/agent/collaboration/askVerbs';
 import { READ_MODELS } from '@runlith/agent/collaboration/CollaborationTools';
 import { AgentDefinitions } from '@runlith/agent/thread/agents/AgentDefinitions';
 import { FINAL_ANSWER_TOOL } from '@runlith/agent/transcript/parts';
@@ -20,9 +19,8 @@ const BEHAVIOURS: Readonly<Record<string, CapabilityBehaviour>> = { files, shell
 export type CapabilityDefinitions = AgentDefinitions<ThreadContext, Capability>;
 
 export const capabilityDefinitions = Effect.fnUntraced(function* (declared: readonly DeclaredCapability[]) {
-  const definitions: CapabilityDefinitions = new AgentDefinitions(
-    (source) => (source === COLLABORATION_SOURCE ? [FINAL_ANSWER_TOOL, READ_MODELS] : undefined),
-    [{ source: ANSWER_SOURCE, tools: [ANSWER_TOOL], standing: true }],
+  const definitions: CapabilityDefinitions = new AgentDefinitions((source) =>
+    source === COLLABORATION_SOURCE ? [FINAL_ANSWER_TOOL, READ_MODELS] : undefined,
   );
   const ids = new Set(declared.map(({ declaration }) => declaration.id));
   const orphaned = Object.keys(BEHAVIOURS).filter((id) => !ids.has(id));

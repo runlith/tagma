@@ -3,8 +3,11 @@ import type { ThreadAuthority } from '@runlith/agent/thread/rows';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm';
 import { QueryBuilder } from 'drizzle-orm/sqlite-core';
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
 import { MachineStore, type StoreDb, type StoreFailure } from '../platform/contract/service/store.js';
+import { SignedSession } from '../platform/contract/service/writers.js';
+import { parseSessionToken, sessionToken } from '../platform/contract/wire/session.js';
+import type { ChangeRecord } from '../platform/contract/wire/actor.js';
 import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
 import { ThreadMandate } from './contract/service/mandate.js';
 import { writes } from '../platform/contract/service/writes.js';
@@ -14,6 +17,8 @@ import { mandateRows, threadMandate } from './store/mandate.js';
 export type MandateWrite = {
   readonly authority?: ThreadAuthority;
   readonly delegation?: boolean | null;
+  readonly delegationBy?: string | null;
+  readonly delegationAt?: Date | null;
   readonly operatorNotice?: boolean | null;
   readonly approves?: readonly string[] | null;
   readonly team?: TeamLayer | null;
@@ -48,6 +53,7 @@ export type DelegationLineage = {
   readonly own: boolean | null;
   readonly nearest: { readonly allowed: boolean; readonly setAt: string } | null;
   readonly depth: number;
+  readonly switched: ChangeRecord | null;
 };
 
 export type TeamLineage = {
@@ -66,31 +72,47 @@ export const makeMandateRows = Effect.gen(function* () {
   const units = yield* MachineUnits;
   const read = <A, E>(unit: Unit<'machine'> | undefined, work: (unit: Unit<'machine'>) => Effect.Effect<A, E>) =>
     unit === undefined ? units.read(work) : work(unit);
-  const lineageOf = <Name extends string, Value>(column: SQL, name: Name) =>
-    db.all<{ id: string; depth: number } & Record<Name, Value>>(sql`
+  const lineageOf = <Row>(columns: SQL) =>
+    db.all<{ id: string; depth: number } & Row>(sql`
         with recursive lineage(id, parent, depth) as (
           select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${sql.placeholder('id')}
           union all
           select leaf.id, leaf.parent_id, l.depth + 1 from ${recordsAs('leaf')} join lineage l on leaf.id = l.parent
         )
-        select l.id as id, ${column} as ${sql.raw(name)}, l.depth as depth
+        select l.id as id, ${columns}, l.depth as depth
           from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`);
-  const delegations = lineageOf<'delegation', number | null>(sql`${mandateFacts.delegation}`, 'delegation');
-  const approvals = lineageOf<'approves', string | null>(sql`${mandateFacts.approves}`, 'approves');
-  const teams = lineageOf<'team', string | null>(sql`${mandateFacts.team}`, 'team');
+  const delegations = lineageOf<{ delegation: number | null; switchedBy: string | null; switchedAt: number | null }>(
+    sql`${mandateFacts.delegation} as delegation, ${mandateFacts.delegationBy} as switchedBy, ${mandateFacts.delegationAt} as switchedAt`,
+  );
+  const approvals = lineageOf<{ approves: string | null }>(sql`${mandateFacts.approves} as approves`);
+  const teams = lineageOf<{ team: string | null }>(sql`${mandateFacts.team} as team`);
   return ThreadMandate.of({
     delegationLineage: Effect.fn('MandateRows.delegationLineage')(function* (id, tx) {
       const rows = yield* read(tx, (unit) => unit.run(delegations.execute({ id })));
       const nearest = rows.find((row) => row.delegation !== null);
       const own = rows.find((row) => row.depth === 0)?.delegation ?? null;
+      let switched: ChangeRecord | null = null;
+      for (const row of rows) {
+        if (row.switchedAt === null || (switched !== null && switched.at >= row.switchedAt)) continue;
+        const writer = row.switchedBy === null ? null : parseSessionToken(row.switchedBy);
+        if (row.switchedBy !== null && writer === null) continue;
+        switched = { writer, at: row.switchedAt };
+      }
       return {
         own: own === null ? null : own === 1,
         nearest: nearest === undefined ? null : { allowed: nearest.delegation === 1, setAt: nearest.id },
         depth: rows.at(-1)?.depth ?? 0,
+        switched,
       };
     }),
-    setDelegation: (id, delegation) =>
-      units.write(writes('MandateRows.setDelegation', [mandateRows]), (unit) => writeMandate(db, unit, id, { delegation })),
+    setDelegation: Effect.fn('MandateRows.setDelegation')(function* (id, delegation) {
+      const signed = yield* SignedSession;
+      const delegationAt = new Date(yield* Clock.currentTimeMillis);
+      const delegationBy = signed === null ? null : sessionToken(signed);
+      yield* units.write(writes('MandateRows.setDelegation', [mandateRows]), (unit) =>
+        writeMandate(db, unit, id, { delegation, delegationBy, delegationAt }),
+      );
+    }),
     approvesLineage: Effect.fn('MandateRows.approvesLineage')(function* (id, tx) {
       const rows = yield* read(tx, (unit) => unit.run(approvals.execute({ id })));
       const listed = (raw: string | null): readonly string[] | null => (raw === null ? null : (JSON.parse(raw) as readonly string[]));

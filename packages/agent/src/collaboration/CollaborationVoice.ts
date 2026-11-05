@@ -107,11 +107,11 @@ function delegationWhere(threadId: string, delegation: ThreadDelegation): string
   return delegation.setAt === threadId ? 'for this thread' : `for thread ${delegation.setAt} and the team it leads`;
 }
 
-export function delegationNotice(threadId: string, delegation: ThreadDelegation): string {
-  const where = delegationWhere(threadId, delegation);
+export function delegationNotice(threadId: string, delegation: ThreadDelegation, by: string): string {
+  const where = `${delegationWhere(threadId, delegation)}${by === '' ? '' : `, switched${by}`}`;
   return delegation.allowed
-    ? `The operator switched delegation back on ${where}: you may start agents again — \`spawn_agent\` where you hold it — within the configured depth.`
-    : `The operator switched delegation off ${where}: start no agent of your own accord — \`spawn_agent\` refuses one without \`operatorAsked\`, and any other new thread refuses. Agents already running keep working and reporting, and you still message, stop and continue them.`;
+    ? `Delegation is back on ${where}: you may start agents again — \`spawn_agent\` where you hold it — within the configured depth.`
+    : `Delegation is off ${where}: start no agent of your own accord — \`spawn_agent\` refuses one without \`operatorAsked\`, and any other new thread refuses. Agents already running keep working and reporting, and you still message, stop and continue them.`;
 }
 
 export const DELEGATION_OFF = 'delegation-off';
@@ -142,26 +142,20 @@ export function collaborationBirth(input: {
   child: ThreadRecord;
   depth: ThreadSpawnDepth;
   messaging: boolean;
-  collected: boolean;
 }): string {
-  const { parent, child, depth, messaging, collected } = input;
+  const { parent, child, depth, messaging } = input;
   const root = child.parentThreadId === null;
   return agentSignalMarkup({
     type: COLLABORATION_BIRTH_MARKUP,
     text: [
       `${theAgent(parent)} started you and is owed your final answer:`,
       ...(messaging
-        ? collected
-          ? [
-              'give it with `answer` when the work is done or cannot go on. Without one, the last message of the run',
-              'where the work ended is taken as a partial answer.',
-            ]
-          : [
-              'send it with send_message and final: true when the work is done or cannot go on, from whichever',
-              'run you are in. Without one, the last message of the run where the work ended is sent instead,',
-              'once: a run that ends while an agent you gave work to still owes you a report sends nothing.',
-              'It may send you more words, more work, or a stop.',
-            ]
+        ? [
+            'send it with send_message and final: true when the work is done or cannot go on, from whichever',
+            'run you are in. Without one, the last message of the run where the work ended is sent instead,',
+            'once: a run that ends while an agent you gave work to still owes you a report sends nothing.',
+            'It may send you more words, more work, or a stop.',
+          ]
         : [
             'you hold no send_message. The last message of the run where the work ends reaches it:',
             'a run awaiting a report or the end of its own command or background call sends nothing.',

@@ -8,6 +8,7 @@ import { delegationRule } from '../../../native-harness/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { resolveDelegation } from '../../../threads/testing/doubles.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
+import { signedBy } from '../../../invocation/testing/call.js';
 
 const standing = Effect.gen(function* () {
   const { units, store, threads, projectId } = yield* threadStoreFixture;
@@ -16,6 +17,11 @@ const standing = Effect.gen(function* () {
     yield* Layer.build(
       Layer.mock(Settings, {
         value: (key) => Schema.decodeUnknownEffect(key.schema)(enabled.value).pipe(Effect.orDie),
+        read: (key) =>
+          Schema.decodeUnknownEffect(key.schema)(enabled.value).pipe(
+            Effect.orDie,
+            Effect.map((value) => ({ value, from: 'default' as const, layers: {}, rejections: [] })),
+          ),
       }),
     ),
     Settings,
@@ -108,5 +114,31 @@ it.live('a working agent hears a changed delegation once, and after compaction o
     expect(yield* step()).toBeNull();
     compacted();
     expect(yield* step()).toBeNull();
+  }),
+);
+
+it.live('a delegation notice names who switched it: the operator, another thread, or the thread itself', () =>
+  Effect.gen(function* () {
+    const { settings, threads, root, child, own } = yield* standing;
+    const rule = delegationRule(threads.mandate);
+    const history: Message[] = [Message.user('Build it.')];
+    const told = Effect.fnUntraced(function* () {
+      const directive = yield* rule({
+        hook: 'beforeStep',
+        modelMessages: history,
+        settings,
+        thread: { id: child },
+      } as unknown as Parameters<typeof rule>[0]);
+      if (directive === null || !('type' in directive) || directive.type !== 'guide')
+        return yield* Effect.die('expected delegation guidance');
+      history.push(agentRuntimeGuidanceMessage(directive.text, directive.state));
+      return directive.text;
+    });
+    yield* own(child, false);
+    expect(yield* told()).toStartWith('Delegation is off for this thread, switched by operator: ');
+    yield* signedBy({ harness: 'tagma', key: root })(own(child, true));
+    expect(yield* told()).toStartWith(`Delegation is back on for this thread, switched by [[${root}]]: `);
+    yield* signedBy({ harness: 'tagma', key: child })(own(child, false));
+    expect(yield* told()).toStartWith('Delegation is off for this thread, switched by you: ');
   }),
 );

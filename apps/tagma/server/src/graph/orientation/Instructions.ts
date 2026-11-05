@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { Context, Effect } from 'effect';
-import type { ChangeActor, Instruction, InstructionChanges, InstructionDiff, InstructionSet } from '../contract/wire/instructions.js';
+import type { Instruction, InstructionChanges, InstructionDiff, InstructionSet } from '../contract/wire/instructions.js';
+import { type ChangeActor, changeActorOf, changedBy } from '../../platform/contract/wire/actor.js';
 import type { GraphEventOp } from '../contract/wire/journal.js';
 import { GraphJournal } from '../contract/service/journal.js';
 import { BlockNames } from '../contract/service/acts.js';
 import { SessionNames } from '../contract/service/orientation.js';
 import { OtherGraphs } from '../serving/policy.js';
 import { WriterRegister } from '../../platform/contract/service/writers.js';
-import { NATIVE_HARNESS, sessionHarness, sessionToken } from '../../platform/contract/wire/session.js';
+import { NATIVE_HARNESS, sessionHarness } from '../../platform/contract/wire/session.js';
 import type { GateRefusal, OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { tagText } from '../voice/tags.js';
 import { Tags, InstalledCatalogs } from '../contract/service/vocabulary.js';
@@ -82,20 +83,7 @@ export function instructionChanges(set: InstructionSet, previous?: InstructionSe
   };
 }
 
-const actorName = (actor: ChangeActor, reader: string | null): string =>
-  actor.kind === 'operator'
-    ? 'operator'
-    : actor.kind === 'session'
-      ? `session ${actor.session}`
-      : actor.threadId === reader
-        ? 'you'
-        : `[[${actor.threadId}${actor.name === null ? '' : `|${actor.name}`}]]`;
-
-const byline = (actors: readonly ChangeActor[] | undefined, reader: string | null): string => {
-  const names = (actors ?? []).map((actor) => actorName(actor, reader));
-  if (names.length === 0) return '';
-  return ` by ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`}`;
-};
+const byline = (actors: readonly ChangeActor[] | undefined, reader: string | null): string => changedBy(actors ?? [], reader);
 
 export function instructionText(
   set: InstructionSet,
@@ -146,12 +134,11 @@ const actorsIn = Effect.fn('Orientation.changeActors')(function* (projectId: num
   const threads = writers.flatMap((row) => (sessionHarness(row.harness) === NATIVE_HARNESS ? [row.key] : []));
   const called = yield* (yield* SessionNames).of(projectId, threads);
   const actorOf = (sessionId: number | null): ChangeActor | null => {
-    if (sessionId === null) return { kind: 'operator' };
+    if (sessionId === null) return changeActorOf(null);
     const row = byId.get(sessionId);
     if (row === undefined) return null;
-    if (sessionHarness(row.harness) !== NATIVE_HARNESS) return { kind: 'session', session: sessionToken(row) };
     const named = called.get(row.key);
-    return { kind: 'thread', threadId: row.key, name: named?.name ?? named?.title ?? null };
+    return changeActorOf(row, named?.name ?? named?.title ?? null);
   };
   const actors = new Map<string, readonly ChangeActor[]>();
   for (const name of names) {

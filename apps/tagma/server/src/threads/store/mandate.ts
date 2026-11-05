@@ -14,6 +14,8 @@ export const threadMandate = sqliteTable(
       .references(() => threadRecord.id, { onDelete: 'cascade' }),
     authority: text('authority', { mode: 'json' }).$type<ThreadAuthority>().notNull(),
     delegation: integer('delegation', { mode: 'boolean' }),
+    delegationBy: text('delegation_by'),
+    delegationAt: integer('delegation_at', { mode: 'timestamp_ms' }),
     operatorNotice: integer('operator_notice', { mode: 'boolean' }),
     approves: text('approves', { mode: 'json' }).$type<readonly string[] | null>(),
     team: text('team', { mode: 'json' }).$type<TeamLayer | null>(),

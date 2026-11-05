@@ -6,6 +6,7 @@ import type { Settings } from '../../settings/contract/service/values.js';
 import { delegation as delegationKey, subAgentDepth } from '../contract/wire/settings.js';
 import type { ThreadMandate } from '../contract/service/mandate.js';
 import type { Delegation } from '../contract/wire/birth.js';
+import type { ChangeRecord } from '../../platform/contract/wire/actor.js';
 
 export type DelegationReading = { readonly delegation: Delegation; readonly depth: number };
 
@@ -18,6 +19,18 @@ export const readDelegation = Effect.fnUntraced(function* (
   const lineage = yield* threads.delegationLineage(threadId, unit);
   const decided = lineage.nearest ?? { allowed: yield* settings.value(delegationKey, undefined, unit), setAt: null };
   return { delegation: { own: lineage.own, ...decided }, depth: lineage.depth };
+});
+
+export const delegationChange = Effect.fnUntraced(function* (
+  threads: ThreadMandate['Service'],
+  settings: Settings['Service'],
+  threadId: string,
+): Effect.fn.Return<ChangeRecord | null, StoreFailure> {
+  const lineage = yield* threads.delegationLineage(threadId);
+  if (lineage.nearest !== null) return lineage.switched;
+  const machine = (yield* settings.read(delegationKey)).changed ?? null;
+  if (lineage.switched === null || machine === null) return lineage.switched ?? machine;
+  return lineage.switched.at >= machine.at ? lineage.switched : machine;
 });
 
 export const resolveDelegation = (

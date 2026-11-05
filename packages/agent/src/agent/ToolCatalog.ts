@@ -1,4 +1,3 @@
-import type { AgentStopCondition } from './AgentStep';
 import type { Tool } from './tool';
 
 export type ToolCatalog = Record<string, Tool>;
@@ -10,10 +9,6 @@ export function mergeToolCatalogs(...catalogs: readonly ToolCatalog[]): ToolCata
     merged[name] = value;
   }
   return merged;
-}
-
-export function hasToolResult(toolName: string): AgentStopCondition {
-  return ({ steps }) => steps[steps.length - 1]?.toolResults.some((result) => result.toolName === toolName) ?? false;
 }
 
 export function visibleOutputToolNames(catalog: ToolCatalog): ReadonlySet<string> {

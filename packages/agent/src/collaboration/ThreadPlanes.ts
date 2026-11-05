@@ -6,7 +6,7 @@ import { threadTarget, type ThreadRecord } from '../thread/record';
 import { ThreadCallBroke, ThreadMissing } from '../thread/ThreadBorder';
 import { Approvers } from '../thread/Approvers';
 import { ApprovalAnswers } from '../thread/run/ApprovalAnswers';
-import type { ThreadAnswering, ThreadPlaneAccess, ThreadPlaneFailure, ThreadSendAnswer, ThreadVerbs } from './ThreadPlaneAccess';
+import type { ThreadPlaneAccess, ThreadPlaneFailure, ThreadSendAnswer, ThreadVerbs } from './ThreadPlaneAccess';
 import { type CollaborationConfig, DeclaredCollaboration } from './CollaborationConfig';
 import { planeRefused } from './planeRefusal';
 import { ContextCompaction } from './compaction';
@@ -15,9 +15,7 @@ import { ThreadDirectory } from './ThreadDirectory';
 import { ThreadEnvelopes } from './ThreadEnvelopes';
 import { ThreadSpawnAccess } from './ThreadSpawnAccess';
 import { ThreadSpawnTree } from './ThreadSpawnTree';
-import { ThreadInbox } from '../thread/ThreadPorts';
 import { type Asks, makeAsks } from './asks';
-import { requesterOf } from './ThreadObligations';
 import { Threads } from './threads';
 import { makeTreeActs, type TreeActs } from './treeActs';
 import { coldReason } from './wakeCost';
@@ -29,7 +27,6 @@ export class ThreadPlanes extends Context.Service<
   {
     access(thread: ThreadRecord, runId?: string): Effect.Effect<ThreadPlaneAccess | null, ThreadPlaneFailure>;
     verbs(thread: ThreadRecord): ThreadVerbs | null;
-    answering(thread: ThreadRecord): Effect.Effect<ThreadAnswering | null, ThreadPlaneFailure>;
   }
 >()('@runlith/agent/ThreadPlanes') {}
 
@@ -45,7 +42,6 @@ export const threadPlanesLayer = Layer.effect(
   Effect.gen(function* () {
     const compaction = yield* ContextCompaction;
     const declared = yield* DeclaredCollaboration;
-    const inbox = yield* ThreadInbox;
     const directory = yield* ThreadDirectory;
     const answering = yield* ApprovalAnswers;
     const approvers = yield* Approvers;
@@ -144,19 +140,6 @@ export const threadPlanesLayer = Layer.effect(
 
     return ThreadPlanes.of({
       verbs: (thread) => (declared && acts && asks ? verbsOf(declared, acts, asks, thread, undefined) : null),
-      answering: Effect.fnUntraced(function* (thread) {
-        const parent = thread.parentThreadId;
-        if (declared === null || acts === null || asks === null || thread.plain || parent === null) return null;
-        const collected = (yield* inbox.openRequests(thread.id)).some(
-          (request) => request.body.reportDelivery === 'collect' && requesterOf(request) === parent,
-        );
-        if (!collected) return null;
-        return {
-          parent,
-          acting: (caller) =>
-            Effect.map(callingThread(threads, caller), ({ thread: calling, runId }) => verbsOf(declared, acts, asks, calling, runId)),
-        } satisfies ThreadAnswering;
-      }),
       access: Effect.fnUntraced(function* (thread, runId) {
         if (declared === null || acts === null || asks === null) return null;
         const acting = acts;
@@ -196,7 +179,6 @@ export const threadPlanesLayer = Layer.effect(
               itemId: provisioned.id,
               task: provisioned.body.text,
               subscribe,
-              collected: provisioned.body.reportDelivery === 'collect',
             });
             return { status: 'completed', output } as const;
           }),

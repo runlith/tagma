@@ -7,6 +7,7 @@ import type { SessionRef } from '../../platform/contract/wire/session.js';
 import type { SettableScope, SettingKey } from '../../platform/contract/wire/setting.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Resolved } from '../contract/service/values.js';
+import type { ChangeRecord } from '../../platform/contract/wire/actor.js';
 import { resolveSetting, type SettingLayer } from '../resolution.js';
 import { setting } from './table.js';
 import { prepareFor } from '../../platform/store/queries.js';
@@ -127,13 +128,11 @@ export const storeRow = Effect.fn('Settings.storeRow')(function* (
   declined: boolean,
 ): Effect.fn.Return<void, StoreFailure> {
   const where = rowOf(keyId, scope, projectId);
-  if (stored === null && !declined) {
-    yield* db.delete(setting).where(where);
-    return;
-  }
+  const existing = yield* db.select({ id: setting.id, value: setting.value, declined: setting.declined }).from(setting).where(where);
+  const standing = existing[0];
+  if (stored === null && !declined && (standing === undefined || (standing.value === null && !standing.declined))) return;
   const sessionId = yield* sessions.signedId(unit);
-  const existing = yield* db.select({ id: setting.id }).from(setting).where(where);
-  if (existing.length > 0) {
+  if (standing !== undefined) {
     yield* db
       .update(setting)
       .set({ value: stored, declined, sessionId, updatedAt: new Date(yield* Clock.currentTimeMillis) })
@@ -163,12 +162,14 @@ function layerOf(scope: SettableScope, rows: readonly SettingRow[], wrote: Reado
   const values = new Map<string, unknown>();
   const declined = new Set<string>();
   const writers = new Map<string, SessionRef>();
+  const changes = new Map<string, ChangeRecord>();
   for (const row of rows) {
     if (row.declined) declined.add(row.key);
     const writer = row.sessionId === null ? undefined : wrote.get(row.sessionId);
     if (writer !== undefined) writers.set(row.key, writer);
+    if (row.sessionId === null || writer !== undefined) changes.set(row.key, { writer: writer ?? null, at: row.updatedAt.getTime() });
     if (row.value === null) continue;
     values.set(row.key, JSON.parse(row.value));
   }
-  return { scope, values, declined, writers };
+  return { scope, values, declined, writers, changes };
 }

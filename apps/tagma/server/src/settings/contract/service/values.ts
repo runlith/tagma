@@ -3,6 +3,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { Unit } from '../../../platform/contract/service/units.js';
 import type { GateRefusal, OpenRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
+import type { ChangeRecord } from '../../../platform/contract/wire/actor.js';
 import type { SettableScope, SettingKey, SettingLayersOf, SettingScope } from '../../../platform/contract/wire/setting.js';
 import type { SettingRejection } from '../wire/catalog.js';
 
@@ -10,6 +11,7 @@ export type Resolved<A> = {
   readonly value: A;
   readonly from: SettingScope;
   readonly writer?: SessionRef;
+  readonly changed?: ChangeRecord;
   readonly layers: SettingLayersOf<A>;
   readonly rejections: readonly SettingRejection[];
 };

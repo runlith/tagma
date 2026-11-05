@@ -7,7 +7,6 @@ import type { ThreadContext } from './context.js';
 import type { NativeRuleSource } from '../contract/service/rules.js';
 
 const RULE_ID = 'run-budget';
-const ANSWER_TOOL = 'answer';
 const GUIDE_AT = 0.7;
 const RESULT_RESERVE = Math.ceil(TOOL_OUTPUT_MAX_BYTES / RAW_CHARS_PER_TOKEN);
 const OUTPUT_ALLOWANCE = 4_000;
@@ -20,7 +19,6 @@ type Gate = {
   guided: boolean;
   told: boolean;
   denied: string | null;
-  closeAsked: boolean;
 };
 
 type Limits = { readonly prompt: number | null; readonly steps: number | null; readonly seconds: number | null };
@@ -71,7 +69,6 @@ function budgetRule(): AgentRule<ThreadContext> {
           guided: false,
           told: false,
           denied: null,
-          closeAsked: false,
         }));
         const now = yield* Clock.currentTimeMillis;
         gate.startedAt ??= ctx.run.startedAt ?? now;
@@ -85,17 +82,19 @@ function budgetRule(): AgentRule<ThreadContext> {
           }
           const limits = limitsOf(budget, gate);
           const spent = gate.denied ?? spentOf(limits, gate, steps, now);
-          if (ctx.run.called(ANSWER_TOOL)) {
-            return spent === null ? null : ({ type: 'restrict', tools: [] } satisfies AgentDirective);
-          }
-          if (spent !== null || gate.closeAsked) {
+          if (spent !== null) {
             const first = !gate.told;
             gate.told = true;
-            const text = `The ${spent ?? 'closing'} budget is spent. Answer now with what you have, and say what you did not establish.`;
-            return [
-              { type: 'restrict', tools: [ANSWER_TOOL] },
-              { type: 'require', tool: ANSWER_TOOL, ...(first ? { text } : {}) },
-            ] satisfies AgentDirective[];
+            const restricted: AgentDirective = { type: 'restrict', tools: [] };
+            return first
+              ? [
+                  restricted,
+                  {
+                    type: 'guide',
+                    text: `The ${spent} budget is spent. Answer now with what you have, and say what you did not establish.`,
+                  },
+                ]
+              : restricted;
           }
           if (!gate.guided && nearing(limits, gate, steps, now)) {
             gate.guided = true;
@@ -108,7 +107,7 @@ function budgetRule(): AgentRule<ThreadContext> {
         }
 
         if (ctx.hook === 'beforeTool') {
-          if (ctx.tool === undefined || ctx.tool.name === ANSWER_TOOL) return null;
+          if (ctx.tool === undefined) return null;
           const own = estimateThreadTokens(ctx.tool.input);
           const limits = limitsOf(budget, gate);
           gate.reserved += own;
@@ -124,11 +123,6 @@ function budgetRule(): AgentRule<ThreadContext> {
           } satisfies AgentDirective;
         }
 
-        if (ctx.hook === 'beforeClose') {
-          if (ctx.catalog[ANSWER_TOOL] === undefined || ctx.run.called(ANSWER_TOOL) || gate.closeAsked || gate.told) return null;
-          gate.closeAsked = true;
-          return { type: 'guide', text: `End by calling ${ANSWER_TOOL} with your answer.` } satisfies AgentDirective;
-        }
         return null;
       }),
     { owner: 'native-harness', priority: 100, critical: false },

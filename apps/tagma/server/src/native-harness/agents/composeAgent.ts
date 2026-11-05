@@ -4,8 +4,7 @@ import type { AgentRuleRegistry, AgentRule } from '@runlith/agent/AgentRuntimePo
 import type { RuleSetup } from '../contract/service/rules.js';
 import type { AgentRunner } from '@runlith/agent/AgentRunner';
 import type { CallHooks } from '@runlith/agent/AgentCalls';
-import { type ToolCatalog, hasToolResult, mergeToolCatalogs } from '@runlith/agent/catalog';
-import { ANSWER_TOOL } from '@runlith/agent/collaboration/askVerbs';
+import { type ToolCatalog, mergeToolCatalogs } from '@runlith/agent/catalog';
 import { deferredToolsSection, revealedDefinitionsSection } from '@runlith/agent/AgentDeferredTools';
 import { stepLimit } from '@runlith/agent/AgentStep';
 import { threadAgent, type ThreadAgent, type ThreadContextUse, type ThreadView } from '@runlith/agent/thread/agents/ThreadAgent';
@@ -177,7 +176,7 @@ function composed(
       return document.success.text;
     },
     tools: (ctx) => agentTools(held(ctx), ctx),
-    stopWhen: [stepLimit(STEP_LIMIT), hasToolResult(ANSWER_TOOL)],
+    stopWhen: [stepLimit(STEP_LIMIT)],
     compaction: declaration.compaction,
   });
 }

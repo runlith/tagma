@@ -63,19 +63,11 @@ export const threadEnvelopeContextSchema = Schema.Struct({
   warmUntil: Schema.optional(Schema.String),
 });
 
-const threadAnswerSchema = Schema.Struct({
-  evidence: Schema.Array(Schema.String),
-  complete: Schema.Boolean,
-  missing: Schema.optional(Schema.String),
-});
-export type ThreadAnswer = typeof threadAnswerSchema.Type;
-
 export const threadInboxEnvelopeBodySchema = Schema.Struct({
   intent: Schema.Literals(THREAD_INBOX_ENVELOPE_INTENTS),
   text: Schema.String,
   inReplyTo: Schema.NullOr(Schema.String),
   context: Schema.optional(threadEnvelopeContextSchema),
-  answer: Schema.optional(threadAnswerSchema),
 });
 export const threadInboxSignalBodySchema = Schema.Struct({
   type: Schema.String,

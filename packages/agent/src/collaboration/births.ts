@@ -68,7 +68,6 @@ export type Provision = {
   readonly task: string;
   readonly lowered?: ThreadSpawnResult['lowered'];
   readonly subscribe?: SpawnSubscription;
-  readonly collected?: boolean;
 };
 
 export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly request: (key: string) => Effect.Effect<KeyedRequest> }) {
@@ -123,10 +122,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
     const depth = yield* spawnAccess.depth(child);
     const text = child.plain
       ? provision.task
-      : [
-          collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging, collected: provision.collected === true }),
-          provision.task,
-        ]
+      : [collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging }), provision.task]
           .filter((part) => part.trim() !== '')
           .join('\n\n');
     const deadline = (yield* request(provision.itemId)).deadline;
@@ -192,7 +188,6 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
           itemId: standing.itemId ?? itemId,
           task: input.task,
           subscribe: input.subscribe,
-          collected: input.reportDelivery === 'collect',
         });
       if (standing.status === 'spent') return yield* spawnSpent(input.requestId);
       const there = project === undefined ? {} : { project };
@@ -288,7 +283,6 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
           task: input.task,
           lowered: selection?.lowered,
           subscribe: input.subscribe,
-          collected: input.reportDelivery === 'collect',
         });
       });
       return yield* seated.pipe(Effect.tapError(() => Effect.sync(() => seats.unseat(childId))));
