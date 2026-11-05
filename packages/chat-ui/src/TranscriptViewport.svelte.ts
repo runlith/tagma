@@ -25,6 +25,7 @@ export class TranscriptViewport {
   private refused = false;
   private request = 0;
   private wheelAt = Number.NEGATIVE_INFINITY;
+  private wheeling: 'none' | 'armed' | 'scrolling' = 'none';
   private readerMoved = false;
   private inputRoot: HTMLElement | undefined;
   private pressing = false;
@@ -95,6 +96,8 @@ export class TranscriptViewport {
     this.inputRoot = root;
     if (!root) return;
     root.addEventListener('wheel', this.onWheel, { passive: true });
+    root.addEventListener('scroll', this.onScroll, { passive: true });
+    root.addEventListener('scrollend', this.onScrollEnd, { passive: true });
     root.addEventListener('touchstart', this.onTouchStart, { passive: true });
     root.addEventListener('touchmove', this.onTouchMove, { passive: true });
     root.addEventListener('touchend', this.onTouchEnd, { passive: true });
@@ -118,6 +121,7 @@ export class TranscriptViewport {
   }
 
   resume(): void {
+    this.endWheel();
     this.clearPinned();
     this.shortId = undefined;
     this.endGap = 0;
@@ -174,6 +178,7 @@ export class TranscriptViewport {
   select(id: string, behavior: ScrollBehavior = 'smooth'): void {
     const root = this.followingViewport.viewport;
     if (!root || !this.window.holds(id)) return;
+    this.endWheel();
     this.shortId = undefined;
     this.pin(id);
     this.followingViewport.pause();
@@ -234,8 +239,26 @@ export class TranscriptViewport {
     if (delta === 0) return;
     const starts = event.timeStamp - this.wheelAt >= WHEEL_PAUSE_MS;
     this.wheelAt = event.timeStamp;
+    if (event.isTrusted && this.wheeling === 'none' && 'onscrollend' in root) this.wheeling = 'armed';
     this.input(event.target, delta, starts);
   };
+
+  private readonly onScroll = (): void => {
+    if (this.wheeling !== 'armed') return;
+    this.wheeling = 'scrolling';
+    this.window.holdWrites('wheel', true);
+  };
+
+  private readonly onScrollEnd = (): void => {
+    if (this.wheeling !== 'scrolling') return;
+    this.wheeling = 'none';
+    this.window.holdWrites('wheel', false);
+  };
+
+  private endWheel(): void {
+    this.wheeling = 'none';
+    this.window.holdWrites('wheel', false);
+  }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
     this.touchY = event.touches.length === 1 ? event.touches[0]?.clientY : undefined;
@@ -269,7 +292,7 @@ export class TranscriptViewport {
     if (this.pressing) return;
     this.pressing = true;
     this.pressTop = this.inputRoot?.scrollTop ?? 0;
-    this.window.holdWrites(true);
+    this.window.holdWrites('press', true);
     window.addEventListener('pointerup', this.onRelease, true);
     window.addEventListener('pointercancel', this.onRelease, true);
     window.addEventListener('blur', this.onRelease);
@@ -284,7 +307,7 @@ export class TranscriptViewport {
   private unwatchPress(): void {
     if (!this.pressing) return;
     this.pressing = false;
-    this.window.holdWrites(false);
+    this.window.holdWrites('press', false);
     window.removeEventListener('pointerup', this.onRelease, true);
     window.removeEventListener('pointercancel', this.onRelease, true);
     window.removeEventListener('blur', this.onRelease);
@@ -372,6 +395,9 @@ export class TranscriptViewport {
     const root = this.inputRoot;
     if (!root) return;
     root.removeEventListener('wheel', this.onWheel);
+    root.removeEventListener('scroll', this.onScroll);
+    root.removeEventListener('scrollend', this.onScrollEnd);
+    this.endWheel();
     root.removeEventListener('touchstart', this.onTouchStart);
     root.removeEventListener('touchmove', this.onTouchMove);
     root.removeEventListener('touchend', this.onTouchEnd);

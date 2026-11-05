@@ -27,6 +27,7 @@ type Anchor = { readonly key: string; readonly index: number; readonly offset: n
 type Pressed = { readonly key: string; readonly node: HTMLElement; readonly row: HTMLElement; inRow: number };
 type Aim = { key: string; index: number; behavior: ScrollBehavior; landed: boolean; via?: number | undefined };
 type Box = { node: HTMLElement; release: (() => void) | undefined };
+type WriteHold = 'press' | 'wheel';
 
 export class TranscriptVirtualizer {
   rows = $state.raw<readonly VirtualItem[]>([]);
@@ -59,7 +60,7 @@ export class TranscriptVirtualizer {
   private pressed: Pressed | undefined;
   private anchor: Anchor | undefined;
   private flushing = false;
-  private writesHeld = false;
+  private readonly writeHolds = new Set<WriteHold>();
   private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
 
   constructor(
@@ -124,10 +125,11 @@ export class TranscriptVirtualizer {
     this.holdTail();
   }
 
-  holdWrites(held: boolean): void {
-    if (held === this.writesHeld) return;
-    this.writesHeld = held;
-    if (!held) this.virtualizer?.refresh();
+  holdWrites(hold: WriteHold, held: boolean): void {
+    if (held === this.writeHolds.has(hold)) return;
+    if (held) return void this.writeHolds.add(hold);
+    this.writeHolds.delete(hold);
+    if (this.writeHolds.size === 0) this.virtualizer?.refresh();
   }
 
   keepEnd(keeps: boolean): void {
@@ -398,7 +400,7 @@ export class TranscriptVirtualizer {
       indexOf: (key) => this.rows_.indexOf(String(key)),
       keyOf: (node) => node.dataset.timelineKey,
       reuseOnMount: true,
-      isScrollWriteBlocked: () => this.writesHeld,
+      isScrollWriteBlocked: () => this.writeHolds.size > 0,
       adjust: (item, delta, instance) => this.shifts(item, delta, instance),
       rangeExtractor: (range: Range) => this.window(range),
       scrollMargin: this.margin,
