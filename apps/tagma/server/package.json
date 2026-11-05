@@ -24,6 +24,10 @@
       "types": "./src/composition/testing/assembled.ts",
       "default": "./src/composition/testing/assembled.ts"
     },
+    "./composition/testing/installation/serving": {
+      "types": "./src/composition/testing/installation/serving.ts",
+      "default": "./src/composition/testing/installation/serving.ts"
+    },
     "./composition/testing/migrations": {
       "types": "./src/composition/testing/migrations.ts",
       "default": "./src/composition/testing/migrations.ts"
