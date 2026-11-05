@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { flushSync } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ColumnWindow } from './ColumnWindow.svelte.js';
 
@@ -133,6 +134,42 @@ test('a preceding block changing height updates scroll targets without an outer 
     view.ResizeObserver = standing;
     vi.unstubAllGlobals();
   }
+});
+
+test('lines laid from an effect teardown after unreported native scrolling run no other effect inside that teardown', () => {
+  const win = new ColumnWindow<Line>(() => 26);
+  const element = scroller(400, () => win.height);
+  leave = win.column(element) as (() => void) | undefined;
+  win.lay(lines(200));
+  element.scrollTop = 2600;
+  element.dispatchEvent(new Event('scroll'));
+  let shown = $state(false);
+  let laid = $state(200);
+  let failure: unknown;
+  const stop = $effect.root(() => {
+    $effect(() => {
+      const count = laid;
+      return () => {
+        shown = true;
+        element.scrollTop = 0;
+        try {
+          win.lay(lines(count + 1));
+        } catch (error) {
+          failure = error;
+        }
+      };
+    });
+    $effect(() => {
+      if (shown) $effect(() => {});
+    });
+  });
+  flushSync();
+
+  laid = 201;
+  flushSync();
+  stop();
+
+  expect(failure).toBeUndefined();
 });
 
 test('a line laid again as a fresh object keeps the measure attachment, so its element is not attached again', () => {

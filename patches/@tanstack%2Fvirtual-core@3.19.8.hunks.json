@@ -14,8 +14,11 @@
       "tests": [{ "package": "packages/virtual-list", "file": "./src/correction.test.ts", "names": "scrollbar press" }]
     },
     "live-correction-basis": {
-      "markers": ["_syncScrollOffset", "_onScroll", "this._lastElementOffset = this._readElementOffset()"],
-      "tests": [{ "package": "packages/virtual-list", "file": "./src/liveOffset.test.ts" }]
+      "markers": ["_syncScrollOffset", "_onScroll", "this._lastElementOffset = this._readElementOffset()", "_ingestingOffset"],
+      "tests": [
+        { "package": "packages/virtual-list", "file": "./src/liveOffset.test.ts" },
+        { "package": "apps/tagma/app", "file": "./src/lib/features/threads/ColumnWindow.svelte.test.ts", "names": "effect teardown" }
+      ]
     },
     "resized-positions": {
       "markers": ["_resizedIndexes", "_measuredWith"],
