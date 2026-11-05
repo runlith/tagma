@@ -94,7 +94,7 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
         const s = yield* commandWorld();
         const running = yield* Effect.forkChild(
           call(s.mine.bash, {
-            command: `exec bun -e 'const fs = require("node:fs"); const done = new Promise(resolve => { const observer = fs.watch("src/a.ts", () => { if (fs.readFileSync("src/a.ts", "utf8") === "v2\\n") { observer.close(); resolve(); } }); }); fs.writeFileSync("src/a.ts", "v1\\n"); await done;'`,
+            command: `exec bun -e 'const fs = require("node:fs"); const done = new Promise(resolve => { const observer = fs.watch("src", () => { if (fs.readFileSync("src/a.ts", "utf8") === "v2\\n") { observer.close(); resolve(); } }); }); fs.writeFileSync("src/a.ts", "v1\\n"); await done;'`,
             description: 'Rewrite and wait for the peer edit',
           }),
         );
