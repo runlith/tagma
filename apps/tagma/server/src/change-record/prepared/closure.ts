@@ -16,6 +16,26 @@ export type Closure<Row extends PreparedRow> = {
   readonly writers: ReadonlyMap<string, readonly string[]>;
 };
 
+const importing = Effect.fn('prepared.importing')(function* <Row extends PreparedRow>(
+  landing: Landing<Row>,
+  joined: readonly string[],
+  pool: readonly string[],
+  capture: number,
+) {
+  const targets = new Set(joined);
+  const found: string[] = [];
+  for (const path of pool) {
+    const probe = yield* Effect.result(landing.fns.walks.dependencyImports({ root: landing.root, path, capture }));
+    if (probe._tag === 'Failure') {
+      yield* Effect.logDebug('a writer file joins: its imports could not be read', { path, reason: probe.failure.reason });
+      found.push(path);
+      continue;
+    }
+    if (probe.success.paths.some((one) => targets.has(one))) found.push(path);
+  }
+  return found;
+});
+
 export const closed = Effect.fn('prepared.closed')(function* <Row extends PreparedRow>(
   landing: Landing<Row>,
   base: string | null,
@@ -29,7 +49,10 @@ export const closed = Effect.fn('prepared.closed')(function* <Row extends Prepar
   const rows = new Map<string, readonly Row[]>();
   const writers = new Map<string, readonly string[]>();
   const expanded = new Set(team);
+  const homed = new Map<string, number>();
+  const changes = new Map<string, readonly string[]>();
   let frontier = [...selection.paths];
+  let selected = true;
   while (frontier.length > 0) {
     const grouped = yield* reads.evidenceInGroups(units, store, placesIn(checkout, frontier), (evidence) => Effect.succeed([...evidence]));
     for (const [path, held] of grouped) rows.set(path, held);
@@ -42,10 +65,18 @@ export const closed = Effect.fn('prepared.closed')(function* <Row extends Prepar
       );
       for (const holder of found) if (!expanded.has(holder)) fresh.add(holder);
     }
-    for (const holder of fresh) expanded.add(holder);
-    const homes = fresh.size === 0 ? new Map<string, number>() : yield* units.read((unit) => unit.run(homesOfHolders(store, [...fresh])));
-    const members: TeamMember[] = [...fresh].map((threadId) => ({ threadId, projectId: homes.get(threadId) ?? null }));
-    const theirs = members.length === 0 ? [] : yield* changedAmong(place, fns, yield* recordedPaths(place, reads, members));
+    if (selected) for (const holder of fresh) expanded.add(holder);
+    const unhomed = [...fresh].filter((holder) => !homed.has(holder) && !changes.has(holder));
+    if (unhomed.length > 0)
+      for (const [holder, home] of yield* units.read((unit) => unit.run(homesOfHolders(store, unhomed)))) homed.set(holder, home);
+    for (const threadId of fresh) {
+      if (changes.has(threadId)) continue;
+      const member: TeamMember = { threadId, projectId: homed.get(threadId) ?? null };
+      changes.set(threadId, yield* changedAmong(place, fns, yield* recordedPaths(place, reads, [member])));
+    }
+    const pool = unique([...fresh].flatMap((holder) => changes.get(holder) ?? [])).filter((path) => !carried.has(path));
+    const theirs = selected ? pool : yield* importing(landing, frontier, pool, capture);
+    selected = false;
     const needed = yield* neededPaths(landing, base, frontier, carried, capture);
     const next = unique([...theirs, ...needed]).filter((path) => !carried.has(path));
     for (const path of next) carried.add(path);
