@@ -13,7 +13,7 @@ import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire
 import type { WorktreeIntent } from '../../../worktrees/contract/wire/creation.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { suiteGit } from '../suiteGit.js';
-import { heard, until } from './protocolRig.js';
+import { heard, signal, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const calledSchema = Schema.Struct({ content: Schema.Array(hostedContentSchema), failed: Schema.Boolean });
@@ -47,9 +47,7 @@ const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'r
   yield* Context.get(world.runtime.owners, ThreadHarness).threads.handle(threadId, 'operator').setAuthorityMode(mode);
   const asThread = (id: string, input: object) => world.op(id, input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(threadId) });
   const called = Effect.fnUntraced(function* (toolCallId: string, name: string, input: object) {
-    const staged = `${report}.staged`;
-    yield* files.writeFileString(staged, JSON.stringify({ toolCallId, name, input }));
-    yield* files.rename(staged, `${report}.announce`);
+    yield* signal(`${report}.announce`, JSON.stringify({ toolCallId, name, input }));
     yield* until(
       Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes(`said-${toolCallId}`) ? true : null)),
       `the agent sealed ${toolCallId}`,

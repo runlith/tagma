@@ -15,7 +15,7 @@ import { compactionChoicesSchema } from '../../../native-harness/contract/wire/c
 import { ThreadEvidence } from '../../../threads/contract/service/evidence.js';
 import { thread, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, until } from './protocolRig.js';
+import { heard, signal, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const DEFERRED = 'apply_batch';
@@ -71,7 +71,7 @@ describe('the tools Tagma serves a Claude Code thread over its MCP door', () => 
       const first = yield* turns.send(threadId, projectId, 'HOLD the turn');
       yield* until(prompted(1), 'the first turn reached the agent', report);
       yield* asThread('open_hosted_turn', {});
-      yield* files.writeFileString(`${report}.search`, `select:${DEFERRED}`);
+      yield* signal(`${report}.search`, `select:${DEFERRED}`);
       yield* until(
         Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes('said-search') ? true : null)),
         'the agent sealed its search',

@@ -19,7 +19,7 @@ import type { ThreadWireFeedEvent } from '../../../threads/contract/wire/snapsho
 import { turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { suiteGit } from '../suiteGit.js';
-import { heard, until } from './protocolRig.js';
+import { heard, signal, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 import type { DoorFixture } from '../doorFixture.js';
 
@@ -44,7 +44,7 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
         report,
       );
       yield* asThread('open_hosted_turn', {});
-      yield* files.writeFileString(`${report}.announce`, JSON.stringify({ toolCallId: 'cost-read', name: 'read', input: { path } }));
+      yield* signal(`${report}.announce`, JSON.stringify({ toolCallId: 'cost-read', name: 'read', input: { path } }));
       yield* until(
         Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes('said-cost-read') ? true : null)),
         'the read call was sealed',
@@ -101,11 +101,8 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
       const repeated = yield* asThread('call_hosted_tool', { toolCallId: 'cost-read', name: 'read', input: { path } });
       expect(repeated.status).toBe(200);
       expect(repeated.body).toMatchObject({ status: 'called', failed: false, content: first.content });
-      const announce = Effect.fnUntraced(function* (toolCallId: string, name: string, input: object) {
-        const staged = `${report}.staged`;
-        yield* files.writeFileString(staged, JSON.stringify({ toolCallId, name, input }));
-        yield* files.rename(staged, `${report}.announce`);
-      });
+      const announce = (toolCallId: string, name: string, input: object) =>
+        signal(`${report}.announce`, JSON.stringify({ toolCallId, name, input }));
       const reveal = { query: `select:${USER_QUESTION_TOOL_NAME}` };
       yield* announce('reveal-question', 'tool_search', reveal);
       expect(
@@ -182,9 +179,7 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
         yield* world.op('open_hosted_turn', {}, `project=${projectId}`, { [GRANT_HEADER]: grantFor(threadId) });
         const earlier = { toolCallId: 'ordered-write', name: 'write', input: { path, content: 'after\n', background: true } };
         const later = { toolCallId: 'ordered-read', name: 'read', input: { path } };
-        const staged = `${report}.staged`;
-        yield* files.writeFileString(staged, JSON.stringify([earlier, later]));
-        yield* files.rename(staged, `${report}.announce`);
+        yield* signal(`${report}.announce`, JSON.stringify([earlier, later]));
         const reading = yield* Effect.forkScoped(asThread(later));
         let queued = false;
         while (!queued) {

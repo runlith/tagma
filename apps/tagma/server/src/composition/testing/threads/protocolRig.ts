@@ -172,6 +172,12 @@ export const heard = Effect.fn('testing.protocolHeard')(function* (report: strin
   const text = yield* files.readFileString(report).pipe(Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed('')));
   return yield* Effect.forEach(text.split('\n').filter(Boolean), (line) => Schema.decodeUnknownEffect(heardSchema)(line));
 }, Effect.provide(BunFileSystem.layer));
+export const signal = Effect.fn('testing.protocolSignal')(function* (path: string, text: string) {
+  const files = yield* FileSystem.FileSystem;
+  const staged = `${path}.staged`;
+  yield* files.writeFileString(staged, text);
+  yield* files.rename(staged, path);
+}, Effect.provide(BunFileSystem.layer));
 export const scenario = <A, E, R>(body: Effect.Effect<A, E, R>) =>
   Effect.scoped(body).pipe(Effect.provide(HostRegistration.layer), Effect.provide(endpointConnection), Effect.provide(platform));
 

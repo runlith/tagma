@@ -9,7 +9,7 @@ import { ThreadFeeds } from '../../../threads/contract/service/feeds.js';
 import type { WireState } from '../../../threads/contract/wire/snapshot.js';
 import { turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, until } from './protocolRig.js';
+import { heard, signal, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const called = Schema.Struct({ failed: Schema.Boolean });
@@ -33,7 +33,7 @@ layer(protocolWorld({ name: 'host-flips', prepare: (world) => Effect.andThen(cla
         report,
       );
       yield* asThread('open_hosted_turn', {});
-      yield* files.writeFileString(`${report}.announce`, JSON.stringify({ toolCallId: 'flip-read', name: 'read', input: { path } }));
+      yield* signal(`${report}.announce`, JSON.stringify({ toolCallId: 'flip-read', name: 'read', input: { path } }));
       yield* until(
         Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes('said-flip-read') ? true : null)),
         'the read call was sealed',
