@@ -4,6 +4,7 @@ import { Schema } from 'effect';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LIBRARY_NAME, SOURCE_DIGEST, SOURCE_ARCHIVE as ARCHIVE } from './engine.js';
+import { suppliesEngine } from './platform.js';
 const AMALGAMATION = 'sqlite-amalgamation-3530400';
 const ORIGIN = `https://sqlite.org/2026/${AMALGAMATION}.zip`;
 const FLAGS = [
@@ -132,6 +133,9 @@ export const buildEngine = async (arch?: string, place: EnginePlace = HOME): Pro
     await rm(work, { recursive: true, force: true });
   }
 };
+
+export const suppliedEngine = (arch?: string): Promise<EngineAsset | undefined> =>
+  suppliesEngine ? buildEngine(arch) : Promise.resolve(undefined);
 
 if (import.meta.main) {
   if (process.argv[2] === '--fetch') {

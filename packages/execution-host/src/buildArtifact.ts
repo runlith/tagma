@@ -15,7 +15,7 @@ import {
 } from '@runlith/executions/protocol/artifact';
 import { WIRE_RANGE } from '@runlith/executions/protocol/wire';
 import { bundle, type BundleOptions } from '@runlith/bundle/bundle';
-import { buildEngine, carrier } from '@runlith/sqlite-process/artifact';
+import { carrier, suppliedEngine } from '@runlith/sqlite-process/artifact';
 import type { CodeSigning } from './Artifact';
 import { nativeRelease } from './composition/nativeBuild';
 import { pipeCapability } from './nativeLaunch';
@@ -178,7 +178,7 @@ export const buildArtifact = Effect.fnUntraced(function* (
 
   part('runtime', RUNTIME_PART, yield* copied(input.runtime ?? process.execPath, at(RUNTIME_PART), RUNTIME_PART, 0o700));
   const engine = yield* Effect.tryPromise({
-    try: () => buildEngine(input.arch),
+    try: () => suppliedEngine(input.arch),
     catch: (cause) => new BuildRefused({ part: 'SQLite engine', detail: String(cause) }),
   });
   const evidence = yield* files
@@ -212,10 +212,12 @@ export const buildArtifact = Effect.fnUntraced(function* (
               Effect.catchTag('PlatformError', (error) => refuse(relative, `its signed bytes could not be read: ${error.reason._tag}`)),
             );
         });
-  const enginePath = `host/${engine.name}`;
-  const engineBytes = yield* copied(engine.path, at(enginePath), enginePath, 0o700);
-  if (digestOf(engineBytes) !== engine.digest) return yield* refuse(enginePath, 'the supplied engine moved during packaging');
-  part(engine.role, enginePath, yield* sealed(enginePath, engineBytes));
+  if (engine !== undefined) {
+    const enginePath = `host/${engine.name}`;
+    const engineBytes = yield* copied(engine.path, at(enginePath), enginePath, 0o700);
+    if (digestOf(engineBytes) !== engine.digest) return yield* refuse(enginePath, 'the supplied engine moved during packaging');
+    part(engine.role, enginePath, yield* sealed(enginePath, engineBytes));
+  }
   const libraryPart = `native/${adapter.library}`;
   const holderPart = `native/${adapter.holder}`;
   part('platform', libraryPart, yield* sealed(libraryPart, yield* copied(input.library, at(libraryPart), libraryPart, 0o700)));
