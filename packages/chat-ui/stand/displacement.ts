@@ -267,7 +267,8 @@ function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, whe
   const reference = wheel?.reference;
   const afterWheel = reference !== undefined && !wheelActive && (drag === undefined || drag.fromFrame <= reference.toFrame);
   const still =
-    previous.scrollTop === current.scrollTop && (previous.finger === null || current.finger === null || previous.finger === current.finger);
+    previous.scrollTop === current.scrollTop &&
+    (!previous.touching || previous.finger === null || current.finger === null || previous.finger === current.finger);
   const touching = wheelActive ? false : drag === undefined ? (previous.touching || current.touching) && !still : dragging;
   const moving =
     wheelActive ||
