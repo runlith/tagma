@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { eq } from 'drizzle-orm';
 import { Clock, Context, Deferred, Effect, Layer, Stream } from 'effect';
+import { subscriptionDescription } from '@runlith/builtin-catalog/subscription/description';
 import type { LLMEvent } from '@runlith/llm/schema/events';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
@@ -229,6 +230,29 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('ask', (it) => 
       expect(answer.entries?.map((entry) => entry.status)).toEqual(['answered', 'partial', 'failed', 'partial']);
       expect(answer.entries?.map((entry) => entry.question)).toEqual(QUESTIONS);
       expect(answer.entries?.[3]?.text).toBe(`${HALL}\n\n${HALL}`);
+    }),
+  );
+
+  it.effect('a reader definition naming only a reasoning rung keeps the light model at that rung', () =>
+    Effect.gen(function* () {
+      const { world, projectId } = yield* Place;
+      const query = `project=${projectId}`;
+      const source =
+        '---\ncapabilities: [files]\ntools: [read]\naudience: reader\nmodel: { reasoning: high }\n---\nAnswer the one question.\n';
+      expect((yield* world.op('save_agent', { name: 'deep-reader', scope: 'project', revision: null, source }, query)).status).toBe(200);
+      const offered = { key: 'agent.offered', value: [{ type: 'deep-reader', to: 'agents' }] };
+      expect((yield* world.op('write_setting', offered, query)).status).toBe(200);
+      const caller = yield* lead();
+      const response = yield* world.op('ask', { questions: [QUESTIONS[0]], agent: 'deep-reader' }, query, {
+        [GRANT_HEADER]: grantFor(caller),
+        [APPROVAL_WAIT_HEADER]: '0',
+        [CALL_HEADER]: 'ask-rung',
+      });
+      expect(response.body).toMatchObject({ status: 'asked' });
+      const reader = (response.body as Answer).entries?.[0]?.threadId ?? '';
+      const thread = ((yield* world.op('read_thread', { threadId: reader }, query)).body as { shape: { thread: Record<string, unknown> } })
+        .shape.thread;
+      expect(thread).toMatchObject({ model: subscriptionDescription.lightTextModel?.model, reasoning: 'high' });
     }),
   );
 });

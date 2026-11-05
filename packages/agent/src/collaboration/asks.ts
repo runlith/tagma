@@ -114,7 +114,9 @@ export const makeAsks = Effect.fnUntraced(function* ({ acting }: { readonly acti
       ...(home === undefined ? {} : { project: home }),
     });
     const defined = offer !== null && !('withheld' in offer) ? offer : null;
-    const model = defined?.profile?.model === undefined ? lightModel(parent) : undefined;
+    const named = defined?.profile?.model;
+    const light = named?.provider === undefined && named?.model === undefined ? lightModel(parent) : undefined;
+    const model = light === undefined || named?.reasoning === undefined ? light : { ...light, reasoning: named.reasoning };
     const secondsCap = readerSeconds(callerOption(parent)?.cacheLifetime.promisedSeconds ?? null);
     const bornOf: ThreadBornOf = {
       ...(runId === undefined || input.step === undefined ? { by: input.requestId, step: 0 } : { by: runId, step: input.step }),
