@@ -45,10 +45,17 @@ export const standingAt = Effect.fn('enforcement.standingAt')(function* (root: s
   return { head: yield* headOf(root), tree: yield* treeOf(root, pinned) };
 });
 
-const separately = (root: string): Effect.Effect<CheckoutPlace, GateRefusal<'inspection-failed'>, Git> =>
-  Effect.map(headOf(root), (head) => ({ head, commonDir: undefined, shelf: undefined }));
+type PossiblePlace = Omit<CheckoutPlace, 'head'> & { readonly head: string | null };
 
-export const placeOf = Effect.fn('enforcement.placeOf')(function* (root: string) {
+const separately = Effect.fnUntraced(function* (root: string) {
+  const git = actingGit(yield* Git, 'enforcement-head');
+  const head = yield* commitOf(git, root, 'HEAD').pipe(
+    Effect.mapError((failure) => failed(`git could not read HEAD in ${root}: ${troubleOf(failure)}`)),
+  );
+  return { head, commonDir: undefined, shelf: undefined } satisfies PossiblePlace;
+});
+
+export const placeOrUnborn = Effect.fn('enforcement.placeOf')(function* (root: string) {
   const git = actingGit(yield* Git, 'enforcement-head');
   const asked = ['-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir', '--git-path', 'tagma/measured', 'HEAD^{commit}'];
   return yield* Effect.matchEffect(git.run(asked), {
@@ -57,10 +64,16 @@ export const placeOf = Effect.fn('enforcement.placeOf')(function* (root: string)
       const lines = answer.status === 0 ? answer.stdout.replace(/\n$/, '').split('\n') : [];
       const [commonDir = '', shelf = '', head = ''] = lines;
       return lines.length === 3 && commonDir !== '' && shelf !== '' && COMMIT.test(head)
-        ? Effect.succeed<CheckoutPlace>({ head, commonDir, shelf })
+        ? Effect.succeed<PossiblePlace>({ head, commonDir, shelf })
         : separately(root);
     },
   });
+});
+
+export const placeOf = Effect.fnUntraced(function* (root: string) {
+  const place = yield* placeOrUnborn(root);
+  if (place.head === null) return yield* failed(`git could not say what HEAD is in ${root}`);
+  return { ...place, head: place.head } satisfies CheckoutPlace;
 });
 
 export const movedUnder = Effect.fn('enforcement.movedUnder')(function* (

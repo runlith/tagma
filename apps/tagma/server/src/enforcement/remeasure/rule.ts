@@ -32,7 +32,7 @@ import { fileTree } from '../judging/trees.js';
 import { judgement } from '../judging/judge.js';
 import { measuredDebt } from '../rules/debt.js';
 import { declarationOf, keepMeasurement, measuredAs, measurementsOf, treeOf } from '../rules/measurements.js';
-import { measureReach, type Measured, placeOf } from '../rules/measure.js';
+import { measureReach, type Measured, placeOrUnborn } from '../rules/measure.js';
 import { measureBound } from '../rules/measureBound.js';
 import { awaitingLanding, judgedDebt } from '../rules/held.js';
 import { ledgerHasSources, ledgerSources, partitionLedger } from '../rules/ledger.js';
@@ -119,7 +119,7 @@ export type Ruled = {
 
 export type RuleSnapshot = {
   readonly root: string;
-  readonly head: string;
+  readonly head: string | null;
   readonly commonDir: string | undefined;
   readonly shelf: string | undefined;
   readonly ruled: readonly Ruled[];
@@ -128,7 +128,8 @@ export type RuleSnapshot = {
 export const ruleSnapshot = Effect.fn('enforcement.ruleSnapshot')(function* (projectId: number) {
   const root = yield* measuredRoot(yield* (yield* Projects).byId(projectId));
   const table = yield* (yield* Tags).of(projectId);
-  const { head, commonDir, shelf } = yield* placeOf(root);
+  const { head, commonDir, shelf } = yield* placeOrUnborn(root);
+  if (head === null) return { root, head, commonDir, shelf, ruled: [] } satisfies RuleSnapshot;
   const version = { projectId, actor: { _tag: 'Operator' } as const, root, tree: head, commonDir };
   const ruled = (yield* enforcedRules(projectId, version)).flatMap((entry): Ruled[] => {
     const field = enforcementField(table, entry.rule);
@@ -143,6 +144,7 @@ export const ruleSnapshot = Effect.fn('enforcement.ruleSnapshot')(function* (pro
 
 export const chosenRules = Effect.fn('enforcement.chosenRules')(function* (projectId: number, aim: Aim, snapshot?: RuleSnapshot) {
   const { root, head, shelf, ruled } = snapshot ?? (yield* ruleSnapshot(projectId));
+  if (head === null) return { root, enforcing: true, rules: [] };
   const previous =
     aim._tag === 'Moved'
       ? yield* measurementsOf(
@@ -206,6 +208,7 @@ export const startRules = Effect.fn('enforcement.startRules')(function* (snapsho
   const code = (yield* Inspections).code;
   if (code === undefined || rules.length === 0) return rules;
   const { root, head } = snapshot;
+  if (head === null) return [];
   const wanted = new Set(rules);
   const ruled = snapshot.ruled.filter((entry) => wanted.has(entry.name));
   const tree = yield* treeOf(root, head);
@@ -398,6 +401,7 @@ export const remeasureRule = Effect.fn('enforcement.remeasureRule')(function* (
   if (places.length === 0) return SKIPPED;
   const uuid = ruled.entry.rule.uuid;
   const { head } = snapshot;
+  if (head === null) return SKIPPED;
   const tree = yield* treeOf(snapshot.root, head);
   const previous = (yield* measurementsOf(snapshot.root, [uuid], snapshot.shelf)).get(uuid);
   const declaration = declarationOf(document, places);
