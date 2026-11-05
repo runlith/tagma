@@ -191,13 +191,18 @@ export class PageActions {
   async positionDisclosure(side: DisclosurePosition): Promise<void> {
     const root = scroller();
     const viewport = root.getBoundingClientRect();
-    const controls = [...root.querySelectorAll<HTMLElement>('[data-timeline-key] [aria-expanded]')].map((button) => ({
-      button,
-      rect: button.getBoundingClientRect(),
-    }));
-    const anchor = controls
-      .filter((item) => item.rect.height > 0)
-      .sort((a, b) => Math.abs(a.rect.top - viewport.top - 100) - Math.abs(b.rect.top - viewport.top - 100))[0];
+    const nearest = () =>
+      [...root.querySelectorAll<HTMLElement>('[data-timeline-key] [aria-expanded]')]
+        .map((button) => ({ button, rect: button.getBoundingClientRect() }))
+        .filter((item) => item.rect.height > 0)
+        .sort((a, b) => Math.abs(a.rect.top - viewport.top - 100) - Math.abs(b.rect.top - viewport.top - 100))[0];
+    let anchor = nearest();
+    while (anchor === undefined && root.scrollTop > 0) {
+      const from = root.scrollTop;
+      await this.position(Math.max(0, from - root.clientHeight));
+      if (root.scrollTop >= from) throw new Error(`Searching for a disclosure, the feed did not move up from ${from}`);
+      anchor = nearest();
+    }
     if (anchor === undefined) throw new Error('The thread mounted no disclosure control');
     this.target = anchor.button.closest<HTMLElement>('[data-timeline-key]')!.dataset.timelineKey!;
     anchor.button.scrollIntoView({ block: 'center' });
