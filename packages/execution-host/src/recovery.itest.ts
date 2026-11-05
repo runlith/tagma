@@ -42,7 +42,7 @@ const recovery = Effect.fnUntraced(function* ({ state, args }: Invocation) {
 const linesOf = (stdout: string) => stdout.trim().split('\n');
 const ROW = /^(\S+) (\d+) (\S+) (\S+) cleanup (\S+) record (\S+)$/;
 
-layer(platform, { excludeTestServices: true, testTimeout: '30 seconds' })('the recovery program against a live host', (it) => {
+layer(platform, { excludeTestServices: true })('the recovery program against a live host', (it) => {
   it.effect(
     'pages current identities, repeats a stop receipt exactly, reads its operation and shuts down',
     Effect.fnUntraced(function* () {

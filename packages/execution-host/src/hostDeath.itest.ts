@@ -104,7 +104,7 @@ const inFlight = (host: ProcessWorld, name: string) =>
     }),
   );
 
-layer(platform, { excludeTestServices: true, testTimeout: '30 seconds' })('a host killed outright', (it) => {
+layer(platform, { excludeTestServices: true })('a host killed outright', (it) => {
   it.effect(
     'leaves inspectable state but no live road, then replaces the incarnation without replaying its work',
     Effect.fnUntraced(function* () {
