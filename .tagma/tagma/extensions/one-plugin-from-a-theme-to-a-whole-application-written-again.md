@@ -50,7 +50,20 @@ Draft from a design conversation with the operator on 2026-11-05. Nothing here i
 
 The graph, threads, law and gates are never plugins: the product's guarantees stand on them.
 
-**The view is a module, whatever the framework.** The contract is `mount(element, tagma)` returning a disposer. Svelte is first-class: it shares the host's runtime and gets Tagma's components. React brings its own copy, takes the look from the tokens and shows a thread through a call such as `tagma.thread(element, id)`. Vigla fits by its own `mount` once it leaves the experiment stage. An iframe becomes a tool inside a module, for MCP App windows and for embedding someone else's widget, so the core keeps one view mechanism.
+**The view is a module, whatever the framework.** A plugin's interface runs in the window without an iframe. There are two ways in.
+
+- *Native: Svelte, later Vigla.* The plugin ships `.svelte` source, and Tagma compiles it at install with its own compiler and Tailwind. Shipped compiled, it would fail in two ways. It would break on the next Svelte update, since a compiled component imports `svelte/internal/client`, the private API of one version (5.57.0 today). And its Tailwind classes would not exist, since Tailwind emits only classes found in the sources `app.css` names. Compiled by Tagma, the plugin shares the runtime, uses Tagma's components and tokens, and may stand anywhere, rows of the chat included.
+- *Foreign: React or anything else.* The plugin ships a built bundle exporting `mount(element, tagma)`, which returns a disposer, and brings its own copy of its framework. It reaches Tagma's components only through calls such as `tagma.thread(element, id)` or through custom elements, and takes its look from the token CSS variables. It survives Tagma updates as long as the promised calls hold.
+
+Slots inside the chat, composer and sidebar take native plugins only, because a separate React root in each row of a feed whose rows are measured is costly and fragile. A screen, pane or window takes either kind. `create-tagma` produces a native plugin, and agents write native by default.
+
+**Vigla.** If Tagma moves to Vigla, the compiler changes in one place, and every native plugin gains what Vigla may add for plugin hosts ([[6b792682]]) with no change by its author. Nothing in the plugin system waits for Vigla.
+
+**Where an iframe remains.** It is a component a module places inside itself, never a second kind of view in the core. It stays only where the HTML is not ours:
+- an MCP App window, because the MCP Apps specification requires an iframe sandbox and a server is a connection nobody installed as code;
+- someone else's site or widget: a player, a map, a payment form, a sign-in page;
+- a finished web application a plugin brings whole, with its own router and build, served by its process;
+- pages an agent writes, already shown framed on their own origin.
 
 The reason is what the iframe costs today: no key forwarding to the window, menus clipped at the frame, no drag bridge, about 60 CSS variables in place of components, and no way to mount a real thread. What it buys is small for a plugin with a process, which already holds all the operator's OS rights. The price of the module is real: a hung plugin hangs the window, a leak lives until reload, a plugin without a process or a third-party widget in the window holds operator rights, and whatever modules we promise become a versioned public contract. Answers to carry into the spec: load lazily, start Tagma without plugins on demand, warn at install, keep the promised list short, as `hostModules` already does for adapters.
 
@@ -67,6 +80,7 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 - Whether all three depths are needed: the operator allows that one may be excess.
 - What exactly is promised to a plugin: which modules, which slots, which `tagma.*` calls.
 - One consent rule at install. A process runs as the operator with no question today; a marketplace plugin asks.
+- Whether an unreviewed plugin without a process shows its interface in an iframe; this is part of the consent rule.
 - A real identity for a plugin. `x-tagma-caller` proves nothing, and opening approvals or streams to it needs one first.
 - Distribution: one catalog, a Plugins screen in the window, machine or project scope.
 - When a process starts: it now lives from install on, which a machine with many plugins will feel.
