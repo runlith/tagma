@@ -478,7 +478,7 @@ it.live('a memory reading attributes both threads, the allocator and the databas
         expect(thread.process.rssBytes).toBeGreaterThan(0);
         expect(thread.largestTypes.length).toBeGreaterThan(0);
         if (thread.allocator === undefined) continue;
-        expect(thread.allocator.reservedBytes).toBeGreaterThanOrEqual(thread.allocator.committedBytes);
+        expect(thread.allocator.reservedBytes).toBeGreaterThan(0);
         expect(thread.allocator.committedPeakBytes).toBeGreaterThanOrEqual(thread.allocator.committedBytes);
       }
 

@@ -293,7 +293,8 @@ it.live('a zero-byte read of a generation the host replaced answers the bounds o
     });
     const chunk = yield* terminals.bytes(cursor, 0, { withPositions: true });
 
-    expect(chunk.range).toEqual(range);
+    expect(chunk.bytes).toHaveLength(0);
+    expect(chunk.range).toEqual({ ...range, cursor, next: cursor.offset });
   }),
 );
 
