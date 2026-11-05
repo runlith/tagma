@@ -56,9 +56,13 @@ class InputClient {
   constructor(options: ClientOptions) {
     const stop = holding();
     try {
-      this.child = spawn(options.tools.python, ['-I', '-u', join(import.meta.dir, 'hid.py'), String(options.port)], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      this.child = spawn(
+        '/usr/sbin/taskpolicy',
+        ['-l', '0', '-t', '0', options.tools.python, '-I', '-u', join(import.meta.dir, 'hid.py'), String(options.port)],
+        {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      );
     } finally {
       stop();
     }
