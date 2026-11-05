@@ -5,9 +5,9 @@ ord: 11
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/chat-ui/stand/wheel.ts
-  - kind: file
     ref: packages/chat-ui/stand/recorder.ts
+  - kind: file
+    ref: packages/chat-ui/stand/wheel.ts
 ---
 An engine may animate a wheel scroll over later frames: Linux WebKit spreads one delivered delta across several frames (CI 41913034331), so a per-frame equality judges the embedder's interpolation, not the feed. The settle point is the page's own fact — the first trusted `scrollend` after the step that does not answer an own write, recorded as `Recording.scrollEnds` — never a frame count or a time. A `scrollend` answers an own write when a write that moved the scroller came after the previous `scrollend`: the feed's write just before a wheel ends its own scroll sequence while the wheel's animation still runs (Linux WebKit, CI 41950402402), and settling the wheel there judged the rest of its animation as excess.
 

@@ -16,9 +16,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/restart.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/testing/frozen.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/stepBack.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/testing/frozen.ts
 ---
 `install.json`, `install/attempt.json` and `returned.json`, the step-back record `install/back.json` (the leaving build writes it; it or any later start of a build that carries chain return settles it, and an issued build before that never reads it), `restart.json`, the update record `update.json`, the machine registry `registry.json` and the release feed cross releases both ways: an issued release reads the manifest of the release that replaced it, the attempt and restart records its successor wrote (after a rollback or a step back), the registry it reseeds a lost database from and the feed today's cut publishes; the running release reads what the issued one left. An issued reader decodes with its own build's schema and can never change, so a writer change it rejects breaks a person's machine with no trace in the repository — an attempt record that does not read blocks every install until a start sets it aside and gives up its automatic return ([[9e8adf53]]).
 

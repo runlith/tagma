@@ -8,17 +8,17 @@ edges:
     to: 01a1662f-8eba-7ac3-b104-b31e35d3e139
 sources:
   - kind: file
+    ref: packages/execution-host/src/holder-client/Link.ts
+  - kind: file
+    ref: packages/execution-host/src/posix/linux/processes.ts
+  - kind: file
     ref: packages/execution-host/src/posix/macos/processes.ts
+  - kind: file
+    ref: packages/execution-host/src/posix/PosixHolder.ts
   - kind: file
     ref: packages/execution-host/src/posix/ProcessServer.ts
   - kind: file
     ref: packages/execution-host/src/posix/ProcessWorker.ts
-  - kind: file
-    ref: packages/execution-host/src/posix/linux/processes.ts
-  - kind: file
-    ref: packages/execution-host/src/posix/PosixHolder.ts
-  - kind: file
-    ref: packages/execution-host/src/holder-client/Link.ts
 ---
 Process tables, process facts and group membership grow with the population and can block unrelated deadlines when read on the logic loop. They are therefore queried through the process-worker protocol on both platforms; a group read does not share the terminal-input thread. Each reader, sampler and holder owns its worker lifetime, using the same replacement mechanism after worker loss.
 

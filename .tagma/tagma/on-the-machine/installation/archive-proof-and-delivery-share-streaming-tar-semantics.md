@@ -8,9 +8,9 @@ edges:
     to: 01a13283-fc95-76c8-a601-3f5eac2d9a04
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/archive/tarball.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/archive/materialize.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/archive/tarball.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/archive.ts
   - kind: file

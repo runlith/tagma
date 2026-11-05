@@ -12,11 +12,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/returning.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/process/returning.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/closure/moves.ts
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/stepBack.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/returning.ts
   - kind: file
     ref: apps/tagma/server/src/installation/process/succession.ts
 ---

@@ -5,9 +5,9 @@ ord: 109
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/executions/terminals/inventory.ts
-  - kind: file
     ref: apps/tagma/server/src/executions/commands/feed.ts
+  - kind: file
+    ref: apps/tagma/server/src/executions/terminals/inventory.ts
 ---
 The inventory serializes every catch-up with the host behind one flight, and a catch-up is a host request: when the host's request lane is saturated, the holder waits and the readers behind it reach the flight's wait or hold ceiling. That is an expected outcome, not a server bug, so it reaches readers as `TerminalUnavailable` from the host.
 

@@ -7,16 +7,16 @@ edges:
   - kind: relates
     to: 01a15208-9958-790e-b6dd-4de6a15337e5
 sources:
-  - kind: symbol
-    ref: packages/agent/src/thread/record.ts
-    symbol: UnreadMark
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/sessions/switch.ts
+  - kind: file
+    ref: packages/agent/src/thread/transport/Transports.ts
   - kind: symbol
     ref: packages/agent/src/thread/persisted.ts
     symbol: readThreadFacts
-  - kind: file
-    ref: packages/agent/src/thread/transport/Transports.ts
-  - kind: file
-    ref: apps/tagma/server/src/external-harnesses/sessions/switch.ts
+  - kind: symbol
+    ref: packages/agent/src/thread/record.ts
+    symbol: UnreadMark
 ---
 A thread's authority, transport and capabilities have no absence, so a stored one this build cannot read stands as a safe value — authority as `review`, transport as `UNREAD_BINDING`, capabilities as `UNREAD_CAPABILITIES`, all none — and the reading (`readThreadFacts`, `readThreadTransport`, `readThreadBinding`, `readThreadCapabilities` in `persisted.ts`) sets `unread` beside the values, naming each fact that stands in. The mark rides the thread row, the list summary, the harness road and the session store's binding and capabilities reads, and the snapshot and the CLI row carry it on the wire. The key is absent when everything read: a frame holding an `undefined` optional key is dropped whole.
 

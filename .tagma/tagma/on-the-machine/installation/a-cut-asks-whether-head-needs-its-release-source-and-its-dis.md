@@ -15,10 +15,10 @@ edges:
     to: 01a16915-34b6-7bf8-9a01-c8c56bc98bc4
 sources:
   - kind: file
-    ref: apps/tagma/server/src/mac-release/notarize.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
     ref: apps/tagma/server/src/cut/stage.ts
+  - kind: file
+    ref: apps/tagma/server/src/mac-release/notarize.ts
 ---
 A release entry that freezes the source needs to know whether a fresh cut will happen: `needsReleaseSource(checkout, cut)` is true only for a HEAD with no standing cut and no release tag. A resumed notarization after HEAD moved must not read live brand art: the cut keeps `brand`, landNotarized carries it to the notarized cut, and `Apple.image` takes the cut's assets directory when it stands.
