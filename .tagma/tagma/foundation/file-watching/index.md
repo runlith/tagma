@@ -12,6 +12,14 @@ fields:
           "13182a9f",
           "edf810fe"
         ]
+      },
+      {
+        "at": "src/cookie.ts",
+        "for": [
+          "d962023e",
+          "c6922284",
+          "5565be05"
+        ]
       }
     ],
     "id": "@runlith/watch",
