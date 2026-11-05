@@ -2,8 +2,9 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { join } from 'node:path';
-import { Context, Effect, Exit, Layer, Scope } from 'effect';
+import { Context, type Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { graphFixture, tempRootEffect } from '../../composition/testing/graphFixture.js';
+import { LoadPluginTitles } from '../../executions/contract/service/owners.js';
 import { FileWatcher } from '../../platform/contract/service/watch.js';
 import { tagmaFormat } from '../../plugin-formats/tagma/format.js';
 import { type PluginFolder, writePlugin } from '../../plugin-formats/tagma/testing/folder.js';
@@ -15,7 +16,7 @@ import { Projects } from '../../projects/contract/service/registry.js';
 import { Secrets, SecretsPlace } from '../../secrets/contract/service/secrets.js';
 import { secrets as secretsModule } from '../../secrets/secrets.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { HostPlace, PluginHost } from '../contract/service/supervision.js';
+import { HostPlace, PLUGIN_QUIET, PluginHost } from '../contract/service/supervision.js';
 import { PluginTools } from '../contract/service/tools.js';
 import { pluginHost } from '../plugin-host.js';
 
@@ -26,6 +27,7 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
   readonly seed?: (home: string) => Promise<void>;
   readonly watcher?: Context.Context<FileWatcher>;
   readonly formats?: readonly PluginFormat[];
+  readonly quiet?: Duration.Input;
 }) {
   const demo = yield* Effect.acquireRelease(fixtureGraph.openEffect(), () => Effect.orDie(fixtureGraph.releaseEffect));
   const projectId = demo.projectId;
@@ -35,7 +37,7 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
   const files = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);
   const stored = secretsModule.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home })));
   const stack = pluginHost.lifetimes.installation.pipe(
-    Layer.provide(Layer.succeed(HostPlace, { server: 'http://127.0.0.1:1' })),
+    Layer.provide(Layer.succeed(HostPlace, { server: 'http://127.0.0.1:1', quiet: input.quiet ?? PLUGIN_QUIET })),
     Layer.provideMerge(
       pluginsModule.lifetimes.installation.pipe(
         Layer.provide(Layer.succeed(PluginPlaces, { home })),
@@ -68,6 +70,7 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
     return {
       host,
       plugins: installed,
+      titles: Context.get(built, LoadPluginTitles),
       tools: Context.get(built, PluginTools),
       secrets: Context.get(built, Secrets),
       said,

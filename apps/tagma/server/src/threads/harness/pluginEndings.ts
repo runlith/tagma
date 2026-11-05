@@ -1,7 +1,9 @@
 import { type ThreadBorderFailed, ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
+import type { EndingInput } from '@runlith/tagma/plugin/protocol';
 import { Effect } from 'effect';
 import { ContributionPoint } from '../../platform/contract/service/contribution.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
+import { unservedTools } from '../../plugin-host/contract/service/tools.js';
 import { type PluginContribution, PluginPointRefused, type PluginRegister } from '../../plugins/contract/service/points.js';
 import { ENDED_REASON, EndingTools, PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
@@ -25,7 +27,7 @@ export const makeEndingDelivery = Effect.gen(function* () {
     const pending = yield* Effect.mapError(host.pending(plugin), (cause) => new ThreadCallBroke({ cause }));
     const hook = hooks.get(plugin);
     if (hook !== undefined || !pending) return hook;
-    return yield* broke(`${plugin} is not running; the ending of ${runId} is delivered once it runs again`);
+    return yield* broke(`${plugin} has not published its contributions yet; the ending of ${runId} is delivered once it has`);
   });
 
   const deliver = Effect.fn('EndingDelivery.deliver')(function* (event: ThreadEvent): Effect.fn.Return<void, ThreadBorderFailed> {
@@ -39,7 +41,7 @@ export const makeEndingDelivery = Effect.gen(function* () {
       .call(
         plugin,
         hook.tool,
-        { threadId: run.threadId, runId: run.runId, status: run.status, failureReason: run.failureReason },
+        { threadId: run.threadId, runId: run.runId, status: run.status, failureReason: run.failureReason } satisfies EndingInput,
         { caller: { kind: 'tagma', projectId: thread.projectId, reason: ENDED_REASON } },
       )
       .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
@@ -48,11 +50,11 @@ export const makeEndingDelivery = Effect.gen(function* () {
 
   const register: PluginRegister<EndingTools> = (contribution) =>
     Effect.suspend(() => {
-      const { plugin, value, tools } = contribution;
+      const { plugin, value, sibling } = contribution;
       const tool = value.ended;
       if (tool === undefined) return Effect.succeed(() => undefined);
-      if (tools === null) return Effect.fail(refused('endings are delivered to a process, and the plugin declares none'));
-      if (!tools.some((descriptor) => descriptor.name === tool)) return Effect.fail(refused(`the process serves no tool ${tool}`));
+      const unserved = unservedTools(sibling, [tool]);
+      if (unserved !== null) return Effect.fail(refused(unserved));
       const hook: Hook = { tool, contribution };
       hooks.set(plugin.id, hook);
       return Effect.succeed(() => {

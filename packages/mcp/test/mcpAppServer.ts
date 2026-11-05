@@ -30,14 +30,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'dashboard',
+        description: 'Shows the dashboard.',
         inputSchema: { type: 'object' as const },
         outputSchema: { type: 'object' as const },
         _meta: { ui: { resourceUri: uri }, custom: { retained: true } },
       },
-      { name: 'refresh', inputSchema: { type: 'object' as const }, _meta: { ui: { visibility: ['app'] } } },
-      { name: 'model', inputSchema: { type: 'object' as const }, _meta: { ui: { visibility: ['model'] } } },
-      { name: 'both', inputSchema: { type: 'object' as const }, _meta: { ui: { visibility: ['model', 'app'] } } },
-      { name: 'hidden', inputSchema: { type: 'object' as const }, _meta: { ui: { visibility: [] } } },
+      {
+        name: 'refresh',
+        description: 'Refreshes the state.',
+        inputSchema: { type: 'object' as const },
+        _meta: { ui: { visibility: ['app'] } },
+      },
+      {
+        name: 'model',
+        description: 'Answers the model.',
+        inputSchema: { type: 'object' as const },
+        _meta: { ui: { visibility: ['model'] } },
+      },
+      {
+        name: 'both',
+        description: 'Answers the model and the view.',
+        inputSchema: { type: 'object' as const },
+        _meta: { ui: { visibility: ['model', 'app'] } },
+      },
+      { name: 'hidden', description: 'Answers nobody.', inputSchema: { type: 'object' as const }, _meta: { ui: { visibility: [] } } },
     ],
   };
 });

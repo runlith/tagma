@@ -2,7 +2,7 @@ import { Effect, PubSub, Stream } from 'effect';
 import { Projects } from '../projects/contract/service/registry.js';
 import { type SecretOwner, SecretOwnerFailed } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { PluginRefused } from './contract/service/format.js';
+import { PluginRefused, PluginUnreadable } from './contract/service/format.js';
 import {
   EnabledPlugins,
   HostedPlugins,
@@ -12,12 +12,17 @@ import {
   PluginUnhosted,
 } from './contract/service/plugins.js';
 import { pluginsDisabled, pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
+import type { Digests } from './digests.js';
 import { enablingIn } from './enabling.js';
 import { hosted } from './reader.js';
 import { SECRET_KIND, type Shelf } from './shelf.js';
 
-export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf: Shelf; readonly pulses: PubSub.PubSub<number | null> }) {
-  const { shelf, pulses } = input;
+export const makeEnabled = Effect.fnUntraced(function* (input: {
+  readonly shelf: Shelf;
+  readonly digests: Digests;
+  readonly pulses: PubSub.PubSub<number | null>;
+}) {
+  const { shelf, digests, pulses } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
 
@@ -58,9 +63,13 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
   });
 
   const anywhere = Effect.fnUntraced(function* () {
-    const running = new Set<string>();
+    const running = new Map<string, number[]>();
     for (const project of yield* projects.list().pipe(Effect.mapError(unreadable))) {
-      for (const id of (yield* enablingIn(settings, project.id).pipe(Effect.mapError(unreadable))).running) running.add(id);
+      for (const id of (yield* enablingIn(settings, project.id).pipe(Effect.mapError(unreadable))).running) {
+        const there = running.get(id) ?? [];
+        there.push(project.id);
+        running.set(id, there);
+      }
     }
     return running;
   });
@@ -69,7 +78,8 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     const running = yield* anywhere();
     const listed = new Map<string, PluginHostedRoot>();
     for (const install of yield* installs) {
-      if (!running.has(install.id)) continue;
+      const there = running.get(install.id);
+      if (there === undefined) continue;
       const read = yield* shelf.read(install.root, install.declared ?? null).pipe(
         Effect.map((found) => (hosted(found.package) ? null : undefined)),
         Effect.catchTags({
@@ -78,7 +88,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
         }),
         Effect.mapError(unreadable),
       );
-      if (read !== undefined) listed.set(install.id, { root: install.root, refused: read });
+      if (read !== undefined) listed.set(install.id, { root: install.root, refused: read, projects: there.sort((a, b) => a - b) });
     }
     return listed;
   });
@@ -94,11 +104,18 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     const { options, redact } = yield* shelf
       .values(id, pkg)
       .pipe(Effect.mapError((failure) => (failure._tag === 'PluginUnreadable' ? failure : unreadable(failure))));
+    const outputs = pkg.build?.outputs ?? [];
+    const revision = yield* digests.digest(install.root, outputs, 'outputs').pipe(Effect.mapError(unreadable));
+    if (revision === null) {
+      return yield* new PluginUnreadable({ path: install.root, reason: `${outputs.join(' or ')} went missing while it was read` });
+    }
     return {
       id,
       title: pkg.title ?? pkg.name,
       root: install.root,
       data: shelf.data(id),
+      revision,
+      outputs,
       process: pkg.process,
       contributes: pkg.contributes,
       options,

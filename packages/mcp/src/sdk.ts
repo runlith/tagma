@@ -74,6 +74,7 @@ export const mcpSdkDefaults = (server: string, transport: McpTransportKind): Eff
 export type McpRequestOptions = {
   readonly timeout: number;
   readonly caller?: McpCaller;
+  readonly meta?: Readonly<Record<string, unknown>>;
   readonly redact?: (text: string) => string;
 };
 
@@ -585,7 +586,10 @@ export const mcpCallTool = Effect.fn('mcp.callTool')(
     ),
 );
 
-const callerOf = (options: McpRequestOptions) => (options.caller === undefined ? {} : { _meta: mcpCallerMeta(options.caller) });
+const callerOf = (options: McpRequestOptions) =>
+  options.caller === undefined && options.meta === undefined
+    ? {}
+    : { _meta: { ...options.meta, ...(options.caller === undefined ? {} : mcpCallerMeta(options.caller)) } };
 
 const callFailed = (connection: McpSdkConnection, tool: string, options: McpRequestOptions, error: unknown) =>
   error instanceof SignInRequired

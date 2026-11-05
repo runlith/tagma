@@ -15,6 +15,7 @@ import {
 } from './contract/service/plugins.js';
 import { PluginPoints } from './contract/service/points.js';
 import { pluginsOptions } from './contract/wire/settings.js';
+import { makeDigests } from './digests.js';
 import { makeEnabled } from './enabled.js';
 import { makeInstalls } from './installs.js';
 import { makePoints } from './points.js';
@@ -52,8 +53,9 @@ export const pluginsLayer: Layer.Layer<
         }),
     });
     const shelf = yield* makeShelf({ home });
+    const digests = yield* makeDigests;
     const installs = yield* makeInstalls({ shelf, home, points, processes: () => reader, changed });
-    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, pulses });
+    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);
     yield* Effect.forkScoped(Stream.runForEach(Stream.drop(options, 1), () => changed(null)));

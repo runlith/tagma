@@ -109,7 +109,7 @@ export const PLUGIN_OPERATIONS = {
     meaning:
       'Install a plugin — in Tagma’s format (tagma-plugin.json), Agent Plugins 1.0, Claude Code or Codex — from a folder, read in place, a git URL, cloned onto this machine, or a revision a preview prepared; installing the same source again updates it. It runs at once in this project, or with `scope: user` in every project; `enabled: false` installs it without running it in this project, and stops it here if it ran.',
     grammar:
-      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers the pool and its agents the agent library of each project running it, each named `<plugin>-<name>`; its command hooks run as the operator. A plugin in Tagma’s format runs its process once for the whole machine while any project runs it, restarted when its files or options change; its tools reach agents as `plugin__<id>__<tool>`. A manifest whose contributions no point accepts refuses. Its remote MCP servers are connected in this project at once, so one asking for a sign-in reads `needs-sign-in` in read_mcp_servers; nothing signs in. A relative folder is read from the project root.',
+      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers the pool and its agents the agent library of each project running it, each named `<plugin>-<name>`; its command hooks run as the operator. A plugin in Tagma’s format publishes its contributions while any project runs it, before its process runs; its one machine-wide process starts on the first call, tick or view that needs it, sleeps when quiet, and restarts after a rebuild or an option change; its tools reach agents as `plugin__<id>__<tool>`. A manifest whose contributions no point accepts refuses. Its remote MCP servers are connected in this project at once, so one asking for a sign-in reads `needs-sign-in` in read_mcp_servers; nothing signs in. A relative folder is read from the project root.',
     input: Schema.Struct({
       project: projectField,
       source: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
@@ -151,7 +151,7 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Run an installed plugin in this project or in every project, or stop running it there: its tools, views, skills, commands, MCP servers, agents and hooks reach a project only while it runs there, and its process runs while any project runs it.',
+      'Run an installed plugin in this project or in every project, or stop running it there: its tools, views, skills, commands, MCP servers, agents and hooks reach a project only while it runs there, and its process may run only while some project runs it.',
     grammar:
       'With `scope: project`, switching off a plugin enabled for every project stops it in this project alone, and switching it on again lifts that. With `scope: user`, switching on also lifts this project’s switch-off; switching off leaves running the projects that enabled it themselves.',
     input: Schema.Struct({

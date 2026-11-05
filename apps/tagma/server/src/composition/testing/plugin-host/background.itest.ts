@@ -17,6 +17,7 @@ import { HostPlace, PluginHost } from '../../../plugin-host/contract/service/sup
 import { pluginHost } from '../../../plugin-host/plugin-host.js';
 import { PluginFormats } from '../../../plugins/contract/service/format.js';
 import { PluginPlaces, Plugins } from '../../../plugins/contract/service/plugins.js';
+import type { PluginProcessState } from '../../../plugins/contract/wire/rows.js';
 import { plugins as pluginsModule } from '../../../plugins/plugins.js';
 import { Projects } from '../../../projects/contract/service/registry.js';
 import { Schedules } from '../../../schedule/contract/service/schedules.js';
@@ -28,6 +29,7 @@ import { ticks } from '../../ticks.js';
 import { demoGraphLayer, tempRootEffect, withDemo } from '../graphFixture.js';
 
 const files = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);
+const QUIET = 30_000;
 
 const assembled = (home: string) =>
   Layer.mergeAll(
@@ -36,7 +38,7 @@ const assembled = (home: string) =>
   ).pipe(
     Layer.provideMerge(
       pluginHost.lifetimes.installation.pipe(
-        Layer.provide(Layer.succeed(HostPlace, { server: null })),
+        Layer.provide(Layer.succeed(HostPlace, { server: null, quiet: QUIET })),
         Layer.provideMerge(
           pluginsModule.lifetimes.installation.pipe(
             Layer.provide(Layer.succeed(PluginPlaces, { home })),
@@ -57,7 +59,7 @@ class NoCallsAnswered extends Data.TaggedError('NoCallsAnswered')<{}> {}
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('background plugin', (it) => {
   it.effect(
-    'a machine-enabled plugin receives the scheduled tick as tagma, takes its notification answer once and withdraws both contributions when disabled',
+    'a machine-enabled plugin stands with no process, its tick starts it as tagma, it takes its notification answer once, goes idle and starts again on the next tick, and withdraws both contributions when disabled',
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
@@ -117,13 +119,14 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
               }),
               { schedule: Schedule.spaced('5 millis') },
             );
-          const running = Effect.repeat(
-            Effect.sync(() => host.reading('background')),
-            {
-              schedule: Schedule.spaced('5 millis'),
-              until: (row) => row?.state === 'running',
-            },
-          );
+          const settled = (...states: readonly PluginProcessState[]) =>
+            Effect.repeat(
+              Effect.sync(() => host.reading('background')),
+              {
+                schedule: Schedule.spaced('5 millis'),
+                until: (row) => row !== undefined && states.includes(row.state),
+              },
+            );
           const stopped = Effect.repeat(
             Effect.sync(() => host.reading('background')),
             {
@@ -134,21 +137,24 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           const install = Effect.gen(function* () {
             const prepared = yield* within(plugins.prepare({ projectId: demo.projectId, source: root }));
             yield* within(plugins.install({ projectId: demo.projectId, prepared, enabled: true, scope: 'project' }));
-            return yield* running;
+            return yield* settled('idle');
           });
           const disable = () => within(plugins.enable({ projectId: demo.projectId, id: 'background', enabled: false, scope: 'project' }));
           const enable = () => within(plugins.enable({ projectId: demo.projectId, id: 'background', enabled: true, scope: 'project' }));
           const all = within(schedules.read({ after: null, limit: 10 }));
 
           expect(senders.accepts('plugin:background')).toBe(false);
-          expect(yield* install).toMatchObject({ state: 'running' });
+          expect(yield* install).toMatchObject({ state: 'idle' });
           expect(senders.accepts('plugin:background')).toBe(true);
           expect((yield* all).rows).toMatchObject([{ owner: 'plugin:background', name: 'poll', nextAt: 60_000 }]);
           yield* advance(60_000);
           expect(yield* received('poll')).toMatchObject([
             {
               args: { name: 'poll', scheduledAt: 60_000, startedAt: 60_000, skipped: 0 },
-              meta: { 'runlith/caller': { kind: 'tagma', projectId: null, reason: 'schedule' } },
+              meta: {
+                'runlith/caller': { kind: 'tagma', projectId: null, reason: 'schedule' },
+                'runlith/projects': [demo.projectId],
+              },
             },
           ]);
 
@@ -172,6 +178,11 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(yield* within(notifications.dismiss(sent.id))).toMatchObject({ repeated: true, outcome: answered.outcome });
           expect((yield* calls).filter((call) => call.tool === 'outcome')).toHaveLength(1);
 
+          yield* advance(QUIET);
+          yield* settled('idle');
+          yield* advance(60_000 - QUIET);
+          expect(yield* received('poll')).toMatchObject([{ args: { name: 'poll', scheduledAt: 120_000 } }]);
+
           yield* disable();
           yield* stopped;
           expect(senders.accepts('plugin:background')).toBe(false);
@@ -179,7 +190,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           yield* advance(120_000);
           expect((yield* all).rows).toEqual([]);
           yield* enable();
-          expect(yield* running).toMatchObject({ state: 'running' });
+          yield* settled('idle', 'running');
           expect((yield* all).rows).toHaveLength(1);
           expect(senders.accepts('plugin:background')).toBe(true);
         }).pipe(Effect.scoped),

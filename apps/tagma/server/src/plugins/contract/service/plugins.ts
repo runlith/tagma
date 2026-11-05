@@ -176,13 +176,15 @@ type PluginHosted = {
   readonly title: string;
   readonly root: string;
   readonly data: string;
+  readonly revision: string;
+  readonly outputs: readonly string[];
   readonly process: PluginProcess | null;
   readonly contributes: Readonly<Record<string, unknown>>;
   readonly options: Readonly<Record<string, string>>;
   readonly redact: readonly string[];
 };
 
-export type PluginHostedRoot = { readonly root: string; readonly refused: string | null };
+export type PluginHostedRoot = { readonly root: string; readonly refused: string | null; readonly projects: readonly number[] };
 
 export class PluginUnhosted extends Data.TaggedError('PluginUnhosted')<{ readonly id: string }> {
   override get message(): string {

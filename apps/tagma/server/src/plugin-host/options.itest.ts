@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { fixtureEntries, KEYED_TOOLS } from './testing/tools.js';
 import { hostWorld } from './testing/world.js';
 
 const FIXTURE = resolve(import.meta.dir, 'testing/keyed.ts');
@@ -11,6 +12,8 @@ const TOKEN = 'tok-5678-abcdef';
 const OTHER = 'tok-9012-ghijklmnop';
 const manifest = {
   program: FIXTURE,
+  resident: true,
+  contributes: { tools: fixtureEntries({}, KEYED_TOOLS) },
   options: [{ key: 'API_TOKEN', title: 'API token', description: 'The token of the service the plugin bridges.', sensitive: true }],
 };
 const target = { owner: 'plugins', id: 'fixture', name: 'API_TOKEN' } as const;

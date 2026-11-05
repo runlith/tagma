@@ -55,6 +55,7 @@ function processState(process: PluginProcessRow): HereState {
     case 'starting':
       return 'connecting';
     case 'running':
+    case 'idle':
     case 'stopped':
       return 'ok';
   }

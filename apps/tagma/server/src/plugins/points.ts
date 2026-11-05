@@ -66,7 +66,7 @@ export const makePoints = () => {
       }
       return Result.succeed(checked satisfies PluginChecked);
     },
-    publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, tools, caller) {
+    publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
       const entries = Object.entries(checked).flatMap(([name, value]) => {
         const declared = points.get(name);
         return declared === undefined ? [] : [{ declared, value }];
@@ -86,9 +86,7 @@ export const makePoints = () => {
       const byPoint = new Map(entries.map((entry) => [entry.declared.point, entry.value]));
       const sibling = <B>(point: PluginFaced<B>): B | undefined => byPoint.get(point) as B | undefined;
       for (const { declared, value } of entries) {
-        releases.push(
-          yield* declared.register({ plugin, value, sibling, tools, caller }).pipe(Effect.tapError(() => Effect.sync(withdraw))),
-        );
+        releases.push(yield* declared.register({ plugin, value, sibling, caller }).pipe(Effect.tapError(() => Effect.sync(withdraw))));
       }
       return withdraw;
     }),

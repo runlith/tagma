@@ -21,7 +21,7 @@ export const pluginHostLayer: Layer.Layer<
     const scope = yield* Effect.scope;
     const offers = yield* makeOffers;
     yield* Effect.acquireRelease(points.declare(TOOLS, offers.register), (withdraw) => Effect.sync(withdraw));
-    const supervisor = yield* makeSupervisor({ points, hosted });
+    const supervisor = yield* makeSupervisor({ points, hosted, offers });
     yield* Effect.acquireRelease((yield* PluginProcesses).register(supervisor.reading), (withdraw) => Effect.sync(withdraw));
 
     const serial = yield* Semaphore.make(1);
@@ -34,7 +34,10 @@ export const pluginHostLayer: Layer.Layer<
           (id) => supervisor.stop(id),
           { discard: true },
         );
-        yield* Effect.forEach(roots, ([id, { root }]) => supervisor.ensure(id, root), { concurrency: 'unbounded', discard: true });
+        yield* Effect.forEach(roots, ([id, { root, projects }]) => supervisor.ensure(id, root, projects), {
+          concurrency: 'unbounded',
+          discard: true,
+        });
       },
       (effect) => serial.withPermit(effect),
     );
@@ -51,8 +54,7 @@ export const pluginHostLayer: Layer.Layer<
           yield* reconcile().pipe(Effect.tapError(() => Effect.forkIn(settled, scope)));
         }),
         reading: supervisor.reading,
-        pending: (id) =>
-          Effect.map(hosted.roots(), (roots) => roots.get(id)?.refused === null && supervisor.reading(id)?.state !== 'running'),
+        pending: (id) => Effect.map(hosted.roots(), (roots) => roots.get(id)?.refused === null && !supervisor.standing(id)),
         call: supervisor.call,
         callAdmitted: supervisor.callAdmitted,
         read: supervisor.read,

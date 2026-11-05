@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import type { LLMEvent } from '@runlith/llm/schema/events';
 import { Clock, Context, Data, Deferred, Effect, Fiber, FileSystem, Layer, Schedule, Stream } from 'effect';
+import { LoadPluginTitles } from '../../../executions/contract/service/owners.js';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { PluginHost } from '../../../plugin-host/contract/service/supervision.js';
@@ -88,7 +89,7 @@ const setup = Effect.gen(function* () {
     Effect.sync(() => host.reading('fixture')),
     {
       schedule: Schedule.spaced('20 millis'),
-      until: (row) => row?.state === 'running',
+      until: (row) => row?.state === 'idle',
     },
   );
   return { world, host, account, plugin, projectId, scope };
@@ -187,7 +188,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
 
   it.effect('an end that falls on a restart of the process is delivered to the process that follows it', () =>
     Effect.gen(function* () {
-      const { world, host, plugin } = yield* Table;
+      const { world, host, plugin, projectId } = yield* Table;
       const files = yield* FileSystem.FileSystem;
       const threadId = yield* player();
       gate = Deferred.makeUnsafe<void>();
@@ -196,7 +197,8 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
 
       const held = yield* Effect.forkChild(host.call('fixture', 'hold', {}, {}));
       yield* files.writeFileString(join(plugin, MANIFEST), manifestText(folder('Fixture again')));
-      yield* until(Effect.sync(() => host.reading('fixture')?.tools === 0));
+      const titles = Context.get(world.runtime.owners, LoadPluginTitles);
+      yield* until(Effect.map(titles.read(projectId), (read) => read.get('fixture') === 'Fixture again'));
 
       yield* Deferred.succeed(gate, undefined);
       yield* files.writeFileString(join(world.dataHome, 'agent-plugin-data', 'fixture', 'release'), '');
@@ -219,7 +221,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         writePlugin(plugin, { id: 'lone', title: 'Lone', program: FIXTURE, contributes: { tools: fixtureEntries({}) } }),
       );
       expect((yield* world.op('install_plugin', { source: plugin }, `project=${projectId}`)).status).toBe(200);
-      yield* until(Effect.sync(() => host.reading('lone')?.state === 'running'));
+      yield* until(Effect.sync(() => host.reading('lone')?.state === 'idle'));
       expect((yield* world.op('remove_project', { ref: String(projectId) })).status).toBe(200);
       yield* until(Effect.sync(() => host.reading('lone') === undefined));
     }),

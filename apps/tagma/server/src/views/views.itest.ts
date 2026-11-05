@@ -15,11 +15,14 @@ import type { PluginViewState } from './contract/wire/sets.js';
 import { siteFile } from './files.js';
 
 const SERVER = resolve(import.meta.dir, '../../../../../packages/mcp/test/mcpAppServer.ts');
-const object = { type: 'object', properties: {} };
+const object = { type: 'object' };
 const contributes = {
   tools: [
     { name: 'dashboard', audience: 'agents', description: 'Shows the dashboard.', inputSchema: object },
     { name: 'refresh', audience: 'view', description: 'Refreshes the state.', inputSchema: object },
+    { name: 'model', audience: 'tagma', description: 'Answers the model.', inputSchema: object },
+    { name: 'both', audience: 'tagma', description: 'Answers the model and the view.', inputSchema: object },
+    { name: 'hidden', audience: 'tagma', description: 'Answers nobody.', inputSchema: object },
   ],
   views: [{ id: 'board', entry: 'ui/board.html', live: true }],
   results: [{ tool: 'dashboard', view: 'board' }],

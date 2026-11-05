@@ -1,4 +1,6 @@
+import type { NotificationInput } from '@runlith/tagma/plugin/protocol';
 import { Context, Effect, Layer } from 'effect';
+import { unservedTools } from '../plugin-host/contract/service/tools.js';
 import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
 import { pluginCaller } from '../plugins/contract/wire/names.js';
 import { NotificationContributions, NOTIFIER } from '../notify/contract/service/contributions.js';
@@ -15,10 +17,9 @@ export const outcomes = Layer.effectContext(
         declare: (register) =>
           points.declare(
             NOTIFIER,
-            Effect.fnUntraced(function* ({ plugin, value, tools, caller }) {
-              if (tools === null || !tools.some((descriptor) => descriptor.name === value.tool)) {
-                return yield* new PluginPointRefused({ point: NOTIFIER.plugin.name, reason: `the process serves no tool ${value.tool}` });
-              }
+            Effect.fnUntraced(function* ({ plugin, value, sibling, caller }) {
+              const unserved = unservedTools(sibling, [value.tool]);
+              if (unserved !== null) return yield* new PluginPointRefused({ point: NOTIFIER.plugin.name, reason: unserved });
               return register(pluginCaller(plugin.id), {
                 deliver: Effect.fnUntraced(function* (outcome) {
                   const answer = yield* caller
@@ -31,7 +32,7 @@ export const outcomes = Layer.effectContext(
                         kind: outcome.kind,
                         answer: outcome.answer,
                         at: outcome.at,
-                      },
+                      } satisfies NotificationInput,
                       { caller: { kind: 'tagma', projectId: null, reason: 'notification' } },
                     )
                     .pipe(Effect.mapError((cause) => new OutcomeRefused({ reason: cause.message })));

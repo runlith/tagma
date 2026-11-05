@@ -1,4 +1,6 @@
+import type { TickInput } from '@runlith/tagma/plugin/protocol';
 import { Context, Effect, Layer } from 'effect';
+import { unservedTools } from '../plugin-host/contract/service/tools.js';
 import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
 import { pluginCaller } from '../plugins/contract/wire/names.js';
 import { SCHEDULED, ScheduleContributions } from '../schedule/contract/service/contributions.js';
@@ -16,12 +18,10 @@ export const ticks = Layer.effectContext(
         declare: (register) =>
           points.declare(
             SCHEDULED,
-            Effect.fnUntraced(function* ({ plugin, value, tools, caller }) {
+            Effect.fnUntraced(function* ({ plugin, value, sibling, caller }) {
               const byName = new Map(value.map((entry) => [entry.name, entry.tool]));
-              const available = new Set(tools?.map((descriptor) => descriptor.name));
-              for (const tool of byName.values()) {
-                if (!available.has(tool)) return yield* refused(`the process serves no tool ${tool}`);
-              }
+              const unserved = unservedTools(sibling, [...byName.values()]);
+              if (unserved !== null) return yield* refused(unserved);
               return yield* register(pluginCaller(plugin.id), value, {
                 deliver: Effect.fnUntraced(function* (tick) {
                   const tool = byName.get(tick.name);
@@ -35,7 +35,7 @@ export const ticks = Layer.effectContext(
                         scheduledAt: tick.scheduledAt,
                         startedAt: tick.startedAt,
                         skipped: tick.skipped,
-                      },
+                      } satisfies TickInput,
                       { caller: { kind: 'tagma', projectId: null, reason: 'schedule' } },
                     )
                     .pipe(Effect.mapError((cause) => new TickRefused({ reason: cause.message })));

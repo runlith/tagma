@@ -15,8 +15,16 @@ export function processSaid(process: PluginProcessRow, here: boolean): ProcessSa
         title: 'Working',
         detail: here ? `Serves ${counted(process.tools, 'tool', 'tools')}.${restarted}` : `Serving your other projects.${restarted}`,
       };
+    case 'idle':
+      return {
+        tone: 'idle',
+        title: 'Asleep',
+        detail: here
+          ? `Offers ${counted(process.tools, 'tool', 'tools')} and wakes when an agent, a view or a schedule needs it.${restarted}`
+          : `Wakes when one of your other projects needs it.${restarted}`,
+      };
     case 'starting':
-      return { tone: 'busy', title: 'Starting', detail: 'Its tools appear in a moment.' };
+      return { tone: 'busy', title: 'Waking up', detail: 'It answers in a moment.' };
     case 'stopped':
       return { tone: 'idle', title: 'Stopped', detail: 'It starts by itself while a project has the plugin on.' };
     case 'failed':

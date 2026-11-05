@@ -15,5 +15,11 @@ export const FIXTURE_TOOLS: readonly McpServedTool[] = [
   { name: 'ended', description: 'Takes the end of a turn of a thread bound to this plugin.', inputSchema: object },
 ];
 
-export const fixtureEntries = (audiences: Readonly<Record<string, ToolAudience>>) =>
-  FIXTURE_TOOLS.map((tool) => ({ ...tool, audience: audiences[tool.name] ?? 'tagma' }));
+export const KEYED_TOOLS: readonly McpServedTool[] = [
+  { name: 'length', description: 'Answers how long the API_TOKEN given to this process is.', inputSchema: object },
+  { name: 'reveal', description: 'Answers the API_TOKEN given to this process.', inputSchema: object },
+  { name: 'keyed', description: 'Answers a structure keyed by the API_TOKEN.', inputSchema: object },
+];
+
+export const fixtureEntries = (audiences: Readonly<Record<string, ToolAudience>>, tools: readonly McpServedTool[] = FIXTURE_TOOLS) =>
+  tools.map((tool) => ({ ...tool, audience: audiences[tool.name] ?? 'tagma' }));

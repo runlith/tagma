@@ -29,7 +29,7 @@ const assembled = (home: string) =>
   buildSteps.pipe(
     Layer.provideMerge(
       pluginHost.lifetimes.installation.pipe(
-        Layer.provide(Layer.succeed(HostPlace, { server: null })),
+        Layer.provide(Layer.succeed(HostPlace, { server: null, quiet: '200 millis' })),
         Layer.provideMerge(
           pluginsModule.lifetimes.installation.pipe(
             Layer.provide(Layer.succeed(PluginPlaces, { home })),
@@ -88,7 +88,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           const plugins = Context.get(built, Plugins);
           const steps = Context.get(built, BuildSteps);
           yield* within(host.start());
-          const standing = (state: 'running' | 'failed') =>
+          const standing = (state: 'idle' | 'failed') =>
             Effect.repeat(
               Effect.sync(() => host.reading('pin')),
               {
@@ -99,7 +99,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
 
           const prepared = yield* within(plugins.prepare({ projectId: demo.projectId, source: root }));
           yield* within(plugins.install({ projectId: demo.projectId, prepared, enabled: true, scope: 'project' }));
-          expect(yield* standing('running')).toMatchObject({ state: 'running' });
+          expect(yield* standing('idle')).toMatchObject({ state: 'idle' });
           const [step, ...more] = yield* steps.of(demo.demoRoot);
           expect(more).toEqual([]);
           expect(step).toMatchObject({ plugin: 'pin', title: 'Core pin', projectId: demo.projectId });
@@ -116,7 +116,9 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
             },
           ]);
 
+          yield* standing('idle');
           yield* fileSystem.writeFileString(join(root, 'crash'), '');
+          expect((yield* Effect.flip(step!.ask({ offer: 'head', checkout: demo.demoRoot }))).message).toContain('pin could not be asked');
           yield* standing('failed');
           expect((yield* Effect.flip(steps.of(demo.demoRoot))).message).toContain('pin is enabled here but its process failed');
 

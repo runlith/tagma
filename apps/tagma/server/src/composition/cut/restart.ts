@@ -5,7 +5,7 @@ import { WORLD_COMMAND, dataDirectory, installationsRoot } from '../../installat
 import { hostBinary } from '../../mac-applications/bundle.js';
 import { worldDirectory } from '../../installation/setup/launcher.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { PLUGIN_ENVIRONMENT } from '../../plugin-host/contract/wire/environment.js';
+import { PLUGIN_ENVIRONMENT } from '@runlith/tagma/plugin/protocol';
 import { CHANNEL } from '../developer/channel.js';
 
 type Running = { readonly pid: number; readonly ppid: number; readonly command: string };

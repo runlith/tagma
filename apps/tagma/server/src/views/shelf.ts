@@ -63,7 +63,10 @@ export const makeShelf = Effect.gen(function* () {
     const unseen = value.filter((result) => !views.has(result.view)).map((result) => result.view);
     if (unseen.length > 0) return yield* refusedResults(`contributes.views declares no view ${unseen.join(', ')}`);
     const called = new Map((sibling(TOOLS) ?? []).map((tool) => [tool.name, tool.audience]));
-    const silent = value.filter((result) => called.get(result.tool) === undefined || called.get(result.tool) === 'view');
+    const silent = value.filter((result) => {
+      const audience = called.get(result.tool);
+      return audience !== 'agents' && audience !== 'own';
+    });
     if (silent.length > 0)
       return yield* refusedResults(
         `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`,

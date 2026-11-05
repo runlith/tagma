@@ -77,16 +77,21 @@ export const pluginOptionSchema = Schema.Struct({
 });
 export type PluginOptionRow = typeof pluginOptionSchema.Type;
 
-const PLUGIN_PROCESS_STATES = ['stopped', 'starting', 'running', 'failed'] as const;
+const PLUGIN_PROCESS_STATES = ['stopped', 'idle', 'starting', 'running', 'failed'] as const;
 export type PluginProcessState = (typeof PLUGIN_PROCESS_STATES)[number];
 
 const pluginProcessSchema = Schema.Struct({
-  state: Schema.Literals(PLUGIN_PROCESS_STATES),
-  tools: Schema.Finite.annotate({ description: 'Tools its process serves.' }),
+  state: Schema.Literals(PLUGIN_PROCESS_STATES).annotate({
+    description:
+      'idle: its contributions stand and its process is not running; the next call, tick, ending, notification, build step or view subscription starts it. failed: its process could not start or serve, so agents are offered none of its tools until it does.',
+  }),
+  tools: Schema.Finite.annotate({ description: 'Tools it offers agents and its views.' }),
   restarts: Schema.Finite,
-  failure: Schema.optional(Schema.String).annotate({ description: 'Why it is failed, with the tail of what its process wrote.' }),
+  failure: Schema.optional(Schema.String).annotate({
+    description: 'Why it is failed, or why its last process ended, with the tail of what that process wrote.',
+  }),
   refused: Schema.optional(Schema.String).annotate({
-    description: 'Why its directory as it stands now is refused; a running process keeps the declaration it started with.',
+    description: 'Why its directory as it stands now is refused; what was working keeps the declaration it started with.',
   }),
 });
 export type PluginProcessRow = typeof pluginProcessSchema.Type;

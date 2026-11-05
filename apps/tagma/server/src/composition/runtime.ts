@@ -196,7 +196,7 @@ import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
 import { PluginViews, ViewSites } from '../views/contract/service/views.js';
 import { WantedSites } from '../remote/contract/service/sites.js';
-import { HostPlace, PluginHost } from '../plugin-host/contract/service/supervision.js';
+import { HostPlace, PLUGIN_QUIET, PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { machineStoreLayer } from '../installation/registry/restore.js';
 import { installation } from '../installation/installation.js';
 import { portBlock } from '../installation/contract/wire/ports.js';
@@ -556,7 +556,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
           }),
         );
   const readyProviders = providerLayer.pipe(Layer.provide(accountCli));
-  const hostPlace = Layer.succeed(HostPlace, { server: options.pluginServer ?? null });
+  const hostPlace = Layer.succeed(HostPlace, { server: options.pluginServer ?? null, quiet: PLUGIN_QUIET });
   const pluginsHome = dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`);
   const pluginsInstallation = marketplaces.lifetimes.installation.pipe(
     Layer.provide(Layer.succeed(MarketplacePlaces, { home: pluginsHome })),

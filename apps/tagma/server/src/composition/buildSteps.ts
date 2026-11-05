@@ -1,18 +1,23 @@
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
+import type { BuildStepInput } from '@runlith/tagma/plugin/protocol';
 import { Effect, Layer, Schedule, Schema } from 'effect';
 import { BEFORE_BUILD, type BeforeStep, BuildStepFailed, BuildSteps } from '../checkout-builds/contract/service/steps.js';
 import { type BeforeBuild, StepVerdict } from '../checkout-builds/contract/wire/steps.js';
 import { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 import { placeAt } from '../projects/identity.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
+import { unservedTools } from '../plugin-host/contract/service/tools.js';
 import { EnabledPlugins, HostedPlugins } from '../plugins/contract/service/plugins.js';
 import { PluginPointRefused, PluginPoints } from '../plugins/contract/service/points.js';
+import type { PluginProcessState } from '../plugins/contract/wire/rows.js';
 
 const decodeVerdict = Schema.decodeUnknownEffect(Schema.fromJsonString(StepVerdict));
 
 const ANSWER_SHOWN = 200;
 
 const STARTING_ASKED_AGAIN = '1 second';
+
+const SETTLED: ReadonlySet<PluginProcessState> = new Set(['idle', 'running', 'failed']);
 
 type Declared = { readonly entries: BeforeBuild; readonly caller: McpToolCaller };
 
@@ -30,15 +35,12 @@ export const buildSteps = Layer.effect(
     yield* Effect.acquireRelease(
       points.declare(
         BEFORE_BUILD,
-        Effect.fnUntraced(function* ({ plugin, value, tools, caller }) {
-          const served = new Set(tools?.map((descriptor) => descriptor.name));
-          const missing = value.filter((entry) => !served.has(entry.tool)).map((entry) => entry.tool);
-          if (missing.length > 0) {
-            return yield* new PluginPointRefused({
-              point: BEFORE_BUILD.plugin.name,
-              reason: `the process serves no tool ${missing.join(', ')}`,
-            });
-          }
+        Effect.fnUntraced(function* ({ plugin, value, sibling, caller }) {
+          const unserved = unservedTools(
+            sibling,
+            value.map((entry) => entry.tool),
+          );
+          if (unserved !== null) return yield* new PluginPointRefused({ point: BEFORE_BUILD.plugin.name, reason: unserved });
           const held: Declared = { entries: value, caller };
           declared.set(plugin.id, held);
           return () => {
@@ -55,12 +57,9 @@ export const buildSteps = Layer.effect(
       projectId,
       ask: Effect.fn('BuildSteps.ask')(function* (input) {
         const answer = yield* caller
-          .call(
-            plugin,
-            entry.tool,
-            { offer: input.offer, checkout: input.checkout },
-            { caller: { kind: 'tagma', projectId, reason: 'build' } },
-          )
+          .call(plugin, entry.tool, { offer: input.offer, checkout: input.checkout } satisfies BuildStepInput, {
+            caller: { kind: 'tagma', projectId, reason: 'build' },
+          })
           .pipe(
             Effect.map((answered) => ({ answered })),
             Effect.catchTag('McpTimedOut', () => Effect.succeed(null)),
@@ -94,7 +93,7 @@ export const buildSteps = Layer.effect(
             Effect.map(hosted.roots(), (roots) => enabled.flatMap((id) => (roots.has(id) ? [{ id, row: host.reading(id) }] : []))),
             {
               schedule: Schedule.spaced(STARTING_ASKED_AGAIN),
-              until: (listed) => listed.every(({ row }) => row?.state === 'running' || row?.state === 'failed'),
+              until: (listed) => listed.every(({ row }) => row !== undefined && SETTLED.has(row.state)),
             },
           );
           const failed = processes.flatMap(({ id, row }) => (row?.state === 'failed' ? [{ id, row }] : []));

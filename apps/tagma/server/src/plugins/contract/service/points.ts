@@ -1,4 +1,3 @@
-import type { McpToolDescriptor } from '@runlith/mcp/McpSession';
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
 import { Context, Data, type Effect, type Result } from 'effect';
 import type { PluginFaced } from '../../../platform/contract/service/contribution.js';
@@ -14,7 +13,6 @@ export type PluginContribution<W> = {
   readonly plugin: PluginRef;
   readonly value: W;
   readonly sibling: <B>(point: PluginFaced<B>) => B | undefined;
-  readonly tools: readonly McpToolDescriptor[] | null;
   readonly caller: McpToolCaller;
 };
 
@@ -31,16 +29,13 @@ export type PluginRegister<W> = (contribution: PluginContribution<W>) => Effect.
 
 export type PluginChecked = Readonly<Record<string, unknown>>;
 
+export const checkedOf = <W>(checked: PluginChecked, point: PluginFaced<W>): W | undefined => checked[point.plugin.name] as W | undefined;
+
 export class PluginPoints extends Context.Service<
   PluginPoints,
   {
     declare<W>(point: PluginFaced<W>, register: PluginRegister<W>): Effect.Effect<() => void>;
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
-    publish(
-      plugin: PluginRef,
-      checked: PluginChecked,
-      tools: readonly McpToolDescriptor[] | null,
-      caller: McpToolCaller,
-    ): Effect.Effect<() => void, PluginPointRefused>;
+    publish(plugin: PluginRef, checked: PluginChecked, caller: McpToolCaller): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}

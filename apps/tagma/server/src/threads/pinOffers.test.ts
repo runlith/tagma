@@ -17,7 +17,6 @@ const contribution = (view: string): PluginContribution<PinContributions> => ({
           { id: 'hand', entry: 'ui/hand.html' },
         ])
       : undefined,
-  tools: null,
   caller: { call: () => Effect.die('the pin contribution calls no tool') },
 });
 

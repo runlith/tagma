@@ -162,7 +162,7 @@
     {#if row.refused !== undefined}
       <Callout
         tone="error"
-        title={row.process?.state === 'running'
+        title={row.process?.state === 'running' || row.process?.state === 'idle'
           ? 'Tagma cannot read the plugin’s files as they are now; the version that was working keeps running'
           : 'Tagma cannot read this plugin, so agents get nothing from it'}
         note={row.refused}

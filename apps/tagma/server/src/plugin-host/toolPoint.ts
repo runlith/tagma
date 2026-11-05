@@ -6,7 +6,7 @@ import { Effect } from 'effect';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
 import { type PluginContribution, PluginPointRefused } from '../plugins/contract/service/points.js';
 import { PluginTools, TOOLS } from './contract/service/tools.js';
-import { pluginToolName, type ToolEntries, type ToolAudience } from './contract/wire/audience.js';
+import { pluginToolName, type ToolAudience, type ToolEntries, type ToolEntry } from './contract/wire/audience.js';
 
 const MODEL_NAME_MAX = 64;
 
@@ -22,16 +22,22 @@ type Assembled = { readonly revision: number; readonly enabled: readonly string[
 
 const refused = (reason: string) => new PluginPointRefused({ point: TOOLS.plugin.name, reason });
 
-const declarationOf = (plugin: string, descriptors: readonly McpToolDescriptor[]): McpServerDeclaration => ({
+const descriptorOf = (entry: ToolEntry): McpToolDescriptor => ({
+  name: entry.name,
+  title: entry.annotations?.title,
+  description: entry.description,
+  inputSchema: entry.inputSchema,
+  annotations: entry.annotations,
+});
+
+const declarationOf = (plugin: string, entries: ToolEntries): McpServerDeclaration => ({
   name: plugin,
   transport: 'stdio',
   command: plugin,
   capabilities: {
     kinds: [],
     mutates: true,
-    tools: Object.fromEntries(
-      descriptors.map((descriptor) => [descriptor.name, { kinds: [], mutates: descriptor.annotations?.readOnlyHint !== true }]),
-    ),
+    tools: Object.fromEntries(entries.map((entry) => [entry.name, { kinds: [], mutates: entry.annotations?.readOnlyHint !== true }])),
   },
   enabled: true,
 });
@@ -39,28 +45,26 @@ const declarationOf = (plugin: string, descriptors: readonly McpToolDescriptor[]
 export const makeOffers = Effect.gen(function* () {
   const enabledPlugins = yield* EnabledPlugins;
   const offers = new Map<string, Offered>();
+  const broken = new Set<string>();
   const assembled = new Map<number, Assembled>();
   let revision = 0;
 
   const register = Effect.fn('PluginTools.register')(function* (
     contribution: PluginContribution<ToolEntries>,
   ): Effect.fn.Return<() => void, PluginPointRefused> {
-    const { plugin, value, tools, caller } = contribution;
-    if (value.length === 0) return () => undefined;
-    if (tools === null) return yield* refused('tools are served by a process, and the plugin declares none');
-    const served = new Map(tools.map((descriptor) => [descriptor.name, descriptor]));
-    const missing = value.filter((entry) => !served.has(entry.name)).map((entry) => entry.name);
-    if (missing.length > 0) return yield* refused(`the process serves no tool ${missing.join(', ')}`);
-    const long = value.filter((entry) => pluginToolName(plugin.id, entry.name).length > MODEL_NAME_MAX).map((entry) => entry.name);
+    const { plugin, value, caller } = contribution;
+    const offered = value.filter((entry) => entry.audience !== 'tagma');
+    if (offered.length === 0) return () => undefined;
+    const long = offered.filter((entry) => pluginToolName(plugin.id, entry.name).length > MODEL_NAME_MAX).map((entry) => entry.name);
     if (long.length > 0)
       return yield* refused(`${long.join(', ')} named under ${plugin.id} pass the ${MODEL_NAME_MAX} characters a model accepts`);
     const audiences = new Map<ToolAudience, McpToolDescriptor[]>();
-    for (const entry of value) {
+    for (const entry of offered) {
       const listed = audiences.get(entry.audience) ?? [];
-      listed.push(served.get(entry.name)!);
+      listed.push(descriptorOf(entry));
       audiences.set(entry.audience, listed);
     }
-    const declaration = declarationOf(plugin.id, tools);
+    const declaration = declarationOf(plugin.id, offered);
     const { excluded } = mcpToolCatalog({
       projectId: null,
       declaration,
@@ -72,17 +76,11 @@ export const makeOffers = Effect.gen(function* () {
         `no agent can call ${excluded.map((tool) => `${tool.tool} (${tool.reason})`).join(', ')}; name it for the view`,
       );
     }
-    const offered: Offered = {
-      plugin: plugin.id,
-      declaration,
-      audiences,
-      caller,
-      built: new Map(),
-    };
-    offers.set(plugin.id, offered);
+    const standing: Offered = { plugin: plugin.id, declaration, audiences, caller, built: new Map() };
+    offers.set(plugin.id, standing);
     revision += 1;
     return () => {
-      if (offers.get(plugin.id) !== offered) return;
+      if (offers.get(plugin.id) !== standing) return;
       offers.delete(plugin.id);
       revision += 1;
     };
@@ -90,7 +88,7 @@ export const makeOffers = Effect.gen(function* () {
 
   const catalogOf = (plugin: string, audience: ToolAudience, projectId: number): ToolCatalog => {
     const offered = offers.get(plugin);
-    if (offered === undefined) return {};
+    if (offered === undefined || broken.has(plugin)) return {};
     const key = `${audience}\u0000${projectId}`;
     const standing = offered.built.get(key);
     if (standing !== undefined) return standing;
@@ -128,5 +126,13 @@ export const makeOffers = Effect.gen(function* () {
         })),
     }),
     register,
+    broken: (plugin: string, now: boolean): void => {
+      if (broken.has(plugin) === now) return;
+      if (now) broken.add(plugin);
+      else broken.delete(plugin);
+      revision += 1;
+    },
   };
 });
+
+export type Offers = Effect.Success<typeof makeOffers>;
