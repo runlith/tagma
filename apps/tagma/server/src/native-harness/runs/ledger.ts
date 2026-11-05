@@ -1,5 +1,5 @@
 import { Clock, Effect } from 'effect';
-import { sumUsage } from '@runlith/llm/schema/events';
+import { sumUsage, type Usage } from '@runlith/llm/schema/events';
 import { ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
 import type { ThreadRunStage } from '@runlith/agent/thread/rows';
 import {
@@ -113,6 +113,11 @@ export const makeRunStores = Effect.gen(function* () {
 
   const reading = <A>(work: (unit: Unit<'machine'>) => Effect.Effect<A, StoredFailure>, tx?: Unit<'machine'>) =>
     tx ? work(tx) : units.read(work);
+
+  const usageAfter = (run: { readonly id: string; readonly threadId: string }, stored: unknown, delta: Usage) => {
+    const held = runFacts(kinds, run).usage(stored);
+    return stored !== null && held === null ? {} : { usage: sumUsage(held, delta) };
+  };
 
   return ({ ownerId, scope, lifecycle }: RunsInput): ThreadRunStore => {
     const ended = endedIn(scope);
@@ -236,10 +241,11 @@ export const makeRunStores = Effect.gen(function* () {
                   .where(and(eq(threadRun.id, runId), eq(threadRun.threadId, threadId), eq(threadRun.status, 'running')))
                   .get(),
               );
-              if (!run || run.progress.stage !== THREAD_RUN_AWAITING_QUESTION_STAGE) {
+              const read = runFacts(kinds, { id: runId, threadId });
+              if (!run || read.progress(run.progress).stage !== THREAD_RUN_AWAITING_QUESTION_STAGE) {
                 return yield* Effect.fail(new ThreadRunConflictError({ threadId, runId }));
               }
-              if (run.stopRequest !== null) return 'stopping' as const;
+              if (read.stopRequest(run.stopRequest) !== null) return 'stopping' as const;
               yield* unit.run(
                 db
                   .update(threadRun)
@@ -262,9 +268,12 @@ export const makeRunStores = Effect.gen(function* () {
             writes('ThreadRunStore.parkRun', [runRows]),
             (unit) =>
               Effect.gen(function* () {
-                const run = yield* unit.run(db.select({ stopRequest: threadRun.stopRequest }).from(threadRun).where(owned(runId)).get());
+                const run = yield* unit.run(
+                  db.select({ threadId: threadRun.threadId, stopRequest: threadRun.stopRequest }).from(threadRun).where(owned(runId)).get(),
+                );
                 if (!run) return 'gone' as const;
-                if (run.stopRequest !== null) return 'stopping' as const;
+                if (runFacts(kinds, { id: runId, threadId: run.threadId }).stopRequest(run.stopRequest) !== null)
+                  return 'stopping' as const;
                 yield* unit.run(
                   db
                     .update(threadRun)
@@ -580,11 +589,15 @@ export const makeRunStores = Effect.gen(function* () {
                   db.select({ threadId: threadRun.threadId, usage: threadRun.usage }).from(threadRun).where(owned(runId)).get(),
                 );
                 if (!current) return;
-                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).usage(current.usage);
                 yield* unit.run(
                   db
                     .update(threadRun)
-                    .set({ usage: sumUsage(held, delta), resumes: 0, heartbeatAt, updatedAt: new Date(yield* Clock.currentTimeMillis) })
+                    .set({
+                      ...usageAfter({ id: runId, threadId: current.threadId }, current.usage, delta),
+                      resumes: 0,
+                      heartbeatAt,
+                      updatedAt: new Date(yield* Clock.currentTimeMillis),
+                    })
                     .where(owned(runId)),
                 );
               }),
@@ -601,12 +614,11 @@ export const makeRunStores = Effect.gen(function* () {
                   db.select({ threadId: threadRun.threadId, usage: threadRun.usage }).from(threadRun).where(eq(threadRun.id, runId)).get(),
                 );
                 if (!current) return;
-                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).usage(current.usage);
                 yield* unit.run(
                   db
                     .update(threadRun)
                     .set({
-                      ...(charge.usage === null ? {} : { usage: sumUsage(held, charge.usage) }),
+                      ...(charge.usage === null ? {} : usageAfter({ id: runId, threadId: current.threadId }, current.usage, charge.usage)),
                       ...(charge.cost === null ? {} : { cost: charge.cost }),
                       updatedAt: new Date(yield* Clock.currentTimeMillis),
                     })

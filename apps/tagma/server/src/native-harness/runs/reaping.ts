@@ -242,7 +242,6 @@ export const makeReaping = Effect.gen(function* () {
         const claim = and(
           eq(threadRun.id, runId),
           reapClaim(input.selector),
-          isNull(threadRun.stopRequest),
           handedOver ? undefined : lt(threadRun.resumes, input.maxResumes),
         );
         return stored('adoptRun')(
@@ -251,9 +250,21 @@ export const makeReaping = Effect.gen(function* () {
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
-                  db.select({ streamTail: threadRun.streamTail, resumes: threadRun.resumes }).from(threadRun).where(claim).get(),
+                  db
+                    .select({
+                      threadId: threadRun.threadId,
+                      streamTail: threadRun.streamTail,
+                      resumes: threadRun.resumes,
+                      stopText: sql<string | null>`${threadRun.stopRequest}`,
+                    })
+                    .from(threadRun)
+                    .where(claim)
+                    .get(),
                 );
                 if (!current) return null;
+                const held = current.stopText === null ? null : threadRun.stopRequest.mapFromDriverValue(current.stopText);
+                if (runFacts(kinds, { id: runId, threadId: current.threadId }).stopRequest(held) !== null) return null;
+                const unstopped = and(claim, sql`${threadRun.stopRequest} is ${current.stopText}`);
                 const run = yield* unit.run(
                   db
                     .update(threadRun)
@@ -266,7 +277,7 @@ export const makeReaping = Effect.gen(function* () {
                       handedOverAt: null,
                       updatedAt: new Date(yield* Clock.currentTimeMillis),
                     })
-                    .where(claim)
+                    .where(unstopped)
                     .returning()
                     .get(),
                 );

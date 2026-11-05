@@ -5,6 +5,7 @@ import { APPROVAL, lifecycleWorld, started } from '@runlith/agent/thread/conform
 import type { ThreadStateChange } from '@runlith/agent/thread/state';
 import { openThreadStore } from '../../composition/testing/storageHarness.js';
 import { sql } from 'drizzle-orm';
+import { Usage } from '@runlith/llm/schema/events';
 import { Clock, Effect, Layer, Tracer } from 'effect';
 import { SCOPED_RUN } from '../row.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
@@ -53,6 +54,11 @@ it.live('a run whose stored facts are not JSON is beaten, staged and claimed for
     expect(yield* world.lifecycle.beat([run], at)).toEqual([]);
     yield* world.runs.writeProgress(run.id, { stage: 'running', message: 'again' }, at);
     expect((yield* world.runs.runById(run.id))?.progress).toMatchObject({ stage: 'running', message: 'again' });
+    expect(yield* world.runs.parkRun(run.id, { stage: 'awaiting-question', message: null }, at)).toBe('parked');
+
+    yield* db.run(sql`update thread_run set usage = ${torn} where id = ${run.id}`);
+    yield* world.runs.addUsage(run.id, new Usage({ totalTokens: 7 }), at);
+    expect((yield* world.runs.runById(run.id))?.usage).toBeNull();
 
     yield* db.run(
       sql`update thread_run set status = 'failed', finished_at = ${at.getTime()}, failure = ${torn}, settled_notification = ${torn} where id = ${run.id}`,
