@@ -316,8 +316,11 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({
           bytes: new Uint8Array(0),
         };
       }
-      const chunk = yield* executionRecord.read(cursor, 1);
-      return { range: chunk.range, bytes: chunk.bytes };
+      const floor = yield* executionRecord.read({ ...cursor, offset: ByteOffset.make('0') }, 1);
+      return {
+        range: { ...floor.range, cursor, next: at, gap: offsetValue(at) < offsetValue(floor.range.retainedFrom) },
+        bytes: new Uint8Array(0),
+      };
     }
     const chunk = yield* executionRecord.read(cursor, limit);
     if (options?.withPositions !== true) return { range: chunk.range, bytes: chunk.bytes };
