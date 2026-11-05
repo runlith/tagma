@@ -291,7 +291,12 @@ layer(Layer.effect(SingleLoginFixture, makeFixture).pipe(Layer.provideMerge(BunF
                 const linked = [...(yield* accounts.connected).providers];
                 expect(linked).toEqual(expect.arrayContaining([lane.provider]));
                 expect(
-                  linked.every((provider) => provider === lane.provider || (lane.provider === 'codex' && provider === 'openai-oauth')),
+                  linked.every(
+                    (provider) =>
+                      provider === lane.provider ||
+                      (lane.provider === 'codex' && provider === 'openai-oauth') ||
+                      (lane.provider === 'claude-code' && provider === 'subscription'),
+                  ),
                 ).toBe(true);
                 signed.entries = [];
                 if (threadId === undefined) {
