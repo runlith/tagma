@@ -1596,30 +1596,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/ViewSets.svelte.ts#ShownView",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#TagmaAppMount",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#TagmaAppHostOwners",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#ThreadReading",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/windows/FloatingPanels.svelte.ts#OpenPanel",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/windows/ViewWindows.ts#VIEW_WINDOW_ROUTE",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/AgentTypes.svelte.ts#RejectedAgentFile",
           "owner": "5a3bed29"
         },
@@ -7048,10 +7024,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/agents/declared/tagmaApps.ts#TagmaAppAgentsInput",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/agents/library.ts#AgentLibraryInput",
           "owner": "5a3bed29"
         },
@@ -7202,10 +7174,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/contract/wire/start.ts#isStartEntry",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/contract/wire/tagmaAppAgents.ts#TAGMA_APP_CAPABILITY_PREFIX",
           "owner": "5a3bed29"
         },
         {
@@ -8102,10 +8070,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/wire/rows.ts#PLUGIN_OPTION_TYPES",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/wire/rows.ts#COMMIT_PATTERN",
           "owner": "5a3bed29"
         },
@@ -8716,80 +8680,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/sending.ts#Senders",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/service/supervision.ts#TagmaAppListRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/service/supervision.ts#TagmaAppInstallRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/service/supervision.ts#TagmaAppChangeRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/service/supervision.ts#UninstallRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/service/supervision.ts#TagmaAppTarget",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/audience.ts#TOOL_AUDIENCES",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/manifest.ts#TagmaAppProcess",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/rows.ts#TAGMA_APP_STATES",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/rows.ts#TAGMA_APP_FLOORS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/secrets.ts#SECRET_NAME_PATTERN",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/secrets.ts#SECRETS_MAX",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/secrets.ts#SecretName",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/contract/wire/secrets.ts#SecretEntry",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/discovery.ts#FloorUnreadable",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/generation.ts#Launch",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/generation.ts#LaunchFailed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/registry.ts#Checked",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/tagma-apps/supervisor.ts#Reading",
           "owner": "5a3bed29"
         },
         {
@@ -10027,11 +9917,6 @@ fields:
         {
           "count": 2,
           "fingerprint": "dead-code dead apps/tagma/server/src/views/contract/wire/points.ts#ResultEntry",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/views/contract/wire/sets.ts#TagmaAppResult",
           "owner": "5a3bed29"
         },
         {
@@ -19385,14 +19270,6 @@ fields:
       "escaped": [
         {
           "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/presence/Presence.svelte.ts#PresenceHold",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 59,
-          "path": "apps/tagma/app/src/lib/features/presence/Presence.svelte.ts",
-          "said": "exported type `PresenceHold` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/ThreadSlot.svelte.ts#SlotOptions",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 69,
@@ -19662,6 +19539,14 @@ fields:
           "line": 23,
           "path": "apps/tagma/server/src/threads/journal/rolloutCarry.ts",
           "said": "exported type `CarryOpening` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/presence/Presence.svelte.ts#PresenceHold",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 59,
+          "path": "apps/tagma/app/src/lib/features/presence/Presence.svelte.ts",
+          "said": "exported type `PresenceHold` is imported by no production file"
         },
         {
           "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
