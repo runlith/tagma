@@ -25,7 +25,7 @@ edges:
   - kind: supersedes
     to: 01a1ad0c-9c6d-75f8-b5b7-b2a7c1891844
 ---
-Read from the code at `11f23bfc7` on 2026-11-05; nothing was run. The agent layer is the child spec [[c4451a7e]].
+Read from the code at `11f23bfc7` on 2026-11-05; nothing was run. Two child specs carry the detail. The SDK, everything a plugin author writes and the only way a plugin reaches Tagma, is [[5067fa15]]. The agent layer is [[c4451a7e]].
 
 ## Outcome
 
@@ -42,7 +42,8 @@ A person, or an agent working for them, extends Tagma through one thing: the plu
 - **Our format is the full one.** Foreign formats are translated into it by readers the person never sees.
 - **A bare MCP server is not a plugin.** It is a connection, a command or URL with its secrets and sign-in, and carries no author, version or files. It keeps its own list. A plugin may bring servers into that list, marked with the plugin and switched with it.
 - **Everything at the side is a plugin:** model and harness providers and speech providers too. A built-in one ships with Tagma as a plugin.
-- **MCP is the wire.** A plugin process speaks MCP over stdio, which is what lets it be written in any language.
+- **Every plugin goes through the SDK.** The SDK is typed and public, and it is a plugin's only way to Tagma. Code in another language lives behind the plugin, in an MCP server it brings or a program its handlers run.
+- **MCP is the wire** between Tagma and a plugin's process, hidden by the SDK.
 - **Code, then manifest.** The author writes code. The SDK's build emits the manifest Tagma reads without running the plugin, and nobody writes it by hand.
 - **All three depths on the agent layer are needed.** A plugin can run its own chat over our agents, show our thread, and add to our chat. They are built in that order.
 - **The Plugins screen stays the one home.** Apps get no screen of their own.
@@ -151,12 +152,7 @@ The shell already has all three for its own dictation pill and quick hide (`apps
 - **`providers` and `speech`** load the `providers` part of an installed plugin. `providers` keeps its loader. `speech` gains one on the same model — host modules, one directory per version, a run pinning the catalog it started with — so a speech provider installs without a rebuild.
 - **`views` (server) and `app-views` (client)** become the native module host: the compile pipeline, the module route, the host module table and the slot faces. The iframe frame and bridge stay as a component.
 - **`app-plugins` (client)** draws the screen below.
-- **`@runlith/tagma` becomes `@runlith/tagma-sdk`**, published on npm:
-  - `/plugin`: `definePlugin`, the manifest build, a typed client of the `external` operations derived from their schemas, and a process wrapper that hides MCP from the author;
-  - `/ui`: the host's components, `Thread` among them, and the tokens;
-  - `/rules` and `/adapter/*`, as now.
-
-  The bare `@runlith/tagma` stays reserved for the product itself. `create-tagma` is its own package.
+- **`@runlith/tagma` becomes `@runlith/tagma-sdk`**, published on npm with the doors `/plugin`, `/ui`, `/testing`, `/rules` and `/adapter/*`, and with `create-tagma` beside it. What each holds and how it is built is [[5067fa15]]. The bare `@runlith/tagma` stays reserved for the product itself.
 
 ## The Plugins screen
 
