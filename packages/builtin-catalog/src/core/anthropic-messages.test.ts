@@ -242,10 +242,10 @@ describe('Anthropic tool input schemas', () => {
         $defs: inputSchema.$defs,
         type: 'object',
         properties: {
-          type: { enum: ['stalls', 'profile'], description: 'Variant requirements: type stalls requires limit; type profile requires id.' },
-          limit: { type: 'number', description: 'Required when type is stalls.' },
+          type: { enum: ['stalls', 'profile'], description: 'Variant keys: type stalls requires limit; type profile requires id.' },
+          limit: { type: 'number', description: 'Taken only when type is stalls, where it is required.' },
           cursor: { anyOf: [{ $ref: '#/$defs/Cursor' }, { anyOf: [{ $ref: '#/$defs/Cursor' }, { type: 'null' }] }] },
-          id: { type: 'string', description: 'Required when type is profile.' },
+          id: { type: 'string', description: 'Taken only when type is profile, where it is required.' },
         },
         required: ['type'],
         additionalProperties: false,
