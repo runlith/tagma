@@ -100,8 +100,18 @@ const ABANDONED = 'a read was left by its caller while its statement ran, so its
 const brokenChannel = (message: string, operation: string) =>
   new SqlError({ reason: classifySqliteError(new Error(message), { message, operation }) });
 
-const failureOf = (thrown: ThrownShape, message: string, operation: string) =>
-  new SqlError({ reason: classifySqliteError(thrown, { message: `${message}: ${thrown.message}`, operation }) });
+const failureOf = (thrown: ThrownShape, message: string, operation: string, filename: string) => {
+  const code = [thrown.code === undefined ? null : String(thrown.code), thrown.errno === undefined ? null : `errno ${thrown.errno}`]
+    .filter((part) => part !== null)
+    .join(', ');
+  const cause = Object.assign(new Error(thrown.message), { ...thrown, name: thrown.name, filename });
+  return new SqlError({
+    reason: classifySqliteError(cause, {
+      message: `${message}: ${thrown.message}${code === '' ? '' : ` (${code})`} in ${filename}`,
+      operation,
+    }),
+  });
+};
 
 type Outstanding = {
   readonly cell: Deferred.Deferred<SqliteSaid, SqlError>;
@@ -379,7 +389,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
 
   const answeredWrong = (said: SqliteSaid, message: string, operation: string) =>
     said._tag === 'Failed'
-      ? failureOf(said.thrown, message, operation)
+      ? failureOf(said.thrown, message, operation, options.filename)
       : brokenChannel(`the sqlite process answered a ${operation} with ${said._tag}`, operation);
 
   const run = (
