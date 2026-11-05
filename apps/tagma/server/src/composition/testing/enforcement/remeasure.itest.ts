@@ -96,11 +96,12 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
     GraphJournal.use((journal) => journal.events({ projectId: demo.projectId, blockId: id, ops: ['remeasure'], limit: 10 }));
   const driven = Effect.fnUntraced(function* (options: DriveOptions = {}) {
     const scope = yield* Scope.fork(yield* Effect.scope);
-    const completed = yield* Queue.unbounded<void>();
+    const completed = yield* Queue.unbounded<string>();
     const journal = journalOver(demo.graph.store.db, demo.graph.units);
     const observed: LandingJournal = {
       ...journal,
-      remove: (key) => journal.remove(key).pipe(Effect.tap(() => Queue.offer(completed, undefined))),
+      remove: (key) => journal.remove(key).pipe(Effect.tap(() => Queue.offer(completed, 'removed'))),
+      park: (key, reason) => journal.park(key, reason).pipe(Effect.tap(() => Queue.offer(completed, `parked: ${reason}`))),
     };
     const driver = yield* Scope.provide(
       driverOver({
@@ -134,7 +135,7 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
       journal,
       told,
       notice: Queue.take(notices),
-      settled: Queue.take(completed),
+      settled: Effect.map(Queue.take(completed), (outcome) => expect(outcome).toBe('removed')),
       close: Scope.close(scope, Exit.void),
     };
   });
