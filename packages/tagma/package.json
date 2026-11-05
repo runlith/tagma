@@ -86,6 +86,10 @@
       "types": "./src/adapter/hostModules.ts",
       "bun": "./src/adapter/hostModules.ts",
       "default": null
+    },
+    "./plugin/template": {
+      "types": "./src/plugin/template.ts",
+      "default": "./src/plugin/template.ts"
     }
   },
   "scripts": {
