@@ -48,6 +48,9 @@ fields:
       },
       {
         "at": "src/adapter/claudeHooks.ts"
+      },
+      {
+        "at": "src/plugin/template.ts"
       }
     ],
     "id": "@runlith/tagma"

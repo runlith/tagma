@@ -46,6 +46,8 @@ edges:
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports-tests
     to: 01a1239f-2e01-7962-8ca3-25a8af373f07
+  - kind: imports-tests
+    to: 01a1adb5-4e03-7f9b-b329-e56dc7b772e2
 sources:
   - kind: dir
     ref: apps/tagma/server/src/views

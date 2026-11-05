@@ -8,9 +8,24 @@ fields:
     "entries": [
       {
         "at": "format.ts"
+      },
+      {
+        "at": "testing/",
+        "role": "testing"
+      },
+      {
+        "at": "contract/"
       }
     ],
-    "id": "tagma-plugin-format"
+    "id": "tagma-plugin-format",
+    "order": [
+      [
+        "contract/wire/"
+      ],
+      [
+        "."
+      ]
+    ]
   }
 edges:
   - kind: imports

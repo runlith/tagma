@@ -16,7 +16,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/plugin-host/supervisor.ts
   - kind: file
-    ref: apps/tagma/server/src/plugin-formats/tagma/manifest.ts
+    ref: apps/tagma/server/src/plugin-formats/tagma/contract/wire/manifest.ts
   - kind: file
     ref: apps/tagma/server/src/plugins/contract/wire/operations.ts
   - kind: file
