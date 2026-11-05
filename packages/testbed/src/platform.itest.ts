@@ -31,6 +31,7 @@ test('platform files are selected before importing them in discovered and explic
   expect(await run(['bun', 'test', '--no-isolate'])).toEqual(['native', 'shared', 'shared']);
   expect(await run(['itest', '--no-isolate'])).toEqual(['native', 'shared']);
   expect(await run(['bun', 'test', 'shared.test'])).toEqual(['shared']);
+  expect(await run(['bun', 'test', '--shard=1/1', 'shared.test'])).toEqual(['shared']);
   expect(await run(['bun', 'test', './shared.itest.ts', `./foreign.${other}.itest.ts`])).toEqual(['shared']);
   expect(await run(['itest', `./foreign.${other}.itest.ts`])).toEqual([]);
 });

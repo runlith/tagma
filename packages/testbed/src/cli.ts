@@ -42,6 +42,11 @@ const discover = async (kind: Kind, pathspec: string): Promise<string[]> => {
     .filter((file) => existsSync(file));
 };
 
+const noFileForPlatform = (count: number): never => {
+  console.error(`SKIP testbed: ${count} platform-specific files do not run on ${process.platform}`);
+  process.exit(0);
+};
+
 const command = process.argv.slice(2);
 const flagValues = new Set([
   '-t',
@@ -117,10 +122,7 @@ if (program) {
     process.exit(1);
   }
   const eligible = files.filter((file) => runsOnPlatform(file));
-  if (eligible.length === 0) {
-    console.error(`testbed: ${files.length} platform-specific files do not run on ${process.platform}`);
-    process.exit(0);
-  }
+  if (eligible.length === 0) noFileForPlatform(files.length);
   command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(eligible.sort()));
 }
 if (command.length === 0) {
@@ -132,10 +134,14 @@ const bunTest = !program && basename(command[0]!) === 'bun' && command.find((par
 if (bunTest && selected === undefined) {
   const named = command.filter((part) => /\.(?:test|itest|e2e|spec)\.[cm]?[jt]sx?$/.test(part));
   const filters: string[] = [];
+  const filterAt: number[] = [];
   for (let at = command.indexOf('test') + 1; at < command.length; at++) {
     const part = command[at]!;
     if (flagValues.has(part) || ((part === '--bail' || part === '--parallel') && /^\d+$/.test(command[at + 1] ?? ''))) at++;
-    else if (!part.startsWith('-')) filters.push(part.replace(/^\.\//, ''));
+    else if (!part.startsWith('-')) {
+      filters.push(part.replace(/^\.\//, ''));
+      filterAt.push(at);
+    }
   }
   const files =
     named.length === 0
@@ -144,12 +150,11 @@ if (bunTest && selected === undefined) {
           .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
       : named;
   const eligible = files.filter((file) => runsOnPlatform(file));
-  if (files.length > 0 && eligible.length === 0) {
-    console.error(`testbed: ${files.length} platform-specific files do not run on ${process.platform}`);
-    process.exit(0);
-  }
-  if (named.length === 0) command.push(...eligible);
-  else
+  if (files.length > 0 && eligible.length === 0) noFileForPlatform(files.length);
+  if (named.length === 0) {
+    if (eligible.length > 0) for (const at of filterAt.reverse()) command.splice(at, 1);
+    command.push(...eligible);
+  } else
     for (let at = command.length - 1; at >= 0; at--) {
       if (named.includes(command[at]!) && !runsOnPlatform(command[at]!)) command.splice(at, 1);
     }
