@@ -1,11 +1,11 @@
 ---
 id: 01a10492-c27e-7eba-8137-4f3e4915e590
 title: "The local signing identity is created once per machine and never silently recreated: replacing it resets every macOS permission granted to Tagma"
-ord: 4
+ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/cut/signing.ts
+    ref: apps/tagma/server/src/mac-release/signing.ts
 ---
 macOS permissions are bound to the signing requirement `identifier … and certificate leaf = H"…"` : a new certificate is a new app for TCC ([[c3dad364|the TCC study]]). So when the "Tagma Local Signing" identity exists but does not fit — expired, lost its key, there are several — the build refuses and names deletion in unblock, warning about the permission reset. Only a build that found no identity at all creates one.
 

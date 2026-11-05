@@ -1,7 +1,7 @@
 ---
 id: 01a13d38-e6b4-70e0-9a02-f32136475170
 title: tagma:transition checks the move from the issued release to the tree with a trial run and the new release's real SurfaceLoader beside the predecessor server
-ord: 6
+ord: 2
 tags: ["explanation"]
 edges:
   - kind: discovered-from
@@ -12,7 +12,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/scripts/transition.ts
   - kind: file
-    ref: apps/tagma/server/src/cut/transition.ts
+    ref: apps/tagma/server/src/mac-release/transition.ts
 ---
 An issued release is frozen with people and decides its own way, so the move from it to the tree is checked with its real code beside the new release's real window.
 

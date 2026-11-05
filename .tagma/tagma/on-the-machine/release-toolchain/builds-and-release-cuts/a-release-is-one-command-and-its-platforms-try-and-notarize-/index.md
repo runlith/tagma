@@ -11,7 +11,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/cut/commands.ts
   - kind: file
-    ref: apps/tagma/server/src/cut/notarize.ts
+    ref: apps/tagma/server/src/mac-release/notarize.ts
   - kind: file
     ref: apps/tagma/server/src/cut/pipeline.ts
   - kind: file

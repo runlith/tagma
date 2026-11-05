@@ -8,7 +8,7 @@ edges:
     to: 01a1411a-c7a8-7e4d-8d8a-93fd24871a8d
 sources:
   - kind: file
-    ref: apps/tagma/server/src/cut/notarize.ts
+    ref: apps/tagma/server/src/mac-release/notarize.ts
   - kind: file
     ref: apps/tagma/server/src/cut/stage.ts
 ---

@@ -1,7 +1,7 @@
 ---
 id: 01a13d38-e6bc-751f-9844-c3a2ab172e64
 title: A release trial run upgrades the previous cut with its own button and requires present from the new release copy's helper
-ord: 8
+ord: 3
 tags: ["explanation"]
 edges:
   - kind: discovered-from
@@ -10,9 +10,9 @@ edges:
     to: 01a13c7f-b7b8-77fb-b506-75271c89545b
 sources:
   - kind: file
-    ref: apps/tagma/server/src/cut/trial.ts
+    ref: apps/tagma/server/src/mac-release/trial.ts
   - kind: file
-    ref: apps/tagma/server/src/cut/world.ts
+    ref: apps/tagma/server/src/mac-release/world.ts
   - kind: symbol
     ref: apps/tagma/server/src/cut/pipeline.ts
     symbol: previousCut
