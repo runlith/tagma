@@ -15,6 +15,8 @@ export type AppBindings = {
   feedAppLeave(): Promise<void>;
   feedAppReturn(): Promise<void>;
   feedAppPaging(): Promise<Reach>;
+  feedAppHoldPages(): Promise<void>;
+  feedAppReleasePages(): Promise<void>;
 };
 
 export type AppGlobal = { feedApp?: AppFeed } & Partial<AppBindings>;

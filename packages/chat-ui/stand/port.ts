@@ -31,8 +31,8 @@ export type StandPort = {
   loadOlder(): Promise<boolean>;
   reachOlder(): Promise<boolean>;
   pageLatency(ms: number): void;
-  holdPages(): void;
-  releasePages(): void;
+  holdPages(): void | Promise<void>;
+  releasePages(): void | Promise<void>;
   paging(): { requested: number; landed: number; latency: number; requestedAt?: number | null; landedAt?: number | null };
   resize(width: number, height: number): Promise<void>;
   changed(): void;

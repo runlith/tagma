@@ -237,8 +237,8 @@ export async function dragPage(stand: StandPage, held: HeldTouch, name: string):
   await act(stand, (port, distance) => port.approach(distance), establish + path.crossing);
   await act(
     stand,
-    (port, name) => {
-      port.holdPages();
+    async (port, name) => {
+      await port.holdPages();
       port.start(name);
       port.beginDrag(0, 0, true);
     },
@@ -254,7 +254,7 @@ export async function dragPage(stand: StandPage, held: HeldTouch, name: string):
   const landing = await call(
     stand,
     async (port) => {
-      port.releasePages();
+      await port.releasePages();
       const loaded = await port.loadOlder();
       const time = performance.now();
       if (loaded) await port.frames(1);

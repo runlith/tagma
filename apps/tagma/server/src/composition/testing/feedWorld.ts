@@ -276,9 +276,16 @@ export const visit = Effect.fnUntraced(function* (
   const scripts = yield* Queue.unbounded<Script>();
   yield* makeE2eWorld({ models: replying(scripts) });
   let requested = 0;
-  page.on('websocket', (socket) =>
-    socket.on('framesent', (frame) => {
-      if (typeof frame.payload === 'string' && frame.payload.includes('thread.entries')) requested += 1;
+  let holding = false;
+  const held: (() => void)[] = [];
+  yield* Effect.promise(() =>
+    page.routeWebSocket(/.*/, (socket) => {
+      const server = socket.connectToServer();
+      socket.onMessage((message) => {
+        if (typeof message === 'string' && message.includes('thread.entries')) requested += 1;
+        server.send(message);
+      });
+      server.onMessage((message) => (holding ? held.push(() => socket.send(message)) : socket.send(message)));
     }),
   );
   const asks = yield* Queue.unbounded<Ask>();
@@ -331,6 +338,17 @@ export const visit = Effect.fnUntraced(function* (
   );
   yield* expose('feedAppReturn', () => click(seeded.thread));
   yield* expose('feedAppPaging', (): Effect.Effect<Reach> => Effect.sync(() => ({ requested })));
+  yield* expose('feedAppHoldPages', () =>
+    Effect.sync(() => {
+      holding = true;
+    }),
+  );
+  yield* expose('feedAppReleasePages', () =>
+    Effect.sync(() => {
+      holding = false;
+      for (const send of held.splice(0)) send();
+    }),
+  );
   if (cdp !== undefined) yield* Effect.promise(() => cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }));
   yield* Effect.promise(() =>
     page.addInitScript({ content: `window.feedApp = ${JSON.stringify({ ...seeded.feed, opening: options.opening })};\n${seeded.script}` }),

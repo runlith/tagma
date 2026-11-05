@@ -153,12 +153,8 @@ function install(): void {
     },
     reachOlder: () => actions.reachOlder(),
     pageLatency() {},
-    holdPages() {
-      throw new Error('The app lane serves real pages and exposes no page gate for a held drag');
-    },
-    releasePages() {
-      throw new Error('The app lane serves real pages and exposes no page gate for a held drag');
-    },
+    holdPages: () => bound('feedAppHoldPages')(),
+    releasePages: () => bound('feedAppReleasePages')(),
     paging: () => ({ requested, landed, latency: 0 }),
     async resize(width, height) {
       await bound('feedAppResize')(width, height);
