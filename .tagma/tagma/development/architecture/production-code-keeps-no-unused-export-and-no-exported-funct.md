@@ -11286,10 +11286,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/agent/ToolCatalog.ts#hasToolResult",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/agent/ToolOutput.ts#AgentToolOutputInspection",
           "owner": "5a3bed29"
         },

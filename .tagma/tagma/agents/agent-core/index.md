@@ -1641,6 +1641,14 @@ fields:
       },
       {
         "at": "src/transcript/openText.ts"
+      },
+      {
+        "at": "src/collaboration/askVerbs.ts",
+        "for": [
+          "1a45453a",
+          "ab05dfec",
+          "13182a9f"
+        ]
       }
     ],
     "id": "agent",

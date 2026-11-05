@@ -5,7 +5,7 @@ ord: 1
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 **Today's floor (measured with `read_agent` in the tagma checkout, 2026-11-04).** A definition without `extends`, capabilities `[files, shell]`, tools `read, grep, glob, ls`, every inherited section dropped, composes 28.5k characters at start: 0.3k its own prompt, 9.3k tool schemas, 18.7k project `prompt` law that no definition can drop. Adding `graph` raises it to 76k: vocabulary 17.4k, map 7.5k and the graph-writing sections. The full Tagma agent composes 132.5k. Reading files also delivers the code rules sourced to them — one read of a server file brought about 10k characters of rules.
