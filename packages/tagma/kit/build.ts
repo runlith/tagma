@@ -1,13 +1,16 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import type { BunPlugin } from 'bun';
 import ts from 'typescript';
 import { hostSpecifiers, workspaceManifests } from '../src/adapter/hostModules';
+import { syncGenerated } from './generated';
 import { emitRules } from './rules';
 
 const packageRoot = resolve(import.meta.dir, '..');
 const root = resolve(packageRoot, '../..');
 const out = join(packageRoot, 'dist');
 await rm(out, { recursive: true, force: true });
+await syncGenerated({ write: true });
 const texts = await workspaceManifests(root);
 const manifests = new Map(
   texts.map((text) => {
@@ -26,10 +29,14 @@ if (previousHost !== hostText) await writeFile(hostEntry, hostText);
 const manifest = manifests.get('@runlith/tagma');
 type Conditions = { readonly types: string; readonly browser?: string; readonly default: string | null };
 const CREATE = './adapter/create';
+const PLUGIN_DOOR = /^\.\/(?:plugin(?:\/|$)|testing$)/u;
+const CLI = join(packageRoot, manifest.bin['tagma-plugin']);
 const doors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
-  .filter(([key]) => key.startsWith('./adapter/') && key !== CREATE)
+  .filter(([key]) => (key.startsWith('./adapter/') && key !== CREATE) || PLUGIN_DOOR.test(key))
   .map(([key, conditions]) => ({ key, conditions, source: join(packageRoot, conditions.types) }));
-const builtFile = (source: string): string => `./adapter/${basename(source, '.ts')}`;
+const adapterDoors = doors.filter((door) => door.key.startsWith('./adapter/'));
+const pluginDoors = doors.filter((door) => PLUGIN_DOOR.test(door.key));
+const builtFile = (source: string): string => `./${relative(join(packageRoot, 'src'), source).replace(/\.ts$/u, '')}`;
 const ruleDoors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
   .filter(([key]) => key === './rules' || key.startsWith('./rules/'))
   .map(([key, conditions]) => ({ key, source: join(packageRoot, conditions.types) }));
@@ -45,15 +52,32 @@ const options: ts.CompilerOptions = {
   types: ['bun'],
 };
 const host = ts.createCompilerHost(options);
+type Exported = string | null | { readonly bun?: string | null; readonly types?: string | null; readonly default?: string | null };
+const exportedAt = (
+  exports: Readonly<Record<string, Exported>>,
+  key: string,
+): { readonly exported: Exported; readonly star: string } | undefined => {
+  if (Object.hasOwn(exports, key)) return { exported: exports[key]!, star: '' };
+  const patterns = Object.keys(exports)
+    .filter((pattern) => {
+      const [prefix, suffix] = pattern.split('*') as [string, string | undefined];
+      return suffix !== undefined && key.length >= prefix.length + suffix.length && key.startsWith(prefix) && key.endsWith(suffix);
+    })
+    .sort((left, right) => right.indexOf('*') - left.indexOf('*'));
+  const pattern = patterns[0];
+  if (pattern === undefined) return undefined;
+  const [prefix, suffix] = pattern.split('*') as [string, string];
+  return { exported: exports[pattern]!, star: key.slice(prefix.length, key.length - suffix.length) };
+};
 const workspaceFile = (specifier: string): string | undefined => {
   const name = specifier.split('/').slice(0, 2).join('/');
   const manifest = manifests.get(name);
   if (manifest === undefined) return undefined;
-  const key = `.${specifier.slice(name.length)}`;
-  const exported = manifest.exports?.[key];
+  const found = exportedAt(manifest.exports ?? {}, `.${specifier.slice(name.length)}`);
+  const exported = found?.exported;
   const entry = typeof exported === 'string' ? exported : (exported?.bun ?? exported?.types ?? exported?.default);
   if (typeof entry !== 'string') throw new Error(`No type surface for ${specifier}`);
-  return join(root, 'packages', name.slice('@runlith/'.length), entry);
+  return join(root, 'packages', name.slice('@runlith/'.length), entry.replace('*', found!.star));
 };
 const resolveModule = (specifier: string, file: string): string | undefined =>
   workspaceFile(specifier) ?? ts.resolveModuleName(specifier, file, options, host).resolvedModule?.resolvedFileName;
@@ -231,33 +255,49 @@ const ambient = [...rewritten]
   .map(([file, text]) => `declare module ${JSON.stringify(internalName(file))} {\n${text}\n}`)
   .join('\n');
 await writeFile(join(out, 'host.d.ts'), ambient);
-await mkdir(join(out, 'adapter'), { recursive: true });
-for (const door of doors)
+for (const door of doors) {
+  const target = join(out, `${builtFile(door.source)}.d.ts`);
+  await mkdir(dirname(target), { recursive: true });
   await writeFile(
-    join(out, `${builtFile(door.source)}.d.ts`),
+    target,
     `/// <reference path="../types/node/index.d.ts" />\n/// <reference path="../host.d.ts" />\n${rewritten.get(door.source)}`,
   );
+}
+const workspaceHost: BunPlugin = {
+  name: 'workspace-host',
+  setup(build) {
+    build.onResolve({ filter: /^@runlith\// }, ({ path }) => {
+      const file = workspaceFile(path);
+      if (file === undefined) throw new Error(`Unknown workspace host module ${path}`);
+      return { path: file };
+    });
+  },
+};
 const runtime = await Bun.build({
-  entrypoints: doors.map((door) => door.source),
+  entrypoints: adapterDoors.map((door) => door.source),
   outdir: join(out, 'adapter'),
   naming: '[name].js',
   target: 'bun',
   external: ['effect', 'effect/*'],
   minify: true,
-  plugins: [
-    {
-      name: 'workspace-host',
-      setup(build) {
-        build.onResolve({ filter: /^@runlith\// }, ({ path }) => {
-          const file = workspaceFile(path);
-          if (file === undefined) throw new Error(`Unknown workspace host module ${path}`);
-          return { path: file };
-        });
-      },
-    },
-  ],
+  plugins: [workspaceHost],
 });
 if (!runtime.success) throw new AggregateError(runtime.logs, 'The author kit did not build');
+const plugins = await Bun.build({
+  entrypoints: [...pluginDoors.map((door) => door.source), CLI],
+  root: join(packageRoot, 'src'),
+  outdir: out,
+  naming: { entry: '[dir]/[name].js', chunk: 'plugin/[name]-[hash].js' },
+  target: 'bun',
+  splitting: true,
+  external: ['typescript'],
+  minify: true,
+  plugins: [workspaceHost],
+});
+if (!plugins.success) throw new AggregateError(plugins.logs, 'The plugin doors did not build');
+const cli = join(out, `${builtFile(CLI)}.js`);
+const cliText = await readFile(cli, 'utf8');
+if (!cliText.startsWith('#!')) await writeFile(cli, `#!/usr/bin/env bun\n${cliText}`);
 await emitRules(out, ruleDoors);
 await mkdir(join(out, 'kit'), { recursive: true });
 await cp(join(import.meta.dir, 'create.ts'), join(out, 'kit/create.ts'));
@@ -293,9 +333,11 @@ await writeFile(
         ),
         [CREATE]: { types: './kit/create.ts', bun: './kit/create.ts', default: null },
       },
-      bin: { create: './kit/create.ts' },
-      files: ['rules', 'adapter', 'host.d.ts', 'types', 'kit/create.ts', 'kit/template'],
+      bin: { create: './kit/create.ts', 'tagma-plugin': `${builtFile(CLI)}.js` },
+      files: ['rules', 'adapter', 'plugin', 'host.d.ts', 'types', 'kit/create.ts', 'kit/template'],
+      dependencies: { typescript: `^${ts.version}` },
       peerDependencies: { effect: manifest.peerDependencies.effect },
+      peerDependenciesMeta: { effect: { optional: true } },
     },
     null,
     2,

@@ -1395,11 +1395,14 @@
       "version": "0.1.0",
       "bin": {
         "create": "./kit/create.ts",
+        "tagma-plugin": "./src/plugin/cli.ts",
       },
       "dependencies": {
+        "@modelcontextprotocol/sdk": "catalog:",
         "@runlith/adapter-anthropic": "workspace:*",
         "@runlith/adapter-deepseek": "workspace:*",
         "@runlith/adapter-devin": "workspace:*",
+        "@runlith/adapter-google": "workspace:*",
         "@runlith/adapter-muse": "workspace:*",
         "@runlith/adapter-openai": "workspace:*",
         "@runlith/adapter-opencode-go": "workspace:*",
@@ -1408,14 +1411,17 @@
         "@runlith/agent": "workspace:*",
         "@runlith/held": "workspace:*",
         "@runlith/llm": "workspace:*",
+        "@runlith/mcp": "workspace:*",
         "@runlith/utils": "workspace:*",
+        "@standard-schema/spec": "^1.1.0",
+        "typescript": "catalog:",
       },
       "devDependencies": {
         "@runlith/tsconfig": "workspace:*",
         "@tagma/inspection": "workspace:*",
         "@types/bun": "catalog:",
         "effect": "catalog:",
-        "typescript": "catalog:",
+        "zod": "catalog:",
       },
       "peerDependencies": {
         "effect": "^4.0.1",
