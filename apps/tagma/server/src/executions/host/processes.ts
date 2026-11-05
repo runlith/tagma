@@ -51,22 +51,36 @@ const hosts = Effect.fn('FixtureProcesses.hosts')(function* (root: string) {
   });
 });
 
-const childGroups = Effect.fn('FixtureProcesses.children')(function* (holders: ReadonlySet<number>) {
-  if (holders.size === 0) return [];
-  const command = ['ps', '-axo', 'pid=,ppid=,pgid='];
-  const table = yield* read(command);
+const PROCESS_TABLE = ['ps', '-A', '-o', 'pid=,ppid=,pgid='];
+
+const table = Effect.fn('FixtureProcesses.table')(function* () {
+  const command = PROCESS_TABLE;
+  const listed = yield* read(command);
   return yield* Effect.try({
     try: () =>
-      table.split('\n').flatMap((line) => {
+      listed.split('\n').flatMap((line) => {
         if (line.trim() === '') return [];
         const [pid, parent, group] = line.trim().split(/\s+/).map(Number);
         if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent)) throw new Error(`ps returned no process identity: ${line}`);
-        if (!holders.has(parent!) || pid === process.pid) return [];
-        if (!Number.isSafeInteger(group) || group! <= 0) throw new Error(`ps returned no process group: ${line}`);
-        return [group!];
+        if (pid === process.pid) return [];
+        return [{ pid: pid!, parent: parent!, group: group! }];
       }),
     catch: (cause) => new ProcessesUnmeasured({ command, detail: String(cause), cause }),
   });
+});
+
+const childGroups = Effect.fn('FixtureProcesses.children')(function* (holders: ReadonlySet<number>) {
+  if (holders.size === 0) return [];
+  const children = (yield* table()).filter((row) => holders.has(row.parent));
+  const ungrouped = children.find((row) => !Number.isSafeInteger(row.group) || row.group <= 0);
+  if (ungrouped !== undefined)
+    return yield* new ProcessesUnmeasured({ command: PROCESS_TABLE, detail: `ps returned no process group for ${ungrouped.pid}` });
+  return children.map((row) => row.group);
+});
+
+const membersOf = Effect.fn('FixtureProcesses.members')(function* (groups: ReadonlySet<number>) {
+  if (groups.size === 0) return [];
+  return (yield* table()).filter((row) => groups.has(row.group)).map((row) => row.pid);
 });
 
 export const hostsUnder = (root: string) => Effect.map(hosts(root), (standing) => standing.map((host) => host.pid));
@@ -94,7 +108,7 @@ export const endHosts = Effect.fn('FixtureProcesses.end')(function* (root: strin
   }
   for (;;) {
     const left = yield* hostsUnder(root);
-    if (left.length === 0) return left;
+    if (left.length === 0 && (yield* membersOf(groups)).length === 0) return left;
     yield* Effect.sleep(20);
   }
 });
