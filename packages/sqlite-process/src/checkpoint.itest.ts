@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun/SqliteClient';
@@ -93,6 +93,9 @@ it.live('the supplied engine checkpoints committed WAL outside the writer and pr
       ),
     );
     expect(copied).toBe(true);
+    const burst = statSync(`${filename}-wal`).size;
+    yield* query("INSERT INTO doc VALUES(3, 'after the checkpoint', NULL)");
+    expect(statSync(`${filename}-wal`).size).toBeLessThan(burst);
     expect(yield* query("SELECT rowid FROM doc_fts WHERE doc_fts MATCH 'history'")).toEqual([{ rowid: 1 }]);
     const [pages] = yield* query<{ pages: number }>('SELECT count(*) AS pages FROM dbstat');
     expect(pages!.pages).toBeGreaterThan(1000);

@@ -16,6 +16,7 @@ import { PROJECTION_BYTES } from './channel.js';
 
 const CHECKPOINT_PAGES = 1000;
 const STATEMENTS = 512;
+const WAL_KEPT_BYTES = 1024 * 1024;
 
 Database.MAX_QUERY_CACHE_SIZE = Math.max(Database.MAX_QUERY_CACHE_SIZE, STATEMENTS);
 const EXPLAIN = /^(?:[\s;]|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*explain\b/i;
@@ -99,7 +100,8 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
             if (ask.config.mmapBytes > 0) opening.run(`PRAGMA mmap_size = ${ask.config.mmapBytes};`);
             if (!ask.config.disableWAL && !ask.config.readonly) {
               opening.run('PRAGMA journal_mode = WAL;');
-              if (ask.config.filename !== ':memory:') opening.run('PRAGMA wal_autocheckpoint = 0;');
+              if (ask.config.filename !== ':memory:')
+                opening.run(`PRAGMA wal_autocheckpoint = 0; PRAGMA journal_size_limit = ${WAL_KEPT_BYTES};`);
             }
           } catch (cause) {
             opening.close();
