@@ -307,7 +307,17 @@ export const visit = Effect.fnUntraced(function* (
           }),
       ),
     );
-  const click = (thread: string) => Effect.promise(() => page.locator(`a[href*="${thread}"]:visible`).first().click());
+  const click = (thread: string) =>
+    Effect.promise(async () => {
+      const link = page.locator(`a[href*="${thread}"]:visible`).first();
+      const shown = await link.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        const view = node.ownerDocument.documentElement;
+        return box.right > 0 && box.left < view.clientWidth && box.bottom > 0 && box.top < view.clientHeight;
+      });
+      if (!shown) await page.locator('header button[aria-label="Back"]').first().click();
+      await link.click();
+    });
   yield* expose(
     'feedAppStream',
     Effect.fnUntraced(function* (chunks: number) {
