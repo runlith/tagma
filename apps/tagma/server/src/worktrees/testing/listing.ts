@@ -300,6 +300,7 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
         admit: () => Effect.die('unused'),
         follow: () => Effect.succeed(false),
         followAcross: () => Effect.succeed(false),
+        coverAcross: () => Effect.succeed(false),
         onCovered: () => () => undefined,
         recorded: () => undefined,
       }),

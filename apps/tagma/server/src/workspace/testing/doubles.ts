@@ -238,6 +238,7 @@ export const fixedCoverage = (projectId: number, checkouts: readonly FixedChecko
     admit: () => unread,
     follow: () => Effect.succeed(false),
     followAcross: () => Effect.succeed(false),
+    coverAcross: () => Effect.succeed(false),
     onCovered: () => () => undefined,
     recorded: () => undefined,
   };

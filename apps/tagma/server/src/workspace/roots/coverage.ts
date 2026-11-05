@@ -21,6 +21,8 @@ import { RootUnavailable, isRegistryChanged, isUnidentified, type RootGit, type 
 import { Coverage, FileRoots, type RootAdmissionRequest, type RootAdoption } from '../contract/service/roots.js';
 import { Repositories } from '../contract/service/repositories.js';
 import { Projects } from '../../projects/contract/service/registry.js';
+import { heldKey, mainWorktree } from '../../projects/identity.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { CoverageStore } from '../store/coverage.js';
 import type { AssignmentStore } from '../store/assignments.js';
 
@@ -53,6 +55,10 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
   const told = new Set<(projectId: number) => void>();
 
   const covering = Semaphore.makeUnsafe(1);
+
+  const strangers = new Set<string>();
+
+  let strangersAt = -1;
 
   const cover = Effect.fn('ProjectRoots.cover')(
     function* (projectId: number): Effect.fn.Return<ProjectCoverage, ProjectRootFailure | StoreFailure> {
@@ -333,6 +339,7 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
   const recorded = (projectId: number): void => announce(projectId);
 
   function announce(projectId: number): void {
+    strangers.clear();
     for (const listener of told) listener(projectId);
   }
 
@@ -407,21 +414,80 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
     };
   });
 
-  const administration = Effect.fn('ProjectRoots.administration')(function* (checkout: string, commonDir: string) {
+  const gitOf = Effect.fn('ProjectRoots.gitOf')(function* (checkout: string) {
     const marker = join(checkout, '.git');
-    const info = yield* files.stat(marker);
+    const info = yield* files.stat(marker).pipe(
+      Effect.catchReasons('PlatformError', {
+        NotFound: () => Effect.succeed(null),
+        BadResource: () => Effect.succeed(null),
+        PermissionDenied: () => Effect.succeed(null),
+      }),
+    );
+    if (info === null) return null;
     if (info.type === 'Directory') {
       const at = yield* files.realPath(marker);
-      return at === commonDir ? at : null;
+      return { gitDir: at, commonDir: at };
     }
     if (info.type !== 'File') return null;
     const first = (yield* files.readFileString(marker)).split('\n', 1)[0] ?? '';
     const named = first.startsWith(GITDIR) ? first.slice(GITDIR.length).trim() : '';
     if (named === '') return null;
-    const at = yield* files.realPath(isAbsolute(named) ? named : join(checkout, named));
-    const common = ((yield* files.readFileString(join(at, 'commondir'))).split('\n', 1)[0] ?? '').trim();
-    if (common === '') return null;
-    return (yield* files.realPath(isAbsolute(common) ? common : join(at, common))) === commonDir ? at : null;
+    const at = yield* files
+      .realPath(isAbsolute(named) ? named : join(checkout, named))
+      .pipe(Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)));
+    if (at === null) return null;
+    const common = (
+      (yield* files
+        .readFileString(join(at, 'commondir'))
+        .pipe(Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed('')))).split('\n', 1)[0] ?? ''
+    ).trim();
+    return { gitDir: at, commonDir: common === '' ? at : yield* files.realPath(isAbsolute(common) ? common : join(at, common)) };
+  });
+
+  const administration = Effect.fn('ProjectRoots.administration')(function* (checkout: string, commonDir: string) {
+    const place = yield* gitOf(checkout);
+    return place !== null && place.commonDir === commonDir ? place.gitDir : null;
+  });
+
+  const linkedAround = Effect.fn('ProjectRoots.linkedAround')(function* (path: string) {
+    for (let at = path; ; at = dirname(at)) {
+      const place = yield* gitOf(at);
+      if (place !== null) return place.gitDir === place.commonDir ? null : { ...place, root: yield* files.realPath(at) };
+      if (at === dirname(at)) return null;
+    }
+  });
+
+  const coverAcross = Effect.fn('ProjectRoots.coverAcross')(function* (path: string): Effect.fn.Return<boolean, ProjectRootFailure> {
+    const unread = (reason: RootUnavailable['reason']) => (failure: Error) =>
+      new RootUnavailable({
+        namespaceId: roots.namespaceId,
+        path,
+        reason,
+        message: failure instanceof GateRefusal ? failure.reason : failure.message,
+      });
+    const unreadable = unread('filesystem');
+    const linked = yield* Effect.mapError(linkedAround(path), unreadable);
+    if (linked === null) return false;
+    const registered = yield* projects.registryVersion;
+    if (registered !== strangersAt) {
+      strangers.clear();
+      strangersAt = registered;
+    }
+    if (strangers.has(linked.root)) return false;
+    const identity = {
+      repoKey: yield* Effect.mapError(heldKey(linked.commonDir), unreadable),
+      rootPath: yield* Effect.mapError(
+        mainWorktree(git, { toplevel: linked.root, gitDir: linked.gitDir, commonDir: linked.commonDir }),
+        unreadable,
+      ),
+      gitDir: linked.commonDir,
+    };
+    const project = yield* projects
+      .resolve(undefined, { cwd: linked.root, identity })
+      .pipe(Effect.mapError((failure) => (failure instanceof GateRefusal ? unreadable(failure) : unread('storage')(failure))));
+    if (project !== undefined && (yield* cover(project.id)).roots.some((root) => root.path === linked.root)) return true;
+    strangers.add(linked.root);
+    return false;
   });
 
   const administered = Effect.fn('ProjectRoots.administered')(function* (
@@ -512,5 +578,5 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
     }
   }
 
-  return Coverage.of({ cover, adopt, covered, survey, admit, followAcross, follow, onCovered, recorded });
+  return Coverage.of({ cover, adopt, covered, survey, admit, followAcross, coverAcross, follow, onCovered, recorded });
 });

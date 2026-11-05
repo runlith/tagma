@@ -222,6 +222,9 @@ export const makeCheckoutPathService = Effect.gen(function* () {
     );
   }
 
+  const widened = (path: string, spelling: string) =>
+    coverage.coverAcross(spelling).pipe(Effect.mapError((failure) => unreadPlace(path, failure)));
+
   const atSpelling = Effect.fn('CheckoutPaths.atSpelling')(function* (
     path: string,
     spelling: string,
@@ -238,7 +241,9 @@ export const makeCheckoutPathService = Effect.gen(function* () {
       fenced.delete(projectId);
       return yield* atSpelling(path, spelling, preferred, followed);
     }
-    if (placed !== null || followed || directlyIn(missedAcross, spelling)) return placed;
+    if (placed !== null || followed) return placed;
+    if (yield* widened(path, spelling)) return yield* atSpelling(path, spelling, preferred, true);
+    if (directlyIn(missedAcross, spelling)) return placed;
     const moved = yield* coverage.followAcross(spelling).pipe(Effect.mapError((failure) => unreadPlace(path, failure)));
     if (moved) return yield* atSpelling(path, spelling, preferred, true);
     if (missedAcross.size >= OUTSIDE_KEPT) missedAcross.clear();
@@ -377,6 +382,10 @@ export const makeCheckoutPathService = Effect.gen(function* () {
       const held = known.get(projectId);
       const placed = held === undefined ? null : yield* deepest(held, spelling);
       if (placed !== null) return placed;
+      if (yield* widened(path, spelling)) {
+        const covered = yield* deepest(yield* rootsOf(projectId, path), spelling);
+        if (covered !== null) return covered;
+      }
       if (held !== undefined && directlyIn(outsideOf.get(projectId), spelling)) return null;
       const found = yield* deepest(yield* rootsOf(projectId, path), spelling);
       if (found !== null) return found;

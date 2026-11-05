@@ -68,6 +68,7 @@ const fixture = Effect.gen(function* () {
     admit: unused,
     follow: unused,
     followAcross: unused,
+    coverAcross: unused,
     onCovered: () => () => undefined,
     recorded: () => undefined,
   });

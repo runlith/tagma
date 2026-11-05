@@ -72,6 +72,25 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
     }),
   );
 
+  it.effect('the gate judges a commit in a worktree git added after the project was covered', () =>
+    Effect.gen(function* () {
+      const gate = yield* commitCase;
+      const check = (cwd: string) => Effect.map(gate.world.tagma(['check', '--gate'], { cwd, env: OPERATOR }), (answer) => answer.code);
+      yield* gate.put('covered.ts', 'export const covered = 1;\n');
+      yield* gate.ran(gate.repo, ['add', 'covered.ts']);
+      expect(yield* check(gate.repo)).toBe(0);
+      yield* gate.ran(gate.repo, ['reset', '-q']);
+
+      const linked = `${yield* gate.world.directory('linked')}/tree`;
+      yield* gate.ran(gate.repo, ['worktree', 'add', '-q', '--detach', linked, 'HEAD']);
+      yield* Effect.gen(function* () {
+        yield* gate.put('linked.ts', FORWARD, linked);
+        yield* gate.ran(linked, ['add', 'linked.ts']);
+        expect(yield* check(linked)).toBe(1);
+      }).pipe(Effect.ensuring(Effect.ignore(gate.ran(gate.repo, ['worktree', 'remove', '--force', linked]))));
+    }),
+  );
+
   it.effect(
     "a foreign project's live thread is judged by this checkout, its refused git commit is attributed to it, and commit_checkout refuses the same violation",
     () =>

@@ -105,6 +105,7 @@ export class Coverage extends Context.Service<
     admit(request: RootAdmissionRequest): Effect.Effect<RootAdmission, ProjectRootsUnavailable | RootResolutionFailure>;
     follow(projectId: number, path: string): Effect.Effect<boolean, ProjectRootsUnavailable | RootResolutionFailure>;
     followAcross(path: string): Effect.Effect<boolean, ProjectRootsUnavailable | RootResolutionFailure>;
+    coverAcross(path: string): Effect.Effect<boolean, ProjectRootFailure>;
     onCovered(listener: (projectId: number) => void): () => void;
     recorded(projectId: number): void;
   }

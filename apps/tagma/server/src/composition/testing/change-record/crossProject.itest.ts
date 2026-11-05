@@ -114,6 +114,7 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           admit: (request) => coverage.admit(request),
           follow: (id, at) => coverage.follow(id, at),
           followAcross: (at) => coverage.followAcross(at),
+          coverAcross: (at) => coverage.coverAcross(at),
           onCovered: (listener) => coverage.onCovered(listener),
           recorded: (id) => coverage.recorded(id),
         };
