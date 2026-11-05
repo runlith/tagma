@@ -492,6 +492,11 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (lane: Lane): Effe
     if (failures.length > 0) throw new AggregateError(failures, 'iOS failure evidence was incomplete');
   });
   yield* Effect.addFinalizer(() => Effect.sync(unhook));
+  yield* Effect.addFinalizer(() =>
+    selected === undefined
+      ? Effect.void
+      : attempted('MobileSafari did not leave its page for about:blank', () => fixture.open('about:blank')).pipe(Effect.orDie),
+  );
   return { fixture, failed };
 });
 
