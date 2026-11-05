@@ -1,6 +1,8 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { contentDigest } from '@runlith/files/content';
@@ -92,14 +94,17 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
     () =>
       Effect.gen(function* () {
         const s = yield* commandWorld();
+        const peer = join(mkdtempSync(join(tmpdir(), 'peer-edit-')), 'landed');
+        execFileSync('mkfifo', [peer]);
         const running = yield* Effect.forkChild(
           call(s.mine.bash, {
-            command: `exec bun -e 'const fs = require("node:fs"); const done = new Promise(resolve => { const observer = fs.watch("src", () => { if (fs.readFileSync("src/a.ts", "utf8") === "v2\\n") { observer.close(); resolve(); } }); }); fs.writeFileSync("src/a.ts", "v1\\n"); await done;'`,
+            command: `exec bun -e 'const fs = require("node:fs"); fs.writeFileSync("src/a.ts", "v1\\n"); fs.readFileSync(${JSON.stringify(peer)});'`,
             description: 'Rewrite and wait for the peer edit',
           }),
         );
         yield* fileReady(s.w.file, () => readFileSync(s.w.file, 'utf8') === 'v1\n');
         yield* call(s.theirs.edit, { path: 'src/a.ts', oldString: 'v1', newString: 'v2' });
+        writeFileSync(peer, 'landed\n');
         yield* Fiber.join(running);
         yield* s.decided(MINE);
 
