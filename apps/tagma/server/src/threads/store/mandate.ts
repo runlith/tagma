@@ -5,6 +5,7 @@ import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { getTableColumns } from 'drizzle-orm';
 import { projectRows } from '../../platform/contract/service/projections.js';
+import { readableJson } from '../../platform/store/readableJson.js';
 
 export const threadMandate = sqliteTable(
   'thread_mandate',
@@ -12,7 +13,7 @@ export const threadMandate = sqliteTable(
     id: text('id')
       .primaryKey()
       .references(() => threadRecord.id, { onDelete: 'cascade' }),
-    authority: text('authority', { mode: 'json' }).$type<ThreadAuthority>().notNull(),
+    authority: readableJson('authority').$type<ThreadAuthority>().notNull(),
     delegation: integer('delegation', { mode: 'boolean' }),
     delegationBy: text('delegation_by'),
     delegationAt: integer('delegation_at', { mode: 'timestamp_ms' }),

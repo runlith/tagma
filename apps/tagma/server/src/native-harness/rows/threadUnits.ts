@@ -14,6 +14,7 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import { programOf } from '../../platform/store/programs.js';
 import { bindQuery } from '../../platform/store/queries.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -160,7 +161,10 @@ export const makeThreadMetadata = Effect.gen(function* () {
     .select({ id: threadRow.id })
     .from(threadRow)
     .where(
-      and(eq(threadRow.id, sql.placeholder('id')), sql`json_extract(${threadRow.transport}, '$.adapter') is ${sql.placeholder('adapter')}`),
+      and(
+        eq(threadRow.id, sql.placeholder('id')),
+        sql`${readableField(threadRow.transport, '$.adapter')} is ${sql.placeholder('adapter')}`,
+      ),
     )
     .prepare();
   return ThreadMetadataSource.of({

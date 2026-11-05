@@ -11,12 +11,7 @@ import {
   type ThreadRunPhase,
   type ThreadRunStopAsked,
 } from '@runlith/agent/thread/storage/runs';
-import {
-  parseThreadRunProgress,
-  parseThreadRunStopRequest,
-  parseThreadRunUsage,
-  type ThreadStorageFailed,
-} from '@runlith/agent/thread/persisted';
+import { runFacts, type ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { mergedStopRequest, seedThreadNotification } from '@runlith/agent/thread/storage/settlement';
 import { and, asc, desc, eq, inArray, type Placeholder, type SQL, sql } from 'drizzle-orm';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -31,6 +26,7 @@ import { recordFacts } from '../../thread-record/facts.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
 import { programOf } from '../../platform/store/programs.js';
 import { bindQuery, writePrepared } from '../../platform/store/queries.js';
+import { readableEdit, readableField } from '../../platform/store/readableJson.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { makeEndedRuns } from './endedRuns.js';
 import { makeReaping, staged, stagedFrom, stageText, trustedRun, type RunLifecycle } from './reaping.js';
@@ -316,10 +312,15 @@ export const makeRunStores = Effect.gen(function* () {
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
-                  db.select({ streamTail: threadRun.streamTail, stopRequest: threadRun.stopRequest }).from(threadRun).where(claim).get(),
+                  db
+                    .select({ threadId: threadRun.threadId, streamTail: threadRun.streamTail, stopRequest: threadRun.stopRequest })
+                    .from(threadRun)
+                    .where(claim)
+                    .get(),
                 );
                 if (!current) return null;
-                const request = mergedStopRequest(parseThreadRunStopRequest(current.stopRequest), patch.intent, patch.finishedAt);
+                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).stopRequest(current.stopRequest);
+                const request = mergedStopRequest(held, patch.intent, patch.finishedAt);
                 const run = yield* unit.run(
                   db
                     .update(threadRun)
@@ -482,7 +483,7 @@ export const makeRunStores = Effect.gen(function* () {
               Effect.map(
                 unit.run(
                   db
-                    .select({ spent: sql<number>`coalesce(sum(json_extract(${threadRun.usage}, '$.totalTokens')), 0)` })
+                    .select({ spent: sql<number>`coalesce(sum(${readableField(threadRun.usage, '$.totalTokens')}), 0)` })
                     .from(threadRun)
                     .innerJoin(recordFacts, eq(recordFacts.id, threadRun.threadId))
                     .where(and(eq(recordFacts.spawnRootId, spawnRootId), eq(recordFacts.principalId, owner)))
@@ -532,10 +533,11 @@ export const makeRunStores = Effect.gen(function* () {
                 const statement = db
                   .update(threadRun)
                   .set({
-                    progress:
+                    progress: readableEdit(threadRun.progress, (stored) =>
                       phase === null
-                        ? sql`json_remove(${threadRun.progress}, '$.phase')`
-                        : sql`json_set(${threadRun.progress}, '$.phase', json(${JSON.stringify(phase)}))`,
+                        ? sql`json_remove(${stored}, '$.phase')`
+                        : sql`json_set(${stored}, '$.phase', json(${JSON.stringify(phase)}))`,
+                    ),
                     updatedAt: new Date(clock.currentTimeMillisUnsafe()),
                   })
                   .where(owned(runId))
@@ -545,18 +547,21 @@ export const makeRunStores = Effect.gen(function* () {
                     progress: threadRun.progress,
                     updatedAt: threadRun.updatedAt,
                   });
+                const read = (run: ThreadRunPhase): ThreadRunPhase => ({ ...run, progress: runFacts(kinds, run).progress(run.progress) });
                 const program = programOf(unit);
-                if (program === null) return yield* unit.run(statement);
+                if (program === null) return (yield* unit.run(statement)).map(read);
                 const written: ThreadRunPhase[] = [];
                 yield* program.returning(statement, (rows) =>
                   Effect.sync(() => {
                     for (const [id, threadId, progress, updatedAt] of rows) {
-                      written.push({
-                        id: String(id),
-                        threadId: String(threadId),
-                        progress: parseThreadRunProgress(threadRun.progress.mapFromDriverValue(String(progress))),
-                        updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updatedAt)),
-                      });
+                      written.push(
+                        read({
+                          id: String(id),
+                          threadId: String(threadId),
+                          progress: threadRun.progress.mapFromDriverValue(String(progress)),
+                          updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updatedAt)),
+                        }),
+                      );
                     }
                   }),
                 );
@@ -571,9 +576,11 @@ export const makeRunStores = Effect.gen(function* () {
             writes('ThreadRunStore.addUsage', [runRows]),
             (unit) =>
               Effect.gen(function* () {
-                const current = yield* unit.run(db.select({ usage: threadRun.usage }).from(threadRun).where(owned(runId)).get());
+                const current = yield* unit.run(
+                  db.select({ threadId: threadRun.threadId, usage: threadRun.usage }).from(threadRun).where(owned(runId)).get(),
+                );
                 if (!current) return;
-                const held = parseThreadRunUsage(current.usage);
+                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).usage(current.usage);
                 yield* unit.run(
                   db
                     .update(threadRun)
@@ -590,13 +597,16 @@ export const makeRunStores = Effect.gen(function* () {
             writes('ThreadRunStore.charge', [runRows]),
             (unit) =>
               Effect.gen(function* () {
-                const current = yield* unit.run(db.select({ usage: threadRun.usage }).from(threadRun).where(eq(threadRun.id, runId)).get());
+                const current = yield* unit.run(
+                  db.select({ threadId: threadRun.threadId, usage: threadRun.usage }).from(threadRun).where(eq(threadRun.id, runId)).get(),
+                );
                 if (!current) return;
+                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).usage(current.usage);
                 yield* unit.run(
                   db
                     .update(threadRun)
                     .set({
-                      ...(charge.usage === null ? {} : { usage: sumUsage(parseThreadRunUsage(current.usage), charge.usage) }),
+                      ...(charge.usage === null ? {} : { usage: sumUsage(held, charge.usage) }),
                       ...(charge.cost === null ? {} : { cost: charge.cost }),
                       updatedAt: new Date(yield* Clock.currentTimeMillis),
                     })
@@ -639,7 +649,7 @@ export const makeRunStores = Effect.gen(function* () {
                               heartbeatAt: threadRun.heartbeatAt.mapFromDriverValue(Number(heartbeat)),
                               updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updated)),
                             });
-                            const request = parseThreadRunStopRequest(
+                            const request = runFacts(kinds, { id: runId, threadId: String(threadId) }).stopRequest(
                               value === null ? null : threadRun.stopRequest.mapFromDriverValue(String(value)),
                             );
                             if (request !== null) asked.push({ runId, by: request.by });
@@ -650,7 +660,7 @@ export const makeRunStores = Effect.gen(function* () {
                       const beaten = yield* unit.run(statement.all());
                       for (const { stopRequest, ...run } of beaten) {
                         written.push(run);
-                        const request = parseThreadRunStopRequest(stopRequest);
+                        const request = runFacts(kinds, run).stopRequest(stopRequest);
                         if (request !== null) asked.push({ runId: run.id, by: request.by });
                       }
                     }
@@ -666,9 +676,12 @@ export const makeRunStores = Effect.gen(function* () {
             writes('ThreadRunStore.requestStop', [runRows]),
             (unit) =>
               Effect.gen(function* () {
-                const current = yield* unit.run(db.select({ stopRequest: threadRun.stopRequest }).from(threadRun).where(claim).get());
+                const current = yield* unit.run(
+                  db.select({ threadId: threadRun.threadId, stopRequest: threadRun.stopRequest }).from(threadRun).where(claim).get(),
+                );
                 if (!current) return null;
-                const request = mergedStopRequest(parseThreadRunStopRequest(current.stopRequest), intent, at);
+                const held = runFacts(kinds, { id: runId, threadId: current.threadId }).stopRequest(current.stopRequest);
+                const request = mergedStopRequest(held, intent, at);
                 yield* unit.run(
                   db
                     .update(threadRun)

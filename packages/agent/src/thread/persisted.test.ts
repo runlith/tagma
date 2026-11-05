@@ -8,7 +8,7 @@ import {
   parseThreadRunFailure,
   parseThreadRunUsage,
   parseThreadRunProgress,
-  parseThreadStreamTail,
+  runFacts,
   decodeThreadEventPayloadResult,
   threadEventPayloadSchema,
 } from './persisted';
@@ -80,17 +80,18 @@ describe('persisted thread contract', () => {
     expect(decode({ compacted: { keepFrom: -1, messages: [] } })._tag).toBe('Failure');
   });
 
-  test('a stored stream tail keeps an entry no kind reads as a line beside its neighbours, and refuses a value with no identity', () => {
+  test('a stored stream tail keeps an entry no kind reads as a line beside its neighbours, and stands as none for a value with no identity', () => {
     const said = { type: 'message', id: 'message-1', role: 'user', text: 'hi' };
-    const [read, neighbour] = parseThreadStreamTail(kinds, 'thread-1', [{ type: 'language-task', id: 'task-1' }, said]) ?? [];
+    const tail = runFacts(kinds, { id: 'run-1', threadId: 'thread-1' }).streamTail;
+    const [read, neighbour] = tail([{ type: 'language-task', id: 'task-1' }, said]) ?? [];
     expect(read).toMatchObject({ type: 'entry-unreadable', id: 'task-1' });
     expect(neighbour).toEqual(said);
-    expect(() => parseThreadStreamTail(kinds, 'thread-1', [{ type: 'message' }])).toThrow('stream tail cannot be read');
+    expect(tail([{ type: 'message' }])).toBeNull();
   });
 
   test('nullable slots answer null and refuse malformed bytes', () => {
     expect(parseThreadPendingInteraction(kinds, null)).toBeNull();
-    expect(parseThreadStreamTail(kinds, 'thread-1', null)).toBeNull();
+    expect(runFacts(kinds, { id: 'run-1', threadId: 'thread-1' }).streamTail(null)).toBeNull();
     expect(parseThreadRunUsage(null)).toBeNull();
     const question: ThreadQuestionEntry = {
       type: 'question',

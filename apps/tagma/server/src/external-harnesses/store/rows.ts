@@ -11,6 +11,7 @@ import { externalSession, leased, sessionFacts, sessionValues } from '../../thre
 import { inProgram } from '../../platform/store/crossing.js';
 import { programOf, programWriteUnit } from '../../platform/store/programs.js';
 import { bindQuery } from '../../platform/store/queries.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { nativeRows, thread, threadRun, unparkedRun } from '../../threads/store/kernel.js';
 import { askedOf, bindingOf, capabilitiesOf, chooseModel, roadOf, switchesOf } from '../../threads/store/seat.js';
 import { parseExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -28,7 +29,7 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
       db
         .select({ id: thread.id })
         .from(thread)
-        .where(and(eq(thread.id, externalSession.id), sql`json_extract(${thread.transport}, '$.adapter') = ${transport}`)),
+        .where(and(eq(thread.id, externalSession.id), sql`${readableField(thread.transport, '$.adapter')} = ${transport}`)),
     );
   const heldSession = db
     .select({ id: externalSession.id })

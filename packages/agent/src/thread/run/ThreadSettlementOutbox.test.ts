@@ -5,7 +5,8 @@ import { Clock, Context, Deferred, Effect, Fiber, Layer } from 'effect';
 import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
 import { agentSpan } from '../../agent/spans';
-import { parseThreadRunNotification } from '../persisted';
+import { runFacts } from '../persisted';
+import { makeThreadEntryReader } from '../../transcript/kinds';
 import { seedThreadNotification, threadNotification } from '../storage/settlement';
 import type { ThreadRunStorage } from '../storage/runs';
 import { threadHostLayer, ThreadRunStoreFactory, type ThreadTx } from '../ThreadPorts';
@@ -437,7 +438,7 @@ function notificationStore() {
         if (failures.observationFailure && !advances) throw failures.observationFailure;
         if (id !== row.id || row.ownerId !== runs.ownerId || row.settledNotifiedAt || row.settledNotification?.id !== expected)
           return false;
-        row.settledNotification = parseThreadRunNotification(JSON.parse(JSON.stringify(record)));
+        row.settledNotification = runFacts(makeThreadEntryReader({ products: [] }), row).notification(JSON.parse(JSON.stringify(record)));
         return true;
       }),
     markSettledNotified: (id, at, record) =>

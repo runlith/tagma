@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Result } from 'effect';
 import { makeThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
-import { decodeThreadEventPayloadResult, parseThreadStreamTail } from '@runlith/agent/thread/persisted';
+import { decodeThreadEventPayloadResult, runFacts } from '@runlith/agent/thread/persisted';
 import { journalSteps } from './formSteps.js';
 
 const dated: ThreadFormStep = {
@@ -30,7 +30,7 @@ test('a record in an old form leaves the reader in the current form, and a curre
   expect(kinds.decode(old)).toEqual(Result.succeed(current));
   expect(kinds.decode(current)).toEqual(Result.succeed(current));
   expect(decodeThreadEventPayloadResult(kinds, 'thread-1', { entry: old })).toEqual(Result.succeed({ entry: current }));
-  expect(parseThreadStreamTail(kinds, 'thread-1', [old, current])).toEqual([current, current]);
+  expect(runFacts(kinds, { id: 'run-1', threadId: 'thread-1' }).streamTail([old, current])).toEqual([current, current]);
 });
 
 test('a step that moves a field queries over many threads read is refused on every record it would move', () => {

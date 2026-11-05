@@ -1,6 +1,7 @@
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
 import { sql, type SQL } from 'drizzle-orm';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import type { ThreadAsk } from '../contract/wire/list.js';
@@ -38,12 +39,13 @@ export function standingOf(thread: ThreadSummary): ThreadStanding | null {
 }
 
 const ASKING = sql.raw('n.pending_interaction');
+const RUN_STAGE = readableField(sql.raw('r.progress'), '$.stage');
 
 const asking: SQL = sql`(
   exists (
     select 1 from ${threadRun} r
      where r.thread_id = ${recordFacts.id} and r.status = 'running'
-       and json_extract(r.progress, '$.stage') = ${THREAD_RUN_AWAITING_QUESTION_STAGE}
+       and ${RUN_STAGE} = ${THREAD_RUN_AWAITING_QUESTION_STAGE}
   )
   or exists (
     select 1 from ${thread} n
@@ -68,7 +70,7 @@ export const standingDriven: SQL = sql`(
     select t.thread_id from ${threadRunTally} t where t.unseen = 1
     union
     select r.thread_id from ${threadRun} r
-     where r.status = 'running' and json_extract(r.progress, '$.stage') = ${THREAD_RUN_AWAITING_QUESTION_STAGE}
+     where r.status = 'running' and ${RUN_STAGE} = ${THREAD_RUN_AWAITING_QUESTION_STAGE}
     union
     select n.id from ${thread} n where ${entryField(ASKING, 'action')} is not null
   )

@@ -2,7 +2,7 @@ import { Clock, Context, Effect } from 'effect';
 import { mintCursor, readCursor } from '@runlith/paging';
 import { THREAD_LIST, type ThreadDirectoryRow, type ThreadListQuery } from '@runlith/agent/collaboration/threads';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
-import { parseThreadContextReading, parseThreadRunFailure, readThreadCapabilities, readableRowFact } from '@runlith/agent/thread/persisted';
+import { parseThreadContextReading, readThreadCapabilities, readableRowFact, runFacts } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { currentRunOf } from '@runlith/agent/thread/state';
@@ -14,6 +14,7 @@ import { MachineUnits } from '../../platform/contract/service/units.js';
 import { thread, threadRun } from './kernel.js';
 import { recordFacts, recordsAs } from '../../thread-record/facts.js';
 import { stored } from '../../platform/store/crossing.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { LEASE_RHYTHM } from '../contract/wire/rhythm.js';
 import { nativeAsk } from '../list/pendingAsk.js';
 
@@ -43,13 +44,13 @@ export const makeThreadDirectory = Effect.gen(function* () {
         eq(recordFacts.principalId, query.principal),
         isNotNull(recordFacts.projectId),
         isNull(recordFacts.archivedAt),
-        query.ids ? inArray(recordFacts.id, [...query.ids]) : sql`json_extract(${recordFacts.bornOf}, '$.ask') is null`,
+        query.ids ? inArray(recordFacts.id, [...query.ids]) : sql`${readableField(recordFacts.bornOf, '$.ask')} is null`,
         query.parent === undefined ? undefined : eq(recordFacts.parentId, query.parent),
         sql`exists (select 1 from ${recordsAs('r')} where r.id = ${query.from} and r.principal_id = ${query.principal})`,
       );
       const life = sql<number>`case
       when ${threadRun.status} = 'running' then
-        case when json_extract(${threadRun.progress}, '$.stage') = ${THREAD_RUN_AWAITING_QUESTION_STAGE} then 1 else 0 end
+        case when ${readableField(threadRun.progress, '$.stage')} = ${THREAD_RUN_AWAITING_QUESTION_STAGE} then 1 else 0 end
       else 2 end`;
       const reading = query.cursor === undefined ? null : readCursor(query.cursor, THREAD_LIST);
       const after = reading !== null && 'at' in reading ? (reading.at as readonly [number, number, string]) : null;
@@ -73,7 +74,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   projectId: recordFacts.projectId,
                   agentId: recordFacts.agentId,
                   profileId: sql<string | null>`json_extract(${thread.profile}, '$.id')`,
-                  hostedAgent: sql<string | null>`json_extract(${thread.transport}, '$.agent')`,
+                  hostedAgent: sql<string | null>`${readableField(thread.transport, '$.agent')}`,
                   name: recordFacts.name,
                   spawnRootId: recordFacts.spawnRootId,
                   parentThreadId: recordFacts.parentId,
@@ -122,8 +123,10 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   : null,
               rows: page.map((row): ThreadDirectoryRow => {
                 const { capabilities } = readThreadCapabilities(kinds, row.threadId, row.capabilities);
+                const facts = row.runId === null ? null : runFacts(kinds, { id: row.runId, threadId: row.threadId });
                 const current =
                   row.runId === null ||
+                  facts === null ||
                   row.runStatus === null ||
                   row.startedAt === null ||
                   row.heartbeatAt === null ||
@@ -136,7 +139,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                           startedAt: row.startedAt,
                           heartbeatAt: row.heartbeatAt,
                           handedOverAt: row.handedOverAt,
-                          progress: row.progress,
+                          progress: facts.progress(row.progress),
                         },
                         { updatedAt: row.movedAt, capabilities },
                         now,
@@ -171,13 +174,7 @@ export const makeThreadDirectory = Effect.gen(function* () {
                   ),
                   assignment: row.runStatus,
                   failureReason: row.failureReason,
-                  failure: readableRowFact(
-                    kinds,
-                    row.threadId,
-                    'a run failure this build cannot read leaves its directory row with the failure reason alone',
-                    () => parseThreadRunFailure(row.failure),
-                    null,
-                  ),
+                  failure: facts === null ? null : facts.failure(row.failure),
                   run,
                 };
               }),

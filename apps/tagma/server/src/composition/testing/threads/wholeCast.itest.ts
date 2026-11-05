@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { parseThreadStreamTail } from '@runlith/agent/thread/persisted';
+import { runFacts } from '@runlith/agent/thread/persisted';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { eq, sql } from 'drizzle-orm';
 import { MachineStore } from '../../../platform/contract/service/store.js';
@@ -68,12 +68,16 @@ const standing = Effect.fn('testing.standingRows')(function* (threadId: string, 
   const mark = yield* db.select({ step: form.step }).from(form).where(eq(form.threadId, threadId)).get();
   const events = yield* db.select({ payload: threadEvent().payload }).from(threadEvent()).where(eq(threadEvent().threadId, threadId));
   const entries = yield* db.select({ entry: threadEntry().entry }).from(threadEntry()).where(eq(threadEntry().threadId, threadId));
-  const run = yield* db.select({ tail: threadRun().streamTail }).from(threadRun()).where(eq(threadRun().threadId, threadId)).get();
+  const run = yield* db
+    .select({ id: threadRun().id, tail: threadRun().streamTail })
+    .from(threadRun())
+    .where(eq(threadRun().threadId, threadId))
+    .get();
   return {
     step: mark?.step ?? null,
     events: events.map((row) => row.payload.entry),
     entries: entries.map((row) => row.entry),
-    tail: parseThreadStreamTail(ENTRY_KINDS, threadId, run?.tail ?? null),
+    tail: runFacts(ENTRY_KINDS, { id: run?.id ?? threadId, threadId }).streamTail(run?.tail ?? null),
     stored: run?.tail ?? null,
     file: yield* files.readFileString(path),
   };
