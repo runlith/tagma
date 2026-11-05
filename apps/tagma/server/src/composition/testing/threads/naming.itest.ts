@@ -40,60 +40,56 @@ it.live(
       let broken = false;
       let suspended = false;
       let recapping = false;
-      let resolving: Deferred.Deferred<void> | undefined;
       const world = yield* DoorFixture;
       yield* world.lend({
         models: (standing) => ({
           ...standing,
-          request: (input) => {
-            if (resolving !== undefined) Deferred.doneUnsafe(resolving, Effect.void);
-            return {
-              plannedOutputTokens: 32,
-              origin:
-                input.model == null
-                  ? undefined
-                  : new ModelIdentity({ provider: ProviderID.make(input.provider), model: ModelID.make(input.model) }),
-              cache: { ttlSeconds: 3_600 },
-              signedAccount: () => account,
-              text: () =>
-                Effect.sync(() => {
-                  excerpted.push(input);
-                  return new LLMResponse({
-                    message: Message.assistant('TITLE: Compact result'),
-                    events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Compact result' }],
-                    usage: new Usage({ inputTokens: 20, outputTokens: 4 }),
-                    finishReason: 'stop',
-                  });
-                }),
-              object: () => Effect.die(new Error('the naming fixture answers no objects')),
-              stream: (call) =>
-                Stream.unwrap(
-                  Effect.gen(function* () {
-                    sent.push({ call });
-                    const naming = !first;
-                    first = false;
-                    if (naming && !recapping && Object.keys(call.tools).length > 0) yield* Deferred.succeed(opened, undefined);
-                    if (naming && suspended) {
-                      yield* Deferred.succeed(interruption, undefined);
-                      return Stream.fromEffect(Effect.never);
-                    }
-                    if (naming && broken) return Stream.fail(credentialMissing('fixture transport failure'));
-                    if (naming && Object.keys(call.tools).length > 0 && answer === 'tool')
-                      return Stream.fromIterable<LLMEvent>([
-                        { type: 'tool-call', id: 'call', name: 'read', input: {} },
-                        { type: 'finish', reason: 'tool-calls' },
-                      ]);
-                    const text = recapping ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none' : !naming ? 'Ready.' : answer;
+          request: (input) => ({
+            plannedOutputTokens: 32,
+            origin:
+              input.model == null
+                ? undefined
+                : new ModelIdentity({ provider: ProviderID.make(input.provider), model: ModelID.make(input.model) }),
+            cache: { ttlSeconds: 3_600 },
+            signedAccount: () => account,
+            text: () =>
+              Effect.sync(() => {
+                excerpted.push(input);
+                return new LLMResponse({
+                  message: Message.assistant('TITLE: Compact result'),
+                  events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Compact result' }],
+                  usage: new Usage({ inputTokens: 20, outputTokens: 4 }),
+                  finishReason: 'stop',
+                });
+              }),
+            object: () => Effect.die(new Error('the naming fixture answers no objects')),
+            stream: (call) =>
+              Stream.unwrap(
+                Effect.gen(function* () {
+                  sent.push({ call });
+                  const naming = !first;
+                  first = false;
+                  if (naming && !recapping && Object.keys(call.tools).length > 0) yield* Deferred.succeed(opened, undefined);
+                  if (naming && suspended) {
+                    yield* Deferred.succeed(interruption, undefined);
+                    return Stream.fromEffect(Effect.never);
+                  }
+                  if (naming && broken) return Stream.fail(credentialMissing('fixture transport failure'));
+                  if (naming && Object.keys(call.tools).length > 0 && answer === 'tool')
                     return Stream.fromIterable<LLMEvent>([
-                      { type: 'text-start', id: 'text' },
-                      { type: 'text-delta', id: 'text', text },
-                      { type: 'text-end', id: 'text' },
-                      { type: 'finish', reason: 'stop', usage: new Usage({ inputTokens: 20, outputTokens: 4 }) },
+                      { type: 'tool-call', id: 'call', name: 'read', input: {} },
+                      { type: 'finish', reason: 'tool-calls' },
                     ]);
-                  }),
-                ),
-            };
-          },
+                  const text = recapping ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none' : !naming ? 'Ready.' : answer;
+                  return Stream.fromIterable<LLMEvent>([
+                    { type: 'text-start', id: 'text' },
+                    { type: 'text-delta', id: 'text', text },
+                    { type: 'text-end', id: 'text' },
+                    { type: 'finish', reason: 'stop', usage: new Usage({ inputTokens: 20, outputTokens: 4 }) },
+                  ]);
+                }),
+              ),
+          }),
         }),
       });
       const projectId = yield* world.stealthProject();
@@ -307,15 +303,9 @@ it.live(
       const expiresAt = Context.get(world.runtime.owners, HarnessAsides).of(threadId)?.expiresAt;
       if (expiresAt == null) return yield* Effect.die('the naming fixture has no expiring warm copy');
       const clock = yield* TestClock.make();
-      const currentTime = yield* Clock.currentTimeMillis;
       yield* Effect.gen(function* () {
-        yield* clock.setTime(currentTime);
-        const reconciled = yield* Deferred.make<void>();
-        resolving = reconciled;
-        const pending = yield* Effect.forkScoped(world.op('generate_thread_title', { threadId }, `project=${projectId}`));
-        yield* Deferred.await(reconciled);
         yield* clock.setTime(expiresAt + 1);
-        const expired = yield* Fiber.join(pending);
+        const expired = yield* world.op('generate_thread_title', { threadId }, `project=${projectId}`);
         expect(expired.status).toBe(200);
         expect(yield* Schema.decodeUnknownEffect(threadTitleAnswerSchema)(expired.body)).toMatchObject({
           outcome: 'named',
