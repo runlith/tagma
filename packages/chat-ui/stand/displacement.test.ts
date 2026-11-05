@@ -76,6 +76,16 @@ test('quiet structural corrections keep stable rows still and accumulate subpixe
   expect(rebased.failures).toEqual([]);
 });
 
+test('an undeclared touch whose finger and scroll stood still is not motion', () => {
+  const first = frame(0, 100, { touching: true, finger: 30 });
+  const second = frame(10, 100, { finger: 30 });
+  second.rows[0]!.rect = box(100, 90);
+  second.rows[1]!.rect = box(190, 100);
+  second.sentinels[1]!.rect = box(200, 10, 10);
+  expect(displacement(recording('still-tap', [first, second])).pairs[0]!.mode).toBe('quiet');
+  expect(displacement(recording('moved-tap', [first, { ...second, finger: 40 }])).pairs[0]!.mode).not.toBe('quiet');
+});
+
 test('a resized single row retains its unchanged text anchor while excluding reflowed paragraphs', () => {
   const first = frame(0, 100, {
     rows: [row('a', box(100, 600, 200))],
