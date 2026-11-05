@@ -4,14 +4,15 @@ import type { AgentRuleRegistry, AgentRule } from '@runlith/agent/AgentRuntimePo
 import type { RuleSetup } from '../contract/service/rules.js';
 import type { AgentRunner } from '@runlith/agent/AgentRunner';
 import type { CallHooks } from '@runlith/agent/AgentCalls';
-import { type ToolCatalog, mergeToolCatalogs } from '@runlith/agent/catalog';
+import { type ToolCatalog, hasToolResult, mergeToolCatalogs } from '@runlith/agent/catalog';
+import { ANSWER_TOOL } from '@runlith/agent/collaboration/askVerbs';
 import { deferredToolsSection, revealedDefinitionsSection } from '@runlith/agent/AgentDeferredTools';
 import { stepLimit } from '@runlith/agent/AgentStep';
 import { threadAgent, type ThreadAgent, type ThreadContextUse, type ThreadView } from '@runlith/agent/thread/agents/ThreadAgent';
 import type { ThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import { Effect, Result } from 'effect';
 import { nativeTurnContext } from '../turns/message.js';
-import { agentPrompt } from './effectiveAgent.js';
+import { agentPrompt, instructionAudience } from './effectiveAgent.js';
 import { capabilityLossSection } from './capabilityLoss.js';
 import { capabilityEnabled, heldCapabilities } from './capabilitySources.js';
 import type { Capability } from '../capabilities/contract.js';
@@ -86,7 +87,7 @@ export function composeAgent(
           ...(ctx.thread.capabilities.toolCatalog === 'dispatch' ? [revealedDefinitionsSection(input.catalog, input.thread.history)] : []),
           capabilityLossSection(ctx.unavailableCapabilities, (id) => definitions.find(id)?.description ?? id),
         ],
-        digest: holding.some((capability) => capability.id === 'graph'),
+        digest: instructionAudience(holding, ctx.thread.profile?.overlay) === 'graph',
         session: { harness: NATIVE_HARNESS, key: ctx.thread.id },
         written: Effect.map(writtenOfThread(ctx.units, ctx.machine, ctx.projectId, ctx.thread.id), (places) => [
           ...new Set(places.map((place) => place.path)),
@@ -176,7 +177,7 @@ function composed(
       return document.success.text;
     },
     tools: (ctx) => agentTools(held(ctx), ctx),
-    stopWhen: [stepLimit(STEP_LIMIT)],
+    stopWhen: [stepLimit(STEP_LIMIT), hasToolResult(ANSWER_TOOL)],
     compaction: declaration.compaction,
   });
 }

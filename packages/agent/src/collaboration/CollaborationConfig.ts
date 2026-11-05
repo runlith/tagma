@@ -65,7 +65,13 @@ export type CollaborationSubscribe = (
   wakes: readonly WakingThreadEvent[] | undefined,
 ) => Effect.Effect<void, ThreadBorderFailed>;
 
+export type CollaborationReaders = {
+  readonly agent: (thread: ThreadRecord) => Effect.Effect<string | undefined, ThreadBorderFailed>;
+  readonly archive: (threadIds: readonly string[]) => Effect.Effect<void, ThreadBorderFailed>;
+};
+
 export type CollaborationConfig = {
+  readonly readers?: CollaborationReaders;
   readonly placement?: CollaborationPlacement;
   readonly subscribe?: CollaborationSubscribe;
   readonly warmth?: CollaborationWarmth;

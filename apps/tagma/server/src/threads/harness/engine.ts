@@ -5,7 +5,7 @@ import { threadAgentsLayer, threadCompactorLayer, threadFeaturesLayer, threadSto
 import { ModelRuns, threadHostLayer } from '@runlith/agent/thread/ThreadPorts';
 import { ApprovalModes } from '@runlith/agent/modes/ApprovalModes';
 import { ThreadTypes } from '@runlith/agent/collaboration/types';
-import { WORKTREE_INHERIT } from '@runlith/agent/collaboration/CollaborationConfig';
+import { type CollaborationReaders, WORKTREE_INHERIT } from '@runlith/agent/collaboration/CollaborationConfig';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { SourceProject } from '../../graph/contract/service/source.js';
@@ -87,7 +87,7 @@ import { OwnWork } from '../contract/service/ownWork.js';
 import { TagmaAppPoints } from '../../tagma-apps/contract/service/points.js';
 import { ENDINGS, makeEndingDelivery } from './tagmaAppEndings.js';
 import { makeRunSweep } from '../ending.js';
-import { coldWakeRefusal, coldWakeTokens } from '../contract/wire/settings.js';
+import { askAgent, coldWakeRefusal, coldWakeTokens } from '../contract/wire/settings.js';
 import { makeChildUpdates } from '../collaboration/childUpdates.js';
 import { makeHeldTasks } from '../collaboration/heldTasks.js';
 import { HolderCopies } from '../../graph/contract/service/holders.js';
@@ -119,6 +119,7 @@ function engineFeatures(
   menu: (runId?: string) => ModelCatalog,
   teams: ThreadTeams['Service'],
   subscriptions: ThreadSubscriptions['Service'],
+  readers: CollaborationReaders,
 ) {
   const homeOf = (thread: ThreadRecord) =>
     thread.projectId === undefined
@@ -127,6 +128,7 @@ function engineFeatures(
   return threadFeaturesLayer({
     resources,
     collaboration: {
+      readers,
       models,
       menu,
       team: (thread, runId) =>
@@ -293,6 +295,18 @@ export const threadEngineLayer = Layer.effectContext(
         menu,
         teams,
         yield* ThreadSubscriptions,
+        {
+          agent: (thread) => settings.value(askAgent, thread.projectId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause }))),
+          archive: (threadIds) =>
+            Effect.forEach(
+              threadIds,
+              (threadId) =>
+                Effect.flatMap(records.projectOf(threadId), (projectId) =>
+                  projectId === undefined ? Effect.void : Effect.asVoid(list.setArchived(threadId, projectId, true)),
+                ),
+              { discard: true },
+            ).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause }))),
+        },
       ),
       Layer.succeed(ModelRuns, { admit: providers.pinRun, release: providers.releaseRun }),
       Layer.succeed(ThreadEntryKinds, yield* ThreadEntryKinds),

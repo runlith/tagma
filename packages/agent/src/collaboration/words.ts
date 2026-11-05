@@ -6,6 +6,7 @@ export const COLLABORATION_WORDS = {
     done: 'Read the roster',
     many: (count) => `Read the roster ${count} times`,
   },
+  ask: { running: 'Asking', runningAlone: 'Asking a question', done: 'Asked', doneAlone: 'Asked a question' },
   spawn_agent: { running: 'Starting', runningAlone: 'Starting an agent', done: 'Started', doneAlone: 'Started an agent' },
   send_message: { running: 'Writing to', runningAlone: 'Writing to an agent', done: 'Wrote to', doneAlone: 'Wrote to an agent' },
   send_task: {

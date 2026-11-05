@@ -27,6 +27,7 @@ const treeOver = (access: ThreadPlaneAccess | null) =>
   ThreadPlanes.of({
     access: () => Effect.succeed(access),
     verbs: () => null,
+    answering: () => Effect.succeed(null),
   });
 const plane = (): ThreadPlaneAccess => ({
   ownerId: 'owner-1',

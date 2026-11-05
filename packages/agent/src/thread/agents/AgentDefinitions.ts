@@ -53,7 +53,10 @@ export class AgentDefinitions<TCtx, C extends AgentCapability<TCtx>> {
   private readonly derived = new WeakMap<AgentDeclared, Map<string, Derived<C>>>();
   private readonly ruled = new WeakMap<AgentDeclared, { readonly revision: number; readonly rules: readonly AgentRule<TCtx>[] }>();
 
-  constructor(private readonly standing: RuntimeStanding = () => undefined) {}
+  constructor(
+    private readonly standing: RuntimeStanding = () => undefined,
+    private readonly everywhere: readonly ToolGrantSource[] = [],
+  ) {}
 
   register(owner: string, contribution: C): Effect.Effect<() => void, RegistryCollision> {
     return this.contributions.register(contribution.id, owner, contribution);
@@ -139,6 +142,7 @@ export class AgentDefinitions<TCtx, C extends AgentCapability<TCtx>> {
       }),
       ...[...base, ...explicit].flatMap((contribution) => (contribution.source === undefined ? [] : [{ source: contribution.source.id }])),
       ...declared.sources.map((source) => ({ source, standing: true as const })),
+      ...this.everywhere,
     ];
     return {
       held,

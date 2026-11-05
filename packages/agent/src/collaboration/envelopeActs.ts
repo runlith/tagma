@@ -50,7 +50,7 @@ export function itemOf(
     : {
         ...shared,
         kind: 'envelope',
-        body: { intent: envelope.intent, text, inReplyTo: envelope.inReplyTo ?? null, context: envelope.context },
+        body: { intent: envelope.intent, text, inReplyTo: envelope.inReplyTo ?? null, context: envelope.context, answer: envelope.answer },
       };
 }
 

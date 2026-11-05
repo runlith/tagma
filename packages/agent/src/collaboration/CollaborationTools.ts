@@ -52,8 +52,9 @@ import {
   worktreeWords,
 } from './collaborationVerbs';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
+import { ASK, ASK_TOOL, askAsk, askedDisplay, askedText, askingDisplay, askInput } from './askVerbs';
 import { Named, NEW_WORKTREE, NOT_A_CHILD, NOT_A_DESCENDANT, PLAIN_CHILD } from './collaborationVerbs';
-import { APPROVAL_REFUSALS, CHILD_REFUSALS, PLANE_REFUSALS, planeRefusals, SPAWN_REFUSALS } from './refusals';
+import { APPROVAL_REFUSALS, ASK_REFUSALS, CHILD_REFUSALS, PLANE_REFUSALS, planeRefusals, SPAWN_REFUSALS } from './refusals';
 const approvalRefusal = (
   code: ApprovalRefusal,
   input: {
@@ -65,6 +66,7 @@ export const READ_MODELS = 'read_models';
 export const COLLABORATION_TOOL_NAMES: readonly string[] = [
   'list_agents',
   FINAL_ANSWER_TOOL,
+  ASK_TOOL,
   'send_task',
   'spawn_agent',
   'stop_agent',
@@ -229,6 +231,25 @@ export function collaborationTools(agents: ThreadPlaneAccess): ToolCatalog {
         }),
         confirmLabel: 'Spawn',
       },
+    });
+    tools[ASK_TOOL] = Tool.make({
+      approval: ASKS_NEVER,
+      description: ASK,
+      refusals: planeRefusals([...ASK_REFUSALS, 'key-reused']),
+      parameters: askInput,
+      document: true,
+      subjects: () => [],
+      display: {
+        streamFields: ['questions'],
+        project: (input) => askingDisplay(input.questions ?? []),
+      },
+      execute: (input, call) =>
+        acting(agents, call.caller, (verbs) =>
+          verbs
+            .ask(askAsk(input, call.toolCallId, call.step))
+            .pipe(Effect.map((asked) => new Tool.ToolAnswer(asked, askedDisplay(asked), told(call, askedText(asked))))),
+        ),
+      mutates: true,
     });
     tools[READ_MODELS] = Tool.make({
       approval: ASKS_NEVER,

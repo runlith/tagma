@@ -294,6 +294,7 @@ export function parseThreadContextReading(kinds: ThreadEntryReader, value: unkno
 export const threadBornOfSchema = Schema.Struct({
   by: Schema.String.check(Schema.isMinLength(1)),
   step: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ask: Schema.optional(Schema.Literal(true)),
 });
 
 const decodeBornOf = Schema.decodeUnknownResult(threadBornOfSchema);

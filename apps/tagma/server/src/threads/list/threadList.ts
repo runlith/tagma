@@ -293,6 +293,7 @@ export const makeThreadList = Effect.gen(function* () {
   };
 
   const announce = (row: ThreadSummary, observed = true): ThreadListProjection => {
+    if (row.bornOf?.ask === true) return listRow(row);
     track(row);
     if (row.archivedAt === null) lives.set(row.id, row.life);
     else lives.delete(row.id);

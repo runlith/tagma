@@ -1,4 +1,5 @@
 import { AgentApprovalMode } from '@runlith/agent/contracts';
+import { DEFAULT_READER } from '@runlith/agent/collaboration/askVerbs';
 import { SUB_AGENT_DEPTH } from '@runlith/agent/collaboration/CollaborationConfig';
 import { NO_REVIEW, ReviewPolicy, TeamEdit } from '@runlith/agent/collaboration/team';
 import { COLD_WAKE_RULE } from '@runlith/agent/collaboration/wakeCost';
@@ -140,6 +141,18 @@ export const defaultType = settingKey({
     'The type a thread of this project is born as when its opener names none — an agent in code or one declared in a file, offered as `agent.offered` decides.',
   schema: Schema.String.check(Schema.isMinLength(1)),
   fallback: DEFAULT_THREAD_TYPE,
+  scopes: SETTABLE_SCOPES,
+  merge: 'replace',
+});
+
+export const askAgent = settingKey({
+  id: 'agent.ask',
+  order: 97,
+  title: 'The reader that answers ask',
+  description:
+    'The agent definition `ask` starts, one per question, when the call names none — one declared in a file or the built-in reader, offered as `agent.offered` decides. It answers with `answer`, whatever tools its definition lists.',
+  schema: Schema.String.check(Schema.isMinLength(1)),
+  fallback: DEFAULT_READER,
   scopes: SETTABLE_SCOPES,
   merge: 'replace',
 });
@@ -299,6 +312,7 @@ export const THREADS_SETTING_KEYS = [
   teamModels,
   teamReview,
   defaultType,
+  askAgent,
   agentWeb,
   autoTitle,
   titleModel,

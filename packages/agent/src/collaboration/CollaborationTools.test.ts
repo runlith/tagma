@@ -96,6 +96,7 @@ function plane(input: PlaneOver = {}): ThreadPlaneAccess {
     spawnHome: unused,
     crossing: () => Effect.succeed([]),
     spawn: unused,
+    ask: unused,
     stop: unused,
     continue: unused,
     move: unused,
@@ -159,6 +160,7 @@ describe('collaborationTools', () => {
   test('exposes child management tools only when the source can spawn targets', () => {
     expect(Object.keys(tools({ startable })).sort()).toEqual([
       'answer_approval',
+      'ask',
       'compact_agent',
       'continue_agent',
       'interrupt_agent',
@@ -728,6 +730,7 @@ describe('what a plane verb shows a reader', () => {
       .sort();
     expect(changes).toEqual([
       'answer_approval',
+      'ask',
       'compact_agent',
       'continue_agent',
       'interrupt_agent',

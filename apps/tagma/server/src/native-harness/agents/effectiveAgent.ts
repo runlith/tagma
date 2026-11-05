@@ -1,6 +1,7 @@
 import type { AgentProfile } from '@runlith/agent/thread/agents/AgentProfile';
 import type { EffectiveAgent } from '@runlith/agent/thread/agents/AgentDefinitions';
 import { LOAD_SKILL_TOOL } from '@runlith/agent/skillWords';
+import { ANSWER_SOURCE, ANSWER_TOOL } from '@runlith/agent/collaboration/askVerbs';
 import { resolveCatalog } from '@runlith/agent/catalog/resolveCatalog';
 import type { CapabilityOffers, OfferFacts } from '../contract/service/execution.js';
 import { capabilityInventory } from '../capabilities/inventory.js';
@@ -48,7 +49,12 @@ export function guidanceCapabilities(
   return effective.held.filter((capability) => selected.has(capability));
 }
 
-const CONVERSATION_TOOLS: ReadonlySet<string> = new Set([...Object.keys(threadUserQuestionTools), TOOL_SEARCH_TOOL, RETRIEVAL_TOOL]);
+const CONVERSATION_TOOLS: ReadonlySet<string> = new Set([
+  ...Object.keys(threadUserQuestionTools),
+  TOOL_SEARCH_TOOL,
+  RETRIEVAL_TOOL,
+  ANSWER_TOOL,
+]);
 const CONVERSATION_SOURCES: ReadonlySet<string> = new Set(conversationSources);
 
 const TOOLS_WAYS: Unblock = [
@@ -64,7 +70,12 @@ function unofferedTools(
 ): ReadonlyMap<string, readonly string[]> {
   const unoffered = new Map<string, readonly string[]>();
   if (overlay?.tools === undefined || overlay.capabilities === undefined) return unoffered;
-  if (effective.grant.sources.some((entry) => entry.standing === true && !CONVERSATION_SOURCES.has(entry.source))) return unoffered;
+  if (
+    effective.grant.sources.some(
+      (entry) => entry.standing === true && entry.source !== ANSWER_SOURCE && !CONVERSATION_SOURCES.has(entry.source),
+    )
+  )
+    return unoffered;
   const offered = new Set(CONVERSATION_TOOLS);
   for (const capability of effective.held) {
     const inventory = capabilityInventory(capability, offers, 'any-world');

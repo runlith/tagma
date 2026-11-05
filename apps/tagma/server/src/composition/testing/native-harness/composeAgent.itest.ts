@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
+import { ANSWER_SOURCE } from '@runlith/agent/collaboration/askVerbs';
 import { type AgentRunner, makeAgentRunner, type AgentSink } from '@runlith/agent/AgentRunner';
 import { RunStop } from '@runlith/agent/RunStop';
 import type { AgentProfile } from '@runlith/agent/thread/agents/AgentProfile';
@@ -504,7 +505,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             Effect.succeed(context(world)),
           );
           expect(composed.id).toBe('tree');
-          expect(composed.grant.sources.map((entry) => entry.source)).toEqual(['tree', ...conversationSources()]);
+          expect(composed.grant.sources.map((entry) => entry.source)).toEqual(['tree', ...conversationSources(), ANSWER_SOURCE]);
           const run = yield* launch(composed, input(composed, 'first', [Message.user('Read, then answer.')]));
           yield* run.output.response;
           expect(offered[0]?.tools).toEqual([

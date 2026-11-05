@@ -315,6 +315,7 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
       const team = and(
         eq(threadRow.spawnRootId, ask.spawnRootId),
         eq(threadRow.ownerId, ask.ownerId),
+        sql`json_extract(${threadRow.bornOf}, '$.ask') is null`,
         ask.parent === undefined ? undefined : eq(threadRow.parentThreadId, ask.parent),
       );
       const going = sql`exists (select 1 from ${threadRun} where ${threadRun.threadId} = ${threadRow.id} and ${threadRun.status} = 'running')`;

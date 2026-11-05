@@ -35,7 +35,7 @@ import { ThreadRuns, ThreadRunUnavailable } from './runs';
 import { type SpawnCeilings, spawnLimits } from './spawnLimits';
 import { ThreadSpawnAccess } from './ThreadSpawnAccess';
 import { type BirthRequest, Threads } from './threads';
-import { ThreadTypes } from './types';
+import { ThreadTypes, type ThreadTypeOffer } from './types';
 
 export type ThreadSpawnRequest = {
   readonly parent: ThreadRecord;
@@ -60,6 +60,7 @@ export type ThreadSpawnRequest = {
   readonly plain?: boolean;
   readonly subscribe?: SpawnSubscription;
   readonly reportDelivery?: ReportDelivery;
+  readonly secondsCap?: number;
 };
 
 export type Provision = {
@@ -67,6 +68,7 @@ export type Provision = {
   readonly task: string;
   readonly lowered?: ThreadSpawnResult['lowered'];
   readonly subscribe?: SpawnSubscription;
+  readonly collected?: boolean;
 };
 
 export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly request: (key: string) => Effect.Effect<KeyedRequest> }) {
@@ -121,7 +123,10 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
     const depth = yield* spawnAccess.depth(child);
     const text = child.plain
       ? provision.task
-      : [collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging }), provision.task]
+      : [
+          collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging, collected: provision.collected === true }),
+          provision.task,
+        ]
           .filter((part) => part.trim() !== '')
           .join('\n\n');
     const deadline = (yield* request(provision.itemId)).deadline;
@@ -183,7 +188,12 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
       const itemId = spawnRequestId(parent.id, input.requestId);
       const standing = yield* threads.readBirth(parent.id, parent.principal, asked);
       if (standing.status === 'born')
-        return yield* answer(parent, standing.thread, { itemId: standing.itemId ?? itemId, task: input.task, subscribe: input.subscribe });
+        return yield* answer(parent, standing.thread, {
+          itemId: standing.itemId ?? itemId,
+          task: input.task,
+          subscribe: input.subscribe,
+          collected: input.reportDelivery === 'collect',
+        });
       if (standing.status === 'spent') return yield* spawnSpent(input.requestId);
       const there = project === undefined ? {} : { project };
       const offer = yield* types.resolve({ caller: 'agent', under: parent, typeId: input.agentId, ...there });
@@ -244,7 +254,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
             childId,
             creatorThreadId: parent.id,
             principal: parent.principal,
-            offer,
+            offer: secondsBounded(offer, input.secondsCap),
             authority: offer.approvalMode === undefined ? parent.authority : { mode: offer.approvalMode, bypassFrom: null },
             place: place ?? null,
             model:
@@ -278,6 +288,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
           task: input.task,
           lowered: selection?.lowered,
           subscribe: input.subscribe,
+          collected: input.reportDelivery === 'collect',
         });
       });
       return yield* seated.pipe(Effect.tapError(() => Effect.sync(() => seats.unseat(childId))));
@@ -299,6 +310,12 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
     }),
   };
 });
+
+function secondsBounded(offer: ThreadTypeOffer, cap: number | undefined): ThreadTypeOffer {
+  const profile = offer.profile;
+  if (cap === undefined || profile === undefined) return offer;
+  return { ...offer, profile: { ...profile, budget: { ...profile.budget, seconds: Math.min(profile.budget?.seconds ?? cap, cap) } } };
+}
 
 export function spawnRequestId(parentThreadId: string, requestId: string): string {
   return `${envelopePrefix('spawn', parentThreadId)}${requestId}`;

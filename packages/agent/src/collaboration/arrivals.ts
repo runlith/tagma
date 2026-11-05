@@ -1,7 +1,7 @@
 import { Clock, type Context, Effect, Option } from 'effect';
 import type { ThreadRecord } from '../thread/record';
 import type { ThreadInbox } from '../thread/ThreadPorts';
-import type { ThreadInboxItem } from '../thread/storage/inbox';
+import type { ThreadAnswer, ThreadInboxItem } from '../thread/storage/inbox';
 import type { ThreadDirectory, ThreadDirectoryAssignment } from './ThreadDirectory';
 import type { ThreadEnvelopeSender } from './ThreadEnvelopes';
 import { threadFinalEnvelopeId } from './ThreadObligations';
@@ -20,6 +20,7 @@ export type ThreadWaitArrival = {
   readonly envelopeId: string;
   readonly text: string;
   readonly report: ThreadReportKind | null;
+  readonly answer: ThreadAnswer | null;
 };
 export type ThreadWaitEnding = Exclude<ThreadDirectoryAssignment, 'never-started' | 'running'> | 'archived';
 export type ThreadWaitResult = {
@@ -148,6 +149,7 @@ const arrivalOf = Effect.fnUntraced(function* (
     envelopeId: row.id,
     text: row.body.text,
     report: row.body.intent === 'report' ? reportKindOf(row.id) : null,
+    answer: row.kind === 'envelope' ? (row.body.answer ?? null) : null,
   };
 });
 const fromNamed = (watched: Watched, row: StandingArrival): boolean =>

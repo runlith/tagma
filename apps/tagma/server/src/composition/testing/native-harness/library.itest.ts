@@ -199,6 +199,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     ),
   );
+  const PLAIN_WORDS: ReadonlySet<string> = new Set(['ask']);
   it.effect(
     'every agent this server ships is a read-only built-in of any project, whose prompt names only operations its capabilities mount',
     () =>
@@ -229,7 +230,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
                 ),
                 ...runtimeServed,
               ]);
-              const named = OPERATION_IDS.filter((id) => new RegExp(`\\b${id}\\b`).test(preview.prompt.text));
+              const named = OPERATION_IDS.filter((id) =>
+                new RegExp(PLAIN_WORDS.has(id) ? `\`${id}\`` : `\\b${id}\\b`).test(preview.prompt.text),
+              );
               expect({ agent: builtin.id, unmounted: named.filter((id) => !mounted.has(id)) }).toEqual({
                 agent: builtin.id,
                 unmounted: [],

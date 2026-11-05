@@ -12,7 +12,14 @@ it.effect(
   'a member result keeps the whole text its collection read',
   Effect.fnUntraced(function* () {
     const whole = `Findings of the build.\n\n${'Every step it took, in order. '.repeat(120)}`;
-    const arrival: ThreadWaitArrival = { from: 'builder', intent: 'report', envelopeId: 'envelope:final:r1', text: whole, report: 'final' };
+    const arrival: ThreadWaitArrival = {
+      from: 'builder',
+      intent: 'report',
+      envelopeId: 'envelope:final:r1',
+      text: whole,
+      report: 'final',
+      answer: null,
+    };
     const unused = () => Effect.die('Waiting for workflow reports does not use this operation');
     const envelopes = ThreadEnvelopes.of({
       deliver: unused,

@@ -75,10 +75,13 @@ const homesSql = (homes: readonly number[]): SQL =>
     sql`, `,
   )})`;
 
+const unasked: SQL = sql`json_extract(${recordFacts.bornOf}, '$.ask') is null`;
+
 export const selected = (ownerId: string, homes: readonly number[], selection: ThreadSelection): SQL | undefined =>
   and(
     eq(recordFacts.principalId, ownerId),
     inArray(recordFacts.projectId, [...homes]),
+    unasked,
     archivedView(selection.view),
     stateOf(selection.state),
     selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),
@@ -207,6 +210,7 @@ export const liveFamilyOf = (ownerId: string, seeds: readonly string[]): SQL => 
       cross join ${recordsAs('child')} on child.parent_id = f.id
       where child.principal_id = ${ownerId}
         and child.archived_at is null
+        and json_extract(child.born_of, '$.ask') is null
   )
   select id from family
 )`;

@@ -1,6 +1,8 @@
 import { Effect, Layer } from 'effect';
 import { ThreadToolRegistry, type ThreadToolSource, type ThreadToolSourceRequest } from '../thread/ThreadPorts';
 import { ThreadCallBroke, isThreadBorderFailure, type ThreadBorderFailed } from '../thread/ThreadBorder';
+import { answerTools } from './answerTools';
+import { ANSWER_SOURCE, ANSWER_TOOL } from './askVerbs';
 import { COLLABORATION_SOURCE, DeclaredCollaboration } from './CollaborationConfig';
 import { COLLABORATION_TOOL_NAMES, collaborationTools } from './CollaborationTools';
 import { collaborationHint } from './CollaborationVoice';
@@ -24,6 +26,20 @@ export const collaborationSource = (
     }),
   );
 
+const answerSource = (
+  tree: (typeof ThreadPlanes)['Service'],
+  threads: (typeof Threads)['Service'],
+  request: ThreadToolSourceRequest,
+): Effect.Effect<ThreadToolSource | null, ThreadBorderFailed> =>
+  crossed(
+    Effect.gen(function* () {
+      const thread = yield* threads.find(request.thread.id, request.thread.ownerId);
+      if (thread === null) return null;
+      const answering = yield* tree.answering(thread);
+      return answering === null ? null : { id: ANSWER_SOURCE, tools: answerTools(answering) };
+    }),
+  );
+
 const OWNER = '@runlith/agent/collaboration';
 
 export const collaborationToolSourcesLayer: Layer.Layer<never, never, DeclaredCollaboration | ThreadToolRegistry | ThreadPlanes | Threads> =
@@ -38,6 +54,12 @@ export const collaborationToolSourcesLayer: Layer.Layer<never, never, DeclaredCo
         owner: OWNER,
         names: COLLABORATION_TOOL_NAMES,
         offer: (request) => collaborationSource(tree, threads, request),
+      });
+      yield* registry.hold({
+        id: ANSWER_SOURCE,
+        owner: OWNER,
+        names: [ANSWER_TOOL],
+        offer: (request) => answerSource(tree, threads, request),
       });
     }).pipe(Effect.orDie),
   );

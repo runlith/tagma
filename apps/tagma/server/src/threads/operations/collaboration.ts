@@ -3,6 +3,7 @@ import type { ToolDisplay } from '@runlith/agent/tool/display';
 import type { DeclaredAnswer } from '../../platform/contract/wire/operation.js';
 import { type Raised } from '@runlith/agent/permissions';
 import { listedOutput, readRoster } from '@runlith/agent/collaboration/agentRoster';
+import { askAsk, askedDisplay, askedText } from '@runlith/agent/collaboration/askVerbs';
 import {
   APPROVAL_REFUSAL_OF,
   approvalChoiceOf,
@@ -132,6 +133,15 @@ function sentDisplay(answer: DeclaredAnswer<(typeof OPS.send_message)['answer']>
 }
 
 export const COLLABORATION_PAIRS = {
+  ask: pair(
+    OPS.ask,
+    body(OPS.ask, {
+      display: askedDisplay,
+      execute: (input, _prepared, caller) => collaborating(OPS.ask, caller, (verbs, key) => verbs.ask(askAsk(input, key))),
+      voice: said((answer: Answer<'ask'>) => (answer.status === 'asked' ? askedText(answer) : UNVOICED)),
+    }),
+  ),
+
   list_agents: pair(
     OPS.list_agents,
     body(OPS.list_agents, {

@@ -24,8 +24,10 @@ import {
   taskQuestion,
   worktreeRaised,
 } from '@runlith/agent/collaboration/collaborationVerbs';
+import { ASK, askInput } from '@runlith/agent/collaboration/askVerbs';
 import {
   APPROVAL_REFUSALS,
+  ASK_REFUSALS,
   CHILD_REFUSALS,
   INTERRUPT_REFUSALS,
   SEND_REFUSALS,
@@ -162,7 +164,33 @@ const PLACEMENT_REFUSALS = [
 
 export type SpawnPrepared = { readonly asking: SpawnWorktrees | null; readonly home?: number };
 
+const AskEntry = Schema.Struct({
+  question: Schema.String,
+  status: Schema.Literals(['answered', 'partial', 'failed']),
+  text: Schema.String,
+  evidence: Schema.Array(Schema.String),
+  missing: Schema.optional(Schema.String),
+  threadId: Schema.NullOr(Schema.String),
+  projectId: Schema.optional(Schema.Int),
+});
+
 export const COLLABORATION_OPERATIONS = {
+  ask: operation('ask', {
+    ...act,
+    approval: ASKS_NEVER,
+    deadline: 'model',
+    meaning: ASK,
+    input: askInput,
+    answer: arms({ asked: { entries: Schema.Array(AskEntry), unarchived: Schema.optional(Schema.String) } }),
+    refusals: ['no-calling-thread', ...ASK_REFUSALS, 'key-reused', 'collaboration-refused'],
+    subjects: () => [],
+    confirmation: (input) => ({
+      summary: `Put ${input.questions.length} question${input.questions.length === 1 ? '' : 's'} to readers?`,
+      facts: input.questions.map((question) => ({ label: 'Question', value: question })),
+    }),
+    confirmLabel: 'Ask',
+    presentation: COLLABORATION_WORDS.ask,
+  }),
   list_agents: operation('list_agents', {
     approval: ASKS_NEVER,
     ...verb,

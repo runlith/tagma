@@ -857,6 +857,12 @@
       "node": "./src/collaboration/collaborationVerbs.ts",
       "default": "./src/collaboration/collaborationVerbs.ts"
     },
+    "./collaboration/askVerbs": {
+      "types": "./src/collaboration/askVerbs.ts",
+      "browser": "./src/collaboration/askVerbs.ts",
+      "node": "./src/collaboration/askVerbs.ts",
+      "default": "./src/collaboration/askVerbs.ts"
+    },
     "./collaboration/agentRoster": {
       "types": "./src/collaboration/agentRoster.ts",
       "default": "./src/collaboration/agentRoster.ts"

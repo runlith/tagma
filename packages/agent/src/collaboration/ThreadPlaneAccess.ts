@@ -34,6 +34,7 @@ import type { Team } from './team';
 import type { OwnLineage, Within } from './reach';
 import type { CompactAsk, TreeAsk } from './treeActs';
 import type { ApprovalAnswered, ApprovalChoice } from '../thread/run/ApprovalAnswers';
+import type { ThreadAskAsk, ThreadAsked } from './askVerbs';
 
 export type ThreadSpawnResult = ThreadTarget & {
   readonly status: 'started';
@@ -135,6 +136,7 @@ export type ThreadVerbs = {
   spawnHome(project: string | number): Effect.Effect<SpawnHome, ThreadPlaneFailure>;
   crossing(input: { to: string; within: Within }): Effect.Effect<readonly Raised[], ThreadPlaneFailure>;
   spawn(input: ThreadSpawnAsk): Effect.Effect<ThreadSpawnResult, ThreadPlaneFailure>;
+  ask(input: ThreadAskAsk): Effect.Effect<ThreadAsked, ThreadPlaneFailure>;
   stop(input: TreeAsk): Effect.Effect<ThreadChildStopped, ThreadPlaneFailure>;
   continue(input: TreeAsk): Effect.Effect<ThreadChildContinued, ThreadPlaneFailure>;
   readonly directory: ThreadDirectoryAccess;
@@ -166,6 +168,11 @@ export type ThreadPlaneAccess = {
     requestId: string,
     subscribe: SpawnSubscription | undefined,
   ): Effect.Effect<ToolEffectSettlement<ThreadSpawnResult>, ThreadPlaneFailure>;
+};
+
+export type ThreadAnswering = {
+  readonly parent: string;
+  acting(caller: ToolCaller): Effect.Effect<ThreadVerbs, ThreadPlaneFailure>;
 };
 
 export type ThreadPlaneFailure =

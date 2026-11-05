@@ -6,7 +6,7 @@ import { threadTarget, type ThreadRecord } from '../thread/record';
 import { ThreadCallBroke, ThreadMissing } from '../thread/ThreadBorder';
 import { Approvers } from '../thread/Approvers';
 import { ApprovalAnswers } from '../thread/run/ApprovalAnswers';
-import type { ThreadPlaneAccess, ThreadPlaneFailure, ThreadSendAnswer, ThreadVerbs } from './ThreadPlaneAccess';
+import type { ThreadAnswering, ThreadPlaneAccess, ThreadPlaneFailure, ThreadSendAnswer, ThreadVerbs } from './ThreadPlaneAccess';
 import { type CollaborationConfig, DeclaredCollaboration } from './CollaborationConfig';
 import { planeRefused } from './planeRefusal';
 import { ContextCompaction } from './compaction';
@@ -15,6 +15,9 @@ import { ThreadDirectory } from './ThreadDirectory';
 import { ThreadEnvelopes } from './ThreadEnvelopes';
 import { ThreadSpawnAccess } from './ThreadSpawnAccess';
 import { ThreadSpawnTree } from './ThreadSpawnTree';
+import { ThreadInbox } from '../thread/ThreadPorts';
+import { type Asks, makeAsks } from './asks';
+import { requesterOf } from './ThreadObligations';
 import { Threads } from './threads';
 import { makeTreeActs, type TreeActs } from './treeActs';
 import { coldReason } from './wakeCost';
@@ -26,6 +29,7 @@ export class ThreadPlanes extends Context.Service<
   {
     access(thread: ThreadRecord, runId?: string): Effect.Effect<ThreadPlaneAccess | null, ThreadPlaneFailure>;
     verbs(thread: ThreadRecord): ThreadVerbs | null;
+    answering(thread: ThreadRecord): Effect.Effect<ThreadAnswering | null, ThreadPlaneFailure>;
   }
 >()('@runlith/agent/ThreadPlanes') {}
 
@@ -41,6 +45,7 @@ export const threadPlanesLayer = Layer.effect(
   Effect.gen(function* () {
     const compaction = yield* ContextCompaction;
     const declared = yield* DeclaredCollaboration;
+    const inbox = yield* ThreadInbox;
     const directory = yield* ThreadDirectory;
     const answering = yield* ApprovalAnswers;
     const approvers = yield* Approvers;
@@ -52,11 +57,13 @@ export const threadPlanesLayer = Layer.effect(
     const request = (key: string): Effect.Effect<KeyedRequest> =>
       Effect.map(Clock.currentTimeMillis, (now) => ({ key, deadline: new Date(now + ACT_MS) }));
     const acts = declared === null ? null : yield* makeTreeActs({ catalog: declared.models, request });
+    const asks = acts === null ? null : yield* makeAsks({ acting: acts });
     const wakes = yield* makeWakes;
 
     const verbsOf = (
       collaboration: CollaborationConfig,
       acting: TreeActs,
+      asking: Asks,
       thread: ThreadRecord,
       runId: string | undefined,
     ): ThreadVerbs => {
@@ -80,6 +87,7 @@ export const threadPlanesLayer = Layer.effect(
             delegation: operatorAsked !== true,
           });
         },
+        ask: (input) => asking.ask(thread, runId, input),
         approvals: {
           answer: Effect.fnUntraced(function* (input) {
             const target = yield* resolveThread(threads, thread, input.threadId);
@@ -135,10 +143,24 @@ export const threadPlanesLayer = Layer.effect(
     };
 
     return ThreadPlanes.of({
-      verbs: (thread) => (declared && acts ? verbsOf(declared, acts, thread, undefined) : null),
+      verbs: (thread) => (declared && acts && asks ? verbsOf(declared, acts, asks, thread, undefined) : null),
+      answering: Effect.fnUntraced(function* (thread) {
+        const parent = thread.parentThreadId;
+        if (declared === null || acts === null || asks === null || thread.plain || parent === null) return null;
+        const collected = (yield* inbox.openRequests(thread.id)).some(
+          (request) => request.body.reportDelivery === 'collect' && requesterOf(request) === parent,
+        );
+        if (!collected) return null;
+        return {
+          parent,
+          acting: (caller) =>
+            Effect.map(callingThread(threads, caller), ({ thread: calling, runId }) => verbsOf(declared, acts, asks, calling, runId)),
+        } satisfies ThreadAnswering;
+      }),
       access: Effect.fnUntraced(function* (thread, runId) {
-        if (declared === null || acts === null) return null;
+        if (declared === null || acts === null || asks === null) return null;
         const acting = acts;
+        const asking = asks;
         const granted = yield* approvers.grantOf(thread.id);
         return {
           ownerId: thread.principal,
@@ -154,7 +176,7 @@ export const threadPlanesLayer = Layer.effect(
           approves: granted.length === 0 ? undefined : granted,
           acting: (caller) =>
             Effect.map(callingThread(threads, caller), ({ thread: calling, runId }) => ({
-              ...verbsOf(declared, acting, calling, runId),
+              ...verbsOf(declared, acting, asking, calling, runId),
               move: (ask) => acting.move(calling, ask),
               compact: Effect.fnUntraced(function* (ask) {
                 const cold = ask.wake === true ? [] : yield* wakes.compacting(calling, yield* acting.compactable(calling, ask));
@@ -170,7 +192,12 @@ export const threadPlanesLayer = Layer.effect(
             const child = yield* threads.find(provisioned.threadId, calling.principal);
             const creator = child === null ? null : (child.parentThreadId ?? child.createdBy);
             if (child === null || creator !== calling.id) return { status: 'aborted' } as const;
-            const output = yield* tree.answer(calling, child, { itemId: provisioned.id, task: provisioned.body.text, subscribe });
+            const output = yield* tree.answer(calling, child, {
+              itemId: provisioned.id,
+              task: provisioned.body.text,
+              subscribe,
+              collected: provisioned.body.reportDelivery === 'collect',
+            });
             return { status: 'completed', output } as const;
           }),
         } satisfies ThreadPlaneAccess;

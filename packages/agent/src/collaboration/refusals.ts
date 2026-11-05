@@ -128,6 +128,22 @@ export const SPAWN_REFUSALS = [
   'title-empty',
 ] as const satisfies readonly PlaneRefusalCode[];
 
+export const ASK_REFUSALS = [
+  'delegation-off',
+  'depth-exhausted',
+  'unknown-type',
+  'type-withheld',
+  'spawn-slots-full',
+  'budget-spent',
+  'harness-contract',
+  'model-unnamed',
+  'model-unserved',
+  'reasoning-unoffered',
+  'worktree-unplaced',
+  'home-unplaced',
+  'transport-cannot',
+] as const satisfies readonly PlaneRefusalCode[];
+
 export const SEND_REFUSALS = ['thread-archived', 'key-reused'] as const satisfies readonly PlaneRefusalCode[];
 
 export const TASK_REFUSALS = [
