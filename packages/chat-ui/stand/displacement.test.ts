@@ -84,6 +84,9 @@ test('an undeclared touch whose finger and scroll stood still is not motion', ()
   second.sentinels[1]!.rect = box(200, 10, 10);
   expect(displacement(recording('still-tap', [first, second])).pairs[0]!.mode).toBe('quiet');
   expect(displacement(recording('moved-tap', [first, { ...second, finger: 40 }])).pairs[0]!.mode).not.toBe('quiet');
+  const landing = displacement(recording('landing', [frame(0, 100), frame(10, 100, { touching: true, finger: 30 })]));
+  expect(landing.pairs[0]!.mode).toBe('quiet');
+  expect(landing.unchecked).toEqual([]);
 });
 
 test('a resized single row retains its unchanged text anchor while excluding reflowed paragraphs', () => {
