@@ -27,6 +27,30 @@ type ServedResource = {
   readonly name: string;
   readonly description?: string;
   readonly mimeType?: string;
+  readonly template: boolean;
+};
+
+const PLACEHOLDER = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/gu;
+
+const templateOf = (
+  uri: string,
+): { readonly template: boolean; readonly matches: (read: string) => Readonly<Record<string, string>> | null } => {
+  const names = [...uri.matchAll(PLACEHOLDER)].map((match) => match[1]!);
+  if (names.length === 0) return { template: false, matches: (read) => (read === uri ? {} : null) };
+  const pattern = new RegExp(
+    `^${uri
+      .split(PLACEHOLDER)
+      .map((part, at) => (at % 2 === 1 ? '([^/?#]+)' : part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')))
+      .join('')}$`,
+    'u',
+  );
+  return {
+    template: true,
+    matches: (read) => {
+      const matched = pattern.exec(read);
+      return matched === null ? null : Object.fromEntries(names.map((name, at) => [name, decodeURIComponent(matched[at + 1]!)]));
+    },
+  };
 };
 
 type ResourceRead = { readonly text: string; readonly mimeType: string } | { readonly refused: string };
@@ -118,7 +142,7 @@ const handlersOf = (definition: PluginDefinition): ReadonlyMap<string, Handler> 
 export const servingOf = (definition: PluginDefinition, place: ServingPlace): Serving => {
   const description = describePlugin(definition);
   const handlers = handlersOf(definition);
-  const resources = Object.entries(definition.resources ?? {});
+  const resources = Object.entries(definition.resources ?? {}).map(([name, declared]) => ({ name, declared, ...templateOf(declared.uri) }));
   const made = new Set<string>();
   const dataOf = (project: number | null): string => {
     const path = join(place.data, project === null ? 'machine' : join('projects', String(project)));
@@ -145,11 +169,12 @@ export const servingOf = (definition: PluginDefinition, place: ServingPlace): Se
   return {
     description,
     tools: description.tools,
-    resources: resources.map(([name, declared]) => ({
+    resources: resources.map(({ name, declared, template }) => ({
       uri: declared.uri,
       name,
       description: declared.description,
       mimeType: declared.mimeType,
+      template,
     })),
     call: async (tool, input, meta, signal) => {
       const handler = handlers.get(tool);
@@ -163,13 +188,16 @@ export const servingOf = (definition: PluginDefinition, place: ServingPlace): Se
       }
     },
     read: async (uri, meta, signal) => {
-      const found = resources.find(([, declared]) => declared.uri === uri);
+      const found = resources.flatMap(({ declared, matches }) => {
+        const params = matches(uri);
+        return params === null ? [] : [{ declared, params }];
+      })[0];
       if (found === undefined) return { refused: `${description.id} serves no resource ${uri}` };
       const caller = callerOf(meta);
       if (caller === null) return { refused: `the read carries no caller in _meta["${MCP_CALLER_META_KEY}"]` };
-      const [, declared] = found;
+      const { declared, params } = found;
       try {
-        const value = await declared.read(contextOf(caller, projectsOf(meta), signal));
+        const value = await declared.read(params, contextOf(caller, projectsOf(meta), signal));
         return typeof value === 'string'
           ? { text: value, mimeType: declared.mimeType ?? 'text/plain' }
           : { text: JSON.stringify(value), mimeType: declared.mimeType ?? 'application/json' };

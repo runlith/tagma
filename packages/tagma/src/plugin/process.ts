@@ -2,6 +2,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   ErrorCode,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   McpError,
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
@@ -43,15 +44,21 @@ export const servePlugin = async (definition: PluginDefinition): Promise<void> =
   if (serving.resources.length > 0) {
     const low = server.server;
     low.registerCapabilities({ resources: { subscribe: true } });
-    low.setRequestHandler(ListResourcesRequestSchema, () => ({ resources: serving.resources.map((one) => ({ ...one })) }));
+    const entryOf = ({ name, description, mimeType }: (typeof serving.resources)[number]) => ({ name, description, mimeType });
+    low.setRequestHandler(ListResourcesRequestSchema, () => ({
+      resources: serving.resources.filter((one) => !one.template).map((one) => ({ ...entryOf(one), uri: one.uri })),
+    }));
+    low.setRequestHandler(ListResourceTemplatesRequestSchema, () => ({
+      resourceTemplates: serving.resources.filter((one) => one.template).map((one) => ({ ...entryOf(one), uriTemplate: one.uri })),
+    }));
     low.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
       const read = await serving.read(request.params.uri, request.params._meta ?? {}, extra.signal);
       if ('refused' in read) throw new McpError(ErrorCode.InvalidParams, read.refused);
       return { contents: [{ uri: request.params.uri, mimeType: read.mimeType, text: read.text }] };
     });
-    low.setRequestHandler(SubscribeRequestSchema, (request) => {
-      if (!serving.resources.some((one) => one.uri === request.params.uri))
-        throw new McpError(ErrorCode.InvalidParams, `${definition.id} serves no resource ${request.params.uri}`);
+    low.setRequestHandler(SubscribeRequestSchema, async (request, extra) => {
+      const admitted = await serving.read(request.params.uri, request.params._meta ?? {}, extra.signal);
+      if ('refused' in admitted) throw new McpError(ErrorCode.InvalidParams, admitted.refused);
       subscribed.add(request.params.uri);
       return {};
     });

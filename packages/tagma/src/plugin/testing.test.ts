@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { beforeBuild, definePlugin, Refusal, schedule, tool } from './plugin.js';
+import { beforeBuild, definePlugin, Refusal, resource, schedule, tool } from './plugin.js';
 import { testPlugin } from './testing.js';
 
-test('testPlugin runs a tick, a build step and a refusing tool through the handlers the process serves', async () => {
+test('testPlugin runs a tick, a build step, a refusing tool and a project-keyed resource through the handlers the process serves', async () => {
   const ticks: string[] = [];
   const plugin = definePlugin({
     id: 'pin',
@@ -19,6 +19,15 @@ test('testPlugin runs a tick, a build step and a refusing tool through the handl
         },
       }),
     },
+    resources: {
+      board: resource({
+        uri: 'notes://project/{project}',
+        read: async ({ project }, ctx) => {
+          if (Number(project) !== ctx.project) throw new Refusal('a view reads only its own project');
+          return { project };
+        },
+      }),
+    },
     schedules: {
       check: schedule({ every: '1h', run: async (tick, ctx) => void ticks.push(`${tick.name}:${ctx.caller.kind}:${ctx.project}`) }),
     },
@@ -31,4 +40,6 @@ test('testPlugin runs a tick, a build step and a refusing tool through the handl
   expect(await tested.build('pin', { offer: 'head', checkout: '/c' })).toEqual({ text: '{"verdict":"go"}', isError: false });
   expect(await tested.call('move', { to: 'nowhere' })).toEqual({ text: 'there is nowhere to move to', isError: true });
   expect(await tested.call('move', { to: 'x' })).toEqual({ text: '{"moved":"x"}', isError: false, structured: { moved: 'x' } });
+  expect(await tested.read('notes://project/1')).toEqual({ text: '{"project":"1"}', isError: false });
+  expect(await tested.read('notes://project/2')).toEqual({ text: 'a view reads only its own project', isError: true });
 });

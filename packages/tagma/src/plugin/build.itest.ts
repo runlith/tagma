@@ -5,27 +5,26 @@ import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { mcpCallerMeta } from '@runlith/mcp/caller';
-import { pluginTemplate } from './template.js';
 
 const sdk = resolve(import.meta.dir, '../..');
 const cli = join(import.meta.dir, 'cli.ts');
-
-const folder = async (id: string): Promise<{ readonly root: string; readonly plugin: string }> => {
-  const root = await mkdtemp(join(tmpdir(), 'tagma-plugin-'));
-  const plugin = join(root, id);
-  await mkdir(join(plugin, 'node_modules/@runlith'), { recursive: true });
-  await mkdir(join(plugin, 'node_modules/@types'), { recursive: true });
-  for (const file of pluginTemplate({ id, title: 'Greeter' })) await writeFile(join(plugin, file.path), file.text);
-  await symlink(sdk, join(plugin, 'node_modules/@runlith/tagma'));
-  await symlink(join(sdk, 'node_modules/zod'), join(plugin, 'node_modules/zod'));
-  await symlink(join(sdk, 'node_modules/@types/bun'), join(plugin, 'node_modules/@types/bun'));
-  return { root, plugin };
-};
 
 const run = async (argv: readonly string[], cwd: string) => {
   const child = Bun.spawn([...argv], { cwd, stdout: 'pipe', stderr: 'pipe' });
   const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   return { code, out: `${stdout}${stderr}` };
+};
+
+const folder = async (id: string): Promise<{ readonly root: string; readonly plugin: string }> => {
+  const root = await mkdtemp(join(tmpdir(), 'tagma-plugin-'));
+  const plugin = join(root, id);
+  expect(await run([process.execPath, cli, 'init', plugin, '--title', 'Greeter'], root)).toMatchObject({ code: 0 });
+  await mkdir(join(plugin, 'node_modules/@runlith'), { recursive: true });
+  await mkdir(join(plugin, 'node_modules/@types'), { recursive: true });
+  await symlink(sdk, join(plugin, 'node_modules/@runlith/tagma'));
+  await symlink(join(sdk, 'node_modules/zod'), join(plugin, 'node_modules/zod'));
+  await symlink(join(sdk, 'node_modules/@types/bun'), join(plugin, 'node_modules/@types/bun'));
+  return { root, plugin };
 };
 
 test('a template folder builds through tagma-plugin into a manifest whose process serves exactly its tools over stdio MCP', async () => {

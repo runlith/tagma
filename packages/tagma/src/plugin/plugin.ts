@@ -48,7 +48,7 @@ export type Resource = {
   readonly uri: string;
   readonly description?: string;
   readonly mimeType?: string;
-  readonly read: (ctx: PluginContext) => Promise<unknown>;
+  readonly read: (params: Readonly<Record<string, string>>, ctx: PluginContext) => Promise<unknown>;
 };
 
 export type Every = number | `${number}${'s' | 'm' | 'h' | 'd'}`;
