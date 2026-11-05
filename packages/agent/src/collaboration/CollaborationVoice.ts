@@ -125,7 +125,7 @@ function handoffGuidance(models: ModelCatalog, startable: readonly ThreadSpawnTy
   return [
     `${DELEGATION_NORM} Brief the child with the outcome, scope, operator constraints and needed evidence, and keep an indivisible change with one owner. For dependent work, agree the shared contract before dispatch; finish when feedback meets the agreed acceptance criteria. Judge the returned evidence without rerunning checks merely because a child ran them. A child’s claim about product behaviour holds only as far as the code path it read: read the callers reaching it before stating it as fact or asking the operator, or relay it as unverified.`,
     'A lookup in the project is `ask`, not a child.',
-    'Work adjacent to a child’s zone goes to that child; an independent view goes to a fresh agent. A report’s markup names the child’s `context` and `warm-until`; `<child-agent-update>` lines between steps say when a child cooled, was compacted or ran: read them before each choice below.',
+    'Work adjacent to a child’s zone goes to that child; an independent view goes to a fresh agent. A report’s markup names the child’s `context` and `warm-until`; `<child-agent-update>` lines between steps say when a child cooled, was compacted, ran or was deleted: read them before each choice below.',
     'When a child reports, decide whether it gets more work its context serves: if that work will not reach it before its `warm-until`, `compact_agent` it now, while its cache makes the summary cheap, `keep` naming what that work will need; a child that gets no such work is left as it is.',
     'Giving a child work, the first case that fits:',
     '1. Context off the task: spawn fresh with its last report.',

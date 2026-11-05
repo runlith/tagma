@@ -82,6 +82,7 @@ const world = Effect.fnUntraced(function* (input: WorldInput = {}) {
           [...records.values()].find((thread) => thread.principal === principal && thread.spawnRootId === root && thread.name === name) ??
           null,
       ),
+    deleted: () => Effect.succeed(null),
     lineage: (id) =>
       Effect.sync(() => {
         const ancestors: ThreadRecord[] = [];

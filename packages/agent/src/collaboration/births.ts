@@ -29,7 +29,7 @@ import { envelopePrefix } from './envelopeKeys';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { askedSwitches, birthModel, type ModelJudgment } from './modelChoice';
 import { planeRefused, transportCannot } from './planeRefusal';
-import { resolveThread } from './reach';
+import { resolveThread, unreached } from './reach';
 import type { PlaneRefusalCode } from './refusals';
 import { ThreadRuns, ThreadRunUnavailable } from './runs';
 import { type SpawnCeilings, spawnLimits } from './spawnLimits';
@@ -101,7 +101,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
   const forkSource = Effect.fnUntraced(function* (input: ThreadSpawnRequest): Effect.fn.Return<ThreadRecord, ThreadPlaneFailure> {
     if (input.forkFrom === undefined) return input.parent;
     const source = yield* resolveThread(threads, input.parent, input.forkFrom);
-    if (source === null) return yield* planeRefused('thread-unknown', `no thread ${input.forkFrom} stands under this owner.`);
+    if (source === null) return yield* unreached(threads, input.parent, input.forkFrom);
     return source;
   });
 

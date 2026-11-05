@@ -141,6 +141,9 @@ const sent = arms({
   'not-found': {
     addresses: Schema.Array(Schema.String),
     addressable: Schema.Array(Schema.String),
+    deleted: Schema.Array(
+      Schema.Struct({ threadId: Schema.String, name: Schema.NullOr(Schema.String), by: Schema.String, at: Schema.String }),
+    ),
     reason: Schema.String,
     unblock: Schema.Array(Schema.String),
   },

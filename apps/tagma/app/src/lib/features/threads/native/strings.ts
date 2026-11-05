@@ -102,6 +102,7 @@ const CHILD_EVENTS = {
   cooled: 'cooled',
   'model-changed': 'changed model',
   tasks: 'left tasks for you',
+  deleted: 'was deleted',
 } as const;
 
 const CALL_OUTCOMES = { completed: 'finished', failed: 'failed', stopped: 'was stopped', interrupted: 'was interrupted' } as const;
@@ -192,7 +193,9 @@ export function nativeStrings(operationWords: OperationWords): ChatStrings {
             ? 'compacted its context'
             : update.event === 'tasks'
               ? 'left tasks for you'
-              : 'went cold',
+              : update.event === 'deleted'
+                ? `was deleted by ${update.by}`
+                : 'went cold',
     callEndings: (counts) =>
       counts
         .map(({ tool, outcome, count }) =>

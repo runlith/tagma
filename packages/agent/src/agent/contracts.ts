@@ -99,6 +99,16 @@ export const AgentChildUpdate = Schema.Union([
     forOperator: Schema.Boolean,
     cost: WakeCost,
   }),
+  Schema.Struct({
+    kind: Schema.tag('child-update'),
+    child: AgentThreadRef,
+    event: Schema.Literal('deleted'),
+    by: Schema.String,
+    at: Schema.String,
+    ended: Schema.Struct({ run: Schema.Boolean, owed: Schema.Boolean }),
+    forOperator: Schema.Boolean,
+    cost: WakeCost,
+  }),
 ]);
 export type AgentChildUpdate = typeof AgentChildUpdate.Type;
 

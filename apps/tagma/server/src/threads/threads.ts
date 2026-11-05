@@ -139,6 +139,7 @@ export const threads = manifest({
       { threadPlace, threadCopy },
       { operatorNote },
       { threadSubscription },
+      { threadDeletion },
     ] = await Promise.all([
       import('./store/tables.js'),
       import('./store/pins.js'),
@@ -151,6 +152,7 @@ export const threads = manifest({
       import('./store/places.js'),
       import('./notes/table.js'),
       import('./store/subscriptions.js'),
+      import('./store/deletions.js'),
     ]);
     return {
       entities: [
@@ -174,6 +176,7 @@ export const threads = manifest({
         spentEpoch,
         operatorNote,
         threadSubscription,
+        threadDeletion,
       ],
       history: [
         threadMessage,

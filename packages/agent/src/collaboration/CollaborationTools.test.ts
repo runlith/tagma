@@ -751,7 +751,7 @@ describe('what a plane verb shows a reader', () => {
           settle: unused,
           lineage: unused,
           aheadCrossing: unused,
-          send: () => Effect.succeed({ status: 'not-found', addresses: ['reviewer'], addressable: ['critic', 'planner'] }),
+          send: () => Effect.succeed({ status: 'not-found', addresses: ['reviewer'], addressable: ['critic', 'planner'], deleted: [] }),
         },
       });
       for (const [name, input] of [
@@ -953,7 +953,7 @@ const spawnWorld = Effect.fnUntraced(function* (menu?: typeof shipped) {
             const found = yield* Effect.forEach(addresses, (id) => threads.find(id, sender.principal));
             const missing = addresses.filter((_id, index) => found[index] === null);
             return missing.length > 0
-              ? { status: 'not-found' as const, addresses: missing, addressable: [] }
+              ? { status: 'not-found' as const, addresses: missing, addressable: [], deleted: [] }
               : { holder: null, recipients: found.filter((record) => record !== null) };
           }),
           send: (input) =>

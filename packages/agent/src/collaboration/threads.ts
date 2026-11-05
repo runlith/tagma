@@ -145,11 +145,19 @@ export class BirthLost extends Data.TaggedError('BirthLost')<{
 
 export type BirthFailure = ThreadMissing | BirthRefused | BirthConflict | BirthUnavailable | BirthLost | ThreadStorageFailed;
 
+export type ThreadDeletion = {
+  readonly threadId: string;
+  readonly name: string | null;
+  readonly by: string;
+  readonly at: string;
+};
+
 export class Threads extends Context.Service<
   Threads,
   {
     find(threadId: string, principal: string): Effect.Effect<ThreadRecord | null, ThreadReadFailure>;
     named(principal: string, spawnRootId: string, name: string): Effect.Effect<ThreadRecord | null, ThreadReadFailure>;
+    deleted(principal: string, spawnRootId: string, address: string): Effect.Effect<ThreadDeletion | null, ThreadReadFailure>;
     lineage(
       threadId: string,
       principal: string,

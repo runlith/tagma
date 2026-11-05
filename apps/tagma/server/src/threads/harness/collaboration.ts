@@ -8,6 +8,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { HarnessFaceMissing, HarnessRegistry, HarnessMissing, harnessNotInstalled } from '../contract/service/harness.js';
 import type { HarnessFailure } from '../contract/service/failure.js';
 import { harnessOfTypeId } from '../contract/wire/harness/types.js';
+import type { DeletionRecords } from '../store/deletions.js';
 
 const BIRTH_REFUSALS = new Set<BirthRefused['reason']>([
   'host-unadmitted',
@@ -62,10 +63,16 @@ export function withExternalThreads(
   native: Threads['Service'],
   external: ExternalThreads,
   list: Threads['Service']['list'],
+  deletions: DeletionRecords,
 ): Threads['Service'] {
   return Threads.of({
     ...native,
     list,
+    deleted: (principal, spawnRootId, address) =>
+      Effect.mapError(
+        deletions.find(principal, spawnRootId, address),
+        (cause) => new ThreadStorageFailed({ call: 'threads.deleted', cause }),
+      ),
     create: (input) => {
       const name = input.request.typeId === null ? null : harnessOfTypeId(input.request.typeId);
       if (name === null) return native.create(input);

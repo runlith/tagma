@@ -36,7 +36,7 @@ import { planeRefused } from './planeRefusal';
 import { resolveThread } from './reach';
 import { reportOwed, withdrawQueued } from './reporting';
 import { ThreadRuns } from './runs';
-import { type ThreadDirectoryRow, Threads } from './threads';
+import { type ThreadDeletion, type ThreadDirectoryRow, Threads } from './threads';
 import { type ColdRecipient, wakeWords } from './wakeCost';
 import { makeWakes } from './wakes';
 import type { AgentSignalContext, WakeCost } from '../agent/contracts';
@@ -99,6 +99,7 @@ export type ThreadAddressUnknown = {
   readonly status: 'not-found';
   readonly addresses: readonly string[];
   readonly addressable: readonly string[];
+  readonly deleted: readonly ThreadDeletion[];
 };
 
 export type ThreadEnvelopeSender = { readonly id: string; readonly principal: string };
@@ -206,7 +207,12 @@ export const threadEnvelopesLayer = Layer.effect(
         cursor = page.cursor;
         if (cursor === null) break;
       }
-      return { status: 'not-found' as const, addresses, addressable } satisfies ThreadAddressUnknown;
+      const deleted: ThreadDeletion[] = [];
+      for (const address of addresses) {
+        const gone = from === null ? null : yield* threads.deleted(sender.principal, from.spawnRootId, address);
+        if (gone !== null) deleted.push(gone);
+      }
+      return { status: 'not-found' as const, addresses, addressable, deleted } satisfies ThreadAddressUnknown;
     });
 
     const addressed = Effect.fnUntraced(function* (sender: ThreadEnvelopeSender, addresses: readonly string[]) {

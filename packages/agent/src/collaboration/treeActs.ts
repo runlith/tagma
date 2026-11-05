@@ -13,7 +13,7 @@ import { movedModel } from './modelChoice';
 import { ThreadModel, ThreadModelConflict, ThreadModelRefused } from './model';
 import { carryModelMove } from './modelCarry';
 import { planeRefused, transportCannot } from './planeRefusal';
-import { crossed, crossing, reach, stopperOf, type Within } from './reach';
+import { crossed, crossing, reach, stopperOf, unreached, type Within } from './reach';
 import type {
   ThreadChildCompacted,
   ThreadChildContinued,
@@ -50,7 +50,9 @@ export const makeTreeActs = Effect.fnUntraced(function* ({
   const admission = yield* RunAdmission;
 
   const crossTo = (caller: ThreadRecord, ask: TreeAsk, within: Within) =>
-    Effect.flatMap(reach(threads, caller, ask.threadId), (reached) => crossed(reached, ask.threadId, within, ask.asked ?? []));
+    Effect.flatMap(reach(threads, caller, ask.threadId), (reached) =>
+      reached === null ? unreached(threads, caller, ask.threadId) : crossed(reached, within, ask.asked ?? []),
+    );
 
   const compactable = Effect.fnUntraced(function* (caller: ThreadRecord, ask: TreeAsk): Effect.fn.Return<ThreadRecord, ThreadPlaneFailure> {
     const { thread } = yield* crossTo(caller, ask, 'descendant');

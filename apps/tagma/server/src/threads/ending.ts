@@ -19,6 +19,7 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from './contract/service/failure.js';
 import { ThreadReleasing } from './contract/service/releasing.js';
 import { HeldTasks } from './contract/service/heldTasks.js';
+import { ThreadDeletions } from './contract/service/deletions.js';
 import { ThreadRollouts } from './contract/service/rollouts.js';
 import { lineageOf, refuseOwnLineage } from './ownLineage.js';
 
@@ -63,6 +64,7 @@ export const makeThreadEnding = Effect.fnUntraced(function* ({
   const admission = yield* RunAdmission;
   const rollouts = yield* ThreadRollouts;
   const held = yield* HeldTasks;
+  const deletions = yield* ThreadDeletions;
   const patience = { ...ENDING_PATIENCE, ...given };
 
   const closeWork = Effect.fn('ThreadEnding.closeWork')(function* (threadIds: readonly string[]) {
@@ -166,8 +168,14 @@ export const makeThreadEnding = Effect.fnUntraced(function* ({
           const act = randomUUID();
           yield* refuseOwnLineage(records, threadId, by);
           const tree = yield* subtree(threadId);
-          for (const session of yield* heldSessionsInSubtree(threadId)) {
-            if (session.kind === 'run') yield* harness.handle(session.threadId, OPERATOR_PRINCIPAL).stop(session.runId, { door: 'delete' });
+          const runs = (yield* heldSessionsInSubtree(threadId)).filter((session) => session.kind === 'run');
+          const telling = yield* deletions.deleting(
+            tree.map((member) => member.id),
+            new Set(runs.map((session) => session.threadId)),
+            by,
+          );
+          for (const session of runs) {
+            yield* harness.handle(session.threadId, OPERATOR_PRINCIPAL).stop(session.runId, { door: 'delete' });
           }
           for (const [swept, members] of Map.groupBy(tree, (member) => member.projectId)) {
             if (swept === null) continue;
@@ -199,6 +207,7 @@ export const makeThreadEnding = Effect.fnUntraced(function* ({
             taken,
             tree.flatMap((member) => (member.host === null ? [] : [member.host])),
           );
+          yield* telling;
           return true;
         }).pipe(
           Effect.catch((failure) => {

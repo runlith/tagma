@@ -27,7 +27,7 @@ const labelOf = (thread: ThreadSummary) => thread.name ?? thread.id;
 
 const updateOf = (
   child: ThreadSummary,
-  event: Exclude<AgentChildUpdate['event'], 'model-changed'>,
+  event: Exclude<AgentChildUpdate['event'], 'model-changed' | 'deleted'>,
   cost: WakeCost,
   forOperator = false,
 ): AgentChildUpdate => ({

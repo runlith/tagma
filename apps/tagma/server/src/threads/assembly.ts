@@ -83,6 +83,7 @@ import { makeThreadRecaps } from './recap/readings.js';
 import { makeRecapSchedule } from './recap/schedule.js';
 import { makeExternalBirthRows } from './birth/externalRows.js';
 import { makeExternalThreads, withExternalThreads } from './harness/collaboration.js';
+import { makeDeletionRecords } from './store/deletions.js';
 import { WorktreeOwners } from '../worktrees/contract/service/owners.js';
 import { WorktreeUpdates } from './contract/service/worktreeUpdates.js';
 import { worktreeUpdates } from './worktreeUpdates.js';
@@ -203,9 +204,10 @@ export const harnessFillersLayer = Layer.effectContext(
     const directory = yield* ThreadDirectory;
     const birthRows = yield* makeExternalBirthRows;
     const external = yield* makeExternalThreads;
-    return Context.make(ExternalThreads, (native) => withExternalThreads(native, external, (query) => directory.list(query))).pipe(
-      Context.add(SessionBirthWriting, birthRows),
-    );
+    const deletions = yield* makeDeletionRecords;
+    return Context.make(ExternalThreads, (native) =>
+      withExternalThreads(native, external, (query) => directory.list(query), deletions),
+    ).pipe(Context.add(SessionBirthWriting, birthRows));
   }),
 );
 

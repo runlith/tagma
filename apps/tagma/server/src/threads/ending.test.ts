@@ -16,6 +16,7 @@ import { HarnessCalls, McpForgetting, ThreadTeardown } from './contract/service/
 import { HarnessAsides } from './contract/service/asides.js';
 import { ThreadReleasing } from './contract/service/releasing.js';
 import { HeldTasks } from './contract/service/heldTasks.js';
+import { ThreadDeletions } from './contract/service/deletions.js';
 import { ThreadRollouts } from './contract/service/rollouts.js';
 import type { ThreadRelation } from '../thread-record/contract/wire/record.js';
 import { makeRunSweep, makeThreadEnding } from './ending.js';
@@ -118,6 +119,7 @@ const stand = Effect.fnUntraced(function* (
     Layer.succeed(HarnessCalls, calls),
     Layer.succeed(RunAdmission, makeLandingHolds()),
     Layer.succeed(HeldTasks, { left: () => Effect.void }),
+    Layer.succeed(ThreadDeletions, { deleting: () => Effect.succeed(Effect.void) }),
   );
   const sweep = yield* makeRunSweep().pipe(Effect.provide(owners));
   const harness: EngineHandles = {
@@ -172,7 +174,6 @@ describe('thread ending', () => {
         'commands:root:run-abort',
         'commands:root,child:scope-closed',
         'release:root',
-        'release:child',
         'held',
         'deleted',
         'after-deleted',

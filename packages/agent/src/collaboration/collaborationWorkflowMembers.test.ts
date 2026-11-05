@@ -46,6 +46,7 @@ it.effect(
             Threads.of({
               find: unused,
               named: unused,
+              deleted: unused,
               lineage: unused,
               list: unused,
               watch: unused,

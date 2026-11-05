@@ -28,6 +28,7 @@ import type {
   ThreadSpawnResult,
 } from './ThreadPlaneAccess';
 import type { ToolRefusal } from '../agent/tool';
+import type { ThreadDeletion } from './threads';
 import type { ToolDisplayFact } from '../tool/display';
 import { refusalLines } from '../tool/refusal';
 import type { ApprovalAnswered, ApprovalChoice } from '../thread/run/ApprovalAnswers';
@@ -487,12 +488,17 @@ function unsentOutput(answer: ThreadAddressUnknown | ThreadSendRefused | ThreadC
   }
   return {
     ...answer,
-    reason: `No agent answers to ${answer.addresses.join(', ')}, so nothing was sent to anyone.`,
+    reason: `${unknownReason(answer)}, so nothing was sent to anyone.`,
     unblock: [
-      answer.addressable.length > 0
-        ? `Address one of the names your own team answers to: ${answer.addressable.join(', ')}.`
-        : 'No agent in your own team carries a name, so address by thread id.',
-      'An agent of another team is reached by its thread id — `list_agents` prints it on every row, beside the `root` that says which team the row belongs to.',
+      ...(answer.deleted.length > 0 ? ['Spawn a fresh agent briefed with a deleted agent’s last report for the work it was doing.'] : []),
+      ...(unnamed(answer).length === 0
+        ? []
+        : [
+            answer.addressable.length > 0
+              ? `Address one of the names your own team answers to: ${answer.addressable.join(', ')}.`
+              : 'No agent in your own team carries a name, so address by thread id.',
+            'An agent of another team is reached by its thread id — `list_agents` prints it on every row, beside the `root` that says which team the row belongs to.',
+          ]),
     ],
   };
 }
@@ -502,9 +508,26 @@ export function sendRefusal(answer: ThreadSendAnswer): ToolRefusal | undefined {
     const said = refusalWords(answer);
     return { code: answer.code, reason: said.reason, words: said.words };
   }
-  if (answer.status === 'not-found')
-    return { code: 'not-found', reason: `No agent answers to ${answer.addresses.join(', ')}.`, words: 'No such agent' };
+  if (answer.status === 'not-found') return { code: 'not-found', reason: `${unknownReason(answer)}.`, words: 'No such agent' };
   return undefined;
+}
+
+export const deletionFact = (gone: ThreadDeletion): string =>
+  `thread ${gone.threadId}${gone.name === null ? '' : ` (${gone.name})`} was deleted by ${gone.by} at ${gone.at}`;
+
+function unnamed(answer: ThreadAddressUnknown): readonly string[] {
+  const gone = new Set(answer.deleted.flatMap((deletion) => [deletion.threadId, ...(deletion.name === null ? [] : [deletion.name])]));
+  return answer.addresses.filter((address) => !gone.has(address));
+}
+
+function unknownReason(answer: ThreadAddressUnknown): string {
+  const missing = unnamed(answer);
+  return [
+    ...answer.deleted.map((deletion) => deletionFact(deletion)),
+    ...(missing.length > 0 ? [`no agent answers to ${missing.join(', ')}`] : []),
+  ]
+    .join('; ')
+    .replace(/^./, (first) => first.toUpperCase());
 }
 
 const clipped = (text: string) => (text.length > REASON_MAX_CHARS ? `${text.slice(0, REASON_MAX_CHARS - 1)}…` : text);
