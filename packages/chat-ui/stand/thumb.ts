@@ -59,14 +59,15 @@ function scaleOf(control: ThumbControl): number {
     reject(control, 'invalid control geometry');
   const meanY = samples.reduce((sum, sample) => sum + sample.y, 0) / samples.length;
   const meanTop = samples.reduce((sum, sample) => sum + sample.top, 0) / samples.length;
-  let covariance = 0;
-  let variance = 0;
-  for (const sample of samples) {
-    if (![sample.y, sample.time, sample.top].every(Number.isFinite)) reject(control, 'non-finite sample');
-    covariance += (sample.y - meanY) * (sample.top - meanTop);
-    variance += (sample.y - meanY) ** 2;
+  for (const sample of samples) if (![sample.y, sample.time, sample.top].every(Number.isFinite)) reject(control, 'non-finite sample');
+  const held = samples.filter((sample, index) => index > 0 && sample.y === samples[index - 1]!.y);
+  let travel = 0;
+  let pointer = 0;
+  for (let index = 1; index < held.length; index += 1) {
+    travel += Math.abs(held[index]!.top - held[index - 1]!.top);
+    pointer += Math.abs(held[index]!.y - held[index - 1]!.y);
   }
-  const scale = covariance / variance;
+  const scale = travel / pointer;
   const extent = Math.max(...samples.map((sample) => sample.top)) - Math.min(...samples.map((sample) => sample.top));
   if (!Number.isFinite(scale) || scale <= 0 || extent < scrollbar.viewport * 2) reject(control, 'vacuous native movement');
   const quantum = scale + tolerance;
@@ -171,11 +172,10 @@ const snap = (value: number, dpr: number): number => Math.round(value * dpr) / d
 const pixelRatio = (page: Page): Promise<number> =>
   page.evaluate(() => (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio);
 
-async function sample(page: Page, y: number, from: number | null = null): Promise<ThumbSample> {
+async function sample(page: Page, y: number): Promise<ThumbSample> {
   return page.evaluate(
-    async ({ y, settled, from }) => {
+    async ({ y, settled }) => {
       const port = (globalThis as StandGlobal).feedStand!;
-      while (from !== null && port.scrollbar().top === from) await port.frames();
       let top = port.scrollbar().top;
       for (let still = 0; still < settled;) {
         await port.frames();
@@ -185,7 +185,7 @@ async function sample(page: Page, y: number, from: number | null = null): Promis
       }
       return { y, time: port.frameTime(), top };
     },
-    { y, settled: SETTLED_FRAMES, from },
+    { y, settled: SETTLED_FRAMES },
   );
 }
 
@@ -255,11 +255,10 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
       port.start('thumb-control');
       await port.frames(3);
     });
-    let top = (await sample(page, y)).top;
     for (let index = 0; index < ESTABLISH_STEPS; index += 1) {
       y -= step;
       await page.mouse.move(scrollbar.x, y);
-      top = (await sample(page, y, top)).top;
+      await sample(page, y);
     }
     samples.push(await sample(page, y));
     samples.push(await sample(page, y));
@@ -267,7 +266,7 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
       for (let index = 0; index < CONTROL_STEPS; index += 1) {
         y += direction * step;
         await page.mouse.move(scrollbar.x, y);
-        samples.push(await sample(page, y, samples.at(-1)!.top));
+        samples.push(await sample(page, y));
       }
       samples.push(await sample(page, y));
     }
@@ -338,7 +337,6 @@ export async function dragThumb(page: Page, reference: ThumbReference): Promise<
       port.beginDrag(0, 0, true);
     });
     await frames(page, 3);
-    let top = (await sample(page, y)).top;
     for (let index = 0; index < TRIAL_PORTIONS; index += 1) {
       await travel(page, pointerStep * MOVE_STEPS, speed, trial.range / scale);
       for (let step = 0; step < MOVE_STEPS; step += 1) {
@@ -346,7 +344,7 @@ export async function dragThumb(page: Page, reference: ThumbReference): Promise<
         await page.mouse.move(trial.x, y);
         await frames(page);
       }
-      top = (await sample(page, y, top)).top;
+      await sample(page, y);
       if ((index + 1) % 8 === 0) {
         await portion(page, 0, 0);
         await frames(page, 3);
