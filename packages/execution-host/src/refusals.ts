@@ -2,7 +2,7 @@ import type { Refusal } from '@runlith/executions/protocol/host';
 import { custodySentence } from './ExecutionCustody';
 import { InputProfileConflict } from './InputModes';
 import { InterpretationUnavailable } from './Interpretation';
-import { StreamMissing } from './ExecutionRecord';
+import { CursorRefused, StreamMissing } from './ExecutionRecord';
 import { InputFenced } from './ExecutionInput';
 import { LaneUnserved } from './TerminalInputs';
 
@@ -41,6 +41,7 @@ export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
       reason: `input encoded against profile revision ${failure.actual} while ${failure.expected} stands`,
     };
   if (failure instanceof InterpretationUnavailable) return { _tag: 'InterpretationUnavailable', reason: failure.detail };
+  if (failure instanceof CursorRefused) return { _tag: 'HostConflict', reason: `${failure._tag}: ${failure.message}` };
   if (failure instanceof StreamMissing) return { _tag: 'StreamMissing', reason: failure.message };
   if (failure instanceof InputFenced)
     return { _tag: failure.reason === 'yielding' ? 'InputYielding' : 'InputFenced', reason: failure.message };
