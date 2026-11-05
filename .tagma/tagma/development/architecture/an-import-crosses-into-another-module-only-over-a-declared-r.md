@@ -8,7 +8,64 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [],
+      "escaped": [
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> @runlith/codesign @ apps/tagma/server/src/cut/dmg.ts",
+          "fix": "Where `cut` truly depends on `@runlith/codesign`, add the relation `cut → @runlith/codesign` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 5,
+          "path": "apps/tagma/server/src/cut/dmg.ts",
+          "said": "imports `@runlith/codesign/codesign` of module `@runlith/codesign`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> @runlith/codesign @ apps/tagma/server/src/cut/notarize.ts",
+          "fix": "Where `cut` truly depends on `@runlith/codesign`, add the relation `cut → @runlith/codesign` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 4,
+          "path": "apps/tagma/server/src/cut/notarize.ts",
+          "said": "imports `@runlith/codesign/codesign` of module `@runlith/codesign`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> mac-applications @ apps/tagma/server/src/cut/pipeline.ts",
+          "fix": "Where `cut` truly depends on `mac-applications`, add the relation `cut → mac-applications` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 19,
+          "path": "apps/tagma/server/src/cut/pipeline.ts",
+          "said": "imports `../mac-applications/bundle.js` of module `mac-applications`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> mac-applications @ apps/tagma/server/src/cut/release.ts",
+          "fix": "Where `cut` truly depends on `mac-applications`, add the relation `cut → mac-applications` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 15,
+          "path": "apps/tagma/server/src/cut/release.ts",
+          "said": "imports `../mac-applications/bundle.js` of module `mac-applications`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> @runlith/codesign @ apps/tagma/server/src/cut/sealing.ts",
+          "fix": "Where `cut` truly depends on `@runlith/codesign`, add the relation `cut → @runlith/codesign` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 4,
+          "path": "apps/tagma/server/src/cut/sealing.ts",
+          "said": "imports `@runlith/codesign/codesign` of module `@runlith/codesign`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> mac-applications @ apps/tagma/server/src/cut/transition.ts",
+          "fix": "Where `cut` truly depends on `mac-applications`, add the relation `cut → mac-applications` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 17,
+          "path": "apps/tagma/server/src/cut/transition.ts",
+          "said": "imports `../mac-applications/bundle.js` of module `mac-applications`, which `cut` has no relation to"
+        },
+        {
+          "commit": "29fc3a93ee77afacd033aef6f190bfc40b71373d",
+          "fingerprint": "cut -> mac-applications @ apps/tagma/server/src/cut/world.ts",
+          "fix": "Where `cut` truly depends on `mac-applications`, add the relation `cut → mac-applications` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `cut` declares and composition fills.",
+          "line": 19,
+          "path": "apps/tagma/server/src/cut/world.ts",
+          "said": "imports `../mac-applications/bundle.js` of module `mac-applications`, which `cut` has no relation to"
+        }
+      ],
       "inspection": "modules",
       "on": [
         {

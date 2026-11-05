@@ -93,6 +93,10 @@ fields:
       {
         "at": "src/boot.ts",
         "role": "port"
+      },
+      {
+        "at": "src/testing/laneTypist.ts",
+        "role": "testing"
       }
     ],
     "id": "@runlith/execution-host",
