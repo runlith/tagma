@@ -70,7 +70,16 @@ fields:
           "value": 999
         }
       ],
-      "escaped": [],
+      "escaped": [
+        {
+          "commit": "9d9be8780f24b3283be69fc8019c3f69f5497352",
+          "fingerprint": "F4 apps/tagma/app/src/lib/app/chrome/StandingChip.svelte",
+          "fix": "Decide by the file's shape, never by the count: name the file's main subject and find what is foreign to it. Nothing foreign: raise `lines` of its allowance `{ path: 'apps/tagma/app/src/lib/app/chrome/StandingChip.svelte' }` to 712 in `checks.F4.allowances` of the `names` inspection in `tagma.config.ts`, its why naming that subject, and land it with the file. Foreign, with an owner and mechanical consumers: move it to that owner in this work, largest first; a small helper moved instead does not count. Foreign, needing a new owner, a spec or rewrites beyond the module, or left after a move: absorb it as debt on this area's debt task, or a new one naming the mix, and take that task right after this work.",
+          "line": 1,
+          "path": "apps/tagma/app/src/lib/app/chrome/StandingChip.svelte",
+          "said": "F4: holds 712 lines outside its imports, over 705"
+        }
+      ],
       "inspection": "names",
       "on": [
         {
