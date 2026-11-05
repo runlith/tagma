@@ -80,11 +80,11 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 2. A plugin reuses our thread through a host component: `<Thread id>` for a native plugin, `tagma.thread(element, id)` for a foreign one, drawing the whole thread. Publishing `chat-ui` over its `ChatConnection` port was rejected in [[5a36577a]]: alone it lacks Tagma's markdown, tool renderers and model picker, and it would turn the kit's protocol types into a public contract.
 3. A plugin adds to our chat: elements in slots and hooks on tool calls. It adds to the conversation and never takes it over.
 
-**A launcher-style application** needs a window without a frame, always on top, and a global shortcut. The shell has all three for its own dictation pill and quick hide; a plugin has none.
+**Windows and shortcuts.** Any window Tagma opens loads Tagma's own client, so a plugin's window shows real threads as the main window does. The example to accept: Mod+J opens a panel or window holding a grid of four threads on four providers. A launcher-style application also needs a window without a frame, always on top, and a global shortcut that works while Tagma is not focused. The shell has all three for its own dictation pill and quick hide; a plugin has none of them, and no keyboard shortcut either. A program Tagma does not open draws its own chat from the event stream; embedding Tagma's thread there is not needed.
 
 ## Open
 
-- What exactly is promised to a plugin: which modules, which slots, which `tagma.*` calls.
+- What exactly is promised to a plugin: which modules, which slots, which `tagma.*` calls, which keyboard shortcuts and window kinds.
 - A real identity for a plugin. `x-tagma-caller` proves nothing, and opening approvals or streams to it needs one first.
 - Distribution: one catalog, a Plugins screen in the window, machine or project scope.
 - When a process starts: it now lives from install on, which a machine with many plugins will feel.
