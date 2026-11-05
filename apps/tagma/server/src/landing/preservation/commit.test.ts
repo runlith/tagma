@@ -261,7 +261,7 @@ it.live('a branch that left its base refuses and leaves no receipt behind the ke
       const refused = yield* Effect.flip(preserved.commit(key, prepared()));
       expect(refused._tag === 'PreservationRefused' && refused.reason).toBe('moved');
       expect(yield* preserved.readReceipt(key)).toBeNull();
-      expect(repo.commits).toBe(0);
+      expect(repo.refs.get(BRANCH)).toBe('elsewhere');
     }),
   ),
 );
