@@ -2,10 +2,13 @@ import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, r
 import { dirname, join } from 'node:path';
 import { Data, Result, Schema } from 'effect';
 import { type Attempt, attemptSchema, type Return, returnSchema, servingSchema } from '../contract/wire/attempt.js';
-import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE, SERVED_FILE } from '../contract/wire/layout.js';
+import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE, SERVED_FILE, STEP_BACK_FILE } from '../contract/wire/layout.js';
+import { type StepBack, stepBackSchema } from '../contract/wire/stepBack.js';
 import { absentPath } from './manifests.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
 
+const decodeStepBack = Schema.decodeUnknownResult(Schema.fromJsonString(stepBackSchema));
+const encodeStepBack = Schema.encodeSync(Schema.fromJsonString(stepBackSchema));
 const decodeAttempt = Schema.decodeUnknownResult(Schema.fromJsonString(attemptSchema));
 const encodeAttempt = Schema.encodeSync(Schema.fromJsonString(attemptSchema));
 const decodeReturn = Schema.decodeUnknownResult(Schema.fromJsonString(returnSchema));
@@ -99,6 +102,25 @@ export const writeReturn = (installRoot: string, left: string, to: string): void
   replaced(join(installRoot, RETURN_FILE), encodeReturn({ left, to }));
 
 export const clearReturn = (installRoot: string): void => rmSync(join(installRoot, RETURN_FILE), { force: true });
+
+export const readStepBack = (installRoot: string): Recorded<StepBack> => recorded(join(installRoot, STEP_BACK_FILE), decodeStepBack);
+
+export const writeStepBack = (installRoot: string, stepBack: StepBack): void =>
+  replaced(join(installRoot, STEP_BACK_FILE), encodeStepBack(stepBack));
+
+export const clearStepBack = (installRoot: string): void => {
+  rmSync(join(installRoot, STEP_BACK_FILE), { force: true });
+  flushed(installRoot);
+};
+
+export const askedStepBack = (installRoot: string): StepBack | null => {
+  const read = readStepBack(installRoot);
+  if (Result.isFailure(read) || read.success === null) return null;
+  const { from, to, carried, failed } = read.success;
+  return !carried && failed === undefined && currentVersion(installRoot) === from && existsSync(join(installRoot, to, INSTALL_FILE))
+    ? read.success
+    : null;
+};
 
 export const writeServed = (installRoot: string, release: string): void =>
   replaced(join(installRoot, SERVED_FILE), encodeServed({ release }));

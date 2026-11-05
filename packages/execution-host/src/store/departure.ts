@@ -10,7 +10,7 @@ import type { PendingEcho } from '../holder/Holder';
 import { Descendant } from '../ProvenSet';
 import type { OpenedStore } from './ExecutionStore';
 import { StoredExecutionMissing } from './errors';
-import { continuation, type Applied, type Continuation } from './migrationChain';
+import { continuation, type Applied } from './migrationChain';
 import { unreadable } from './records';
 
 export type Departure = {
@@ -106,8 +106,7 @@ export const departures = (store: OpenedStore) => {
       try: () => readMigrationFiles({ migrationsFolder: migrations }),
       catch: (cause) => String(cause),
     }).pipe(Effect.result);
-    if (chain._tag === 'Failure')
-      return { _tag: 'Diverges', detail: `the next migrations could not be read: ${chain.failure}` } satisfies Continuation;
+    if (chain._tag === 'Failure') return { _tag: 'Unread', detail: `the next migrations could not be read: ${chain.failure}` } as const;
     const applied = yield* unit(db.all<Applied>(sql`select name, hash from __drizzle_migrations order by created_at, id`));
     return continuation(applied, chain.success);
   });

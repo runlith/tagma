@@ -5,7 +5,12 @@ import type { MigrationLoad } from '../../../platform/contract/wire/migrationLoa
 import type { HostVerdict } from './steps.js';
 import type { PendingRefusal } from '../wire/pending.js';
 
-export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{ readonly detail: string }> {}
+export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{
+  readonly detail: string;
+  readonly reason: 'nothing-stands' | 'unreadable' | 'stopping';
+}> {}
+
+export class SuccessorUnfit extends Data.TaggedError('SuccessorUnfit')<{ readonly detail: string }> {}
 
 export class HostUnprepared extends Data.TaggedError('HostUnprepared')<{ readonly detail: string }> {}
 
@@ -17,7 +22,7 @@ export type SuccessorPlan = {
   readonly hostState: string;
 };
 
-export type SuccessionPreparation = (installation: Installation | null) => Effect.Effect<SuccessorPlan, SuccessionRefused>;
+export type SuccessionPreparation = (installation: Installation | null) => Effect.Effect<SuccessorPlan, SuccessionRefused | SuccessorUnfit>;
 
 export type SuccessorLaunch = {
   start(command: readonly string[], env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<void>;
@@ -45,6 +50,7 @@ export class Succession extends Context.Service<
   {
     readonly current: Effect.Effect<Installation | null, InstallationFailure>;
     readonly leaving: Effect.Effect<boolean>;
+    readonly unready: Effect.Effect<string | null>;
     restart(host?: RestartHost): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
     weigh(root: string): Effect.Effect<HostVerdict>;
     readonly refused: Effect.Effect<PendingRefusal | null>;

@@ -35,7 +35,6 @@ export type NextPlace = SourcePlace & {
   readonly source: ProcessProvenance | undefined;
   readonly restart: Effect.Effect<void, RestartRefused>;
   readonly landed: Effect.Effect<string | null, InstallationFailure>;
-  readonly refuses: (root: string) => Effect.Effect<string | null>;
   readonly downgrade: DowngradeSteps['Service'];
   readonly roots: FileRoots['Service'];
   readonly watch: CheckoutWatch['Service'];

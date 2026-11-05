@@ -18,6 +18,8 @@ export const REFUSAL_WORDS = {
   'restart-record-unwritable': 'Restart record not saved',
   'restart-window-refused': 'Restart window not accepted',
   'rollback-failed': 'Rollback failed',
+  'server-stopping': 'Server is stopping',
   'source-unreadable': 'Source could not be read',
   'successor-left': 'New version did not start',
+  'successor-unreadable': 'Version could not be read',
 } as const satisfies RefusalWords;

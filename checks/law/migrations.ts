@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import type { Finding } from '@runlith/tagma/rules';
 import { Option, Schema } from 'effect';
-import { migrationIssues } from '../../apps/tagma/server/src/platform/store/migrationLaw';
+import { migrationIssues, unreturnedIssues } from '../../apps/tagma/server/src/platform/store/migrationLaw';
+import { BACK_SCRIPT } from '../../packages/sqlite-process/src/chainReturn';
 import type { Declaration } from './declarations';
 import { blobTexts, changedBetween, type Entry, entriesAt, git, mentioning, present } from './git';
 
@@ -377,6 +378,16 @@ const Placed = Schema.Struct({ source: Schema.String });
 
 export type StepPlacesParams = typeof Placed.Encoded;
 
+const Backs = Schema.Struct({ folders: Schema.Array(Schema.String), cut: Schema.String });
+
+export type MigrationBacksParams = typeof Backs.Encoded;
+
+const addedMigrations = (
+  migrations: ReturnType<typeof migrationsAt>,
+  before: ReturnType<typeof migrationsAt> | null,
+  cut: string,
+): readonly string[] => migrations.paths.filter((path) => (before === null ? path.split('/').at(-2)! > cut : !before.listed.has(path)));
+
 export type StoredKey = { readonly key: string; readonly id: string; readonly params: unknown };
 
 export type StoredReading = { readonly key: string; readonly side: Side; readonly findings: readonly Finding[] };
@@ -411,6 +422,28 @@ export const storedJudge = (root: string, treeAt: string, baseAt: string | null)
       }
       return readings;
     }
+    if (key.id === 'migration-backs') {
+      const params = Schema.decodeUnknownSync(Backs, { onExcessProperty: 'error' })(key.params);
+      const tree = snapshotOf('tree');
+      const base = baseAt === null ? null : snapshotOf('base');
+      const findings: Finding[] = [];
+      for (const folder of params.folders) {
+        const migrations = migrationsAt(tree, root, folder);
+        const unscripted = addedMigrations(migrations, base === null ? null : migrationsAt(base, root, folder), params.cut).filter(
+          (path) => !migrations.listed.has(path.replace(/migration\.sql$/, BACK_SCRIPT)),
+        );
+        tree.load(unscripted);
+        for (const path of unscripted)
+          for (const issue of unreturnedIssues(statementsOf(tree.read(path))))
+            findings.push({
+              path,
+              line: 1,
+              fingerprint: `${path}: back ${issue.table ?? 'unresolved'} ${issue.statement.trim()}`,
+              message: `${issue.table ?? 'unknown target'}: ${issue.reason}, and no ${BACK_SCRIPT} stands beside it to return it: ${issue.statement.trim()}`,
+            });
+      }
+      return [{ key: key.key, side: 'tree', findings }];
+    }
     if (key.id !== 'migrations') throw new Error(`unknown migration check ${key.id}`);
     const params = Schema.decodeUnknownSync(Params, { onExcessProperty: 'error' })(key.params);
     const tree = snapshotOf('tree');
@@ -421,7 +454,7 @@ export const storedJudge = (root: string, treeAt: string, baseAt: string | null)
     const migrations = migrationsAt(tree, root, params.folder);
     const before = base === null ? null : migrationsAt(base, root, params.folder);
     const findings: Finding[] = [];
-    const added = migrations.paths.filter((path) => (before === null ? path.split('/').at(-2)! > params.cut : !before.listed.has(path)));
+    const added = addedMigrations(migrations, before, params.cut);
     tree.load(added);
     for (const path of added) {
       const metadata = path.replace(/migration\.sql$/, 'heavy.json');

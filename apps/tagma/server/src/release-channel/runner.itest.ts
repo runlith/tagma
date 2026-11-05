@@ -13,7 +13,8 @@ import type { DowngradeSteps } from '../installation/contract/service/steps.js';
 import type { NextFrame } from '../installation/contract/wire/next.js';
 import type { InstallationPlatform } from '../installation/contract/wire/manifest.js';
 import { releaseAt } from '../installation/closure/manifests.js';
-import { readReturn, writeAttempt } from '../installation/closure/attempt.js';
+import { clearStepBack, readReturn, readStepBack, writeAttempt, writeReturn } from '../installation/closure/attempt.js';
+import { swapCurrent } from '../platform/lock/versionedDirectories.js';
 import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { Settings } from '../settings/contract/service/values.js';
 import type { Feed } from '../installation/contract/wire/feed.js';
@@ -108,7 +109,6 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
   const placed = (
     running: string,
     serving: string | null,
-    refused: string | null = null,
     applications: ChannelPlace['applications'] = trustedApplications,
   ): ChannelPlace => ({
     installations: root,
@@ -122,7 +122,6 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     restart: Effect.sync(() => {
       restarts.push(running);
     }),
-    refuses: () => Effect.succeed(refused),
     env,
   });
 
@@ -291,7 +290,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
 
           expect(seen.offered.update).toBe('0.2.0');
           expect(seen.offered.readFrom).toBe(`${url}/feed.json`);
-          expect(seen.offered.offers[0]).toMatchObject({ id: '0.2.0', size: second.size, irreversible: true });
+          expect(seen.offered.offers[0]).toMatchObject({ id: '0.2.0', size: second.size });
           expect(seen.steps).toEqual(['download', 'verify', 'install', 'restart']);
           expect(seen.carried.installing).toMatchObject({ step: 'download', progress: { done: half, total: second.size } });
           expect(seen.ended.installed).toMatchObject({ outcome: 'landed', build: '0.2.0', restartRefused: null });
@@ -308,13 +307,11 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           const seen = yield* channel(placed('0.2.0', standing()), (next) =>
             Effect.gen(function* () {
               const frame = yield* until(next, (one) => one.back !== null);
-              const back = yield* Effect.result(next.install('back', 'restart', null));
               const down = yield* Effect.result(next.install('0.1.0', 'restart', null));
-              return { frame, back, down };
+              return { frame, down };
             }),
           );
-          expect(seen.frame.back?.why).toContain('0.1.0 cannot read (the graph format in 0.2.0)');
-          expect(seen.back._tag === 'Failure' ? seen.back.failure.code : 'started').toBe('offer-unavailable');
+          expect(seen.frame.back?.disabled).toBeNull();
           expect(seen.down._tag === 'Failure' ? seen.down.failure.code : 'started').toBe('no-offer');
           expect(buildOf(standing())).toBe('0.2.0');
         });
@@ -385,7 +382,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
             signature: () => Deferred.succeed(checking, undefined).pipe(Effect.andThen(Effect.never)),
           };
           world.feed = { releases: [releaseOf('0.3.0', third, false)] };
-          const stopped = yield* channel(placed('0.2.0', before, null, applications), (next) =>
+          const stopped = yield* channel(placed('0.2.0', before, applications), (next) =>
             Effect.gen(function* () {
               yield* until(next, (frame) => frame.offers[0]?.id === '0.3.0');
               yield* next.install('0.3.0', null, null);
@@ -531,10 +528,15 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
             }),
           );
           expect(back.installed).toMatchObject({ outcome: 'landed', build: '0.2.0', then: 'restart' });
-          expect(buildOf(standing())).toBe('0.2.0');
-          expect(Result.getOrThrow(readReturn(root))).toEqual({ left: '0.4.0', to: standing() });
+          expect(standing()).toBe(from);
+          const asked = Result.getOrThrow(readStepBack(root));
+          expect(asked).toMatchObject({ from, carried: false });
+          expect(buildOf(asked!.to)).toBe('0.2.0');
           expect(queue).toMatchObject({ closed: 2, reopened: 1 });
           expect(restarts.at(-1)).toBe('0.4.0');
+          clearStepBack(root);
+          writeReturn(root, '0.4.0', asked!.to);
+          swapCurrent(root, asked!.to);
         });
 
         yield* Effect.gen(function* () {
@@ -718,8 +720,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           world.feed = { releases: [{ ...releaseOf('0.12.0', archive, false), changes }] };
           const accepted = yield* channel(placed('0.5.0', before), (next) =>
             Effect.gen(function* () {
-              const offered = yield* until(next, (frame) => frame.offers[0]?.id === '0.12.0');
-              expect(offered.offers[0]?.irreversible).toBe(true);
+              yield* until(next, (frame) => frame.offers[0]?.id === '0.12.0');
               const { installing } = yield* next.install('0.12.0', null, null);
               return yield* ended(next, installing.since);
             }),

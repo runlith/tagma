@@ -24,6 +24,7 @@ import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { directoryLeased } from '../platform/lock/directoryLease.js';
 import { reachLine, writeLauncher } from '../installation/setup/launcher.js';
+import { steppedBackAlone } from '../installation/cli/stepBack.js';
 import { installRelease, type Weigh } from './install.js';
 import { weighedByServer } from './successor.js';
 import { BACK } from './offers.js';
@@ -39,13 +40,7 @@ const megabytes = (bytes: number): string => `${(bytes / 1024 ** 2).toFixed(0)} 
 const dataPath = (channel: Channel): string => dirname(databasePath(channel));
 
 const offerLine = (offer: NextOffer): string =>
-  [
-    `${offer.title} ${offer.label}`,
-    offer.size === null ? '' : `${megabytes(offer.size)} to download`,
-    offer.irreversible === true ? 'no step back once it runs' : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  [`${offer.title} ${offer.label}`, offer.size === null ? '' : `${megabytes(offer.size)} to download`].filter(Boolean).join(' · ');
 
 const begin = ({ ask, here }: Operating, offer: string, then: Then | undefined): Effect.Effect<Installing, unknown> =>
   ask((door, at) =>
@@ -204,9 +199,7 @@ const update = (cli: ServerCli) =>
     noting(`The standing server reads the release feed, downloads the archive the feed names,
 checks its SHA-256, unpacks it and hands it to the release's own install-from, which makes it current; then the server restarts onto it
 and the window reopens in the new release. Before it starts, this verb prints the
-release, its download size and whether there is a step back from it. A release that
-applied a change the one before it cannot read says "no step back once it runs".
-Nothing updates on its own.`),
+release and its download size. Nothing updates on its own.`),
   );
 
 const check = (cli: ServerCli) =>
@@ -231,17 +224,27 @@ const check = (cli: ServerCli) =>
 
 const back = (cli: ServerCli) =>
   Command.make('back', { json }, (o) =>
-    moved(
-      cli,
-      (next) => {
-        if (next.back === null) return refuse('no-previous', 'no release is kept beside the one that stands', ['tagma status']);
-        if (next.back.disabled !== null) return refuse('no-way-back', next.back.disabled, ['tagma status — what stands']);
-        return BACK;
-      },
-      'restart',
-      o,
-    ),
-  ).pipe(Command.withDescription('step back onto the release kept beside the one that stands, then restart onto it'));
+    Effect.gen(function* () {
+      if ((yield* cli.healthOrNone()) === null) {
+        const channel = yield* InstalledChannel;
+        return yield* steppedBackAlone(channel, o.json);
+      }
+      return yield* moved(
+        cli,
+        (next) => {
+          if (next.back === null) return refuse('no-previous', 'no release is kept beside the one that stands', ['tagma status']);
+          if (next.back.disabled !== null) return refuse('back-unavailable', next.back.disabled, ['tagma status — what stands']);
+          return BACK;
+        },
+        'restart',
+        o,
+      );
+    }),
+  ).pipe(
+    Command.withDescription('step back onto the release kept beside the one that stands, then restart onto it'),
+    noting(`With no server running it returns the data here and makes that release the one that stands;
+the next start brings it up.`),
+  );
 
 const removeVerb = Command.make('remove', { json }, (o) =>
   Effect.gen(function* () {
@@ -361,6 +364,6 @@ clones the release beside it and bun into the execution host's bundle, takes the
 quarantine, writes the launcher without touching a shell profile, records the attempt {from, to}
 and switches current last; the server of the new release clears the attempt once its local door
 opens, or rolls it back. With --json it prints one line: {"status":"landed",…}, or
-{"status":"ask","reason":"stepped-back"|"irreversible"|"failed","said":…} when the person is asked
+{"status":"ask","reason":"stepped-back"|"failed","said":…} when the person is asked
 first — --agreed installs anyway.`),
   );

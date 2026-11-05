@@ -12,6 +12,8 @@ import type { ServerCli } from '../installation/cli/port.js';
 import { comingUp, restartMismatch } from '../installation/process/serverStart.js';
 import { readStartup } from '../installation/process/record.js';
 import { RESTART_RECORD } from '../installation/contract/wire/restart.js';
+import { steppedBackAlone } from '../installation/cli/stepBack.js';
+import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { BuildFrom } from './record.js';
 
 const readStarted = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.install_next.answer);
@@ -160,6 +162,7 @@ export const update = ({ ask, baseUrl, boundHere, healthOrNone, here, startup }:
       const at = yield* CurrentInvocation;
       const url = baseUrl(at);
       const standing = yield* healthOrNone();
+      if (standing === null && offer === 'back') return yield* steppedBackAlone(yield* InstalledChannel, o.json);
       if (standing === null)
         return refuse('server-not-up', `nothing answers at ${url}; the server runs the build`, ['tagma web — start it']);
       const noDoor = () =>

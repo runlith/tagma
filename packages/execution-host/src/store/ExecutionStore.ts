@@ -48,7 +48,7 @@ import { custody, type CustodyAcceptance, type CustodyClaim, type StoredCustodyA
 import { endings } from './endings';
 import { timing } from './timing';
 import { departures, type Departed, type Departure, type DepartureLost } from './departure';
-import { continuation, type Applied, type Continuation } from './migrationChain';
+import { continuation, type Applied, type CandidateChain } from './migrationChain';
 import {
   CustodyConflict,
   CustodyLost,
@@ -256,7 +256,7 @@ export class ExecutionStore extends Context.Service<
       execution: ExecutionId,
     ) => Effect.Effect<Departure | undefined, StoreLost | StoreUnreadable | DepartureLost | StoreFailure>;
     readonly dropDeparture: (execution: ExecutionId) => Effect.Effect<void, StoreLost | StoreFailure>;
-    readonly continuedBy: (migrations: string) => Effect.Effect<Continuation, StoreLost | StoreFailure>;
+    readonly continuedBy: (migrations: string) => Effect.Effect<CandidateChain, StoreLost | StoreFailure>;
     readonly handover: () => Effect.Effect<void, StoreFailure>;
 
     readonly finalOf: (
@@ -314,16 +314,17 @@ export const executionStore = (
     }),
   );
 
-const migrations =
+export const shippedFolder =
   [new URL('../../drizzle', import.meta.url), new URL('../drizzle', import.meta.url)]
     .map((url) => fileURLToPath(url))
     .find((folder) => existsSync(folder)) ?? fileURLToPath(new URL('../../drizzle', import.meta.url));
 
 let chainFiles: ReturnType<typeof readMigrationFiles> | null = null;
-const chain = (): ReturnType<typeof readMigrationFiles> => {
-  chainFiles ??= readMigrationFiles({ migrationsFolder: migrations });
+export const shippedChain = (): ReturnType<typeof readMigrationFiles> => {
+  chainFiles ??= readMigrationFiles({ migrationsFolder: shippedFolder });
   return chainFiles;
 };
+const chain = shippedChain;
 
 const applyChain = Effect.gen(function* () {
   const db = yield* makeWithDefaults();

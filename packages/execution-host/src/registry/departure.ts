@@ -1,4 +1,6 @@
-import { Clock, Deferred, Duration, Effect, FileSystem, Ref, Schema, Semaphore } from 'effect';
+import { Clock, Data, Deferred, Duration, Effect, FileSystem, Ref, Schema, Semaphore } from 'effect';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
+import { returnToChain } from '@runlith/sqlite-process/chainReturn';
 import { partOf, readArtifact, verifyArtifact, type ArtifactFailure } from '@runlith/executions/hostArtifacts';
 import type { Digest } from '@runlith/executions/protocol/artifact';
 import { bootPath, YieldRefusal, yieldRefusalPath } from '@runlith/executions/protocol/boot';
@@ -6,6 +8,7 @@ import { HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { StreamPositions } from '@runlith/executions/protocol/record';
 import type { Refusal } from '@runlith/executions/protocol/host';
 import type { PrepareAnswer, QuiescenceTicket, YieldAnswer } from '@runlith/executions/protocol/runtime';
+import { shippedChain, shippedFolder } from '../store/ExecutionStore';
 import { checkpointScreen } from '../checkpointFile';
 import { endAccepted } from './commands';
 import { endedStreams } from './work';
@@ -65,7 +68,7 @@ const candidateChecked = Effect.fn('HostLifecycle.candidateChecked')(function* (
   }
   const chain = yield* Effect.result(store.continuedBy(path.join(next, metadata.path.split('/')[0]!)));
   if (chain._tag === 'Failure') return unprepared('migrations', `the applied migrations could not be read: ${chain.failure._tag}`);
-  if (chain.success._tag === 'Diverges') return unprepared('migrations', chain.success.detail);
+  if (chain.success._tag === 'Unread') return unprepared('migrations', chain.success.detail);
   const boot = bootPath(state, manifest.identity.digest);
   const booted = yield* Effect.result(fs.exists(boot));
   if (booted._tag === 'Failure')
@@ -179,6 +182,33 @@ const leave = Effect.fn('HostLifecycle.leave')(function* (registry: RegistryStat
   yield* closeIntakes(executions);
   yield* Effect.forEach(executions, (found) => depart(registry, found), { concurrency: 'unbounded', discard: true });
   yield* reported('hand its store over', store.handover());
+  yield* reported('return its store to the candidate', storeReturned(registry));
+});
+
+class StoreNotReturned extends Data.TaggedError('StoreNotReturned')<{ readonly message: string }> {}
+
+const storeReturned = Effect.fn('HostLifecycle.storeReturned')(function* (registry: RegistryState) {
+  const { fs, path, entered } = registry;
+  const state = entered.registration.state;
+  const next = path.join(state, NEXT);
+  const manifest = yield* Effect.result(Effect.provideService(readArtifact(next), FileSystem.FileSystem, fs));
+  if (manifest._tag === 'Failure') {
+    if (manifest.failure._tag === 'ArtifactMissing') return;
+    return yield* new StoreNotReturned({ message: `the candidate at ${NEXT} could not be read: ${artifactDetail(manifest.failure)}` });
+  }
+  const metadata = partOf(manifest.success, 'metadata');
+  if (metadata === undefined) return;
+  const folder = path.join(next, metadata.path.split('/')[0]!);
+  const answer = yield* Effect.try({
+    try: () =>
+      returnToChain(
+        path.join(state, 'executions.sqlite'),
+        { steps: readMigrationFiles({ migrationsFolder: folder }) },
+        { steps: shippedChain(), folder: shippedFolder },
+      ),
+    catch: (cause) => new StoreNotReturned({ message: cause instanceof Error ? cause.message : String(cause) }),
+  });
+  for (const loss of answer.lost) yield* Effect.logWarning(`the store returned to ${folder} without ${loss.rows} rows of ${loss.table}`);
 });
 
 export type Departure = {

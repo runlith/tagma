@@ -350,6 +350,20 @@ const registryNext = Schema.Struct({
   settings: Schema.Array(setting0_2),
 });
 
+const stepBackNext = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String,
+  carried: Schema.Boolean,
+  failed: Schema.optional(
+    Schema.Struct({
+      detail: Schema.String,
+      words: Schema.optional(
+        Schema.Struct({ text: Schema.String, settings: Schema.optional(Schema.Literals(['microphone', 'system-audio', 'accessibility'])) }),
+      ),
+    }),
+  ),
+});
+
 export const NEXT = {
   issued: [],
   manifest: manifestNext,
@@ -362,6 +376,7 @@ export const NEXT = {
   feed: feedNext,
   update: updateNext,
   registry: registryNext,
+  stepBack: stepBackNext,
 } as const;
 
 export const FROZEN = [

@@ -1,5 +1,5 @@
 import { defineInspection } from '@runlith/tagma/rules';
-import type { MigrationsParams, StepPlacesParams } from './migrations';
+import type { MigrationBacksParams, MigrationsParams, StepPlacesParams } from './migrations';
 import type { EffectStyleParams } from './effect-style/declaration';
 import type { EnvironmentParams } from './environment/declaration';
 import type { UiTokensParams } from './ui-tokens/declaration';
@@ -15,3 +15,5 @@ export const environment = defineInspection<EnvironmentParams>({ program, name: 
 export const migrations = defineInspection<MigrationsParams>({ program, name: 'migrations', concern: 'code' });
 
 export const stepPlaces = defineInspection<StepPlacesParams>({ program, name: 'step-places', concern: 'code' });
+
+export const migrationBacks = defineInspection<MigrationBacksParams>({ program, name: 'migration-backs', concern: 'code' });

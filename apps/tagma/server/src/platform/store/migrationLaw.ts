@@ -2,6 +2,54 @@ import { isKeyword, isMark, nameOf, schemaStatement, statementTarget, tokenize }
 
 export type MigrationIssue = { readonly table: string | null; readonly statement: string; readonly reason: string };
 
+const UNRETURNED = {
+  renamed: 'a renamed table leaves the build before without the rows it reads under the old name',
+  column: 'a renamed or dropped column comes back empty to the build before',
+  dropped: 'a dropped table comes back empty to the build before',
+  written: 'rows rewritten here reach the build before in a shape it never wrote',
+  unresolved: 'the statement cannot be judged',
+} as const;
+
+export const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssue[] => {
+  const created = new Set<string>();
+  const dropped = new Map<string, string>();
+  const issues: MigrationIssue[] = [];
+  const issue = (table: string | null, statement: string, reason: keyof typeof UNRETURNED) =>
+    issues.push({ table, statement, reason: UNRETURNED[reason] });
+  for (const statement of statements) {
+    const target = statementTarget(statement);
+    if (target.kind === 'write') {
+      if (!created.has(target.table.toLowerCase())) issue(target.table, statement, 'written');
+      continue;
+    }
+    const shape = schemaStatement(statement);
+    const tokens = tokenize(statement);
+    const columnChange =
+      isKeyword(tokens[0], 'alter') &&
+      isKeyword(tokens[1], 'table') &&
+      tokens.some((token) => isKeyword(token, 'rename') || isKeyword(token, 'drop'));
+    if (shape.kind === 'unresolved' && columnChange) {
+      const table = nameOf(tokens[2]);
+      if (table === null || !created.has(table.toLowerCase())) issue(table, statement, 'column');
+    } else if (shape.kind === 'unresolved') issue(null, statement, 'unresolved');
+    else if (shape.kind === 'create-table') created.add(shape.table.toLowerCase());
+    else if (shape.kind === 'drop-table') {
+      const table = shape.table.toLowerCase();
+      if (!created.delete(table)) dropped.set(table, statement);
+    } else if (shape.kind === 'alter-table') {
+      const table = shape.table.toLowerCase();
+      if (shape.renameTo !== null) {
+        const to = shape.renameTo.toLowerCase();
+        if (!created.delete(table)) issue(shape.table, statement, 'renamed');
+        created.add(to);
+        dropped.delete(to);
+      } else if (shape.addedColumn === null && !created.has(table)) issue(shape.table, statement, 'column');
+    }
+  }
+  for (const [table, statement] of dropped) issue(table, statement, 'dropped');
+  return issues;
+};
+
 export const migrationIssues = (statement: string, history: ReadonlySet<string>): readonly MigrationIssue[] => {
   const shape = schemaStatement(statement);
   const target = statementTarget(statement);

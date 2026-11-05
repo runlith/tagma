@@ -44,7 +44,6 @@ const offerLine = (offer: NextOffer): string => {
   const facts = [
     offer.label,
     offer.size === null ? '' : `${(offer.size / 1024 ** 2).toFixed(1)} MB to download`,
-    offer.irreversible === true ? 'no step back once it runs' : '',
     offer.current ? 'running' : '',
   ].filter(Boolean);
   return `        ${offer.title}${facts.length === 0 ? '' : ` · ${facts.join(' · ')}`} — ${offer.why ?? offer.disabled ?? offer.update}`;

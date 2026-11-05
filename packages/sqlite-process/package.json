@@ -6,6 +6,11 @@
   "type": "module",
   "exports": {
     "./testing/pool": "./src/testing/pool.ts",
+    "./chainReturn": {
+      "types": "./src/chainReturn.ts",
+      "bun": "./src/chainReturn.ts",
+      "default": "./src/chainReturn.ts"
+    },
     "./engine": {
       "types": "./src/engine.ts",
       "bun": "./src/engine.ts"

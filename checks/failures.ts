@@ -142,6 +142,13 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: "A file whose HEAD side cannot be read is walked as new, so every line counts as added and the walk can only carry more; the landing's rules judge the built tree.",
   },
   {
+    path: 'apps/tagma/server/src/checkout-builds/runner.ts',
+    symbol: 'makeCheckoutBuilds.steppingBack',
+    form: 'failureReturn',
+    site: '23bd0069',
+    why: 'A step back that did not land ends the build as failed, its reason read from the failure by tag: the record carries the failure to the window and the CLI.',
+  },
+  {
     path: 'apps/tagma/server/src/change-record/prepared/dependencies.ts',
     symbol: 'neededPaths',
     form: 'failureReturn',

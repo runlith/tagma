@@ -19,7 +19,8 @@ import { DataDirectoryConflict } from '../../platform/lock/dataDirectory.js';
 import { dataDirectoryHolder } from '../../platform/lock/holder.js';
 import { HostUnprepared, Succession } from '../contract/service/succession.js';
 import type { SuccessionSteps } from '../contract/service/steps.js';
-import { standBy, successionLayer } from './succession.js';
+import { standBy } from './standBy.js';
+import { successionLayer } from './succession.js';
 
 const homed = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), 'tagma-succession-'))),

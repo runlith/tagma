@@ -40,7 +40,7 @@ import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
 import { endHosts } from '../../../executions/testing/doubles.js';
 import { fixtureMigrations } from '../migrations.js';
-import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated } from './fixture.js';
+import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, unreadableMigrations } from './fixture.js';
 
 const operator: Caller = { actor: { kind: 'operator' }, files: null };
 const channel = CHANNELS.stable;
@@ -71,6 +71,10 @@ const makeFixture = Effect.gen(function* () {
   yield* files.makeDirectory(standing, { recursive: true });
   yield* files.copy(bundle.root, join(standing, EXECUTIONS));
   yield* migrated(join(standing, EXECUTIONS));
+  const refusing = join(home, 'refusing', EXECUTIONS);
+  yield* files.makeDirectory(join(refusing, '..'), { recursive: true });
+  yield* files.copy(bundle.root, refusing);
+  yield* unreadableMigrations(refusing);
   const scope = yield* Scope.fork(owner);
   const executions = yield* Layer.buildWithScope(
     executionsLayer.pipe(
@@ -100,7 +104,7 @@ const makeFixture = Effect.gen(function* () {
     yield* syntheticReleaseEffect(app, build, undefined, undefined, host);
     return carriedIn(app);
   });
-  return { home, installRoot, executions, release, checkout: raised.checkout, projectId: raised.projectId, standing, plain: bundle.root };
+  return { home, installRoot, executions, release, checkout: raised.checkout, projectId: raised.projectId, standing, refusing };
 });
 class Fixture extends Context.Service<Fixture, Effect.Success<typeof makeFixture>>()('testing/executions/HeldReleaseFixture') {}
 const fixture = Layer.effect(
@@ -123,7 +127,7 @@ describe('a published release the standing execution host does not take', () => 
       'stays beside the release that runs with what a new host ends, until the restart that consents to one makes it current; a release the host takes becomes current',
       () =>
         Effect.gen(function* () {
-          const { installRoot, executions, release, checkout, projectId, standing, plain } = yield* Fixture;
+          const { installRoot, executions, release, checkout, projectId, standing, refusing } = yield* Fixture;
           const place = { installRoot, launcher: join(installRoot, '..', 'bin/tagma'), name: channel.name };
           const at = () => Effect.map(Clock.currentTimeMillis, (now) => new Date(now));
           const first = yield* installRelease(
@@ -185,7 +189,7 @@ describe('a published release the standing execution host does not take', () => 
           const machineHost = Context.get(executions, MachineHost);
           yield* until(machineHost.endings, (ends) => ends?.some((ending) => ending.execution === sleeper) === true);
 
-          const refused = yield* installRelease(yield* release('0.2.0', plain), place, trustedApplications, yield* at(), false, weigh);
+          const refused = yield* installRelease(yield* release('0.2.0', refusing), place, trustedApplications, yield* at(), false, weigh);
           expect(refused).toMatchObject({ status: 'held', build: '0.2.0', standing: '0.1.0' });
           if (refused.status !== 'held') return;
           expect(readlinkSync(join(installRoot, 'current'))).toBe(first.version);

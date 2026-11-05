@@ -41,13 +41,6 @@ export const releaseFor = (feed: Feed, running: string, platform: InstallationPl
       };
 };
 
-export const crossesNoWayBack = (feed: Feed, below: string, upTo: string): boolean =>
-  newestOf(feed).changes.some(
-    (one) =>
-      !isRelease(one.release) ||
-      ((!isRelease(below) || compareReleases(one.release, below) > 0) && (!isRelease(upTo) || compareReleases(one.release, upTo) <= 0)),
-  );
-
 const unreachable = (url: string, detail: string): NextIssue => ({
   code: 'offline',
   reason: `the release feed at ${url} could not be reached: ${detail}`,

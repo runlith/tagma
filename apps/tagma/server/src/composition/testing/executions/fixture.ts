@@ -51,14 +51,13 @@ export const EXTRA_MIGRATION = '29991231000000_stest_extra';
 
 const manifestJson = Schema.fromJsonString(ArtifactManifest);
 
-export const migrated = Effect.fn('ExecutionFixture.migrated')(function* (bundle: string) {
+const withMigrationFile = Effect.fn('ExecutionFixture.withMigrationFile')(function* (bundle: string, path: string, text: string) {
   const files = yield* FileSystem.FileSystem;
   const manifest = yield* files.readFileString(join(bundle, ARTIFACT_FILE)).pipe(Effect.flatMap(Schema.decodeUnknownEffect(manifestJson)));
   const like = manifest.parts.find((one) => one.path.startsWith('drizzle/'));
   if (like === undefined) return yield* Effect.die(new Error('the bundle carries no migrations'));
-  const path = `drizzle/${EXTRA_MIGRATION}/migration.sql`;
-  const bytes = new TextEncoder().encode('CREATE TABLE `stest_extra` (`x` integer);\n');
-  yield* files.makeDirectory(join(bundle, 'drizzle', EXTRA_MIGRATION), { recursive: true });
+  const bytes = new TextEncoder().encode(text);
+  yield* files.makeDirectory(join(bundle, path, '..'), { recursive: true });
   yield* files.writeFile(join(bundle, path), bytes, { mode: 0o600 });
   const parts = [...manifest.parts, { ...like, path, bytes: bytes.length, digest: digestOf(bytes) }];
   const next = { ...manifest, parts, identity: { ...manifest.identity, digest: identityOf({ ...manifest, parts }) } };
@@ -67,6 +66,11 @@ export const migrated = Effect.fn('ExecutionFixture.migrated')(function* (bundle
   yield* files.writeFileString(join(bundle, ARTIFACT_FILE), yield* Schema.encodeEffect(manifestJson)(next));
   yield* files.writeFileString(join(bundle, HOLDER_ENTRY_FILE), entry);
 });
+
+export const migrated = (bundle: string) =>
+  withMigrationFile(bundle, `drizzle/${EXTRA_MIGRATION}/migration.sql`, 'CREATE TABLE `stest_extra` (`x` integer);\n');
+
+export const unreadableMigrations = (bundle: string) => withMigrationFile(bundle, 'drizzle/meta/_journal.json', '{}\n');
 
 export const hostFixtureLayer = (_name: string) => Layer.effect(HostBundle, shared(hostBundleWorld, null));
 

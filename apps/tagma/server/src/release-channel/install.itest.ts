@@ -92,7 +92,7 @@ describe('install-from', () => {
   );
 
   it.live(
-    'a person is asked before updating again from a release they went back to, past a release with no way back, and onto one whose last attempt rolled back; agreeing installs',
+    'a person is asked before updating again from a release they went back to, and onto one whose last attempt rolled back; agreeing installs',
     () =>
       Effect.gen(function* () {
         const { root } = yield* World;
@@ -117,10 +117,6 @@ describe('install-from', () => {
         swapCurrent(root, from);
         const failed = yield* offered(three, true);
         expect(failed._tag === 'Success' ? failed.success : null).toMatchObject({ status: 'ask', reason: 'failed' });
-
-        const four = yield* built('four', '0.4.0', [{ store: 'machine-store', release: '0.4.0' }]);
-        const irreversible = yield* offered(four, true);
-        expect(irreversible._tag === 'Success' ? irreversible.success : null).toMatchObject({ status: 'ask', reason: 'irreversible' });
         expect(yield* standing()).toBe(from);
       }).pipe(Effect.provide(world)),
   );

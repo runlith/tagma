@@ -30,7 +30,6 @@ import { RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import type { Asked, Held, Landed } from '../installation/contract/wire/placement.js';
-import { noWayBackTo } from './offers.js';
 
 export class ReleaseNotInstalled extends Data.TaggedError('ReleaseNotInstalled')<{
   readonly step: string;
@@ -143,13 +142,6 @@ const askOf = Effect.fnUntraced(function* (installRoot: string, offered: Install
       status: 'ask',
       reason: 'stepped-back',
       said: `You went back from Tagma ${back.left} to ${standing ?? 'the earlier version'}. Update to ${build} again?`,
-    } satisfies Asked;
-  }
-  if (standing !== undefined && noWayBackTo(offered.irreversible ?? [], standing, build) !== null) {
-    return {
-      status: 'ask',
-      reason: 'irreversible',
-      said: `Once Tagma ${build} runs, you cannot go back to ${standing}. Update anyway?`,
     } satisfies Asked;
   }
   return null;

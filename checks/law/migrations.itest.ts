@@ -104,6 +104,55 @@ test('landing judges a new history migration and a backdated form against the im
   }
 });
 
+test('a new migration of any judged chain that a step back cannot return without losing what the build before reads is named until a back.sql stands beside it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'migration-backs-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  const put = (path: string, text: string) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  try {
+    git('init', '-q');
+    put(`drizzle/${initial}/migration.sql`, 'create table events (id integer primary key, body text);');
+    put(`host/${initial}/migration.sql`, 'create table runs (id integer primary key);');
+    git('add', '.');
+    const base = git('write-tree');
+    const law = {
+      key: 'backs',
+      id: 'migration-backs',
+      params: { folders: ['drizzle', 'host'], cut: initial },
+      reach: { places: [''] },
+    };
+    const trees: string[] = [];
+    const judge = () => {
+      git('add', '.');
+      trees.push(git('write-tree'));
+    };
+    put(`drizzle/${next}/migration.sql`, 'alter table events rename column body to text;');
+    put(`host/${next}/migration.sql`, 'drop table runs;');
+    judge();
+    put(`drizzle/${next}/back.sql`, 'alter table events rename column text to body;');
+    put(`host/${next}/migration.sql`, 'alter table runs add column label text;');
+    judge();
+    put(
+      `drizzle/${next}/migration.sql`,
+      "create table __new_events (id integer primary key, body text not null);\n--> statement-breakpoint\ninsert into __new_events select id, coalesce(body, '') from events;\n--> statement-breakpoint\ndrop table events;\n--> statement-breakpoint\nalter table __new_events rename to events;",
+    );
+    rmSync(join(root, `drizzle/${next}/back.sql`));
+    judge();
+    expect(await inspectAll(root, law, trees, base)).toEqual([
+      [
+        expect.objectContaining({ path: `drizzle/${next}/migration.sql`, message: expect.stringContaining('back.sql') }),
+        expect.objectContaining({ path: `host/${next}/migration.sql`, message: expect.stringContaining('runs') }),
+      ],
+      [],
+      [],
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a form step a manifest takes from live code is named, and one from its steps folder is not, whatever the memo holds', async () => {
   const root = mkdtempSync(join(tmpdir(), 'step-places-'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();

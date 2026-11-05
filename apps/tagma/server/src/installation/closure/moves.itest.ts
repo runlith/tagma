@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Fiber, Result } from 'effect';
-import { readReturn } from './attempt.js';
+import { readReturn, readStepBack } from './attempt.js';
 import { claimLeased } from './leases.js';
 import { madeCurrent, moveFrom, moving, published, staging, steppedBack } from './moves.js';
 import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
@@ -57,22 +57,32 @@ it.live(
     }),
 );
 
-it.live('stepping back lands on the release below the standing one and records the return; from the oldest kept it refuses', () =>
-  Effect.gen(function* () {
-    const root = rooted('stepping', '20260102T000000000Z', '20260101T000000000Z', '20260102T000000000Z');
-    const stepped = yield* steppedBack(root, null, Effect.void, Effect.void);
-    expect(stepped).toMatchObject({ version: '20260101T000000000Z', from: '20260102T000000000Z' });
-    expect([standing(root), Result.getOrThrow(readReturn(root))]).toEqual([
-      '20260101T000000000Z',
-      { left: '20260102T000000000Z', to: '20260101T000000000Z' },
-    ]);
+it.live(
+  'stepping back asks for the release below the standing one and leaves current where it stands until the data is returned; onto the release that runs it only moves current; from the oldest kept it refuses',
+  () =>
+    Effect.gen(function* () {
+      const root = rooted('stepping', '20260102T000000000Z', '20260101T000000000Z', '20260102T000000000Z');
+      const stepped = yield* steppedBack(root, null, '20260102T000000000Z', Effect.void, Effect.void);
+      expect(stepped).toMatchObject({ version: '20260101T000000000Z', from: '20260102T000000000Z' });
+      expect([standing(root), Result.getOrThrow(readReturn(root)), Result.getOrThrow(readStepBack(root))]).toEqual([
+        '20260102T000000000Z',
+        null,
+        { from: '20260102T000000000Z', to: '20260101T000000000Z', carried: false },
+      ]);
 
-    const oldest = yield* Effect.flip(steppedBack(root, null, Effect.void, Effect.void));
-    expect(oldest).toMatchObject({ _tag: 'PreviousMissing', standing: '20260101T000000000Z' });
-    const moved = rooted('moved', '20260102T000000000Z', '20260102T000000000Z');
-    const elsewhere = yield* Effect.flip(steppedBack(moved, '20260101T000000000Z', Effect.void, Effect.void));
-    expect(elsewhere).toMatchObject({ _tag: 'PreviousMissing', expected: '20260101T000000000Z' });
-  }),
+      yield* steppedBack(root, null, '20260101T000000000Z', Effect.void, Effect.void);
+      expect([standing(root), Result.getOrThrow(readReturn(root)), Result.getOrThrow(readStepBack(root))]).toEqual([
+        '20260101T000000000Z',
+        { left: '20260102T000000000Z', to: '20260101T000000000Z' },
+        null,
+      ]);
+
+      const oldest = yield* Effect.flip(steppedBack(root, null, null, Effect.void, Effect.void));
+      expect(oldest).toMatchObject({ _tag: 'PreviousMissing', standing: '20260101T000000000Z' });
+      const moved = rooted('moved', '20260102T000000000Z', '20260102T000000000Z');
+      const elsewhere = yield* Effect.flip(steppedBack(moved, '20260101T000000000Z', null, Effect.void, Effect.void));
+      expect(elsewhere).toMatchObject({ _tag: 'PreviousMissing', expected: '20260101T000000000Z' });
+    }),
 );
 
 it.live(
@@ -85,6 +95,7 @@ it.live(
         steppedBack(
           root,
           '20260101T000000000Z',
+          null,
           Effect.map(landed(root, built(root)), (version) => void happened.push(version)),
           Effect.sync(() => void happened.push('undone')),
         ),

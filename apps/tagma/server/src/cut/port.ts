@@ -11,7 +11,7 @@ export type HealthAnswer = {
 export type CutDoor = {
   readonly operations: {
     perform(request: {
-      readonly params: { readonly id: 'prepare_downgrade' | 'restart_server' };
+      readonly params: { readonly id: 'prepare_downgrade' | 'restart_server' | 'install_next' };
       readonly query: { readonly cwd?: string };
       readonly headers: Record<string, string | number | undefined>;
       readonly payload: unknown;

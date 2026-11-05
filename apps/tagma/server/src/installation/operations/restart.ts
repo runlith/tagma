@@ -19,6 +19,18 @@ const costOf = (ends: ReadonlyArray<HostEnding> | null): string => {
 
 const VERDICTS = { Takes: 'takes', Refuses: 'refuses', Unasked: 'unasked' } as const;
 
+const REFUSED = {
+  'nothing-stands': {
+    code: 'no-successor',
+    unblock: 'read_machine_state — the next installations this machine’s source offers; install one, then restart',
+  },
+  unreadable: {
+    code: 'successor-unreadable',
+    unblock: 'read_machine_state — the next installations this machine’s source offers; install another, then restart',
+  },
+  stopping: { code: 'server-stopping', unblock: 'read_machine_state — whether a server still answers here' },
+} as const;
+
 export const checkSuccessor = pair(
   OPS.check_successor,
   body(OPS.check_successor, {
@@ -53,10 +65,10 @@ export const restartServer = pair(
               return new GateRefusal('successor-left', `${refused.detail}; this server keeps running`, [
                 `${refused.log} — what the successor printed, under the start marked "on restart"`,
               ]).saying(RESTART_WORDS['successor-left']);
-            case 'SuccessionRefused':
-              return new GateRefusal('no-successor', `${refused.detail}; this server keeps running`, [
-                'read_machine_state — the next installations this machine’s source offers; install one, then restart',
-              ]).saying(RESTART_WORDS['no-successor']);
+            case 'SuccessionRefused': {
+              const { code, unblock } = REFUSED[refused.reason];
+              return new GateRefusal(code, `${refused.detail}; this server keeps running`, [unblock]).saying(RESTART_WORDS[code]);
+            }
           }
         }),
       );

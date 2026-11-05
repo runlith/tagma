@@ -58,13 +58,13 @@ import { FrozenBuilds } from '../installation/contract/service/builds.js';
 import { NextInstallation, RestartRefused } from '../installation/contract/service/next.js';
 import { FileRoots } from '../workspace/contract/service/roots.js';
 import { CheckoutWatch } from '../workspace/contract/service/watch.js';
-import { storeRefusal } from './storeReads.js';
 import {
   type ProcessBirth,
   ServerProcess,
   Succession,
   SuccessionRefused,
   type SuccessorFailed,
+  SuccessorUnfit,
 } from '../installation/contract/service/succession.js';
 import { HOST_REPLACE, HOST_STATE } from '../installation/contract/wire/launch.js';
 import { MachineStore, storeDirectory } from '../platform/contract/service/store.js';
@@ -87,8 +87,10 @@ import { Access } from '../remote/contract/service/access.js';
 import { serveLogBounding } from './serveLogBound.js';
 import { recordConsole } from './serveRecord.js';
 import { databasePath, databasePathIn, installationRoot, installationRootIn } from '../installation/paths.js';
-import { expectsRelease, replaced, serving, standBy, type StoodBy, successionLayer } from '../installation/process/succession.js';
+import { expectsRelease, replaced, serving, standBy, type StoodBy } from '../installation/process/standBy.js';
+import { successionLayer } from '../installation/process/succession.js';
 import { attemptOf, startFailure } from './attempt.js';
+import { stepBackSettledAt } from './returning.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { migrationsFolder, refusalDetail } from '../installation/closure/read.js';
 import { EXECUTIONS, MIGRATIONS, type Installation } from '../installation/contract/wire/manifest.js';
@@ -324,6 +326,7 @@ export const serve = async (build: Build): Promise<void> => {
     console.error(`[tagma] the data directory was taken without a clean release: ${stood.unreleased}`);
     restartRecord.unreleased(stood.unreleased);
   }
+  if (installation !== undefined) await Effect.runPromise(stepBackSettledAt(installations, installation.root, storePath));
   const attempt = await Effect.runPromise(attemptOf({ installRoot: installations, release: installation?.root, storePath }));
   const dataLock: DataDirectoryLock = stood.lock;
   const worldCommand = join(runningWorld(installation?.root, installations), WORLD_COMMAND);
@@ -392,18 +395,32 @@ export const serve = async (build: Build): Promise<void> => {
                       Effect.gen(function* () {
                         const folder = next === null ? migrationsFolder : join(next.root, MIGRATIONS);
                         const store = yield* MachineStore;
-                        const pending = yield* pendingMigrations(store.db, chain({ folder }), folder);
-                        const heavy = yield* Context.get(tagma.bindings, StoreSnapshots).estimate(store, pending, folder);
+                        const pending = yield* pendingMigrations(store.db, chain({ folder }), folder).pipe(
+                          Effect.map((steps) => Result.succeed(steps)),
+                          Effect.catchTag('MigrationChainInvalid', (invalid) => Effect.succeed(Result.fail(invalid))),
+                        );
+                        if (Result.isFailure(pending)) return { unfit: pending.failure.message };
+                        const heavy = yield* Context.get(tagma.bindings, StoreSnapshots).estimate(store, pending.success, folder);
                         return {
-                          migrations: pending.length,
+                          migrations: pending.success.length,
                           ...(heavy === null ? {} : { heavy }),
                           hostState: (yield* HostManagement).connection.address.state,
                         };
                       }),
                     ),
                   ),
-                catch: (cause) => new SuccessionRefused({ detail: `the successor's migration chain could not be read: ${String(cause)}` }),
-              }),
+                catch: (cause) =>
+                  new SuccessionRefused({
+                    detail: `the successor's migration chain could not be read: ${String(cause)}`,
+                    reason: 'unreadable',
+                  }),
+              }).pipe(
+                Effect.flatMap((plan) =>
+                  'unfit' in plan
+                    ? Effect.fail(new SuccessorUnfit({ detail: plan.unfit ?? 'its migration chain is not this data' }))
+                    : Effect.succeed(plan),
+                ),
+              ),
             Effect.sync(() => Context.get(tagma.executions, SuccessionSteps)),
             undefined,
             userEnvironment.handoff,
@@ -534,7 +551,6 @@ export const serve = async (build: Build): Promise<void> => {
                   ),
                 ),
                 landed: Effect.map(succession.current, (standing) => standing?.manifest.identity.build ?? null),
-                refuses: storeRefusal(tagma.graph),
                 downgrade: Context.get(tagma.door, DowngradeSteps),
                 roots: Context.get(tagma.workspace, FileRoots),
                 watch: Context.get(tagma.workspace, CheckoutWatch),

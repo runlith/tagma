@@ -1,8 +1,8 @@
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Effect, Exit, Schema, Scope } from 'effect';
-import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { digestOf, holderEntryOf, identityOf } from '@runlith/executions/hostArtifacts';
@@ -24,7 +24,10 @@ export type Offer = {
   readonly build: string;
   readonly holder?: 'standing' | 'distinct' | 'refusing';
   readonly logic?: 'working' | 'boot-exit' | 'store-ahead' | 'store-repair' | 'over-store-ahead';
+  readonly migrations?: 'shipped' | 'extra';
 };
+
+export const EXTRA_MIGRATION = '29991231000000_stand_extra';
 
 const storeStep = (sql: string) =>
   [
@@ -67,9 +70,7 @@ export type Stand = {
 
 const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 
-const rewritten = (root: string, manifest: ArtifactManifest, path: string, bytes: Uint8Array): ArtifactManifest => {
-  writeFileSync(join(root, path), bytes, { mode: 0o700 });
-  const parts = manifest.parts.map((part) => (part.path === path ? { ...part, bytes: bytes.length, digest: digestOf(bytes) } : part));
+const reissued = (root: string, manifest: ArtifactManifest, parts: ArtifactManifest['parts']): ArtifactManifest => {
   const content = { ...manifest, parts };
   const next = { ...content, identity: { ...manifest.identity, digest: identityOf(content) } };
   writeFileSync(join(root, ARTIFACT_FILE), JSON.stringify(next));
@@ -77,7 +78,29 @@ const rewritten = (root: string, manifest: ArtifactManifest, path: string, bytes
   return next;
 };
 
-export const bundledStand = async (directory: string, executions: number): Promise<Stand> => {
+const rewritten = (root: string, manifest: ArtifactManifest, path: string, bytes: Uint8Array): ArtifactManifest => {
+  writeFileSync(join(root, path), bytes, { mode: 0o700 });
+  return reissued(
+    root,
+    manifest,
+    manifest.parts.map((part) => (part.path === path ? { ...part, bytes: bytes.length, digest: digestOf(bytes) } : part)),
+  );
+};
+
+const extraMigrated = (root: string, manifest: ArtifactManifest): ArtifactManifest => {
+  const like = manifest.parts.find((part) => part.role === 'metadata' && part.path.endsWith('/migration.sql'))!;
+  const path = join(dirname(dirname(like.path)), EXTRA_MIGRATION, 'migration.sql');
+  const bytes = new TextEncoder().encode('CREATE TABLE `stand_extra` (`x` integer);\n');
+  mkdirSync(join(root, dirname(path)), { recursive: true });
+  writeFileSync(join(root, path), bytes, { mode: 0o600 });
+  return reissued(root, manifest, [...manifest.parts, { ...like, path, bytes: bytes.length, digest: digestOf(bytes) }]);
+};
+
+export const bundledStand = async (
+  directory: string,
+  executions: number,
+  standingMigrations: Offer['migrations'] = 'shipped',
+): Promise<Stand> => {
   const registration = registrationOf(directory);
   const policy = hostPolicy({ executions, custodyReceipts: 128 });
   const funded = {
@@ -105,6 +128,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
     let manifest = answer.manifest;
     if (offer.holder === 'distinct') manifest = rewritten(root, manifest, HOLDER_PART, readFileSync(holder));
     if (offer.holder === 'refusing') manifest = rewritten(root, manifest, HOLDER_PART, new TextEncoder().encode('#!/bin/sh\nexit 3\n'));
+    if (offer.migrations === 'extra') manifest = extraMigrated(root, manifest);
     if (offer.logic !== undefined && offer.logic !== 'working') {
       const host = manifest.parts.find((part) => part.role === 'host')!.path;
       const script =
@@ -152,7 +176,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
     };
   };
 
-  const standing = await build(bundle, { build: 'standing' });
+  const standing = await build(bundle, { build: 'standing', migrations: standingMigrations });
   const child = Bun.spawn(
     [
       join(bundle, HOLDER_PART),

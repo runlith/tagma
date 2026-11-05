@@ -2,7 +2,7 @@ import { Code, defineConfig, Files, Format, Imports, Loading } from '@runlith/ta
 import { Effect } from '@runlith/tagma/rules/effect';
 import { names, platforms, serverNames } from './checks/builtins';
 import { ALLOWED } from './checks/failures';
-import { effectStyle, environment, migrations, stepPlaces, uiTokens } from './checks/law/inspections';
+import { effectStyle, environment, migrationBacks, migrations, stepPlaces, uiTokens } from './checks/law/inspections';
 import type { EffectStyleParams } from './checks/law/effect-style/declaration';
 import { vendorIds } from './checks/law/architecture/inspections';
 import { dead, repeated } from './checks/law/declarations/declaration';
@@ -374,6 +374,25 @@ export default defineConfig({
     migrations: migrations(
       { cut: '20261010214002_command_measurement', folder: 'apps/tagma/server/drizzle', source: 'apps/tagma/server/src' },
       { files: ['apps/tagma/server/src/**/*.ts', 'apps/tagma/server/drizzle/**'] },
+    ),
+    'migration-backs': migrationBacks(
+      {
+        cut: '20261105164552_delegation_switcher',
+        folders: [
+          'apps/tagma/server/drizzle',
+          'packages/activity/drizzle',
+          'packages/execution-host/drizzle',
+          'packages/performance/drizzle',
+        ],
+      },
+      {
+        files: [
+          'apps/tagma/server/drizzle/**',
+          'packages/activity/drizzle/**',
+          'packages/execution-host/drizzle/**',
+          'packages/performance/drizzle/**',
+        ],
+      },
     ),
     modules: Imports.modules({
       built: [

@@ -1,4 +1,6 @@
-export type Continuation = { readonly _tag: 'Continues' } | { readonly _tag: 'Diverges'; readonly detail: string };
+type Continuation = { readonly _tag: 'Continues' } | { readonly _tag: 'Diverges'; readonly detail: string };
+
+export type CandidateChain = Continuation | { readonly _tag: 'Unread'; readonly detail: string };
 
 export type Applied = { readonly name: string | null; readonly hash: string };
 

@@ -5,7 +5,7 @@ import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { ParseMemo } from '@runlith/code-facts/blobs';
 import { checkOf } from './checks';
 import { type HeldBlobs, sideTree } from './trees';
-import { type MigrationsParams, type StepPlacesParams, storedJudge } from './migrations';
+import { type MigrationBacksParams, type MigrationsParams, type StepPlacesParams, storedJudge } from './migrations';
 import type { EffectStyleParams } from './effect-style/declaration';
 import type { EnvironmentParams } from './environment/declaration';
 import type { UiTokensParams } from './ui-tokens/declaration';
@@ -86,7 +86,7 @@ const prepared = async (commit: string): Promise<void> => {
 };
 
 const stored =
-  (id: 'migrations' | 'step-places') =>
+  (id: 'migrations' | 'migration-backs' | 'step-places') =>
   async (input: InspectionInput<object>): Promise<Answer> =>
     withReader(root, input.tree.commit, async () => {
       await (engine ??= prepared(input.tree.commit));
@@ -115,6 +115,7 @@ export default defineProgram<{
   'ui-tokens': UiTokensParams;
   environment: EnvironmentParams;
   migrations: MigrationsParams;
+  'migration-backs': MigrationBacksParams;
   'step-places': StepPlacesParams;
   'repeated-declarations': RepeatedParams;
   'dead-code': DeadParams;
@@ -125,6 +126,7 @@ export default defineProgram<{
   'ui-tokens': checked('ui-tokens'),
   environment: checked('environment'),
   migrations: stored('migrations'),
+  'migration-backs': stored('migration-backs'),
   'step-places': stored('step-places'),
   'repeated-declarations': lazily<RepeatedParams>(() => import('./declarations/program'), 'repeated-declarations'),
   'dead-code': lazily<DeadParams>(() => import('./declarations/program'), 'dead-code'),

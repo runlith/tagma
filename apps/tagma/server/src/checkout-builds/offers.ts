@@ -158,19 +158,19 @@ export const updateOf = (checkout: CheckoutState | null, denied: string | null):
   return newer === 'head' && checkout.head === null ? null : newer;
 };
 
-export const backOf = (checkout: CheckoutState | null, previous: string | null, denied: string | null): NextOffer | null =>
-  checkout === null
+export const backOf = (previous: string | null, denied: string | null): NextOffer | null =>
+  previous === null
     ? null
     : {
         id: 'back',
         title: TITLES.back,
         detail: 'The installation kept beside the one that stands; the server restarts onto it',
-        label: previous ?? '',
+        label: previous,
         size: null,
         irreversible: null,
         current: false,
-        disabled: denied ?? (previous === null ? 'No earlier installation is kept to go back to' : null),
-        why: denied === null && previous === null ? 'no installation is kept beside the one that stands' : null,
+        disabled: denied,
+        why: null,
         update: 'tagma update --back',
         install: 'tagma update --back',
       };

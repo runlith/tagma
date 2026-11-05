@@ -282,6 +282,7 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
         if (this.newHost !== null) return;
       }
       this.actionProblem = toldOf(error);
+      await this.read();
       return;
     }
     await this.successor(heavy);

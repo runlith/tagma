@@ -5,8 +5,10 @@ import type { Channel } from '../../installation/contract/wire/channel.js';
 
 export const serveCommand = (channel: Channel, server: () => Promise<unknown>) =>
   Command.make('serve', {}, () =>
-    Effect.promise(() => import('../attempt.js')).pipe(
-      Effect.flatMap(({ arrival, beforeDoor }) => Effect.andThen(arrival(channel), beforeDoor(Effect.promise(server)))),
+    Effect.promise(() => Promise.all([import('../attempt.js'), import('../returning.js')])).pipe(
+      Effect.flatMap(([{ arrival, beforeDoor }, { returnedBeforeServing }]) =>
+        Effect.andThen(returnedBeforeServing(channel), Effect.andThen(arrival(channel), beforeDoor(Effect.promise(server)))),
+      ),
       Effect.asVoid,
     ),
   ).pipe(

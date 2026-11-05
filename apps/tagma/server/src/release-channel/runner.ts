@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync, statfsSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { Cause, Clock, Duration, Effect, Exit, Fiber, FileSystem, Layer, PubSub, Result, Scope, Semaphore, Stream } from 'effect';
 import { HttpClient } from 'effect/http';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -21,6 +21,7 @@ import { previousRelease } from '../installation/closure/versions.js';
 import { currentVersion } from '../platform/lock/versionedDirectories.js';
 import { manifestAt, releaseAt } from '../installation/closure/manifests.js';
 import { downgradePreflight } from '../installation/operations/downgrade.js';
+import { stepBackFailure } from '../installation/process/returning.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { openArchive } from './archive.js';
@@ -30,18 +31,7 @@ import { downloaded, Undelivered, undelivered } from './delivery.js';
 import type { Feed, ReleaseArchive } from '../installation/contract/wire/feed.js';
 import { readFeed, releaseFor, type ReleaseChoice } from './feed.js';
 import { provenRelease } from './install.js';
-import {
-  BACK,
-  BACK_TITLE,
-  backRefused,
-  frameOf,
-  noWayBackTo,
-  type Previous,
-  RELEASE_TITLE,
-  STEPS,
-  type StepId,
-  stepsOf,
-} from './offers.js';
+import { BACK, BACK_TITLE, backRefused, frameOf, type Previous, RELEASE_TITLE, STEPS, type StepId, stepsOf } from './offers.js';
 import type { ReleasePlaces } from './places.js';
 import { releaseFeed } from './settings.js';
 
@@ -60,7 +50,6 @@ export type ChannelPlace = {
   readonly machine: MachinePlatform;
   readonly downgrade: DowngradeSteps['Service'];
   readonly restart: Effect.Effect<void, RestartRefused>;
-  readonly refuses: (root: string) => Effect.Effect<string | null>;
   readonly env: NodeJS.ProcessEnv;
 };
 
@@ -265,11 +254,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
       };
       return;
     }
-    const build = read.manifest.identity.build;
-    const declared = [...(place.runsFrom?.manifest.irreversible ?? []), ...(releaseAt(place.installations, standing)?.irreversible ?? [])];
-    const changes = [...new Map(declared.map((one) => [`${one.store} ${one.release}`, one])).values()];
-    const refused = noWayBackTo(changes, build, place.running) ?? (yield* place.refuses(root));
-    previous = { version, root, build, refused: refused === null ? null : backRefused.unreadableData(version, refused) };
+    previous = { version, root, build: read.manifest.identity.build, refused: null };
   });
 
   const refresh = Effect.fn('ReleaseChannel.refresh')(function* () {
@@ -413,8 +398,6 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   });
 
   const stepBack = Effect.fn('ReleaseChannel.stepBack')(function* (target: Previous) {
-    const refused = yield* place.refuses(target.root);
-    if (refused !== null) return yield* undelivered(refused);
     const read = manifestAt(target.root);
     if (read._tag !== 'Read') return yield* undelivered(`${target.root} holds no installation manifest that reads`);
     const kept = place.applications.kept(target.root, place.name);
@@ -424,7 +407,8 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
       Effect.provideService(DowngradeSteps, place.downgrade),
       Effect.mapError((failure) => undelivered(failure.reason)),
     );
-    yield* steppedBack(place.installations, target.version, preflight, place.downgrade.reopen()).pipe(
+    const running = place.runsFrom === undefined ? null : basename(place.runsFrom.root);
+    yield* steppedBack(place.installations, target.version, running, preflight, place.downgrade.reopen()).pipe(
       Effect.mapError((failure) => {
         switch (failure._tag) {
           case 'Undelivered':
@@ -442,7 +426,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
         }
       }),
     );
-    yield* say(`${CURRENT} → ${target.version} (${target.build ?? 'unnamed'})`);
+    yield* say(`stepping back onto ${target.version} (${target.build ?? 'unnamed'})`);
     if (delivering !== null) delivering = { ...delivering, landed: target.build ?? target.version };
   });
 
@@ -497,10 +481,13 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   const record = yield* Effect.orDie(keptFile.read);
   feed = record?.feed ?? null;
   took = record?.took ?? null;
+  const backFailed = stepBackFailure(place.installations);
   installed =
-    record?.installing === null || record?.installing === undefined
-      ? (record?.installed ?? null)
-      : reconciled(record.installing, record.placement);
+    backFailed !== null && record?.installed != null
+      ? { ...record.installed, outcome: 'failed', build: null, detail: backFailed.detail, restartRefused: null }
+      : record?.installing === null || record?.installing === undefined
+        ? (record?.installed ?? null)
+        : reconciled(record.installing, record.placement);
   yield* clean(place.places.staging);
   yield* keep();
   yield* shift();

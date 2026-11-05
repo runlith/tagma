@@ -33,6 +33,8 @@ const nextInstallation = (place: NextPlace) => {
     running: runningRevision(place),
     restart: place.restart,
     landed: place.landed,
+    runsFrom: place.installation,
+    downgrade: place.downgrade,
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 

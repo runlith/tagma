@@ -4,7 +4,16 @@ import { Clock, Data, Effect, Result } from 'effect';
 import { holdDirectory } from '../../platform/lock/directoryLease.js';
 import type { Attempt } from '../contract/wire/attempt.js';
 import { INSTALL_LOCK } from '../contract/wire/layout.js';
-import { beginAttempt, clearReturn, type RecordUnreadable, servedRelease, standingAttempt, writeReturn } from './attempt.js';
+import {
+  beginAttempt,
+  clearReturn,
+  clearStepBack,
+  type RecordUnreadable,
+  servedRelease,
+  standingAttempt,
+  writeReturn,
+  writeStepBack,
+} from './attempt.js';
 import { type Claimed, claimLeased, pruneReleases } from './leases.js';
 import { releaseAt } from './manifests.js';
 import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
@@ -70,6 +79,7 @@ export const madeCurrent = Effect.fn('installation.makeCurrent')(function* (
   yield* done('current', () => {
     if (attempted) beginAttempt(lock.root, move.from, version);
     clearReturn(lock.root);
+    clearStepBack(lock.root);
     swapCurrent(lock.root, version);
   });
   const kept = [version, ...(move.from === null ? [] : [move.from])];
@@ -92,7 +102,7 @@ const chosenBack = Effect.fnUntraced(function* (lock: InstallLock, expected: str
   return { standing, previous, release } satisfies Chosen;
 });
 
-const swappedBack = Effect.fnUntraced(function* (lock: InstallLock, chosen: Chosen) {
+const askedBack = Effect.fnUntraced(function* (lock: InstallLock, chosen: Chosen, running: string | null) {
   const { root } = lock;
   const { standing, previous } = chosen;
   yield* moveFrom(lock);
@@ -100,18 +110,58 @@ const swappedBack = Effect.fnUntraced(function* (lock: InstallLock, chosen: Chos
     return yield* new PreviousMissing({ root, standing: currentVersion(root), expected: previous });
   }
   yield* done('current', () => {
-    writeReturn(root, releaseAt(root, standing)?.identity.build ?? standing, previous);
-    swapCurrent(root, previous);
+    clearStepBack(root);
+    if (running === previous) {
+      writeReturn(root, releaseAt(root, standing)?.identity.build ?? standing, previous);
+      swapCurrent(root, previous);
+    } else writeStepBack(root, { from: standing, to: previous, carried: false });
   });
-  return { version: previous, root: join(root, previous), from: standing };
+  return { version: previous, root: join(root, previous), from: standing, build: releaseAt(root, previous)?.identity.build ?? null };
 });
 
-export const steppedBack = <E, R>(root: string, expected: string | null, before: Effect.Effect<void, E, R>, undo: Effect.Effect<void>) =>
+export const steppedBack = <E, R>(
+  root: string,
+  expected: string | null,
+  running: string | null,
+  before: Effect.Effect<void, E, R>,
+  undo: Effect.Effect<void>,
+) =>
   moving(root, (lock) => chosenBack(lock, expected)).pipe(
     Effect.flatMap((chosen) =>
-      Effect.andThen(before, moving(root, (lock) => swappedBack(lock, chosen)).pipe(Effect.onError(() => undo))).pipe(
+      Effect.andThen(before, moving(root, (lock) => askedBack(lock, chosen, running)).pipe(Effect.onError(() => undo))).pipe(
         Effect.ensuring(Effect.sync(chosen.release)),
       ),
     ),
     Effect.withSpan('installation.stepBack'),
   );
+
+export const carriedOnto = Effect.fn('installation.stepBackCarried')(function* (
+  lock: InstallLock,
+  back: { readonly from: string; readonly to: string },
+  leaving: string,
+) {
+  const { root } = lock;
+  yield* done('current', () => {
+    writeStepBack(root, { from: back.from, to: back.to, carried: true });
+    beginAttempt(root, leaving, back.to);
+    writeReturn(root, releaseAt(root, leaving)?.identity.build ?? leaving, back.to);
+    swapCurrent(root, back.to);
+  });
+});
+
+export const undoneOnto = Effect.fn('installation.stepBackUndone')(function* (lock: InstallLock, leaving: string) {
+  const { root } = lock;
+  yield* done('current', () => {
+    clearReturn(root);
+    swapCurrent(root, leaving);
+  });
+});
+
+export const backAskedOnto = Effect.fn('installation.stepBackAsked')(function* (lock: InstallLock, leaving: string, onto: string) {
+  const { root } = lock;
+  yield* done('current', () => {
+    clearReturn(root);
+    swapCurrent(root, leaving);
+    writeStepBack(root, { from: leaving, to: onto, carried: false });
+  });
+});

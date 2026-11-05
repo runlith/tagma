@@ -60,7 +60,7 @@ export const readMachineState = pair(
           },
           host,
           acts: [
-            { act: 'restart' as const, command: `${channel.command} restart`, disabled: null },
+            { act: 'restart' as const, command: `${channel.command} restart`, disabled: yield* succession.unready },
             {
               act: 'command' as const,
               command: `${channel.command} release path`,

@@ -309,7 +309,7 @@
 
   const rowOf = (offer: NextOffer): Row => ({
     offer,
-    sub: offer.disabled ?? `${offer.detail}${offer.irreversible === true ? ' · no step back once it runs' : ''}`,
+    sub: offer.disabled ?? offer.detail,
     meta: [offer.label, offer.size === null ? '' : megabytes(offer.size)].filter(Boolean).join(' · '),
     disabled: acting !== null || installing !== null || offer.disabled !== null,
   });
@@ -382,9 +382,10 @@
     return 'ok';
   });
 
+  const restartDenied = $derived(standing.act('restart')?.disabled ?? null);
+
   function restartNow(): void {
-    const act = standing.act('restart');
-    if (act === null || act.disabled !== null) return;
+    if (restartDenied !== null) return;
     void standing.restart();
   }
 
@@ -561,15 +562,21 @@
             <div class="grid min-w-0 flex-1 gap-0.5">
               <span class="font-semibold">Installation <span class="stamp text-small">{short(standing.ready)}</span> is ready</span>
               <span class="truncate text-small text-muted-foreground">{readyFrom ?? 'stands, and is not running yet'}</span>
-              <span class="text-small text-muted-foreground">Your terminals and agents keep running through the update.</span>
+              {#if restartDenied === null}
+                <span class="text-small text-muted-foreground">Your terminals and agents keep running through the update.</span>
+              {:else}
+                <span class="text-small text-destructive">{restartDenied}</span>
+              {/if}
             </div>
-            <button
-              type="button"
-              class={cn(BUTTON, 'h-7 border-transparent bg-primary px-3 text-primary-foreground hover:opacity-90')}
-              onclick={restartNow}
-            >
-              Restart to apply
-            </button>
+            {#if restartDenied === null}
+              <button
+                type="button"
+                class={cn(BUTTON, 'h-7 border-transparent bg-primary px-3 text-primary-foreground hover:opacity-90')}
+                onclick={restartNow}
+              >
+                Restart to apply
+              </button>
+            {/if}
           </div>
         {/if}
         {#if rows.length > 0 || backRow !== null}

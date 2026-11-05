@@ -126,14 +126,12 @@ bed.pend(STARTED, meter());
 let engineSelected = kindOf(main) !== 'unit';
 
 const enter = async (file: string, start?: Meter, skip?: { readonly cpu: number; readonly wall: number }): Promise<void> => {
-  if (kindOf(file) !== 'unit') {
-    if (bed.processes === undefined) bed.useProcesses(await openProcesses());
-    if (!engineSelected) {
-      await engine();
-      engineSelected = true;
-    }
-  }
+  if (kindOf(file) !== 'unit' && bed.processes === undefined) bed.useProcesses(await openProcesses());
   bed.enter(file, start, skip);
+  if (kindOf(file) !== 'unit' && !engineSelected) {
+    await engine();
+    engineSelected = true;
+  }
 };
 
 if (bed.file === undefined) await enter(main);

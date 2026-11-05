@@ -5,6 +5,7 @@ import { attemptSchema, returnSchema } from './contract/wire/attempt.js';
 import { feedSchema } from './contract/wire/feed.js';
 import { InstallationManifest } from './contract/wire/manifest.js';
 import { restartRecordSchema } from './contract/wire/restart.js';
+import { stepBackSchema } from './contract/wire/stepBack.js';
 import { updateRecordSchema } from './contract/wire/update.js';
 import { NEXT } from './testing/frozen.js';
 
@@ -37,4 +38,5 @@ test('the shape this tree writes is frozen as the next release’s, so a changed
   expect(shapeOf(feedSchema)).toEqual(shapeOf(NEXT.feed));
   expect(shapeOf(updateRecordSchema)).toEqual(shapeOf(NEXT.update));
   expect(shapeOf(await registryShape())).toEqual(shapeOf(NEXT.registry));
+  expect(shapeOf(stepBackSchema)).toEqual(shapeOf(NEXT.stepBack));
 });

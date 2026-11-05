@@ -17,7 +17,6 @@ const nextInstallation = (place: NextPlace) =>
     machine: macPlatform,
     downgrade: place.downgrade,
     restart: place.restart,
-    refuses: place.refuses,
     env: process.env,
   });
 

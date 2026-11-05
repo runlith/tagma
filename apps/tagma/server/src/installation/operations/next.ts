@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { GateRefusal, type Unblock, type Words } from '../../platform/contract/wire/refusal.js';
 import { NextInstallation } from '../contract/service/next.js';
-import type { Installing, NextOffer } from '../contract/wire/next.js';
+import type { Installing } from '../contract/wire/next.js';
 import { INSTALLATION_OPERATIONS as OPS } from '../contract/wire/operations.js';
 import { INSTALL_WORDS } from '../contract/wire/words.js';
 
@@ -19,11 +19,6 @@ const replacing = (running: Installing): Raised => ({
   fact: `${running.title} ${running.target} installs since ${running.since}${running.then === 'restart' ? ' and restarts the server once it lands' : ''}; this one stops it first`,
 });
 
-const noWayBack = (offer: NextOffer): Raised => ({
-  condition: 'no-way-back',
-  fact: `${offer.title}${offer.label === '' ? '' : ` ${offer.label}`} cannot be stepped back from once it runs`,
-});
-
 export const installNext = pair(
   OPS.install_next,
   body(OPS.install_next, {
@@ -35,10 +30,7 @@ export const installNext = pair(
       return {
         running,
         offer: named,
-        consents: [
-          ...(running === null || running.step === 'restart' ? [] : [replacing(running)]),
-          ...(named?.irreversible === true ? [noWayBack(named)] : []),
-        ],
+        consents: running === null || running.step === 'restart' ? [] : [replacing(running)],
       };
     }),
     execute: Effect.fnUntraced(function* ({ offer, then }, { running }) {

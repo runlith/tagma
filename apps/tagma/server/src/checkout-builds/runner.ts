@@ -1,4 +1,4 @@
-import { join, dirname } from 'node:path';
+import { basename, join, dirname } from 'node:path';
 import type { PlatformError } from 'effect/PlatformError';
 import { Cause, Clock, Data, Effect, Exit, Fiber, FileSystem, Layer, PubSub, Schema, Scope, Semaphore, Stream } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
@@ -19,11 +19,15 @@ import {
   BUILD_WORKTREE_ENV,
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
+import { steppedBack } from '../installation/closure/moves.js';
 import { previousRelease } from '../installation/closure/versions.js';
+import { DowngradeSteps } from '../installation/contract/service/steps.js';
+import { downgradePreflight } from '../installation/operations/downgrade.js';
+import { stepBackFailure } from '../installation/process/returning.js';
 import { declaredSubmodules, SUBMODULE_PATHS } from '../cut/snapshot.js';
 import { type InstallRefused, NextInstallation, RestartRefused, type StopRefused } from '../installation/contract/service/next.js';
 import { askedRestart, occupied, restarting } from '../installation/next/asking.js';
-import type { InstallationFailure } from '../installation/contract/wire/manifest.js';
+import type { Installation, InstallationFailure } from '../installation/contract/wire/manifest.js';
 import { type InstallRefusal, installRefusalSchema, type NextFrame } from '../installation/contract/wire/next.js';
 import {
   type BuildEnded,
@@ -78,6 +82,8 @@ export type CheckoutBuildsOptions = {
   readonly runtime?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly landed?: Effect.Effect<string | null, InstallationFailure>;
+  readonly runsFrom?: Installation | undefined;
+  readonly downgrade?: DowngradeSteps['Service'];
 };
 
 const tookSchema = Schema.Struct({
@@ -167,7 +173,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       standing: standingOf(frame.checkout),
       offers: offersOf(frame.checkout, denied),
       update: updateOf(frame.checkout, denied),
-      back: backOf(frame.checkout, previousOf(options.installations), denied),
+      back: backOf(previousOf(options.installations), building === null ? null : 'an installation is running'),
       installing: building === null ? null : installingOf(building),
       installed: ended === null ? null : installedOf(ended),
       acts: actsOf(building),
@@ -403,12 +409,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     });
 
     const decided = Effect.fnUntraced(function* (): Effect.fn.Return<Decision, BuildNotRun | PlatformError> {
-      if (started.from === 'back') {
-        const code = yield* step('back', [runtime, 'run', 'tagma:build', '--back', '--no-restart'], checkout);
-        if (code !== 0) return ['failed', null, `${BUILD_COMMAND} --back ended with code ${code}`];
-        const { build, unread } = yield* standing;
-        return ['landed', build, `${build === null ? 'the previous installation stands' : `installation ${build} stands again`}${unread}`];
-      }
+      if (started.from === 'back') return ['failed', null, 'a step back runs no build'];
       yield* files.remove(note, { force: true });
       const held = yield* ahead(started.from);
       if (held !== null) return held;
@@ -456,6 +457,55 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     yield* say(`=== tagma build ${started.from} ${last.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
     return last;
   }, Effect.scoped);
+
+  const steppingBack = Effect.fn('CheckoutBuilds.back')(function* (started: BuildRunning) {
+    yield* say(`\n=== tagma build back ${started.revision} started ${started.since} by pid ${process.pid}, then restart ===`);
+    const refused = (reason: string, code = 'back-failed') =>
+      endedAs(started, 'failed', null, reason, [], '', { code, reason, unblock: ['tagma update --back — try again'] });
+    const installations = options.installations;
+    if (installations === undefined) return refused('this server keeps no installations to step back onto');
+    const preflight =
+      options.downgrade === undefined
+        ? Effect.void
+        : Effect.asVoid(downgradePreflight().pipe(Effect.provideService(DowngradeSteps, options.downgrade)));
+    const stepped = yield* Effect.result(
+      steppedBack(
+        installations,
+        null,
+        options.runsFrom === undefined ? null : basename(options.runsFrom.root),
+        preflight,
+        options.downgrade?.reopen() ?? Effect.void,
+      ),
+    );
+    const endedAt = yield* stamp;
+    if (stepped._tag === 'Failure') {
+      const failure = stepped.failure;
+      const reason =
+        failure._tag === 'GateRefusal'
+          ? failure.message
+          : failure._tag === 'MoveFailed'
+            ? `${failure.step}: ${failure.detail}`
+            : failure._tag === 'InstallHeld'
+              ? `${failure.path} could not be held: ${failure.reason}`
+              : failure._tag === 'PreviousMissing'
+                ? 'no installation is kept beside the one that stands'
+                : failure._tag === 'AttemptStanding'
+                  ? `the update onto ${failure.attempt.to} stands open, so nothing steps back before it ends`
+                  : failure.message;
+      return { ...refused(reason), endedAt };
+    }
+    const build = stepped.success.build;
+    const last = endedAs(
+      started,
+      'landed',
+      build,
+      `${build === null ? 'the previous installation' : `installation ${build}`} comes up after the restart`,
+      [],
+      endedAt,
+    );
+    yield* say(`=== tagma build back ${last.revision} landed ${endedAt}: ${last.detail} ===`);
+    return last;
+  });
 
   const settle = Effect.fn('CheckoutBuilds.settle')(function* (
     started: BuildRunning,
@@ -512,10 +562,16 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
             onFailure: (failure) => Effect.as(Effect.logWarning(`the build record could not be read: ${failure.message}`), null),
           }),
         );
+  const backFailed = options.installations === undefined ? null : stepBackFailure(options.installations);
   if (kept !== null) {
     took = kept.took;
-    if (kept.running === null) ended = kept.ended;
-    else {
+    if (kept.running === null) {
+      ended =
+        backFailed !== null && kept.ended !== null
+          ? { ...kept.ended, outcome: 'failed', build: null, detail: backFailed.detail, restartRefused: null }
+          : kept.ended;
+      if (backFailed !== null) yield* keep(null, ended);
+    } else {
       ended = endedAs(kept.running, 'failed', null, 'the server that ran this build ended before the build did', [], yield* stamp);
       yield* keep(null, ended);
       yield* Effect.forkScoped(reap(kept.held, kept.worktree));
@@ -536,10 +592,20 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
             unblock: ['tagma status — the next installations offered here'],
           });
         }
-        const checkout = yield* Effect.flatMap(source.read, (frame) =>
-          frame.issue === null ? Effect.succeed(frame.checkout) : Effect.fail<InstallRefused>(frame.issue),
-        );
-        if (checkout === null) {
+        const back = offer === 'back';
+        const checkout = back
+          ? null
+          : yield* Effect.flatMap(source.read, (frame) =>
+              frame.issue === null ? Effect.succeed(frame.checkout) : Effect.fail<InstallRefused>(frame.issue),
+            );
+        if (back && previousOf(options.installations) === null) {
+          return yield* Effect.fail<InstallRefused>({
+            code: 'no-offer',
+            reason: 'no earlier installation is kept to go back to',
+            unblock: ['tagma status — the next installations offered here'],
+          });
+        }
+        if (!back && checkout === null) {
           return yield* Effect.fail<InstallRefused>({
             code: 'no-offer',
             reason:
@@ -549,10 +615,10 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
             unblock: [`${BUILD_COMMAND} — at a Tagma checkout root, builds that checkout and makes it the installation that stands`],
           });
         }
-        if (offer === 'head' && checkout.head === null) {
+        if (offer === 'head' && checkout?.head === null) {
           return yield* Effect.fail<InstallRefused>({
             code: 'offer-unavailable',
-            reason: `${checkout.path} is not a git checkout, so it has no HEAD to cut cleanly`,
+            reason: `${checkout?.path ?? 'this checkout'} is not a git checkout, so it has no HEAD to cut cleanly`,
             unblock: ['tagma build --tree — build the tree as it stands'],
           });
         }
@@ -566,7 +632,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
           revision:
             offer === 'back'
               ? (previousOf(options.installations) ?? 'previous')
-              : revisionLabel(checkout.head === null ? null : { head: checkout.head, dirty: offer === 'tree' && checkout.dirty }),
+              : revisionLabel(checkout?.head == null ? null : { head: checkout.head, dirty: offer === 'tree' && checkout.dirty }),
           since: yield* stamp,
           log: options.log,
           then: offer === 'back' ? 'restart' : then,
@@ -578,7 +644,9 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         stopping = false;
         yield* keep(started, ended);
         current = yield* Effect.forkIn(
-          Effect.onExit(run(checkout.path, started), (exit) => settle(started, exit)).pipe(Effect.interruptible),
+          Effect.onExit(checkout === null ? steppingBack(started) : run(checkout.path, started), (exit) => settle(started, exit)).pipe(
+            Effect.interruptible,
+          ),
           scope,
         );
         return { installing: installingOf(started), replaced: replaced === null ? null : installedOf(replaced) };

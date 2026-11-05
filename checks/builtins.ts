@@ -74,6 +74,11 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: adapter report and lifecycle conformance over the shared storage contract; its durable reports, live tail and launch handover use the same harness unchanged over memory and SQLite.',
           },
           {
+            lines: 705,
+            path: 'apps/tagma/app/src/lib/app/chrome/StandingChip.svelte',
+            why: 'One subject: the installation chip — where the server and its execution host stand and the acts on that standing; offers, the step back, installing progress, the ready installation with its restart and a new host render the same Standing reading and act set.',
+          },
+          {
             lines: 704,
             path: 'packages/code-facts/src/languages/js/symbols.ts',
             why: "One subject: the JS/TS implementation of SymbolReader — reading a text's references, names and exports, and placing member spellings on checker types over handed texts, share the same spelling, receiver and script helpers.",
