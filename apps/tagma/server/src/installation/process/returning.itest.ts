@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, expect } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import {
   chmodSync,
   copyFileSync,
@@ -18,10 +18,11 @@ import { it } from '@runlith/effect-test';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { Effect, Result } from 'effect';
 import { returnToChain } from '@runlith/sqlite-process/chainReturn';
+import { adoptedPath, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { beginAttempt, readStepBack, writeStepBack } from '../closure/attempt.js';
 import { MIGRATIONS } from '../contract/wire/manifest.js';
-import { type ReturnPlace, stepBackCarried, stepBackSettled } from './returning.js';
+import { asidesReleased, type ReturnPlace, stepBackCarried, stepBackSettled } from './returning.js';
 
 const tree = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-returning-')));
 afterAll(() => rmSync(tree, { recursive: true, force: true }));
@@ -135,6 +136,86 @@ it.live('a step-back record that does not read is set aside with the copies it m
     expect(existsSync(`${store}.back.${aside[0]!.slice('back.json.'.length)}`)).toBe(true);
   }),
 );
+
+const DROP = '20260102000000_drop';
+const MOVE = '20260102000001_move';
+const ADOPTED = '20260102000002_adopted';
+
+const dropping = (name: string) => {
+  const installRoot = join(tree, name, 'install');
+  for (const version of [OLD, NEW]) {
+    mkdirSync(join(installRoot, version), { recursive: true });
+    writeFileSync(join(installRoot, version, 'install.json'), '{}');
+    migration(
+      join(installRoot, version),
+      BASE,
+      'CREATE TABLE note (id integer PRIMARY KEY, body text);\n--> statement-breakpoint\nCREATE TABLE tag (id integer PRIMARY KEY, name text);',
+    );
+  }
+  migration(join(installRoot, NEW), DROP, 'DROP TABLE tag;');
+  writeFileSync(join(installRoot, NEW, MIGRATIONS, DROP, 'aside.json'), '{"tables":["tag"]}');
+  swapCurrent(installRoot, NEW);
+  const data = join(tree, name, 'data');
+  mkdirSync(data, { recursive: true });
+  const store = join(data, 'tagma.sqlite');
+  const db = new Database(store);
+  db.run('CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text)');
+  const [base, drop] = readMigrationFiles({ migrationsFolder: join(installRoot, NEW, MIGRATIONS) });
+  const ran = (step: typeof base) => {
+    for (const statement of step!.sql) db.run(statement);
+    db.run('INSERT INTO __drizzle_migrations (hash, created_at, name) VALUES (?, ?, ?)', [
+      step!.hash,
+      step!.folderMillis,
+      step!.name ?? null,
+    ]);
+  };
+  ran(base);
+  db.run(`INSERT INTO tag (id, name) VALUES (1, 'red')`);
+  mkdirSync(join(data, 'stores', 'set-aside'), { recursive: true });
+  db.run('ATTACH DATABASE ? AS kept', [setAsidePath(store, DROP)]);
+  db.run('CREATE TABLE kept.tag AS SELECT * FROM main.tag');
+  db.run('DETACH DATABASE kept');
+  ran(drop);
+  db.close();
+  const files = [{ path: store, chain: MIGRATIONS }];
+  return {
+    installRoot,
+    store,
+    files,
+    place: { installRoot, own: NEW, ownRoot: join(installRoot, NEW), files: () => files, kept: () => files },
+  };
+};
+
+it.live('a step back puts back the rows a leaving migration dropped, from the copy that migration kept aside', () =>
+  Effect.gen(function* () {
+    const { installRoot, store, place } = dropping('restored');
+    const back = { from: NEW, to: OLD, carried: false };
+    writeStepBack(installRoot, back);
+    expect(yield* stepBackCarried(place, back)).toBe(true);
+    const db = new Database(store, { readonly: true });
+    expect(db.query('select id, name from tag').all()).toEqual([{ id: 1, name: 'red' }]);
+    db.close();
+  }),
+);
+
+test('what a migration kept aside is released once every standing installation carries it, and a moved copy waits for its adopter', () => {
+  const { installRoot, store, files } = dropping('released');
+  for (const [name, moved] of [
+    [MOVE, setAsidePath(store, MOVE)],
+    [ADOPTED, adoptedPath(setAsidePath(store, ADOPTED))],
+  ] as const) {
+    migration(join(installRoot, NEW), name, 'SELECT 1;');
+    writeFileSync(join(installRoot, NEW, MIGRATIONS, name, 'aside.json'), '{"tables":["tag"],"moved":true}');
+    writeFileSync(moved, '');
+  }
+  const ownRoot = join(installRoot, NEW);
+  expect(asidesReleased(installRoot, ownRoot, files)).toEqual([]);
+  rmSync(join(installRoot, OLD), { recursive: true, force: true });
+  expect(asidesReleased(installRoot, ownRoot, files).toSorted()).toEqual(
+    [setAsidePath(store, DROP), adoptedPath(setAsidePath(store, ADOPTED))].toSorted(),
+  );
+  expect(existsSync(setAsidePath(store, MOVE))).toBe(true);
+});
 
 it.live(
   'a step back cut off after its attempt was written is carried through by the next start, keeping the copy taken before the data changed',

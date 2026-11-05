@@ -1,13 +1,16 @@
 import { Database } from 'bun:sqlite';
-import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { Clock, Data, Effect, Result, Schedule, Schema } from 'effect';
 import { type ChainFills, type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
 import { prepareEngine, selectEngine } from '@runlith/sqlite-process/engine';
 import type { Words } from '../../platform/contract/wire/refusal.js';
+import { adoptedPath, setAsideDirectory, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { cloneFile, type DurableWriteFailed, moveFile, removeFile } from '../../platform/durable/files.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
+import { ASIDE_FILE, AsideDeclared } from '../../platform/store/migrationLaw.js';
+import { releasesNewestFirst } from '../closure/versions.js';
 import {
   askedStepBack,
   clearStepBack,
@@ -50,6 +53,8 @@ const receiptSchema = Schema.fromJsonString(
 
 const decodeReceipt = Schema.decodeUnknownResult(receiptSchema);
 
+const decodeAside = Schema.decodeUnknownResult(Schema.fromJsonString(AsideDeclared));
+
 const chainTarget = (folder: string): ChainTarget => {
   const receiptAt = join(folder, 'baseline.json');
   const receipt = existsSync(receiptAt) ? decodeReceipt(readFileSync(receiptAt, 'utf8')) : null;
@@ -88,6 +93,41 @@ const snapshotsDropped = (path: string): void => {
   for (const at of [`${path}.snapshot.json`, `${path}.snapshots`]) rmSync(at, { recursive: true, force: true });
 };
 
+const keptAside = (storePath: string, migration: string): string | undefined => {
+  const fresh = setAsidePath(storePath, migration);
+  if (existsSync(fresh)) return fresh;
+  return existsSync(adoptedPath(fresh)) ? adoptedPath(fresh) : undefined;
+};
+
+const ASIDE = /^(\d{14}_[^.]+)(\.adopted)?\.sqlite$/u;
+
+const movedAside = (migration: string): boolean => {
+  const declared = join(migration, ASIDE_FILE);
+  if (!existsSync(declared)) return false;
+  const read = decodeAside(readFileSync(declared, 'utf8'));
+  return Result.isFailure(read) || read.success.moved === true;
+};
+
+export const asidesReleased = (installRoot: string, ownRoot: string, files: readonly StoreFile[]): readonly string[] => {
+  const standing = releasesNewestFirst(installRoot).map((version) => join(installRoot, version));
+  const released: string[] = [];
+  for (const { path, chain } of files) {
+    const directory = setAsideDirectory(path);
+    if (!existsSync(directory)) continue;
+    for (const name of readdirSync(directory)) {
+      const matched = ASIDE.exec(name);
+      if (matched === null) continue;
+      const migration = matched[1]!;
+      const own = join(ownRoot, chain, migration);
+      if (!existsSync(own) || standing.some((root) => !existsSync(join(root, chain, migration)))) continue;
+      if (matched[2] === undefined && movedAside(own)) continue;
+      rmSync(join(directory, name), { force: true });
+      released.push(join(directory, name));
+    }
+  }
+  return released;
+};
+
 const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: string, fromRoot: string) {
   const { path, chain } = file;
   const folder = join(toRoot, chain);
@@ -106,21 +146,25 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
   );
   const leaving = join(fromRoot, chain);
   const answer = yield* Effect.try({
-    try: () =>
-      returnToChain(
-        path,
-        target,
-        {
-          steps: existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [],
-          folder: existsSync(leaving) ? leaving : null,
-        },
-        file.fills,
-      ),
+    try: () => {
+      const steps = existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [];
+      const kept = new Map(
+        steps.flatMap((step) => {
+          const aside = step.name === undefined ? undefined : keptAside(path, step.name);
+          return aside === undefined ? [] : [[step.name!, aside] as const];
+        }),
+      );
+      return returnToChain(path, target, { steps, folder: existsSync(leaving) ? leaving : null, kept }, file.fills);
+    },
     catch: (cause) => failedOf(`${path} could not be returned`, cause),
   });
   if (answer.returned) snapshotsDropped(path);
   for (const index of answer.unfilled)
     console.error(`[tagma] the step back recreated the index ${index.table} of ${basename(path)} empty: ${index.reason}`);
+  for (const back of answer.restored)
+    console.error(
+      `[tagma] the step back put ${back.rows} rows of ${basename(path)} ${back.table} back from what its migrations kept aside`,
+    );
   return answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` }));
 });
 

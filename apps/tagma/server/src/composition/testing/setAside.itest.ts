@@ -9,7 +9,7 @@ import { sql } from 'drizzle-orm';
 import { Context, Deferred, Effect, FileSystem, Layer } from 'effect';
 import { Maintenance } from '../../platform/contract/service/maintenance.js';
 import type { Manifest } from '../../platform/contract/service/manifest.js';
-import { setAsidePath } from '../../platform/contract/service/ownStore.js';
+import { adoptedPath, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { MachineStore, type Store } from '../../platform/contract/service/store.js';
 import { storeLayer } from '../../platform/store/open.js';
 import { installedIn } from '../extensions.js';
@@ -77,7 +77,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('a module store adopti
 
       yield* Deferred.succeed(door, undefined);
       yield* store.adopted;
-      expect(existsSync(adopted)).toBe(false);
+      expect([existsSync(adopted), existsSync(adoptedPath(adopted))]).toEqual([false, true]);
       expect(yield* held).toEqual([
         { id: 'a', title: 'call a' },
         { id: 'b', title: 'call b' },

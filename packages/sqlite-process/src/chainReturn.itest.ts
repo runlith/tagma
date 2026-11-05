@@ -289,6 +289,61 @@ test('a full-text index the return recreates comes back holding its rows: its ow
   expect(read(path, shapeOf)).toEqual(fresh([base, leaving]));
 });
 
+test('what the leaving migrations dropped comes back from the copies they kept: a table with its rows, a column by key, and a row deleted after the drop stays deleted', () => {
+  const base = step(
+    '1000_base',
+    'CREATE TABLE thread (id text PRIMARY KEY NOT NULL, title text NOT NULL, kept text)',
+    'CREATE TABLE note (id integer PRIMARY KEY, body text NOT NULL)',
+  );
+  const narrowed = step('2000_narrowed', 'ALTER TABLE thread DROP COLUMN kept');
+  const gone = step('3000_gone', 'DROP TABLE note');
+  const aside = (path: string, table: string): string => {
+    const file = join(home, `kept-${++serial}.sqlite`);
+    read(path, (db) => {
+      db.run(`ATTACH DATABASE ? AS kept`, [file]);
+      db.run(`CREATE TABLE kept.${table} AS SELECT * FROM main.${table}`);
+      db.run('DETACH DATABASE kept');
+    });
+    return file;
+  };
+  const path = store([base], (db) => {
+    db.run(`INSERT INTO thread (id, title, kept) VALUES ('a', 'first', 'value'), ('c', 'third', 'gone too')`);
+    db.run(`INSERT INTO note (id, body) VALUES (1, 'hello')`);
+  });
+  const column = aside(path, 'thread');
+  forward(path, narrowed);
+  read(path, (db) => {
+    db.run(`INSERT INTO thread (id, title) VALUES ('b', 'second')`);
+    db.run(`DELETE FROM thread WHERE id = 'c'`);
+  });
+  const table = aside(path, 'note');
+  forward(path, gone);
+
+  const answer = returnToChain(
+    path,
+    { steps: [base] },
+    {
+      steps: [base, narrowed, gone],
+      folder: null,
+      kept: new Map([
+        [narrowed.name!, column],
+        [gone.name!, table],
+      ]),
+    },
+  );
+
+  expect(answer.restored.toSorted((a, b) => a.table.localeCompare(b.table))).toEqual([
+    { table: 'note', rows: 1 },
+    { table: 'thread', rows: 1 },
+  ]);
+  expect(read(path, shapeOf)).toEqual(fresh([base]));
+  expect(read(path, (db) => db.query('select id, title, kept from thread order by id').all())).toEqual([
+    { id: 'a', title: 'first', kept: 'value' },
+    { id: 'b', title: 'second', kept: null },
+  ]);
+  expect(read(path, (db) => db.query('select id, body from note').all())).toEqual([{ id: 1, body: 'hello' }]);
+});
+
 test('a store whose ledger the target already holds is left untouched', () => {
   const later = step('2000_later', 'CREATE TABLE later (id integer PRIMARY KEY)');
   const path = store([BASE], () => undefined);
@@ -296,6 +351,7 @@ test('a store whose ledger the target already holds is left untouched', () => {
     returned: false,
     lost: [],
     unfilled: [],
+    restored: [],
   });
   expect(ledger(path)).toEqual([BASE.name!]);
 });

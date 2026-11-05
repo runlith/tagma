@@ -14,6 +14,7 @@ import { databasePathIn, installationRootIn } from '../installation/paths.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { makeProcessRestart } from '../installation/process/record.js';
 import {
+  asidesReleased,
   installedSince,
   JOURNAL_STARTS,
   journalsDeferred,
@@ -92,7 +93,14 @@ export const returnedBeforeServing = Effect.fn('composition.returning')(function
   const release = holdingProcess(process.execPath);
   if (release === null) return;
   const asked = stepBackAsked(installRoot.success, basename(release));
-  if (asked === null) return;
+  if (asked === null) {
+    const released = yield* Effect.result(Effect.try(() => asidesReleased(installRoot.success, release, dataStores(store.success, []))));
+    if (Result.isFailure(released)) console.error(`[tagma] what migrations kept aside stays where it lies: ${String(released.failure)}`);
+    else
+      for (const file of released.success)
+        console.error(`[tagma] ${file} is released: every standing installation carries the migration that kept it`);
+    return;
+  }
   const storePath = store.success;
   const data = storeDirectory(storePath);
   const manifest = releaseAt(installRoot.success, basename(release));

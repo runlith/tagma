@@ -27,6 +27,7 @@ const setup = Effect.gen(function* () {
   yield* fixture.files.symlink(join(REPOSITORY, 'node_modules'), join(fixture.root, 'node_modules'));
   const storage = 'apps/tagma/server/src/platform/store';
   yield* fixture.files.makeDirectory(join(fixture.root, storage), { recursive: true });
+  yield* fixture.files.symlink(join(REPOSITORY, 'apps/tagma/server/node_modules'), join(fixture.root, 'apps/tagma/server/node_modules'));
   for (const file of ['migrationLaw.ts', 'statementTarget.ts'])
     yield* fixture.files.copy(join(REPOSITORY, storage, file), join(fixture.root, storage, file));
   yield* git(fixture.root, 'add', 'checks/law', storage);

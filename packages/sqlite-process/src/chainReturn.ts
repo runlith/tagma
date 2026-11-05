@@ -22,6 +22,7 @@ export type ChainTarget = {
 type ChainLeaving = {
   readonly steps: readonly ChainStep[];
   readonly folder: string | null;
+  readonly kept?: ReadonlyMap<string, string>;
 };
 
 export type ChainLoss = { readonly table: string; readonly rows: number };
@@ -32,7 +33,12 @@ export type ChainFills = ReadonlyMap<string, ChainFill>;
 
 type ChainUnfilled = { readonly table: string; readonly reason: string };
 
-type ChainReturn = { readonly returned: boolean; readonly lost: readonly ChainLoss[]; readonly unfilled: readonly ChainUnfilled[] };
+type ChainReturn = {
+  readonly returned: boolean;
+  readonly lost: readonly ChainLoss[];
+  readonly unfilled: readonly ChainUnfilled[];
+  readonly restored: readonly ChainLoss[];
+};
 
 type Row = { readonly type: string; readonly name: string; readonly tbl: string; readonly sql: string | null };
 
@@ -150,6 +156,22 @@ const narrowed = (db: Database, reference: Database, table: string, wanted: stri
   return false;
 };
 
+const carried = (target: readonly Column[], held: ReadonlyMap<string, string>) => {
+  const into: string[] = [];
+  const from: string[] = [];
+  for (const column of target) {
+    const source = held.get(column.name.toLowerCase());
+    if (source !== undefined) {
+      into.push(quoted(column.name));
+      from.push(column.notnull === 1 ? `coalesce(${quoted(source)}, ${column.dflt_value ?? zeroOf(column.type)})` : quoted(source));
+    } else if (column.notnull === 1 && column.dflt_value === null && column.pk === 0) {
+      into.push(quoted(column.name));
+      from.push(zeroOf(column.type));
+    }
+  }
+  return { into, from };
+};
+
 const rebuilt = (db: Database, reference: Database, table: string, wanted: string): number => {
   const aside = `__chain_return_${table}`;
   const sequence = db.query(`select 1 from sqlite_master where name = 'sqlite_sequence'`).get()
@@ -162,19 +184,8 @@ const rebuilt = (db: Database, reference: Database, table: string, wanted: strin
   db.run(`ALTER TABLE ${quoted(table)} RENAME TO ${quoted(aside)}`);
   db.run(wanted);
   const held = new Map(columnsOf(db, aside).map((column) => [column.name.toLowerCase(), column.name]));
-  const into: string[] = [];
-  const from: string[] = [];
   const target = columnsOf(reference, table);
-  for (const column of target) {
-    const source = held.get(column.name.toLowerCase());
-    if (source !== undefined) {
-      into.push(quoted(column.name));
-      from.push(column.notnull === 1 ? `coalesce(${quoted(source)}, ${column.dflt_value ?? zeroOf(column.type)})` : quoted(source));
-    } else if (column.notnull === 1 && column.dflt_value === null && column.pk === 0) {
-      into.push(quoted(column.name));
-      from.push(zeroOf(column.type));
-    }
-  }
+  const { into, from } = carried(target, held);
   const aliased =
     target.filter((column) => column.pk > 0).length === 1 &&
     target.some((column) => column.pk === 1 && column.type.toUpperCase() === 'INTEGER');
@@ -309,6 +320,57 @@ const virtualRemade = (db: Database, reference: Database, held: string, want: Ro
   db.run(`DROP TABLE ${quoted(aside)}`);
 };
 
+const changes = (db: Database): number => db.query<{ n: number }, []>('select changes() as n').get()?.n ?? 0;
+
+const restoredFrom = (
+  db: Database,
+  schema: string,
+  wantedTables: ReadonlyMap<string, Row>,
+  virtualWanted: ReadonlySet<string>,
+  standing: Map<string, ReadonlySet<string> | null>,
+  restored: Map<string, number>,
+): void => {
+  const tables = db
+    .query<{ name: string }, []>(`select name from ${quoted(schema)}.sqlite_master where type = 'table' and name not like 'sqlite_%'`)
+    .all();
+  for (const { name } of tables) {
+    const key = name.toLowerCase();
+    const want = wantedTables.get(key);
+    if (want === undefined || virtualWanted.has(key)) continue;
+    const held = new Map(
+      db
+        .query<{ name: string }, [string, string]>('select name from pragma_table_info(?, ?)')
+        .all(name, schema)
+        .map((column) => [column.name.toLowerCase(), column.name]),
+    );
+    const target = columnsOf(db, want.name);
+    const source = `${quoted(schema)}.${quoted(name)}`;
+    const had = standing.get(key) ?? null;
+    if (had === null) {
+      const { into, from } = carried(target, held);
+      if (into.length === 0) continue;
+      db.run(`INSERT OR IGNORE INTO main.${quoted(want.name)} (${into.join(', ')}) SELECT ${from.join(', ')} FROM ${source}`);
+      restored.set(want.name, (restored.get(want.name) ?? 0) + changes(db));
+      standing.set(key, new Set(target.filter((column) => held.has(column.name.toLowerCase())).map((column) => column.name.toLowerCase())));
+      continue;
+    }
+    const lacked = target.filter((column) => held.has(column.name.toLowerCase()) && !had.has(column.name.toLowerCase()));
+    const keys = target.filter((column) => column.pk > 0).toSorted((a, b) => a.pk - b.pk);
+    if (lacked.length === 0 || keys.length === 0 || keys.some((column) => !held.has(column.name.toLowerCase()))) continue;
+    const match = keys
+      .map((column) => `kept.${quoted(held.get(column.name.toLowerCase())!)} = ${quoted(want.name)}.${quoted(column.name)}`)
+      .join(' AND ');
+    const values = lacked.map(
+      (column) => `coalesce(kept.${quoted(held.get(column.name.toLowerCase())!)}, ${quoted(want.name)}.${quoted(column.name)})`,
+    );
+    db.run(
+      `UPDATE main.${quoted(want.name)} SET (${lacked.map((column) => quoted(column.name)).join(', ')}) = (SELECT ${values.join(', ')} FROM ${source} AS kept WHERE ${match}) WHERE EXISTS (SELECT 1 FROM ${source} AS kept WHERE ${match})`,
+    );
+    restored.set(want.name, (restored.get(want.name) ?? 0) + changes(db));
+    standing.set(key, new Set([...had, ...lacked.map((column) => column.name.toLowerCase())]));
+  }
+};
+
 const reshaped = (
   db: Database,
   reference: Database,
@@ -328,10 +390,20 @@ const reshaped = (
     leaving.steps.filter((step) => step.name === undefined || members.get(step.name) !== step.hash).flatMap((step) => step.sql),
   );
   const scripts = excessSteps.toReversed().flatMap((step) => (step.name === undefined ? [] : scriptOf(leaving, step.name)));
+  const kept = excessSteps.toReversed().flatMap((step) => {
+    const file = step.name === undefined ? undefined : leaving.kept?.get(step.name);
+    return file === undefined || !existsSync(file) ? [] : [file];
+  });
   const lost = new Map<string, number>();
+  const restored = new Map<string, number>();
   const unfilled: ChainUnfilled[] = [];
   db.run('PRAGMA foreign_keys = OFF');
   db.run('PRAGMA legacy_alter_table = ON');
+  const schemas = kept.map((file, at) => {
+    const schema = `chain_kept_${at}`;
+    db.run(`ATTACH DATABASE ? AS ${quoted(schema)}`, [file]);
+    return schema;
+  });
   db.run('BEGIN IMMEDIATE');
   try {
     for (const script of scripts) db.run(script);
@@ -343,6 +415,11 @@ const reshaped = (
       if (row.type === 'trigger' || row.type === 'view') db.run(`DROP ${row.type.toUpperCase()} ${quoted(row.name)}`);
     }
     const standingTables = new Map(standing.filter((row) => row.type === 'table').map((row) => [row.name.toLowerCase(), row]));
+    const leavingShape = new Map<string, ReadonlySet<string> | null>(
+      schemas.length === 0
+        ? []
+        : [...standingTables].map(([name, row]) => [name, new Set(columnsOf(db, row.name).map((column) => column.name.toLowerCase()))]),
+    );
     const reachable = (table: string): boolean => touched === null || touched.has(table.toLowerCase());
     const wantedIndexes = new Map(
       wanted.filter((row) => row.type === 'index' && row.sql !== null).map((row) => [row.name.toLowerCase(), row]),
@@ -382,6 +459,8 @@ const reshaped = (
       if (removed > 0) lost.set(want.name, removed);
       remade.add(name);
     }
+    for (const schema of schemas) restoredFrom(db, schema, wantedTables, virtualWanted, leavingShape, restored);
+    for (const table of restored.keys()) remade.add(table.toLowerCase());
     const after = new Map(
       catalog(db)
         .filter((row) => row.type === 'index' && row.sql !== null)
@@ -429,12 +508,19 @@ const reshaped = (
   } catch (cause) {
     db.run('ROLLBACK');
     throw cause;
+  } finally {
+    for (const schema of schemas) db.run(`DETACH DATABASE ${quoted(schema)}`);
   }
   db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-  return { returned: true, lost: [...lost].map(([table, count]) => ({ table, rows: count })), unfilled };
+  return {
+    returned: true,
+    lost: [...lost].map(([table, count]) => ({ table, rows: count })),
+    unfilled,
+    restored: [...restored].filter(([, count]) => count > 0).map(([table, count]) => ({ table, rows: count })),
+  };
 };
 
-const UNRETURNED: ChainReturn = { returned: false, lost: [], unfilled: [] };
+const UNRETURNED: ChainReturn = { returned: false, lost: [], unfilled: [], restored: [] };
 
 export const returnToChain = (path: string, target: ChainTarget, leaving: ChainLeaving, fills: ChainFills = new Map()): ChainReturn => {
   const db = new Database(path);

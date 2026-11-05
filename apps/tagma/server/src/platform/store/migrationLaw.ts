@@ -1,14 +1,46 @@
+import { Schema } from 'effect';
 import { isKeyword, isMark, nameOf, schemaStatement, statementTarget, tokenize } from './statementTarget.js';
+
+export const ASIDE_FILE = 'aside.json';
+
+export const AsideDeclared = Schema.Struct({
+  tables: Schema.optionalKey(Schema.NonEmptyArray(Schema.NonEmptyString)),
+  derived: Schema.optionalKey(Schema.NonEmptyArray(Schema.NonEmptyString)),
+  moved: Schema.optionalKey(Schema.Boolean),
+});
 
 export type MigrationIssue = { readonly table: string | null; readonly statement: string; readonly reason: string };
 
 const UNRETURNED = {
   renamed: 'a renamed table leaves the build before without the rows it reads under the old name',
-  column: 'a renamed or dropped column comes back empty to the build before',
+  column: 'a renamed column comes back empty to the build before',
+  droppedColumn: 'a dropped column comes back empty to the build before',
   dropped: 'a dropped table comes back empty to the build before',
   written: 'rows rewritten here reach the build before in a shape it never wrote',
   unresolved: 'the statement cannot be judged',
 } as const;
+
+export const DROPPING: ReadonlySet<string> = new Set([UNRETURNED.dropped, UNRETURNED.droppedColumn]);
+
+type Renamed = { readonly tables: ReadonlySet<string>; readonly columns: ReadonlyMap<string, ReadonlySet<string>> };
+
+export const renamedIn = (statements: readonly string[]): Renamed => {
+  const tables = new Set<string>();
+  const columns = new Map<string, Set<string>>();
+  for (const statement of statements) {
+    const tokens = tokenize(statement);
+    if (!isKeyword(tokens[0], 'alter') || !isKeyword(tokens[1], 'table')) continue;
+    const table = nameOf(tokens[2])?.toLowerCase();
+    const rename = tokens.findIndex((token) => isKeyword(token, 'rename'));
+    if (table === undefined || rename < 0) continue;
+    if (isKeyword(tokens[rename + 1], 'to')) tables.add(table);
+    else {
+      const old = nameOf(tokens[rename + (isKeyword(tokens[rename + 1], 'column') ? 2 : 1)])?.toLowerCase();
+      if (old !== undefined) columns.set(table, new Set([...(columns.get(table) ?? []), old]));
+    }
+  }
+  return { tables, columns };
+};
 
 export const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssue[] => {
   const created = new Set<string>();
@@ -30,7 +62,8 @@ export const unreturnedIssues = (statements: readonly string[]): readonly Migrat
       tokens.some((token) => isKeyword(token, 'rename') || isKeyword(token, 'drop'));
     if (shape.kind === 'unresolved' && columnChange) {
       const table = nameOf(tokens[2]);
-      if (table === null || !created.has(table.toLowerCase())) issue(table, statement, 'column');
+      const dropping = tokens.some((token) => isKeyword(token, 'drop'));
+      if (table === null || !created.has(table.toLowerCase())) issue(table, statement, dropping ? 'droppedColumn' : 'column');
     } else if (shape.kind === 'unresolved') issue(null, statement, 'unresolved');
     else if (shape.kind === 'create-table') created.add(shape.table.toLowerCase());
     else if (shape.kind === 'drop-table') {
@@ -43,7 +76,8 @@ export const unreturnedIssues = (statements: readonly string[]): readonly Migrat
         if (!created.delete(table)) issue(shape.table, statement, 'renamed');
         created.add(to);
         dropped.delete(to);
-      } else if (shape.addedColumn === null && !created.has(table)) issue(shape.table, statement, 'column');
+      } else if (shape.addedColumn === null && !created.has(table))
+        issue(shape.table, statement, tokens.some((token) => isKeyword(token, 'drop')) ? 'droppedColumn' : 'column');
     }
   }
   for (const [table, statement] of dropped) issue(table, statement, 'dropped');

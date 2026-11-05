@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { migrationIssues, unreturnedIssues } from './migrationLaw.js';
+import { DROPPING, migrationIssues, renamedIn, unreturnedIssues } from './migrationLaw.js';
 
 const history = new Set(['events']);
 
@@ -49,7 +49,7 @@ test('a migration that only adds, or rebuilds a table through a copy renamed int
   ).toEqual([]);
 });
 
-test('a rename, a dropped column or table and rewritten rows of a table the build before reads each need an authored script', () => {
+test('a rename, a dropped column or table and rewritten rows of a table the build before reads each leave it short, and the drops are told apart', () => {
   const renamed = 'ALTER TABLE `events` RENAME TO `moved`';
   const column = 'ALTER TABLE `entities` RENAME COLUMN `name` TO `title`';
   const narrowed = 'ALTER TABLE `entities` DROP COLUMN `note`';
@@ -57,13 +57,19 @@ test('a rename, a dropped column or table and rewritten rows of a table the buil
   const rewritten = "UPDATE `entities` SET `title` = 'x'";
   const deleted = 'DELETE FROM `owners`';
   expect(
-    unreturnedIssues([renamed, column, narrowed, dropped, rewritten, deleted]).map((issue) => `${issue.table} ${issue.statement}`),
+    unreturnedIssues([renamed, column, narrowed, dropped, rewritten, deleted]).map(
+      (issue) => `${issue.table} ${issue.statement} ${DROPPING.has(issue.reason) ? 'drop' : 'script'}`,
+    ),
   ).toEqual([
-    `events ${renamed}`,
-    `entities ${column}`,
-    `entities ${narrowed}`,
-    `entities ${rewritten}`,
-    `owners ${deleted}`,
-    `labels ${dropped}`,
+    `events ${renamed} script`,
+    `entities ${column} script`,
+    `entities ${narrowed} drop`,
+    `entities ${rewritten} script`,
+    `owners ${deleted} script`,
+    `labels ${dropped} drop`,
   ]);
+  expect(renamedIn([renamed, column, narrowed])).toEqual({
+    tables: new Set(['events']),
+    columns: new Map([['entities', new Set(['name'])]]),
+  });
 });
