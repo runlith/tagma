@@ -311,6 +311,47 @@ export const journalLayer: Layer.Layer<GraphJournal, never, GraphStore | GraphUn
         }),
       ),
 
+      head: reads(
+        Effect.fn('Journal.head')(function* (): Effect.fn.Return<number, StoreFailure> {
+          const rows = yield* db.select({ id: sql<number | null>`max(${event.id})` }).from(event);
+          return rows[0]?.id ?? 0;
+        }),
+      ),
+
+      changedBy: reads(
+        Effect.fn('Journal.changedBy')(function* (input: {
+          ids: readonly number[];
+          after: number;
+          ops: readonly GraphEventOp[];
+        }): Effect.fn.Return<ReadonlyMap<number, readonly (number | null)[]>, StoreFailure> {
+          const wanted = new Set(input.ids);
+          const changed = new Map<number, (number | null)[]>();
+          if (wanted.size === 0 || input.ops.length === 0) return changed;
+          const peered = input.ops.filter((op) => op in PEER_PATHS);
+          const own = inArray(event.blockId, [...wanted]);
+          const rows = yield* db
+            .select()
+            .from(event)
+            .where(
+              and(
+                sql`${event.id} > ${input.after}`,
+                inArray(event.op, [...input.ops]),
+                peered.length === 0 ? own : or(own, inArray(event.op, peered)),
+              ),
+            )
+            .orderBy(sql`${event.id} asc`);
+          for (const row of rows) {
+            for (const id of blocksOf(row).ids) {
+              if (!wanted.has(id)) continue;
+              const sessions = changed.get(id) ?? [];
+              if (!sessions.includes(row.sessionId)) sessions.push(row.sessionId);
+              changed.set(id, sessions);
+            }
+          }
+          return changed;
+        }),
+      ),
+
       byCall: reads(
         Effect.fn('Journal.byCall')(function* (callId: string, sessionId: number | null): Effect.fn.Return<ActEntry[], StoreFailure> {
           return yield* db

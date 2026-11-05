@@ -25,6 +25,12 @@ export class GraphJournal extends Context.Service<
     vocabulary(filter: { projectId: number; scopeId?: number }): Effect.Effect<JournalVocabulary, StoreFailure>;
     writersIn(input: { projectId: number; before?: number; limit: number }): Effect.Effect<PageSlice<SessionRow, number>, StoreFailure>;
     newest(ids: readonly number[], ops: readonly GraphEventOp[]): Effect.Effect<ReadonlyMap<number, ActEntry>, StoreFailure>;
+    head(): Effect.Effect<number, StoreFailure>;
+    changedBy(input: {
+      ids: readonly number[];
+      after: number;
+      ops: readonly GraphEventOp[];
+    }): Effect.Effect<ReadonlyMap<number, readonly (number | null)[]>, StoreFailure>;
     byCall(callId: string, sessionId: number | null): Effect.Effect<ActEntry[], StoreFailure>;
     authors(ids: readonly number[]): Effect.Effect<ReadonlyMap<number, number | null>, StoreFailure>;
     touchedBy(sessionId: number, ids: readonly number[]): Effect.Effect<ReadonlySet<number>, StoreFailure>;

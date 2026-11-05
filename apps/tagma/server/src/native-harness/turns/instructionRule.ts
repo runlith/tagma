@@ -1,7 +1,7 @@
 import { Context, Effect } from 'effect';
 import { agentRule, type AgentRule } from '@runlith/agent/AgentRuntimePolicy';
 import { Orientation } from '../../graph/contract/service/orientation.js';
-import { instructionChanges, instructionText } from '../../graph/orientation/Instructions.js';
+import { instructionText } from '../../graph/orientation/Instructions.js';
 import type { InstructionSet } from '../../graph/contract/wire/instructions.js';
 import type { GraphServices } from '../../graph/contract/service/services.js';
 import type { GraphStore } from '../../platform/contract/service/store.js';
@@ -31,9 +31,10 @@ export function instructionRule(audienceOf: (ctx: ThreadContext) => InstructionS
         const state: Record<string, InstructionSet> = {};
         const deliver = Effect.fnUntraced(function* (projectId: number, graph: Context.Context<GraphServices | GraphStore>) {
           const previous = instructionSnapshot(ctx.modelMessages, projectId);
-          const current = yield* Context.get(graph, Orientation).instructions({ projectId, audience }).pipe(Effect.provide(graph));
-          const changes = instructionChanges(current, previous);
-          const text = instructionText(current, previous, changes);
+          const { set: current, changes } = yield* Context.get(graph, Orientation)
+            .changes({ projectId, audience, previous })
+            .pipe(Effect.provide(graph));
+          const text = instructionText(current, previous, changes, ctx.thread.id);
           if (text.length === 0) return;
           told.push(text);
           for (const entry of changes.pending) {

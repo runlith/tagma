@@ -9,6 +9,7 @@ import type { AgentRuleAnswer, AgentRuleContext } from '@runlith/agent/AgentRunt
 import { demoGraphLayer, withDemo, type DemoServices, type EffectDemo } from '../composition/testing/graphFixture.js';
 import { Orientation, Touches } from '../graph/contract/service/orientation.js';
 import type { InstructionSet } from '../graph/contract/wire/instructions.js';
+import { instructionChanges } from '../graph/orientation/Instructions.js';
 import { MeasuredCheckout, ServedGraphs, type ServedGraph } from '../graph/contract/service/serving.js';
 import { CheckoutPaths } from '../workspace/contract/service/checkoutPaths.js';
 import { signedBy } from '../invocation/testing/call.js';
@@ -224,6 +225,34 @@ layer(graphs, { excludeTestServices: true })('working places and their law', (it
     ),
   );
 
+  it.effect('an instruction change notice names who made each change: the operator, another thread or the thread itself', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { alpha, context } = yield* setup(demo);
+        const top = yield* demo.graph.blocks.rootBlockOf(alpha.projectId);
+        const rule = (title: string) => demo.graph.blocks.create({ projectId: alpha.projectId, parentId: top.id, tags: ['rule'], title });
+        const kept = yield* rule('Kept law');
+        const doomed = yield* rule('Doomed law');
+        const instructions = instructionRule(() => 'graph');
+        const history: ModelMessage[] = [Message.user('Work.')];
+        const step = Effect.fnUntraced(function* () {
+          const guide = yield* told(instructions(context('beforeStep', history)));
+          if (guide !== null) history.push(agentRuntimeGuidanceMessage(guide.text, guide.state));
+          return guide?.text ?? '';
+        });
+        expect(yield* step()).toContain('Project instructions');
+        yield* demo.graph.trash.delete({ id: doomed.id });
+        expect(yield* step()).toContain(`Withdrawn by operator: law ${yield* demo.nameOf(doomed.id)} [`);
+        yield* signedBy({ harness: 'tagma', key: OTHER })(demo.graph.blocks.update({ id: kept.id, title: 'Kept law, revised' }));
+        const revised = yield* step();
+        expect(revised).toContain(`Changed by [[${OTHER}`);
+        expect(revised).toContain(`${yield* demo.nameOf(kept.id)} Kept law, revised`);
+        const own = yield* signedBy({ harness: 'tagma', key: THREAD })(rule('Own law'));
+        expect(yield* step()).toContain(`Added by you:\n- ${yield* demo.nameOf(own.id)} Own law`);
+      }),
+    ),
+  );
+
   it.effect('checkout changes reuse read law and hold mutations until differing instructions reach the thread', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
@@ -270,6 +299,7 @@ layer(graphs, { excludeTestServices: true })('working places and their law', (it
           Context.add(demo.context, Orientation, {
             ...demo.graph.orientation,
             instructions: () => Effect.succeed(current),
+            changes: ({ previous }) => Effect.succeed({ set: current, changes: instructionChanges(current, previous) }),
           }),
         );
         yield* enter(copy);

@@ -2,7 +2,7 @@ import { Context, Effect, type FileSystem, Layer } from 'effect';
 import { Catalogs, NO_CATALOGS } from '../contract/wire/catalogs.js';
 import { actLayer as actLayerValue } from '../acts/unit.js';
 import { ZONE_PAGE_BUDGET as zonePageBudgetValue } from '../reading/block.js';
-import { instructionText as instructionTextFn } from '../orientation/Instructions.js';
+import { instructionChanges as instructionChangesFn, instructionText as instructionTextFn } from '../orientation/Instructions.js';
 import { tagPrompts as tagPromptsFn } from '../orientation/tagPrompts.js';
 import { type GraphPool, makeGraphPool } from '../serving/pool.js';
 import { type MachineContext, machineGraphOf as machineGraphOfFn } from '../serving/machine.js';
@@ -127,6 +127,8 @@ export const resolveStorageLayout = (...input: Parameters<typeof resolveStorageL
 export const treeHeadStamp = (...input: Parameters<typeof treeHeadStampFn>) => treeHeadStampFn(...input);
 
 export const instructionText = (...input: Parameters<typeof instructionTextFn>) => instructionTextFn(...input);
+
+export const instructionChanges = (...input: Parameters<typeof instructionChangesFn>) => instructionChangesFn(...input);
 
 export const heldTasks = (...input: Parameters<typeof heldTasksFn>) => heldTasksFn(...input);
 

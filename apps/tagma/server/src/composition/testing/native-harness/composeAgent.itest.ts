@@ -93,7 +93,7 @@ import { FOLDER_OPERATIONS } from '../../../threads/contract/wire/operations/fol
 import { ATTENTION_OPERATIONS } from '../../../threads/contract/wire/operations/attention.js';
 import { NOTE_OPERATIONS } from '../../../threads/contract/wire/operations/notes.js';
 import { SEARCH_OPERATION_IDS } from '../../../threads/contract/wire/operations/search.js';
-import { commentPolicy } from '../../../graph/testing/doubles.js';
+import { commentPolicy, instructionChanges } from '../../../graph/testing/doubles.js';
 import { nativeOffers } from '../../../invocation/testing/native.js';
 import { fixtureOperationCatalog } from '../nativeCatalog.js';
 import type { CapabilityId } from '../../../platform/contract/wire/capability.js';
@@ -969,7 +969,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             touched: (ctx, at, shown) =>
               graph.touches.touch({ projectId: at.projectId, shown }).pipe(signedBy(ctx.session), Effect.provide(at.graph)),
           };
-          const home = Context.add(demo.context, Orientation, { ...graph.orientation, instructions: () => Effect.succeed(legacy) });
+          const home = Context.add(demo.context, Orientation, {
+            ...graph.orientation,
+            instructions: () => Effect.succeed(legacy),
+            changes: ({ previous }) => Effect.succeed({ set: legacy, changes: instructionChanges(legacy, previous) }),
+          });
           const composed = composeAgent(agent, runner, undelegatedThreads.rows, undelegatedThreads.mandate, execution, () =>
             Effect.succeed(
               asThreadContext({

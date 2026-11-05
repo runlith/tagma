@@ -4,7 +4,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriterRef } from '../../../platform/contract/service/writers.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
-import type { InstructionSet } from '../wire/instructions.js';
+import type { InstructionDiff, InstructionSet } from '../wire/instructions.js';
 import type { LawReach } from '../wire/tags/law.js';
 import type { Tag } from '../wire/tags/declaration.js';
 import type { ActState } from './transaction.js';
@@ -24,6 +24,11 @@ export class Orientation extends Context.Service<
       projectId: number;
       audience: InstructionSet['audience'];
     }): Effect.Effect<InstructionSet, StoreFailure | GateRefusal>;
+    changes(input: {
+      projectId: number;
+      audience: InstructionSet['audience'];
+      previous: InstructionSet | undefined;
+    }): Effect.Effect<InstructionDiff, StoreFailure | GateRefusal>;
   }
 >()('tagma/graph/Orientation') {}
 

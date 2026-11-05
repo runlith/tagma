@@ -213,36 +213,44 @@ export const lawReads = Effect.fnUntraced(function* (doctrine: DoctrineText | nu
   const prompted = (projectId: number) => Effect.provide(promptLaw(projectId), ownGraph);
   const off = (projectId: number) => Effect.provide(lawOff(projectId), ownGraph);
 
+  const globalGraph = Effect.fnUntraced(function* (projectId: number) {
+    const global = yield* projects.global();
+    if (global === undefined) return null;
+    return global.id === projectId || (yield* settings.value(globalRules, projectId)) ? global.id : null;
+  });
+
   const globalLaw = reads(
     Effect.fn('Orientation.globalLaw')(function* (
       projectId: number,
-    ): Effect.fn.Return<{ scope: string; mark: string; rules: LawEntry[]; own: boolean }, StoreFailure | GateRefusal<OpenRefusal>> {
-      const graph = yield* projects.global();
+    ): Effect.fn.Return<
+      { scope: string; mark: string; rules: LawEntry[]; own: boolean; graph: number | null },
+      StoreFailure | GateRefusal<OpenRefusal>
+    > {
       const scope = `prompt · ${GLOBAL_PROJECT.name}`;
       const mark = ` [${scope}]`;
-      if (graph === undefined) return { scope, mark, rules: [], own: false };
-      const own = graph.id === projectId;
-      if (!own && !(yield* settings.value(globalRules, projectId))) return { scope, mark, rules: [], own };
+      const graph = yield* globalGraph(projectId);
+      if (graph === null) return { scope, mark, rules: [], own: false, graph };
+      const own = graph === projectId;
       const off = own ? [] : (yield* settings.value(rulesOff, projectId)).map((name) => name.toLowerCase());
       const turnedOff = (uuid: string) => {
         const id = uuid.replaceAll('-', '').toLowerCase();
         return off.some((name) => id.endsWith(name));
       };
-      const family = yield* Effect.provide(lawFamilies(graph.id), yield* graphOf(graph.id));
+      const family = yield* Effect.provide(lawFamilies(graph), yield* graphOf(graph));
       if (off.length === 0) {
         filtered.delete(projectId);
-        return { scope, mark, rules: family.prompt, own };
+        return { scope, mark, rules: family.prompt, own, graph };
       }
       const disabled = JSON.stringify(off);
       const known = filtered.get(projectId);
-      if (known?.family === family && known.disabled === disabled) return { scope, mark, rules: known.rules, own };
+      if (known?.family === family && known.disabled === disabled) return { scope, mark, rules: known.rules, own, graph };
       const rules = familyEntries(
         family.rows,
         family.standing.filter((rule) => family.reach.get(rule.id)?.delivery === 'prompt' && !turnedOff(rule.uuid)),
         family.reach,
       );
       filtered.set(projectId, { family, disabled, rules });
-      return { scope, mark, rules, own };
+      return { scope, mark, rules, own, graph };
     }),
   );
 
@@ -276,7 +284,7 @@ export const lawReads = Effect.fnUntraced(function* (doctrine: DoctrineText | nu
     return [LAW_START, yield* doctrineText(input.projectId), LAW_END].join('\n');
   });
 
-  return { policyOf, graphOf, forest, prompted, promptOf, off, globalLaw, doctrineText, lawText, ownGraph, ruleReachOf };
+  return { policyOf, graphOf, forest, prompted, promptOf, off, globalGraph, globalLaw, doctrineText, lawText, ownGraph, ruleReachOf };
 });
 
 export type LawReads = Effect.Success<ReturnType<typeof lawReads>>;

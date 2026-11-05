@@ -4,7 +4,7 @@ import type { ThreadRow } from '@runlith/agent/thread/rows';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { Orientation } from '../graph/contract/service/orientation.js';
 import { ServedGraphs } from '../graph/contract/service/serving.js';
-import type { InstructionSet } from '../graph/contract/wire/instructions.js';
+import type { InstructionDiff } from '../graph/contract/wire/instructions.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { threadCallFailed } from '../threads/contract/service/failure.js';
 import { OperatorNotes } from '../threads/contract/service/notes.js';
@@ -12,7 +12,7 @@ import { WorkPlaces } from '../threads/contract/service/working.js';
 import { NOTES_RULE } from '../threads/contract/wire/notes.js';
 import { sectionContext } from '../threads/doctrine/render.js';
 import { teamLaw } from './installs/teamLaw.js';
-import { instructionDelivery } from './instructions.js';
+import { type DeliveredLaw, deliveredLaw, instructionDelivery } from './instructions.js';
 import { linkedOf } from './protocol/links.js';
 import { HarnessAdapters } from './contract/service/adapters.js';
 import type { HomePlace, SessionHome } from './sessions/place.js';
@@ -24,10 +24,10 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
   const records = yield* ThreadRecords;
   const operatorNotes = yield* OperatorNotes;
   const adapters = yield* HarnessAdapters;
-  const instructions = Effect.fn('HarnessGuidance.instructions')(function* (threadId: string, known?: HomePlace) {
+  const instructions = Effect.fn('HarnessGuidance.instructions')(function* (threadId: string, delivered: DeliveredLaw, known?: HomePlace) {
     const home = known ?? (yield* place(threadId));
     const origins = [{ projectId: home.projectId, root: home.root }, ...(yield* places.held(threadId))];
-    const sets: InstructionSet[] = [];
+    const diffs: InstructionDiff[] = [];
     const unavailable: { projectId: number; text: string }[] = [];
     for (const origin of origins) {
       const opened = yield* Effect.result(places.graphAt(origin));
@@ -41,13 +41,13 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
         continue;
       }
       const served = opened.success;
-      sets.push(
+      diffs.push(
         yield* Context.get(served.context, Orientation)
-          .instructions({ projectId: origin.projectId, audience: 'graph' })
+          .changes({ projectId: origin.projectId, audience: 'graph', previous: delivered[String(origin.projectId)] })
           .pipe(Effect.provide(served.context)),
       );
     }
-    return { sets, unavailable };
+    return { diffs, unavailable };
   });
   const hosted = (threadId: string) =>
     Effect.flatMap(store.read(threadId), (facet) =>
@@ -59,16 +59,17 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
     orientation: Effect.fnUntraced(function* (thread: ThreadRow) {
       if (yield* hosted(thread.id)) return { texts: [], law: null };
       const home = yield* place(thread.id);
-      const current = yield* instructions(thread.id, home);
-      const own = current.sets.find((set) => set.projectId === home.projectId);
+      const current = yield* instructions(thread.id, {}, home);
+      const own = current.diffs.find((diff) => diff.set.projectId === home.projectId)?.set;
       const served = yield* graphs.resolve({ projectId: home.projectId, cwd: home.root });
       yield* served.fresh();
       const text = yield* Context.get(served.context, Orientation)
         .render({ projectId: home.projectId, law: own })
         .pipe(Effect.provide(served.context));
-      const foreign = yield* instructionDelivery(
-        null,
-        current.sets.filter((set) => set.projectId !== home.projectId),
+      const foreign = instructionDelivery(
+        {},
+        current.diffs.filter((diff) => diff.set.projectId !== home.projectId),
+        thread.id,
       );
       const law = own === undefined ? foreign.law : { ...foreign.law, [String(home.projectId)]: own };
       return {
@@ -83,10 +84,12 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
     }, Effect.mapError(threadCallFailed)),
     law: Effect.fnUntraced(function* (thread: ThreadRow, delivered: unknown) {
       if (yield* hosted(thread.id)) return { text: '', law: delivered };
-      const current = yield* instructions(thread.id);
-      const updated = yield* instructionDelivery(
-        delivered ?? null,
-        current.sets,
+      const known = yield* deliveredLaw(delivered ?? null);
+      const current = yield* instructions(thread.id, known);
+      const updated = instructionDelivery(
+        known,
+        current.diffs,
+        thread.id,
         current.unavailable.map((place) => place.projectId),
       );
       return {

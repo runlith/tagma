@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import type { ThreadEventBody } from '@runlith/agent/thread/events';
 import type { GuidanceSources } from '@runlith/agent/thread/transport/contract';
+import type { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { touchText } from '../graph/orientation/touches.js';
 import { includeInstructions } from '../graph/orientation/tagPrompts.js';
 import type { TouchBrief } from '../graph/contract/service/orientation.js';
@@ -15,7 +16,7 @@ import type { InstructionSet } from '../graph/contract/wire/instructions.js';
 import type { Place } from '../platform/contract/wire/place.js';
 import { Context } from 'effect';
 import { Orientation } from '../graph/contract/service/orientation.js';
-import { instructionDelivery } from './instructions.js';
+import { deliveredLaw, instructionDelivery } from './instructions.js';
 import { threadCallFailed } from '../threads/contract/service/failure.js';
 import type { RunReports, AdapterReports } from '@runlith/agent/thread/run/lifecycle/RunReports';
 import { hostedHistory, hostedTurns } from './hostedHistory.js';
@@ -61,7 +62,7 @@ export const makeHookGuidance = (
     threadId: string,
     evidence: string,
     decide: Parameters<RunGuiding['hook']>[3],
-    options?: { readonly law?: (delivered: unknown) => ReturnType<typeof instructionDelivery> },
+    options?: { readonly law?: (delivered: unknown) => Effect.Effect<ReturnType<typeof instructionDelivery>, ThreadCallBroke> },
   ) {
     const runId = yield* runOf(threadId);
     return yield* Effect.mapError(
@@ -107,17 +108,19 @@ export const makeHookGuidance = (
         return lines.length === 0 ? null : lines.join('\n\n');
       },
       {
-        law: Effect.fnUntraced(function* (known: unknown) {
-          instructions = yield* Effect.forEach(places, (place) =>
+        law: Effect.fnUntraced(function* (delivered: unknown) {
+          const known = yield* deliveredLaw(delivered);
+          const diffs = yield* Effect.forEach(places, (place) =>
             Effect.gen(function* () {
               if (place.checkout === null) return yield* threadCallFailed(new Error('A touch place needs its checkout.'));
               const served = yield* working.graphAt({ projectId: place.projectId, root: place.checkout });
               return yield* Context.get(served.context, Orientation)
-                .instructions({ projectId: place.projectId, audience: 'graph' })
+                .changes({ projectId: place.projectId, audience: 'graph', previous: known[String(place.projectId)] })
                 .pipe(Effect.provide(served.context));
             }),
           ).pipe(Effect.mapError(threadCallFailed));
-          return yield* instructionDelivery(known, instructions);
+          instructions = diffs.map((diff) => diff.set);
+          return instructionDelivery(known, diffs, threadId);
         }),
       },
     );

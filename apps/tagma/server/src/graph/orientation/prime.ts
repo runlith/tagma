@@ -13,13 +13,14 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { block, edge, source } from '../store/tables.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { InstalledCatalogs, Tags } from '../contract/service/vocabulary.js';
-import { Act } from '../contract/service/acts.js';
+import { Act, type BlockNames } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { ProjectPolicy, measuredRoot } from '../contract/service/serving.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Selection } from '../contract/service/reads.js';
-import { Orientation } from '../contract/service/orientation.js';
+import type { GraphJournal } from '../contract/service/journal.js';
+import { Orientation, type SessionNames } from '../contract/service/orientation.js';
 import { type LawReads, lawReads } from './law.js';
 import { instructionText, instructionsReads } from './Instructions.js';
 import { WORK } from '../contract/wire/tags/work.js';
@@ -230,15 +231,19 @@ export const orientationLayer: Layer.Layer<
   | SessionIdentity
   | InstalledCatalogs
   | HolderStandings
+  | GraphJournal
+  | BlockNames
+  | SessionNames
 > = Layer.effect(
   Orientation,
   Effect.gen(function* () {
     const doctrine = yield* Doctrine;
     const law = yield* lawReads(doctrine);
-    const instructions = yield* instructionsReads(law);
+    const { instructions, changes } = yield* instructionsReads(law);
     const orientation = yield* orientationReads(law);
     return Orientation.of({
       instructions,
+      changes,
       render: orientation.render,
       law: law.lawText,
       rules: (projectId) => Effect.map(law.forest(projectId), (entries) => entries.map((entry) => entry.rule)),
