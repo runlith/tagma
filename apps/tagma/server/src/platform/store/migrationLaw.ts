@@ -45,6 +45,7 @@ const renamedIn = (statements: readonly string[]): Renamed => {
 
 const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssue[] => {
   const created = new Set<string>();
+  const added = new Map<string, Set<string>>();
   const dropped = new Map<string, string>();
   const issues: MigrationIssue[] = [];
   const issue = (table: string | null, statement: string, reason: keyof typeof UNRETURNED) =>
@@ -52,7 +53,11 @@ const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssu
   for (const statement of statements) {
     const target = statementTarget(statement);
     if (target.kind === 'write') {
-      if (!created.has(target.table.toLowerCase())) issue(target.table, statement, 'written');
+      const table = target.table.toLowerCase();
+      const columns = target.columns;
+      const backfilled =
+        target.verb === 'update' && columns !== 'all' && [...columns].every((column) => added.get(table)?.has(column) === true);
+      if (!created.has(table) && !backfilled) issue(target.table, statement, 'written');
       continue;
     }
     const shape = schemaStatement(statement);
@@ -77,7 +82,8 @@ const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssu
         if (!created.delete(table)) issue(shape.table, statement, 'renamed');
         created.add(to);
         dropped.delete(to);
-      } else if (shape.addedColumn === null && !created.has(table))
+      } else if (shape.addedColumn !== null) added.set(table, new Set([...(added.get(table) ?? []), shape.addedColumn.toLowerCase()]));
+      else if (!created.has(table))
         issue(shape.table, statement, tokens.some((token) => isKeyword(token, 'drop')) ? 'droppedColumn' : 'column');
     }
   }
@@ -114,6 +120,17 @@ const shapeOf = (db: Database): Shape =>
             .map((column) => column.name.toLowerCase()),
         ),
       ]),
+  );
+
+const keylessOf = (db: Database): ReadonlySet<string> =>
+  new Set(
+    db
+      .query<{ name: string }, []>(
+        `select list.name from pragma_table_list as list where list.schema = 'main' and list.type = 'table' and list.name not like 'sqlite_%'
+         and not exists (select 1 from pragma_table_info(list.name) as info where info.pk > 0)`,
+      )
+      .all()
+      .map(({ name }) => name.toLowerCase()),
   );
 
 type Dropped = { readonly table: string; readonly columns: readonly string[] | null };
@@ -167,8 +184,9 @@ export const stepBackLosses = (chain: readonly ChainedMigration[], judged: Reado
       at = migration.name;
       const statements = statementsOf(migration.sql);
       const before = judged.has(migration.name) ? shapeOf(db) : null;
+      const keyless = before === null ? null : keylessOf(db);
       for (const statement of statements) db.run(statement);
-      if (before === null) continue;
+      if (before === null || keyless === null) continue;
       const loss = (file: StepBackLoss['file'], fingerprint: string, message: string) =>
         losses.push({ migration: migration.name, file, fingerprint, message });
       if (migration.back === null) {
@@ -200,8 +218,17 @@ export const stepBackLosses = (chain: readonly ChainedMigration[], judged: Reado
         continue;
       }
       const declared = read?.success;
-      const kept = new Set([...(declared?.tables ?? []), ...(declared?.derived ?? [])].map((table) => table.toLowerCase()));
+      const copied = new Set((declared?.tables ?? []).map((table) => table.toLowerCase()));
+      const kept = new Set([...copied, ...(declared?.derived ?? []).map((table) => table.toLowerCase())]);
       for (const drop of droppedBy(before, shapeOf(db), statements)) {
+        if (drop.columns !== null && copied.has(drop.table) && keyless.has(drop.table)) {
+          loss(
+            'aside',
+            `keyless ${drop.table} ${drop.columns.join(',')}`,
+            `${drop.table}: the migration drops ${drop.columns.join(', ')} and ${ASIDE_FILE} keeps the table, but it has no primary key to put them back on their rows by, so a step back would bring them back empty`,
+          );
+          continue;
+        }
         if (kept.has(drop.table)) continue;
         const what = drop.columns === null ? 'the migration drops the table' : `the migration drops ${drop.columns.join(', ')}`;
         loss(

@@ -7,6 +7,7 @@ const BASE = [
   'CREATE TABLE `entities` (`id` integer PRIMARY KEY, `name` text, `note` text)',
   'CREATE TABLE `labels` (`id` integer PRIMARY KEY)',
   'CREATE TABLE `owners` (`id` integer PRIMARY KEY)',
+  'CREATE TABLE `marks` (`at` integer, `label` text)',
 ];
 
 const lossesOf = (statements: readonly string[], aside: string | null = null, back: string | null = null) =>
@@ -30,9 +31,16 @@ test('a back.sql covers a rename only when it names the table or column back', (
   ).toEqual([]);
 });
 
+test('a column dropped from a table with no primary key cannot be kept aside, since nothing puts it back on its rows', () => {
+  expect(lossesOf(['ALTER TABLE `marks` DROP COLUMN `label`'], '{"tables":["marks"]}')).toEqual(['keyless marks label']);
+  expect(lossesOf(['DROP TABLE `marks`'], '{"tables":["marks"]}')).toEqual([]);
+});
+
 test('a migration that only adds, or rebuilds a table through a copy renamed into its place, loses nothing on a step back', () => {
   expect(
     lossesOf([
+      'ALTER TABLE `entities` ADD `extra` text',
+      'UPDATE `entities` SET `extra` = `name`',
       'PRAGMA foreign_keys=OFF',
       'CREATE TABLE `__new_events` (`id` integer PRIMARY KEY, `body` text NOT NULL)',
       "INSERT INTO `__new_events`(`id`, `body`) SELECT `id`, coalesce(`body`, '') FROM `events`",
