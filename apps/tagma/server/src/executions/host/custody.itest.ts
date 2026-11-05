@@ -775,6 +775,25 @@ it.live('a refused take is declined with the host’s own refusal', () =>
   ),
 );
 
+it.live('a start whose take the host refuses because it admits no more work answers the host’s own refusal, not an identity verdict', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed({ _tag: 'Refused', refusal: { _tag: 'AdmissionClosed', reason: 'this host admits no more work' } })],
+      });
+      const custody = yield* owner(registration, host);
+      const answer = yield* custody.guarded().start(keyOf('closed-take'), launch);
+      expect(answer._tag).toBe('Refused');
+      if (answer._tag === 'Refused') {
+        expect(answer.refusal._tag).toBe('AdmissionClosed');
+        expect(answer.refusal.reason).toContain('this host admits no more work');
+      }
+    }),
+  ),
+);
+
 it.live('a host that answers nothing leaves custody undecided without taking', () =>
   run(
     Effect.gen(function* () {

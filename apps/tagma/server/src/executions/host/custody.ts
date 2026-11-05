@@ -417,17 +417,21 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
 const gone = (failure: ExecutionsFailure): boolean =>
   failure._tag === 'WireUnavailable' && !failure.sent && (failure.kind === 'absent' || failure.kind === 'unreachable');
 
-const admitsNothing = (refusal: Refusal): boolean => refusal._tag === 'AdmissionClosed' || refusal._tag === 'HolderLost';
+type AdmitsNothing = Extract<Refusal, { readonly _tag: 'AdmissionClosed' | 'HolderLost' }>;
+
+const admitsNothing = (refusal: Refusal): refusal is AdmitsNothing => refusal._tag === 'AdmissionClosed' || refusal._tag === 'HolderLost';
 
 const unserved = (reason: CustodyDeferral): boolean =>
   (reason._tag === 'TakeRefused' && admitsNothing(reason.refusal)) || (reason._tag === 'HostUnreachable' && gone(reason.failure));
 
 const refusalOf = (reason: CustodyDeferral, detail: string): Refusal =>
-  reason._tag === 'HostUnreachable'
+  reason._tag === 'HostUnreachable' || reason._tag === 'TakeContended'
     ? { _tag: 'HostUnavailable', reason: detail }
-    : reason._tag === 'ActivationDeferred' && reason.reason._tag === 'BundleMismatch'
-      ? { _tag: 'HostIncompatible', reason: detail }
-      : { _tag: 'Unauthorized', reason: detail };
+    : reason._tag === 'TakeRefused' && admitsNothing(reason.refusal)
+      ? { _tag: reason.refusal._tag, reason: detail }
+      : reason._tag === 'ActivationDeferred' && reason.reason._tag === 'BundleMismatch'
+        ? { _tag: 'HostIncompatible', reason: detail }
+        : { _tag: 'Unauthorized', reason: detail };
 
 const refusedStart = (operation: HostRequestRef, reason: CustodyDeferral, state: string): StartAnswer => ({
   _tag: 'Refused',
