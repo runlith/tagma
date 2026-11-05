@@ -477,6 +477,8 @@ layer(fixture, { excludeTestServices: true })('released records', (it) => {
   it.effect('a release below the volume reserve seals its record while the retired generations are still being reclaimed', () =>
     withHost(
       Effect.fnUntraced(function* (open) {
+        const armed = yield* started(open, 'op-reclaim-armed', { line: 'exit 0' });
+        yield* released(open, armed.execution);
         const reclaim = yield* gateOf(open);
         open.faults.ledger = reclaim;
         open.faults.volume = { total: 1_000_000_000_000, available: 34_000_000_000 };
