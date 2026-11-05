@@ -48,6 +48,8 @@ edges:
     to: 01a12c56-9127-7a6c-ac2f-3e1937fe1c9a
   - kind: imports
     to: 01a12c56-9129-7fb3-aa86-19579bcbb761
+  - kind: imports
+    to: 01a18e1d-2841-72f0-b3c5-26c3d4a5b244
 sources:
   - kind: dir
     ref: packages/tagma/kit

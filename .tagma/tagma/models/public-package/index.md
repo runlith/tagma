@@ -51,6 +51,19 @@ fields:
       },
       {
         "at": "src/plugin/template.ts"
+      },
+      {
+        "at": "src/plugin/plugin.ts"
+      },
+      {
+        "at": "src/plugin/process.ts"
+      },
+      {
+        "at": "src/plugin/protocol.ts"
+      },
+      {
+        "at": "src/plugin/testing.ts",
+        "role": "testing"
       }
     ],
     "id": "@runlith/tagma"
@@ -60,6 +73,8 @@ edges:
     to: 01a0c83b-81fb-7929-bac8-0429249ce587
   - kind: imports
     to: 01a0c944-8aa1-7e16-b225-ddc5d1caad35
+  - kind: imports
+    to: 01a0ca5d-3b72-7529-8b88-94c413756ad0
   - kind: imports
     to: 01a0d584-d0b8-7967-9796-a8e3bbddbda9
 sources:

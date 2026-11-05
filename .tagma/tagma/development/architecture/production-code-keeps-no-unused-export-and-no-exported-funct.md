@@ -16973,10 +16973,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/mcp/src/mcpCallerMeta.ts#MCP_CALLER_META_KEY",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/mcp/src/mcpOAuth.ts#McpOAuthStep",
           "owner": "5a3bed29"
         },
@@ -19462,22 +19458,6 @@ fields:
         },
         {
           "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 19,
-          "path": "packages/mcp/src/sdkServer.ts",
-          "said": "exported type `McpServedMedia` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 42,
-          "path": "packages/mcp/src/sdkServer.ts",
-          "said": "exported type `StdioServerInput` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/testbed/src/core/bed.ts#diskContinuity",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 174,
@@ -19555,6 +19535,22 @@ fields:
           "line": 159,
           "path": "packages/agent/src/transcript/kinds.ts",
           "said": "exported type `ThreadReaderWorker` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 19,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `McpServedMedia` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 42,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `StdioServerInput` is imported by no production file"
         }
       ],
       "inspection": "dead-code",
