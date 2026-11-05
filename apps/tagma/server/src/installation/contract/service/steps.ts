@@ -37,7 +37,10 @@ export class DowngradeSteps extends Context.Service<
 
 type GraphMark = { readonly project: string; readonly step: string | null };
 
-export type GraphMarks = { readonly steps: readonly string[]; readonly marks: Effect.Effect<readonly GraphMark[], StoreFailure> };
+export type GraphMarks = {
+  readonly owns: (step: string) => boolean;
+  readonly marks: Effect.Effect<readonly GraphMark[], StoreFailure>;
+};
 
 export class ConsoleKeyRollback extends Context.Service<
   ConsoleKeyRollback,
