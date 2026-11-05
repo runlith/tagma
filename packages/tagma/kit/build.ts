@@ -36,7 +36,8 @@ const doors = Object.entries(manifest.exports as Readonly<Record<string, Conditi
   .map(([key, conditions]) => ({ key, conditions, source: join(packageRoot, conditions.types) }));
 const adapterDoors = doors.filter((door) => door.key.startsWith('./adapter/'));
 const pluginDoors = doors.filter((door) => PLUGIN_DOOR.test(door.key));
-const builtFile = (source: string): string => `./${relative(join(packageRoot, 'src'), source).replace(/\.ts$/u, '')}`;
+const PLUGIN_SOURCES = join(packageRoot, 'src/plugin');
+const builtFile = (source: string): string => `./${dirname(source) === PLUGIN_SOURCES ? 'plugin' : 'adapter'}/${basename(source, '.ts')}`;
 const ruleDoors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
   .filter(([key]) => key === './rules' || key.startsWith('./rules/'))
   .map(([key, conditions]) => ({ key, source: join(packageRoot, conditions.types) }));
