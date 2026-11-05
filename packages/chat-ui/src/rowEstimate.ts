@@ -256,6 +256,12 @@ function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): num
       );
     }
     case 'list':
+      if (display.items.some((item) => item.state !== undefined)) {
+        const rows = display.items.map(
+          (item, index) => LIST_ROW_PX + (item.detail ? view.markdown(`${key}:${index}`, item.detail, view.metrics.document) : 0),
+        );
+        return STEP_BODY_PX + rows.reduce((height, row) => height + row, 0) + Math.max(0, rows.length - 1) * BODY_GAP_PX;
+      }
       return STEP_BODY_PX + wellHeight(display.items.length * LIST_ROW_PX, whole);
     case 'markdown':
       return STEP_BODY_PX + wellHeight(view.markdown(`${key}:display`, display.text, view.metrics.document), whole);

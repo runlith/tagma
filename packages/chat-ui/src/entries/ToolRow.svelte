@@ -7,6 +7,7 @@
   import { patchBodyHeight } from '../rowEstimate';
   import { useChatStrings } from '../strings';
   import type { ChatLink } from '../surface';
+  import AnswerRows from './AnswerRows.svelte';
   import AttachmentStrip from './AttachmentStrip.svelte';
   import ToolDiff from './ToolDiff.svelte';
   import Well from './Well.svelte';
@@ -102,6 +103,8 @@
           </div>
         {/if}
       {/each}
+    {:else if display.form === 'list' && display.items.some((item) => item.state !== undefined)}
+      <AnswerRows id={entry.id} items={display.items} />
     {:else if display.form === 'list'}
       <Well
         id={entry.id}
