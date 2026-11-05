@@ -47,6 +47,7 @@ An app without `process` still carries views, their placements and agents; `tool
 Open to an app process — every other operation refuses `external-refused`:
 - `create_thread`, `start_turn`, `queue_turn`, `continue_thread`, `read_statuses`, `read_endings`, `read_thread`, `archive_thread` — the threads it drives;
 - `pin_view`, `unpin_view` — `{threadId, app, view, key}` for a view in `contributes.pins`, else `view-not-pinnable`; the same address keeps one pin, and a pin outlives disabling the app;
+- `delete_worktree` — a worktree its thread stood in, once that thread rests: `create_thread` with `worktree: "new"` answers it as `snapshot.thread.place.rootId`. Uncommitted work is committed onto the branch first, and a terminal or command still holding the folder refuses `root-in-use`;
 - `send_notification` (Secrets, schedules and notifications);
 - the built-in browser's page, profile and cookie operations.
 

@@ -47,4 +47,33 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       });
     }),
   );
+
+  it.effect('an app process deletes a worktree with uncommitted work, keeping that work on its branch', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('app-worktrees'));
+      const projectId = yield* world.stealthProject(root);
+      yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
+      yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
+      const op = (id: string, input: unknown, headers?: Readonly<Record<string, string>>) =>
+        world.op(id, input, `project=${projectId}`, headers);
+      const repository = ((yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer).repositories[0]!;
+      const destination = join(yield* files.realPath(yield* world.directory('app-copies')), 'repair');
+      yield* op('prepare_worktree', {
+        operationId: 'repair',
+        repository: repository.binding,
+        destination,
+        mode: { kind: 'new-branch', branch: 'repair', start: 'HEAD' },
+      });
+      const made = (yield* op('create_worktree', { operationId: 'repair' })).body as { operation: WorktreeIntent };
+      yield* files.writeFileString(join(destination, 'left.txt'), 'unfinished\n');
+
+      expect(yield* op('delete_worktree', { rootId: made.operation.rootId }, { 'x-tagma-caller': 'app:core-pin' })).toMatchObject({
+        status: 200,
+        body: { status: 'branch-kept', committed: { paths: ['left.txt'] } },
+      });
+      expect(yield* files.exists(destination)).toBe(false);
+    }),
+  );
 });
