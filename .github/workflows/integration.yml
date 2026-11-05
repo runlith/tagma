@@ -1,7 +1,10 @@
 name: integration
-run-name: ${{ inputs.script || 'test:integration' }} ${{ inputs.package || 'all packages' }} on ${{ inputs.runner || 'macos-latest' }}
+run-name: ${{ inputs.script || 'test:integration' }} ${{ inputs.package || 'all packages' }} on ${{ inputs.runner || 'ubuntu-latest' }}
 
 on:
+  push:
+    branches: [main]
+    paths-ignore: ['.tagma/**']
   workflow_dispatch:
     inputs:
       package:
@@ -11,7 +14,7 @@ on:
       runner:
         description: The machine every shard runs on
         required: false
-        default: macos-latest
+        default: ubuntu-latest
       script:
         description: The package script every suite runs
         required: false
@@ -21,6 +24,10 @@ on:
           - test:integration
           - test:native
 
+concurrency:
+  group: integration-${{ github.event_name }}-${{ github.ref }}-${{ inputs.runner || 'ubuntu-latest' }}-${{ inputs.script || 'test:integration' }}-${{ inputs.package }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -28,8 +35,8 @@ jobs:
   integration:
     uses: ./.github/workflows/tests.yml
     with:
-      name: ${{ inputs.script == 'test:native' && 'native' || 'integration' }}-${{ inputs.runner || 'macos-latest' }}
+      name: ${{ inputs.script == 'test:native' && 'native' || 'integration' }}-${{ inputs.runner || 'ubuntu-latest' }}
       script: ${{ inputs.script || 'test:integration' }}
-      runner: ${{ inputs.runner || 'macos-latest' }}
+      runner: ${{ inputs.runner || 'ubuntu-latest' }}
       shards: ${{ inputs.script == 'test:native' && 1 || 5 }}
       package: ${{ inputs.package }}
