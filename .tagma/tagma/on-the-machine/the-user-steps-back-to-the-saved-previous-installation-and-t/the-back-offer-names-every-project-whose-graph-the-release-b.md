@@ -5,7 +5,7 @@ ord: 4
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "done"
   }
 ---
 A release whose graph format is older than a project's graph serves that graph read-only, so a step back can silently stop the user from editing it. Before the step back, the offer names each such project in the installation panel and in `tagma update --back`.
