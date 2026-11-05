@@ -247,21 +247,29 @@ it.live('a reading the host did not answer is taken again at the next round, not
   }),
 );
 
-it.effect('a reading the host leaves unanswered past its ceiling is refused as unavailable, and the next reading asks the host again', () =>
-  Effect.gen(function* () {
-    const { host, inventory, hold, unanswered } = yield* hostOver();
-    hold(idOf(1));
-    host.silent = true;
-    const reading = yield* Effect.forkScoped(Effect.flip(inventory.held(true)));
-    yield* Deferred.await(unanswered);
-    yield* TestClock.adjust('2 minutes');
-    const refused = yield* Fiber.join(reading);
-    host.silent = false;
-    const next = yield* inventory.held(true);
+it.effect(
+  'a reading the host leaves unanswered past its ceiling is refused as unavailable and unsyncs the mirror, so the next reading asks the host',
+  () =>
+    Effect.gen(function* () {
+      const { host, inventory, hold, push, unanswered } = yield* hostOver();
+      hold(idOf(1));
+      yield* inventory.held(false);
+      const { feed, stop } = yield* following(inventory);
+      yield* push(moved(host.revision));
+      yield* feed.until(at(host.revision));
+      host.silent = true;
+      const reading = yield* Effect.forkScoped(Effect.flip(inventory.held(true)));
+      yield* Deferred.await(unanswered);
+      yield* TestClock.adjust('2 minutes');
+      const refused = yield* Fiber.join(reading);
+      host.silent = false;
+      hold(idOf(2));
+      const next = yield* inventory.held(false);
+      yield* stop;
 
-    expect(refused).toMatchObject({ _tag: 'TerminalUnavailable', owner: 'host' });
-    expect(next.stateOf(refOf(idOf(1)))).toBeDefined();
-  }).pipe(Effect.provideService(StallRecords, () => Effect.void)),
+      expect(refused).toMatchObject({ _tag: 'TerminalUnavailable', owner: 'host' });
+      expect(next.stateOf(refOf(idOf(2)))).toBeDefined();
+    }).pipe(Effect.provideService(StallRecords, () => Effect.void)),
 );
 
 it.live(

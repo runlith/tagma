@@ -115,7 +115,9 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
     );
 
   const serial = <A, R>(work: Effect.Effect<A, never, R>): Effect.Effect<A, TerminalUnavailable, R> =>
-    flight.hold('inventory', work).pipe(Effect.mapError((held) => new TerminalUnavailable({ owner: 'host', message: held.message })));
+    flight
+      .hold('inventory', work.pipe(Effect.onInterrupt(() => Effect.sync(lost))))
+      .pipe(Effect.mapError((held) => new TerminalUnavailable({ owner: 'host', message: held.message })));
 
   const behind = (): boolean => synced === undefined || latest === undefined || latest._tag === 'Gap' || latest.revision > synced;
 

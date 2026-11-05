@@ -68,6 +68,7 @@ const floorOver = Effect.fnUntraced(function* (
     stale: false,
     failing: false,
     unavailable: false,
+    unread: false,
     unheld: new Set<string>(),
     ended: new Set<string>(),
     children: [] as Child[],
@@ -141,13 +142,15 @@ const floorOver = Effect.fnUntraced(function* (
   const commands = {
     changes: () => Stream.fromQueue(moves),
     moves: () =>
-      Effect.sync(() => ({
-        epoch: stored.epoch,
-        revision: stored.revision,
-        horizon: 0,
-        movedAfter: (execution: string, revision: number) => (stored.moved.get(execution) ?? -1) > revision,
-        holds: (ref: ExecutionRef) => stored.watched.has(ref.execution),
-      })),
+      stored.unread
+        ? Effect.fail(new TerminalUnavailable({ owner: 'host', message: 'the host inventory was not read' }))
+        : Effect.sync(() => ({
+            epoch: stored.epoch,
+            revision: stored.revision,
+            horizon: 0,
+            movedAfter: (execution: string, revision: number) => (stored.moved.get(execution) ?? -1) > revision,
+            holds: (ref: ExecutionRef) => stored.watched.has(ref.execution),
+          })),
   } as unknown as ManagedCommands['Service'];
   const evidence = {
     processes: (execution: ExecutionRef) =>
@@ -367,6 +370,29 @@ it.live('a host that could not answer leaves every row unavailable, and the next
       ['live-1', 'live-2', 'old-1'],
     ]);
   }),
+);
+
+it.live(
+  'moves the host inventory could not read keep the view open: the transition is composed whole, and the next one reads moves again',
+  () =>
+    Effect.gen(function* () {
+      const floor = yield* floorOver();
+      const feed = yield* follow(params, floor.feeds);
+      yield* floor.transition(4);
+      yield* feed.next;
+      floor.stored.unread = true;
+      floor.stored.unheld.add('live-2');
+      yield* floor.transition(5, 'live-2');
+      const unread = yield* feed.reading;
+      floor.stored.unread = false;
+      floor.stored.unheld.delete('live-2');
+      yield* floor.transition(6, 'live-2');
+      const again = yield* feed.reading;
+      yield* feed.stop;
+
+      expect(unread.active.map((reading) => reading.live._tag)).toEqual(['Held', 'Unheld']);
+      expect(again.active.map((reading) => reading.live._tag)).toEqual(['Held', 'Held']);
+    }),
 );
 
 it.live('a command discharged between the two reads is carried as ended, and never in both', () =>

@@ -22,6 +22,7 @@ import type { Custody } from '../contract/service/custody.js';
 import type { ExecutionProcessEvidence } from '../contract/service/records.js';
 import type { ManagedCommands } from '../contract/service/commands.js';
 import type { TerminalFailure, Terminals } from '../contract/service/terminals.js';
+import type { InventoryMoves } from '../terminals/inventory.js';
 import type { CommandMarks } from '../store/commandRows.js';
 import type { CommandState } from '../store/rows.js';
 import { INVENTORY_PAGE } from '../store/terminalRows.js';
@@ -200,6 +201,8 @@ export const readCommandFeed = (
 
 const CONFIRMED_MS = 5_000;
 
+const UNREAD_EPOCH = -1;
+
 type Composed = {
   readonly revision: number;
   readonly epoch: number;
@@ -312,15 +315,30 @@ export const makeCommandFeed = Effect.fnUntraced(function* ({
       return sent;
     };
 
-    const everything = Effect.fnUntraced(function* (revision: number): Effect.fn.Return<Step, TerminalFailure> {
-      const moves = yield* commands.moves();
+    const movesRead = Effect.fnUntraced(function* () {
+      const read = yield* Effect.result(commands.moves());
+      if (read._tag === 'Success') return read.success;
+      yield* Effect.logWarning('the host inventory moves were not read; the command feed composes everything and reads them again', {
+        reason: read.failure.message,
+      });
+      return undefined;
+    });
+
+    const composeAll = Effect.fnUntraced(function* (
+      revision: number,
+      moves: InventoryMoves | undefined,
+    ): Effect.fn.Return<Step, TerminalFailure> {
       return {
         _tag: 'Compose',
         composing: { held: last === undefined ? undefined : last.snapshot, fresh: 'all', rows: true },
         marks: marksOf(yield* reader.marks(projectId)),
-        revision: moves.revision ?? revision,
-        epoch: moves.epoch,
+        revision: moves?.revision ?? revision,
+        epoch: moves?.epoch ?? UNREAD_EPOCH,
       };
+    });
+
+    const everything = Effect.fnUntraced(function* (revision: number): Effect.fn.Return<Step, TerminalFailure> {
+      return yield* composeAll(revision, yield* movesRead());
     });
 
     const stepOf = Effect.fnUntraced(function* (pulse: Pulse, standing: Composed, now: number): Effect.fn.Return<Step, TerminalFailure> {
@@ -332,7 +350,8 @@ export const makeCommandFeed = Effect.fnUntraced(function* ({
       const fresh = new Set<string>();
       let revision = standing.revision;
       const epoch = standing.epoch;
-      const moves = update === undefined ? undefined : yield* commands.moves();
+      const moves = update === undefined ? undefined : yield* movesRead();
+      if (update !== undefined && moves === undefined) return yield* composeAll(update.revision, undefined);
       if (update !== undefined && moves !== undefined && (moves.epoch !== epoch || standing.revision < moves.horizon)) {
         return yield* everything(update.revision);
       }
