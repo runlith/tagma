@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { type AgentSkill, AgentSkillUnreadable } from '@runlith/agent/AgentSkill';
 import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
 
-const APPS_SKILL = 'apps';
+const PLUGINS_SKILL = 'plugins';
 
 const BRIDGE_MARK = '<!-- bridge-methods -->';
 
@@ -24,7 +24,7 @@ export function withBridgeMethods<TContext>(
   const referenced = methods.flatMap((method) => (method.reference === undefined ? [] : [{ method, reference: method.reference }]));
   const render = (text: string): string => text.replace(BRIDGE_MARK, () => bridgeList(methods));
   return skills.map((skill) => {
-    if (skill.id !== APPS_SKILL) return skill;
+    if (skill.id !== PLUGINS_SKILL) return skill;
     return {
       ...skill,
       references: [

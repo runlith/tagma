@@ -65,7 +65,7 @@ it.live('an app asks, the question reaches the phone as a link and the stored ou
       p256dh: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('base64url'),
       auth: Buffer.alloc(16, 3).toString('base64url'),
     });
-    const sent = yield* notifications.send('app:poker', {
+    const sent = yield* notifications.send('plugin:poker', {
       title: 'Table 3',
       body: '',
       question: { text: 'Raise to 40?', options: ['Yes', 'No'] },
@@ -79,7 +79,7 @@ it.live('an app asks, the question reaches the phone as a link and the stored ou
     expect(again).toMatchObject({ repeated: true, outcome: answered.outcome });
     expect(yield* Queue.take(handed)).toMatchObject({
       id: sent.id,
-      sender: 'app:poker',
+      sender: 'plugin:poker',
       kind: 'answered',
       answer: 'Yes',
     });

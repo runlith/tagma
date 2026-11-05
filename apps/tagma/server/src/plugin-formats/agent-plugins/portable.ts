@@ -112,6 +112,8 @@ export const readPortable = Effect.fn('agentPlugins.portable')(function* (root: 
       servers,
       hooks: [],
       options: [],
+      process: null,
+      contributes: {},
       ignored,
     },
     extensions: isObject(manifest.extensions) ? manifest.extensions : null,

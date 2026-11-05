@@ -1,7 +1,7 @@
 import { Result, Schema } from 'effect';
-import { AppViewDocument, McpViewDocument } from './load.js';
+import { McpViewDocument, PluginViewDocument } from './load.js';
 
-const ViewIdentity = Schema.Union([AppViewDocument, McpViewDocument]);
+const ViewIdentity = Schema.Union([PluginViewDocument, McpViewDocument]);
 export type ViewIdentity = typeof ViewIdentity.Type;
 
 const PREFIX = 'tagma-view:';

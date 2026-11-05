@@ -11,11 +11,21 @@ import type {
   PluginHookPoint,
   PluginOrigin,
   PluginPreview,
+  PluginProcessRow,
   PluginRow,
   PluginSource,
 } from '../wire/rows.js';
 import type { PluginInstall } from '../wire/settings.js';
-import type { PluginHookAnswer, PluginHookCall, PluginHookSession, PluginPackage, PluginPlace, PluginUnreadable } from './format.js';
+import type {
+  PluginHookAnswer,
+  PluginHookCall,
+  PluginHookSession,
+  PluginPackage,
+  PluginPlace,
+  PluginProcess,
+  PluginRefused,
+  PluginUnreadable,
+} from './format.js';
 
 export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home: string }>()('tagma/plugins/PluginPlaces') {}
 
@@ -142,6 +152,8 @@ export type PluginLoaded = {
   readonly agents: readonly LoadedAgent[];
   readonly servers: readonly McpServerDeclaration[];
   readonly hooks: readonly LoadedHook[];
+  readonly process: PluginProcess | null;
+  readonly contributes: Readonly<Record<string, unknown>>;
 };
 
 export class PluginsUnreadable extends Data.TaggedError('PluginsUnreadable')<{ readonly reason: string }> {
@@ -154,6 +166,43 @@ export class EnabledPlugins extends Context.Service<
   EnabledPlugins,
   {
     of(projectId: number): Effect.Effect<readonly PluginLoaded[], PluginsUnreadable>;
+    held(projectId: number): Effect.Effect<() => readonly string[], PluginsUnreadable>;
     readonly changes: Stream.Stream<number | null>;
   }
 >()('tagma/plugins/EnabledPlugins') {}
+
+type PluginHosted = {
+  readonly id: string;
+  readonly title: string;
+  readonly root: string;
+  readonly data: string;
+  readonly process: PluginProcess | null;
+  readonly contributes: Readonly<Record<string, unknown>>;
+  readonly options: Readonly<Record<string, string>>;
+  readonly redact: readonly string[];
+};
+
+export type PluginHostedRoot = { readonly root: string; readonly refused: string | null };
+
+export class PluginUnhosted extends Data.TaggedError('PluginUnhosted')<{ readonly id: string }> {
+  override get message(): string {
+    return `${this.id} runs no process and contributes nothing to Tagma`;
+  }
+}
+
+export class HostedPlugins extends Context.Service<
+  HostedPlugins,
+  {
+    roots(): Effect.Effect<ReadonlyMap<string, PluginHostedRoot>, PluginsUnreadable>;
+    read(id: string): Effect.Effect<PluginHosted, PluginUnhosted | PluginRefused | PluginUnreadable | PluginsUnreadable>;
+  }
+>()('tagma/plugins/HostedPlugins') {}
+
+export type PluginProcessReader = (id: string) => PluginProcessRow | undefined;
+
+export class PluginProcesses extends Context.Service<
+  PluginProcesses,
+  {
+    register(reader: PluginProcessReader): Effect.Effect<() => void>;
+  }
+>()('tagma/plugins/PluginProcesses') {}

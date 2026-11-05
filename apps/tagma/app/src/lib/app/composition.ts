@@ -29,10 +29,10 @@ import { McpLayer } from '$lib/features/mcp/layer.js';
 import { PowerLayer } from '$lib/features/power/layer.js';
 import { ShellLayer } from '$lib/features/shell/layer.js';
 import { TelemetryLayer } from '$lib/features/telemetry/layer.js';
-import { TagmaAppsLayer } from '$lib/features/tagma-apps/layer.js';
-import { FloatingPanels } from '$lib/features/tagma-apps/windows/FloatingPanels.svelte.js';
-import { NativeWindows } from '$lib/features/tagma-apps/windows/NativeWindows.js';
-import { ViewWindows } from '$lib/features/tagma-apps/windows/ViewWindows.js';
+import { PluginViewsLayer } from '$lib/features/plugin-views/layer.js';
+import { FloatingPanels } from '$lib/features/plugin-views/windows/FloatingPanels.svelte.js';
+import { NativeWindows } from '$lib/features/plugin-views/windows/NativeWindows.js';
+import { ViewWindows } from '$lib/features/plugin-views/windows/ViewWindows.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
@@ -198,7 +198,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     McpLayer,
     SecretsRepo,
     PluginsLayer,
-    TagmaAppsLayer,
+    PluginViewsLayer,
     Layer.provide(ViewWindows, function* () {
       return (yield* Host).isDesktop ? new NativeWindows(bridged((bridge) => bridge.windows)()) : yield* FloatingPanels;
     }),

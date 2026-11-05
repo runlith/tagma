@@ -21,7 +21,7 @@ test('a renderer lists the documents its frames belong to: the interface, a page
     { pid: 18, type: 'Tab', creationTime: 1_008 },
     { pid: 19, type: 'Tab', creationTime: 1_009 },
   ];
-  const app = viewFrameName({ _tag: 'AppView', project: 3, app: 'notes', view: 'board' });
+  const plugin = viewFrameName({ _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' });
   const mcp = viewFrameName({ _tag: 'McpView', server: 'linear' });
   const hosted: Hosted[] = [
     {
@@ -29,7 +29,7 @@ test('a renderer lists the documents its frames belong to: the interface, a page
       frames: [
         frame(1, null, 12, SURFACE),
         frame(2, 1, 12, SURFACE),
-        frame(3, 1, 18, 'http://notes.localhost:4000', app),
+        frame(3, 1, 18, 'http://notes.localhost:4000', plugin),
         frame(4, 3, 19, 'https://player.example'),
         frame(5, 1, 18, 'http://127.0.0.1:4100', mcp),
         frame(6, 1, 12, 'http://127.0.0.1:4200', 'tagma-view:{"_tag":"McpView"'),
@@ -62,10 +62,10 @@ test('a renderer lists the documents its frames belong to: the interface, a page
       createdMs: 1_008,
       kind: 'renderer',
       documents: [
-        { _tag: 'AppView', project: 3, app: 'notes', view: 'board' },
         { _tag: 'McpView', server: 'linear' },
+        { _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' },
       ],
     },
-    { pid: 19, createdMs: 1_009, kind: 'renderer', documents: [{ _tag: 'AppView', project: 3, app: 'notes', view: 'board' }] },
+    { pid: 19, createdMs: 1_009, kind: 'renderer', documents: [{ _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' }] },
   ]);
 });

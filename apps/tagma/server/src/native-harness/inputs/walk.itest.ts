@@ -199,7 +199,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
       ),
     );
 
-    it.effect('the shipped apps skill renders the bridge methods it is given and offers their references', () =>
+    it.effect('the shipped plugins skill renders the bridge methods it is given and offers their references', () =>
       withDemo((demo) =>
         Effect.gen(function* () {
           const { root, projectId } = yield* setup(demo);
@@ -216,14 +216,14 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             const read = skill.instructions(undefined);
             return typeof read === 'string' ? Effect.succeed(read) : read;
           };
-          const apps = (yield* read([...HOST_BRIDGE, echo])).shipped.find((skill) => skill.id === 'apps')!;
-          const text = yield* textOf(apps);
+          const plugins = (yield* read([...HOST_BRIDGE, echo])).shipped.find((skill) => skill.id === 'plugins')!;
+          const text = yield* textOf(plugins);
           expect(text).toContain('- `tagma/storage/get {key}`');
           expect(text).toContain('- `tagma/echo {said}` — Says it back.');
           expect(text).not.toContain('<!-- bridge-methods -->');
-          expect(apps.references?.map(({ name }) => name)).toEqual(['example', 'echo']);
-          expect(yield* apps.reference!('echo')).toContain('Echo details.');
-          const bare = (yield* read(HOST_BRIDGE)).shipped.find((skill) => skill.id === 'apps')!;
+          expect(plugins.references?.map(({ name }) => name)).toEqual(['example', 'echo']);
+          expect(yield* plugins.reference!('echo')).toContain('Echo details.');
+          const bare = (yield* read(HOST_BRIDGE)).shipped.find((skill) => skill.id === 'plugins')!;
           expect(yield* textOf(bare)).not.toContain('tagma/echo');
         }),
       ),

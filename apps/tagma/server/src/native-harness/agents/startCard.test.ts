@@ -187,7 +187,7 @@ it.effect('only a scoped operator root at the first opening request receives a s
     const test = yield* fixture;
     for (const given of [
       { facts: { parentId: ThreadId.make('parent') } },
-      { facts: { createdBy: 'app:schedule' } },
+      { facts: { createdBy: 'plugin:schedule' } },
       { facts: { createdBy: 'agent-root-creator' } },
       { facts: { createdBy: null } },
       { facts: { projectId: null } },

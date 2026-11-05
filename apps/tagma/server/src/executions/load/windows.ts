@@ -2,9 +2,9 @@ import type { DeclaredPart } from '@runlith/executions/protocol/evidence';
 import { Effect, SubscriptionRef } from 'effect';
 import type { Pages } from '../../browser/contract/service/pages.js';
 import type { PageId } from '../../browser/contract/wire/ids.js';
-import { type AppRef, WindowDeclarations, type WindowPart } from '../contract/service/load.js';
+import { type PluginViewRef, WindowDeclarations, type WindowPart } from '../contract/service/load.js';
 import type { LoadPage, WindowDeclaration, WindowDocument, WindowProcess } from '../contract/wire/load.js';
-import { type AppTitles, appTitleKey } from './work.js';
+import { type PluginTitles, pluginTitleKey } from './work.js';
 
 export type PartRow =
   | { readonly _tag: 'Interface' }
@@ -14,8 +14,8 @@ export type PartRow =
 export type PartLookup = (key: string) => PartRow | undefined;
 
 export type PartNames = {
-  readonly row: (key: string, titles: AppTitles) => PartRow | undefined;
-  readonly apps: () => readonly AppRef[];
+  readonly row: (key: string, titles: PluginTitles) => PartRow | undefined;
+  readonly plugins: () => readonly PluginViewRef[];
 };
 
 const keyOf = (host: string, process: WindowProcess): string => `window:${host}:${process.pid}:${process.createdMs}`;
@@ -26,7 +26,7 @@ const hostOf = (url: string): string | undefined => {
   return host === '' ? undefined : host;
 };
 
-const documentTitle = (document: WindowDocument, pages: Pages['Service'], titles: AppTitles): string => {
+const documentTitle = (document: WindowDocument, pages: Pages['Service'], titles: PluginTitles): string => {
   switch (document._tag) {
     case 'Interface':
       return 'Interface';
@@ -37,8 +37,8 @@ const documentTitle = (document: WindowDocument, pages: Pages['Service'], titles
       if (title === '') return host === undefined ? 'Page' : `Page — ${host}`;
       return host === undefined ? `Page — ${title}` : `Page — ${title} (${host})`;
     }
-    case 'AppView':
-      return `App — ${titles.get(appTitleKey(document)) ?? document.app}`;
+    case 'PluginView':
+      return `Plugin — ${titles.get(pluginTitleKey(document)) ?? document.plugin}`;
     case 'McpView':
       return `MCP view — ${document.server}`;
     case 'Origin':
@@ -46,7 +46,7 @@ const documentTitle = (document: WindowDocument, pages: Pages['Service'], titles
   }
 };
 
-const partRow = (part: WindowPart, pages: Pages['Service'], titles: AppTitles): PartRow => {
+const partRow = (part: WindowPart, pages: Pages['Service'], titles: PluginTitles): PartRow => {
   const { kind, documents } = part.process;
   if (kind === 'graphics') return { _tag: 'Graphics' };
   if (kind !== 'renderer' || documents.length === 0 || documents.some((one) => one._tag === 'Interface')) return { _tag: 'Interface' };
@@ -68,19 +68,19 @@ export const partNames = (windows: WindowDeclarations['Service'], pages: Pages['
     const part = windows.part(key);
     return part === undefined ? undefined : partRow(part, pages, titles);
   },
-  apps: () => windows.views(),
+  plugins: () => windows.views(),
 });
 
 export const makeWindowDeclarations = Effect.gen(function* () {
   const held = new Map<string, { readonly generation: number; readonly declaration: WindowDeclaration }>();
   let byKey: ReadonlyMap<string, WindowPart> = new Map();
-  let appViews: readonly AppRef[] = [];
+  let pluginViews: readonly PluginViewRef[] = [];
   const parts = yield* SubscriptionRef.make<readonly DeclaredPart[]>([]);
 
   const publish = Effect.suspend(() => {
     const next = new Map<string, WindowPart>();
     const declared: DeclaredPart[] = [];
-    const apps = new Map<string, AppRef>();
+    const plugins = new Map<string, PluginViewRef>();
     for (const [host, { declaration }] of held)
       for (const process of declaration.processes) {
         const key = keyOf(host, process);
@@ -88,10 +88,12 @@ export const makeWindowDeclarations = Effect.gen(function* () {
         next.set(key, { host, process });
         declared.push({ key, pid: process.pid, createdMs: process.createdMs, precisionMs: declaration.precisionMs });
         for (const document of process.documents)
-          if (document._tag === 'AppView') apps.set(appTitleKey(document), { project: document.project, app: document.app });
+          if (document._tag === 'PluginView') {
+            plugins.set(pluginTitleKey(document), { project: document.project, plugin: document.plugin });
+          }
       }
     byKey = next;
-    appViews = [...apps.values()];
+    pluginViews = [...plugins.values()];
     return SubscriptionRef.set(parts, declared);
   });
 
@@ -112,6 +114,6 @@ export const makeWindowDeclarations = Effect.gen(function* () {
     parts: SubscriptionRef.changes(parts),
     declared: SubscriptionRef.get(parts),
     part: (key) => byKey.get(key),
-    views: () => appViews,
+    views: () => pluginViews,
   });
 });

@@ -1,7 +1,6 @@
 import { Service } from '@runlith/layer/key';
 import { AppState, type AppStateStorage } from '$lib/features/workspace/AppState.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
-import { launchNamed } from './place.js';
 
 export const RAIL_KEY = 'tagma.rail';
 
@@ -77,7 +76,7 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
 
   private names(value: unknown): readonly string[] {
     if (!Array.isArray(value)) return [];
-    return [...new Set(value.filter((one): one is string => typeof one === 'string').map((one) => launchNamed(this.surfaces.named(one))))];
+    return [...new Set(value.filter((one): one is string => typeof one === 'string').map((one) => this.surfaces.named(one)))];
   }
 
   private write(next: Stored): void {

@@ -70,7 +70,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       yield* files.writeFileString(join(destination, 'left.txt'), 'unfinished\n');
       yield* files.writeFileString(join(destination, '.watch-cookie-4242-7'), '');
 
-      expect(yield* op('delete_worktree', { rootId: made.operation.rootId }, { 'x-tagma-caller': 'app:core-pin' })).toMatchObject({
+      expect(yield* op('delete_worktree', { rootId: made.operation.rootId }, { 'x-tagma-caller': 'plugin:core-pin' })).toMatchObject({
         status: 200,
         body: { status: 'branch-kept', committed: { paths: ['left.txt'] } },
       });

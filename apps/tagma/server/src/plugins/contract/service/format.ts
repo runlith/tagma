@@ -96,6 +96,8 @@ export type PluginAbout = {
   readonly license: string | null;
 };
 
+export type PluginProcess = { readonly command: string; readonly args: readonly string[] };
+
 export type PluginPackage = {
   readonly name: string;
   readonly title: string | null;
@@ -108,6 +110,8 @@ export type PluginPackage = {
   readonly servers: readonly PluginServer[];
   readonly hooks: readonly PluginHook[];
   readonly options: readonly PluginOption[];
+  readonly process: PluginProcess | null;
+  readonly contributes: Readonly<Record<string, unknown>>;
   readonly ignored: readonly PluginIgnored[];
 };
 
@@ -130,6 +134,7 @@ export type PluginEntry = {
 
 export type PluginFormat = {
   readonly id: string;
+  readonly prevails?: true;
   readonly claim: (root: string) => Effect.Effect<PluginClaim | null, PluginUnreadable, FileSystem.FileSystem>;
   readonly read: (
     root: string,

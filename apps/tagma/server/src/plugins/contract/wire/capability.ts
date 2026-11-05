@@ -2,6 +2,6 @@ import type { CapabilityDeclaration } from '../../../platform/contract/wire/capa
 
 export const pluginsCapability = {
   id: 'plugins',
-  description: 'agent plugins on this machine: installing, enabling or reading one',
-  sections: [],
+  description: 'plugins on this machine: the tools of those enabled in this project, and installing, enabling or reading one',
+  sections: ['plugins'],
 } as const satisfies CapabilityDeclaration;

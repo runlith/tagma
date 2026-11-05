@@ -16,16 +16,16 @@ export const threadViewPin = sqliteTable(
     threadId: text('thread_id')
       .notNull()
       .references(() => threadRecord.id, { onDelete: 'cascade' }),
-    app: text('app').notNull(),
+    plugin: text('app').notNull(),
     view: text('view').notNull(),
     key: text('key').notNull(),
   },
-  (table) => [primaryKey({ columns: [table.threadId, table.app, table.view, table.key] })],
+  (table) => [primaryKey({ columns: [table.threadId, table.plugin, table.view, table.key] })],
 );
 
 const empty: readonly PinnedView[] = [];
 const pinOrder = (left: PinnedView, right: PinnedView): number => {
-  for (const field of ['app', 'view', 'key'] as const) {
+  for (const field of ['plugin', 'view', 'key'] as const) {
     if (left[field] < right[field]) return -1;
     if (left[field] > right[field]) return 1;
   }
@@ -47,12 +47,12 @@ export const makeThreadPins = Effect.gen(function* () {
       db
         .select({
           threadId: threadViewPin.threadId,
-          app: threadViewPin.app,
+          plugin: threadViewPin.plugin,
           view: threadViewPin.view,
           key: threadViewPin.key,
         })
         .from(threadViewPin)
-        .orderBy(threadViewPin.threadId, threadViewPin.app, threadViewPin.view, threadViewPin.key),
+        .orderBy(threadViewPin.threadId, threadViewPin.plugin, threadViewPin.view, threadViewPin.key),
     ),
   );
   const grouped = new Map<string, PinnedView[]>();
@@ -74,7 +74,7 @@ export const makeThreadPins = Effect.gen(function* () {
   const address = (threadId: string, pin: PinnedView) =>
     and(
       eq(threadViewPin.threadId, threadId),
-      eq(threadViewPin.app, pin.app),
+      eq(threadViewPin.plugin, pin.plugin),
       eq(threadViewPin.view, pin.view),
       eq(threadViewPin.key, pin.key),
     );
@@ -128,7 +128,7 @@ export const makeThreadPins = Effect.gen(function* () {
         : Effect.map(
             unit.run(
               db
-                .select({ app: threadViewPin.app, view: threadViewPin.view, key: threadViewPin.key })
+                .select({ plugin: threadViewPin.plugin, view: threadViewPin.view, key: threadViewPin.key })
                 .from(threadViewPin)
                 .where(eq(threadViewPin.threadId, threadId)),
             ),

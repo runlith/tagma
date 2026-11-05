@@ -85,6 +85,7 @@ import { plugins } from '../plugins/plugins.js';
 import { PluginPlaces } from '../plugins/contract/service/plugins.js';
 import { PluginFormats } from '../plugins/contract/service/format.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
+import { tagmaFormat } from '../plugin-formats/tagma/format.js';
 import { agentPluginsFormat } from '../plugin-formats/agent-plugins/format.js';
 import { codexFormat } from '../plugin-formats/codex/format.js';
 import { claudeCodeList } from '../plugin-formats/claude-code/list.js';
@@ -189,13 +190,13 @@ import { DoorAddress } from '../platform/contract/service/door.js';
 import type { Route } from '../platform/contract/service/route.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
-import { tagmaApps } from '../tagma-apps/tagma-apps.js';
+import { pluginHost } from '../plugin-host/plugin-host.js';
 import { views } from '../views/views.js';
 import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
-import { TagmaAppViews, ViewSites } from '../views/contract/service/views.js';
+import { PluginViews, ViewSites } from '../views/contract/service/views.js';
 import { WantedSites } from '../remote/contract/service/sites.js';
-import { TagmaAppPlace, TagmaApps } from '../tagma-apps/contract/service/supervision.js';
+import { HostPlace, PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { machineStoreLayer } from '../installation/registry/restore.js';
 import { installation } from '../installation/installation.js';
 import { portBlock } from '../installation/contract/wire/ports.js';
@@ -286,8 +287,8 @@ export type ServerRuntime = {
   openMaintenance: Effect.Effect<void>;
   measurement: Measurement;
   mcp: Context.Service.Shape<typeof McpServers>;
-  tagmaApps: TagmaApps['Service'];
-  views: TagmaAppViews['Service'];
+  pluginHost: PluginHost['Service'];
+  views: PluginViews['Service'];
   artifacts: ArtifactStore['Service'];
   status: RuntimeStatus;
   door: Context.Context<RuntimeDoor>;
@@ -351,7 +352,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     exposure?: (standing: Exposure['Service']) => Exposure['Service'];
     marketplaces?: readonly MarketplacePreset[];
     sender?: Sender['Service'];
-    tagmaAppServer?: string;
+    pluginServer?: string;
     localOrigin?: string;
     adapters?: readonly AdapterSource[];
     userEnvironment?: UserEnvironment['Service'];
@@ -555,10 +556,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
           }),
         );
   const readyProviders = providerLayer.pipe(Layer.provide(accountCli));
-  const tagmaAppPlace = Layer.succeed(TagmaAppPlace, {
-    home: dataPath,
-    server: options.tagmaAppServer ?? null,
-  });
+  const hostPlace = Layer.succeed(HostPlace, { server: options.pluginServer ?? null });
   const pluginsHome = dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`);
   const pluginsInstallation = marketplaces.lifetimes.installation.pipe(
     Layer.provide(Layer.succeed(MarketplacePlaces, { home: pluginsHome })),
@@ -567,7 +565,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provideMerge(
       plugins.lifetimes.installation.pipe(
         Layer.provide(Layer.succeed(PluginPlaces, { home: pluginsHome })),
-        Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, codexFormat, agentPluginsFormat])),
+        Layer.provide(Layer.succeed(PluginFormats, [tagmaFormat, claudeCodeFormat, codexFormat, agentPluginsFormat])),
       ),
     ),
     Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)))),
@@ -649,7 +647,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.effect(
                     WantedSites,
-                    Effect.map(TagmaAppViews, (shown) => ({ names: shown.standing })),
+                    Effect.map(PluginViews, (shown) => ({ names: shown.standing })),
                   ),
                 ),
               ),
@@ -702,13 +700,13 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 ),
               ),
             ),
-            Layer.provideMerge(Layer.merge(closing('app views', views.lifetimes.installation), closing('plugins', pluginsInstallation))),
+            Layer.provideMerge(closing('plugin views', views.lifetimes.installation)),
             Layer.provideMerge(
               closing(
-                'apps',
-                tagmaApps.lifetimes.installation.pipe(
-                  Layer.provide(tagmaAppPlace),
-                  Layer.provide(BunFileSystem.layer),
+                'plugin host',
+                pluginHost.lifetimes.installation.pipe(
+                  Layer.provide(hostPlace),
+                  Layer.provideMerge(closing('plugins', pluginsInstallation)),
                   Layer.provideMerge(
                     closing('secrets', secrets.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home: dataPath })))),
                   ),
@@ -909,8 +907,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       Context.add(HeapSnapshots, Context.get(built, HeapSnapshots)),
     ),
     mcp: Context.get(built, McpServers),
-    tagmaApps: Context.get(built, TagmaApps),
-    views: Context.get(built, TagmaAppViews),
+    pluginHost: Context.get(built, PluginHost),
+    views: Context.get(built, PluginViews),
     artifacts: shelf,
     status,
     bindings,

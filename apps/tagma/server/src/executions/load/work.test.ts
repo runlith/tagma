@@ -4,7 +4,7 @@ import { Context, Effect } from 'effect';
 import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { ManagedCommands } from '../contract/service/commands.js';
-import { LoadAppTitles, LoadOwnerFacts, OwnerFactsUnread } from '../contract/service/owners.js';
+import { LoadOwnerFacts, LoadPluginTitles, OwnerFactsUnread } from '../contract/service/owners.js';
 import { Terminals } from '../contract/service/terminals.js';
 import type { TerminalRecord } from '../contract/wire/terminals.js';
 import { makeWorkNames } from './work.js';
@@ -22,7 +22,7 @@ const server = {
 } as unknown as TerminalRecord;
 
 it.effect(
-  'a held terminal on pipes is named by its terminal record and its stop goes to the terminal; app titles come per shown view, and a failed read drops the stale title and is reported on every reading',
+  'a held terminal on pipes is named by its terminal record and its stop goes to the terminal; plugin titles come per shown view, and a failed read drops the stale title and is reported on every reading',
   () =>
     Effect.gen(function* () {
       let listing = true;
@@ -34,7 +34,7 @@ it.effect(
             } as unknown as Terminals['Service']),
             Context.add(LoadOwnerFacts, { read: () => Effect.succeed(new Map()) } as unknown as LoadOwnerFacts['Service']),
             Context.add(Projects, { list: () => Effect.succeed([{ id: 5, name: 'runlith' }]) } as unknown as Projects['Service']),
-            Context.add(LoadAppTitles, {
+            Context.add(LoadPluginTitles, {
               read: () =>
                 listing ? Effect.succeed(new Map([['notes', 'Notes']])) : Effect.fail(new OwnerFactsUnread({ reason: 'unreadable' })),
             }),
@@ -42,16 +42,16 @@ it.effect(
         ),
       );
       const shown = [
-        { project: 5, app: 'notes' },
-        { project: 5, app: 'gone' },
+        { project: 5, plugin: 'notes' },
+        { project: 5, plugin: 'gone' },
       ];
       const named = yield* names.read([ref], 0, shown);
       expect(named.work.get(ref.execution)).toMatchObject({ kind: 'terminal', transport: 'pipes', label: 'Tagma site dev server (5194)' });
-      expect([...named.apps]).toEqual([['5:notes', 'Notes']]);
+      expect([...named.plugins]).toEqual([['5:notes', 'Notes']]);
       listing = false;
       for (const now of [60_000, 60_001]) {
         const failed = yield* names.read([ref], now, shown);
-        expect([...failed.apps]).toEqual([]);
+        expect([...failed.plugins]).toEqual([]);
         expect(failed.unread).toContain('unreadable');
       }
     }),
@@ -67,7 +67,7 @@ it.effect('held work of a removed project stands without a project name and is n
           } as unknown as Terminals['Service']),
           Context.add(LoadOwnerFacts, { read: () => Effect.succeed(new Map()) } as unknown as LoadOwnerFacts['Service']),
           Context.add(Projects, { list: () => Effect.succeed([{ id: 8, name: 'global' }]) } as unknown as Projects['Service']),
-          Context.add(LoadAppTitles, { read: () => Effect.succeed(new Map()) }),
+          Context.add(LoadPluginTitles, { read: () => Effect.succeed(new Map()) }),
         ),
       ),
     );

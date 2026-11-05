@@ -259,6 +259,8 @@ it.live(
       revision: 'first',
       title: 'Demo',
       place: { root: '/plugins/demo', data: '/plugins/demo', options: {}, project: '/project' },
+      process: null,
+      contributes: {},
       redact: [],
       skills: [],
       commands: [],
@@ -292,9 +294,9 @@ it.live(
 it.live(
   'two package floors naming one id: the earlier floor wins in the library and at birth alike, and the later file is rejected naming it',
   Effect.fnUntraced(function* () {
-    const fileOf = (origin: 'app' | 'plugin', path: string): AgentFile => ({
+    const fileOf = (floorName: 'contributed' | 'format', path: string): AgentFile => ({
       id: 'demo-tools.reviewer',
-      description: origin,
+      description: floorName,
       extends: undefined,
       capabilities: [],
       tools: undefined,
@@ -303,19 +305,19 @@ it.live(
       body: 'Review.',
       path,
       directory: '/floors',
-      origin,
-      revision: origin,
+      origin: 'plugin',
+      revision: floorName,
       source: 'Review.',
     });
     const floor = (file: AgentFile): AgentPackages => ({
       agentsIn: () => Effect.succeed([file]),
       agentIn: (_, typeId) => Effect.succeed(typeId === file.id ? file : undefined),
     });
-    const stand = yield* world([], [floor(fileOf('app', '/floors/app.md')), floor(fileOf('plugin', '/floors/plugin.md'))]);
+    const stand = yield* world([], [floor(fileOf('contributed', '/floors/contributed.md')), floor(fileOf('format', '/floors/format.md'))]);
     const found = yield* stand.files();
-    expect(found.agents.map((file) => file.origin)).toEqual(['app']);
-    expect(found.rejected).toEqual([{ path: '/floors/plugin.md', reason: 'shadowed by /floors/app.md' }]);
-    expect(yield* stand.resolve('demo-tools.reviewer', 'operator')).toMatchObject({ profile: { description: 'app' } });
+    expect(found.agents.map((file) => file.revision)).toEqual(['contributed']);
+    expect(found.rejected).toEqual([{ path: '/floors/format.md', reason: 'shadowed by /floors/contributed.md' }]);
+    expect(yield* stand.resolve('demo-tools.reviewer', 'operator')).toMatchObject({ profile: { description: 'contributed' } });
   }),
 );
 

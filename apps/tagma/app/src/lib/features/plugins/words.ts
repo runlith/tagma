@@ -1,5 +1,41 @@
 import type { MarketplaceRow, TrustLabel } from '@tagma/server/marketplaces/contract/wire/rows';
-import type { PluginComponent, PluginComponentKind } from '@tagma/server/plugins/contract/wire/rows';
+import type { PluginComponent, PluginComponentKind, PluginProcessRow } from '@tagma/server/plugins/contract/wire/rows';
+import type { StepTone } from './here.js';
+
+type ProcessSaid = { readonly tone: StepTone; readonly title: string; readonly detail: string | null };
+
+const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+export function processSaid(process: PluginProcessRow, here: boolean): ProcessSaid {
+  const restarted = process.restarts > 0 ? ` Restarted ${counted(process.restarts, 'time', 'times')}.` : '';
+  switch (process.state) {
+    case 'running':
+      return {
+        tone: 'done',
+        title: 'Working',
+        detail: here ? `Serves ${counted(process.tools, 'tool', 'tools')}.${restarted}` : `Serving your other projects.${restarted}`,
+      };
+    case 'starting':
+      return { tone: 'busy', title: 'Starting', detail: 'Its tools appear in a moment.' };
+    case 'stopped':
+      return { tone: 'idle', title: 'Stopped', detail: 'It starts by itself while a project has the plugin on.' };
+    case 'failed':
+      return { tone: 'fails', title: 'Broken', detail: null };
+  }
+}
+
+export function failureSplit(failure: string): { readonly reason: string; readonly output: string } {
+  const lines = failure.split('\n');
+  const first = lines.findIndex((line) => line.trim() !== '');
+  if (first < 0) return { reason: '', output: '' };
+  return {
+    reason: lines[first]!.trim(),
+    output: lines
+      .slice(first + 1)
+      .join('\n')
+      .trim(),
+  };
+}
 
 export type ComponentSaid = { readonly kind: PluginComponentKind | 'program'; readonly title: string; readonly detail: string | null };
 
@@ -26,8 +62,26 @@ export function saidOf(component: PluginComponent): ComponentSaid {
       };
     case 'hook':
       return { kind: 'hook', title: `Runs on ${component.name}`, detail };
+    case 'process':
+      return { kind: 'process', title: 'A program of its own on this computer', detail: component.name };
+    case 'contribution':
+      return { kind: 'contribution', title: CONTRIBUTIONS[component.name] ?? `Adds ${component.name} to Tagma`, detail };
   }
 }
+
+const CONTRIBUTIONS: Readonly<Record<string, string>> = {
+  tools: 'Tools agents can call',
+  agents: 'Agents you can start',
+  views: 'Pages inside Tagma',
+  results: 'Pages that show what a tool did',
+  surfaces: 'Sections in Tagma’s sidebar',
+  panes: 'Panels beside a thread',
+  launchers: 'Windows you open from the palette',
+  pins: 'Pages a thread can keep above its feed',
+  notify: 'Notifications',
+  schedule: 'Runs on a schedule',
+  on: 'Actions when a thread ends',
+};
 
 export const KINDS: Readonly<Record<PluginComponentKind, string>> = {
   skill: 'Skills',
@@ -35,9 +89,16 @@ export const KINDS: Readonly<Record<PluginComponentKind, string>> = {
   'mcp-server': 'MCP servers',
   agent: 'Agents',
   hook: 'Hooks',
+  process: 'Programs',
+  contribution: 'Additions',
 };
 
-export const FORMATS: Readonly<Record<string, string>> = { 'claude-code': 'Claude Code', codex: 'Codex', 'agent-plugins': 'Agent Plugins' };
+export const FORMATS: Readonly<Record<string, string>> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  'agent-plugins': 'Agent Plugins',
+  tagma: 'Tagma',
+};
 
 export const LABELS: Readonly<Record<TrustLabel, string>> = { tagma: 'Tagma', vendor: 'Vendor', unreviewed: 'Unreviewed' };
 

@@ -3,6 +3,7 @@ import { makeRefreshFlight, type RefreshFlightFault, type RefreshRequest } from 
 import { Data, Effect } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import {
+  maskedForms,
   type SecretEntry,
   type SecretHolder,
   type SecretOwner,
@@ -36,11 +37,6 @@ const unavailable = () =>
 const ownerFailed = (failure: SecretOwnerFailed) => new GateRefusal('secret-owner-failed', failure.reason, failure.unblock);
 const invalid = (reason: string) =>
   new GateRefusal('secret-value-invalid', reason, [`give a non-empty value of at most ${SECRET_VALUE_MAX} characters without a NUL`]);
-
-const maskedForms = (value: string): readonly string[] => {
-  const escaped = JSON.stringify(value).slice(1, -1);
-  return escaped === value ? [value] : [value, escaped];
-};
 
 const rowOf = (entry: SecretEntry, set: boolean): SecretRow => ({ name: entry.name, description: entry.description, set });
 

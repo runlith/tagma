@@ -6,36 +6,34 @@ import type { McpResourceUpdated } from '@runlith/mcp/resources';
 import { Effect, PubSub, Schedule, Stream } from 'effect';
 import type { McpResourceEvent } from '../mcp/contract/wire/feeds.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
-import { SettingChanges } from '../settings/contract/service/changes.js';
-import { Settings } from '../settings/contract/service/values.js';
-import { type TagmaAppContribution, TagmaAppPointRefused, type TagmaAppRef } from '../tagma-apps/contract/service/points.js';
-import { TagmaApps } from '../tagma-apps/contract/service/supervision.js';
-import { TagmaAppTools, TOOLS } from '../tagma-apps/contract/service/tools.js';
-import { tagmaAppToolName } from '../tagma-apps/contract/wire/audience.js';
-import { tagmaAppsEnabled } from '../tagma-apps/contract/wire/settings.js';
+import { PluginHost } from '../plugin-host/contract/service/supervision.js';
+import { PluginTools, TOOLS } from '../plugin-host/contract/service/tools.js';
+import { pluginToolName } from '../plugin-host/contract/wire/audience.js';
+import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
+import { type PluginContribution, PluginPointRefused, type PluginRef } from '../plugins/contract/service/points.js';
 import { PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
-import { TagmaAppViews, type ViewFailure, type ViewMount, type ViewSites } from './contract/service/views.js';
+import { PluginViews, type ViewFailure, type ViewMount, type ViewSites } from './contract/service/views.js';
 import type { ResultEntries, ViewEntries } from './contract/wire/points.js';
-import type { TagmaAppViewSet, TagmaAppViewState, ViewRefusalCode } from './contract/wire/sets.js';
+import type { PluginViewSet, PluginViewState, ViewRefusalCode } from './contract/wire/sets.js';
 import { makeLaunchers } from './launchers.js';
 import { makeSections } from './sections.js';
 
-type Shown = { readonly app: TagmaAppRef; readonly views: ViewEntries };
+type Shown = { readonly plugin: PluginRef; readonly views: ViewEntries };
 const RECOVERY = Schedule.min([Schedule.exponential('500 millis'), Schedule.spaced('30 seconds')]);
-const RETURNING: ReadonlySet<string> = new Set(['app-unavailable', 'app-view-unknown']);
-const READ_APPS = 'read_apps answers each app’s state and why it stopped';
+const RETURNING: ReadonlySet<string> = new Set(['plugin-unavailable', 'plugin-view-unknown']);
+const READ_PLUGINS = 'read_plugins answers each plugin’s process state and why it stopped';
 const viewer = (mount: ViewMount): McpCaller => ({ kind: 'operator', projectId: mount.projectId, view: mount.view });
-const refusedResults = (reason: string) => new TagmaAppPointRefused({ point: RESULTS.app.name, reason });
+const refusedResults = (reason: string) => new PluginPointRefused({ point: RESULTS.plugin.name, reason });
 const refusal = (code: ViewRefusalCode, reason: string) =>
-  new GateRefusal<ViewRefusalCode>(code, reason, code === 'app-unavailable' ? [READ_APPS] : ['try again', READ_APPS]);
+  new GateRefusal<ViewRefusalCode>(code, reason, code === 'plugin-unavailable' ? [READ_PLUGINS] : ['try again', READ_PLUGINS]);
 const resourceRefusal = (failure: { readonly _tag: string; readonly message: string }) =>
-  refusal(failure._tag === 'McpResourceFailed' ? 'app-resource-failed' : 'app-unavailable', failure.message);
+  refusal(failure._tag === 'McpResourceFailed' ? 'plugin-resource-failed' : 'plugin-unavailable', failure.message);
+const unreadable = (failure: { readonly message: string }) => new GateRefusal('plugin-unavailable', failure.message, [READ_PLUGINS]);
 
 export const makeShelf = Effect.gen(function* () {
-  const settings = yield* Settings;
-  const apps = yield* TagmaApps;
-  const tools = yield* TagmaAppTools;
-  const changes = yield* SettingChanges;
+  const enabledPlugins = yield* EnabledPlugins;
+  const host = yield* PluginHost;
+  const tools = yield* PluginTools;
   const moved = yield* Effect.acquireRelease(PubSub.unbounded<number | null>(), PubSub.shutdown);
   const shown = new Map<string, Shown>();
   const results = new Map<string, ResultEntries>();
@@ -46,20 +44,20 @@ export const makeShelf = Effect.gen(function* () {
   const panes = makeSections({ point: PANES, changed: bump });
   const launchers = makeLaunchers({ changed: bump });
 
-  const registerViews = ({ app, value }: TagmaAppContribution<ViewEntries>) =>
+  const registerViews = ({ plugin, value }: PluginContribution<ViewEntries>) =>
     Effect.sync(() => {
       if (value.length === 0) return () => undefined;
-      const standing: Shown = { app, views: value };
-      shown.set(app.id, standing);
+      const standing: Shown = { plugin, views: value };
+      shown.set(plugin.id, standing);
       bump();
       return () => {
-        if (shown.get(app.id) !== standing) return;
-        shown.delete(app.id);
+        if (shown.get(plugin.id) !== standing) return;
+        shown.delete(plugin.id);
         bump();
       };
     });
 
-  const registerResults = Effect.fnUntraced(function* ({ app, value, sibling }: TagmaAppContribution<ResultEntries>) {
+  const registerResults = Effect.fnUntraced(function* ({ plugin, value, sibling }: PluginContribution<ResultEntries>) {
     if (value.length === 0) return () => undefined;
     const views = new Set((sibling(VIEWS) ?? []).map((view) => view.id));
     const unseen = value.filter((result) => !views.has(result.view)).map((result) => result.view);
@@ -70,27 +68,27 @@ export const makeShelf = Effect.gen(function* () {
       return yield* refusedResults(
         `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`,
       );
-    results.set(app.id, value);
+    results.set(plugin.id, value);
     bump();
     return () => {
-      if (results.get(app.id) !== value) return;
-      results.delete(app.id);
+      if (results.get(plugin.id) !== value) return;
+      results.delete(plugin.id);
       bump();
     };
   });
 
-  const setsOf = (enabled: readonly string[], sites: ViewSites['Service']): readonly TagmaAppViewSet[] =>
+  const setsOf = (enabled: readonly string[], sites: ViewSites['Service']): readonly PluginViewSet[] =>
     enabled.flatMap((id) => {
       const standing = shown.get(id);
       return standing === undefined
         ? []
         : [
             {
-              app: id,
-              title: standing.app.title,
+              plugin: id,
+              title: standing.plugin.title,
               site: sites.site(id),
               views: standing.views,
-              results: (results.get(id) ?? []).map((result) => ({ ...result, name: tagmaAppToolName(id, result.tool) })),
+              results: (results.get(id) ?? []).map((result) => ({ ...result, name: pluginToolName(id, result.tool) })),
               surfaces: surfaces.of(id),
               panes: panes.of(id),
               launchers: launchers.of(id),
@@ -99,29 +97,30 @@ export const makeShelf = Effect.gen(function* () {
     });
 
   const mounted = Effect.fnUntraced(function* (mount: ViewMount) {
-    const enabled = yield* settings.value(tagmaAppsEnabled, mount.projectId);
-    const standing = shown.get(mount.app);
-    if (!enabled.includes(mount.app) || standing === undefined || !standing.views.some((view) => view.id === mount.view)) {
-      return yield* new GateRefusal('app-view-unknown', `The app ${mount.app} shows this project no view ${mount.view}.`, [READ_APPS]);
+    const enabled = (yield* enabledPlugins.held(mount.projectId).pipe(Effect.mapError(unreadable)))();
+    const standing = shown.get(mount.plugin);
+    if (!enabled.includes(mount.plugin) || standing === undefined || !standing.views.some((view) => view.id === mount.view)) {
+      return yield* new GateRefusal('plugin-view-unknown', `The plugin ${mount.plugin} shows this project no view ${mount.view}.`, [
+        READ_PLUGINS,
+      ]);
     }
-    return standing.app;
+    return standing.plugin;
   });
 
-  const unwatch = changes.subscribe((event) => (event.key === tagmaAppsEnabled.id ? PubSub.publish(moved, event.projectId) : Effect.void));
-  yield* Effect.addFinalizer(() => Effect.sync(unwatch));
+  yield* Effect.forkScoped(Stream.runForEach(enabledPlugins.changes, (project) => PubSub.publish(moved, project)));
 
   return {
-    ...TagmaAppViews.of({
+    ...PluginViews.of({
       sets: (projectId, sites) =>
         Stream.unwrap(
           Effect.map(PubSub.subscribe(moved), (moves) =>
             Stream.concat(Stream.succeed(null), Stream.merge(Stream.fromSubscription(moves), Stream.as(sites.moved, null))).pipe(
               Stream.filter((move) => move === null || move === projectId),
               Stream.mapEffect(() =>
-                Effect.map(settings.value(tagmaAppsEnabled, projectId), (enabled): TagmaAppViewState => ({
-                  apps: setsOf(enabled, sites),
-                  enabled,
-                })),
+                Effect.map(enabledPlugins.held(projectId), (held): PluginViewState => {
+                  const enabled = held();
+                  return { plugins: setsOf(enabled, sites), enabled };
+                }),
               ),
               Stream.changesWith((left, right) => JSON.stringify(left) === JSON.stringify(right)),
             ),
@@ -135,10 +134,10 @@ export const makeShelf = Effect.gen(function* () {
           ),
         ),
       ),
-      file: Effect.fn('TagmaAppViews.file')(function* (app, path) {
-        const standing = shown.get(app);
+      file: Effect.fn('PluginViews.file')(function* (plugin, path) {
+        const standing = shown.get(plugin);
         if (standing === undefined || !path.startsWith('ui/') || path.split('/').some((part) => part === '..' || part === '')) return null;
-        const { root } = standing.app;
+        const { root } = standing.plugin;
         return yield* Effect.promise(() =>
           Promise.all([realpath(root), realpath(join(root, 'ui')), realpath(join(root, path))]).then(
             ([home, views, file]) => (views === join(home, 'ui') && file.startsWith(`${views}${sep}`) ? file : null),
@@ -146,26 +145,26 @@ export const makeShelf = Effect.gen(function* () {
           ),
         );
       }),
-      csp: (app, path) => Effect.succeed(shown.get(app)?.views.find((view) => view.entry === path)?.csp ?? {}),
-      call: Effect.fn('TagmaAppViews.call')(function* (mount, tool, args, caller) {
+      csp: (plugin, path) => Effect.succeed(shown.get(plugin)?.views.find((view) => view.entry === path)?.csp ?? {}),
+      call: Effect.fn('PluginViews.call')(function* (mount, tool, args, caller) {
         const admit = Effect.gen(function* () {
           yield* mounted(mount);
-          const offered = (yield* tools.of(mount.projectId)).view(mount.app);
+          const offered = (yield* tools.of(mount.projectId).pipe(Effect.mapError(unreadable))).view(mount.plugin);
           if (!offered.some((descriptor) => descriptor.name === tool))
-            return yield* new GateRefusal('app-tool-unoffered', `The app ${mount.app} offers its views no tool ${tool}.`, [
-              'call a tool its tagma-app.json names with audience view',
+            return yield* new GateRefusal('plugin-tool-unoffered', `The plugin ${mount.plugin} offers its views no tool ${tool}.`, [
+              'call a tool its tagma-plugin.json names with audience view',
             ]);
         });
-        return yield* apps.callAdmitted(mount.app, admit, tool, args, { caller }).pipe(
+        return yield* host.callAdmitted(mount.plugin, admit, tool, args, { caller }).pipe(
           Effect.mapError((failure) => {
             switch (failure._tag) {
               case 'McpCallFailed':
               case 'McpTimedOut':
-                return refusal('app-call-failed', failure.message);
+                return refusal('plugin-call-failed', failure.message);
               case 'McpConnectFailed':
               case 'McpNotConnected':
               case 'McpNeedsSignIn':
-                return refusal('app-unavailable', failure.message);
+                return refusal('plugin-unavailable', failure.message);
               default:
                 return failure;
             }
@@ -173,13 +172,13 @@ export const makeShelf = Effect.gen(function* () {
           Effect.map(mcpAppResult),
         );
       }),
-      read: Effect.fn('TagmaAppViews.read')(function* (mount, uri) {
+      read: Effect.fn('PluginViews.read')(function* (mount, uri) {
         yield* mounted(mount);
-        return yield* apps.read(mount.app, uri, { caller: viewer(mount) }).pipe(Effect.mapError(resourceRefusal));
+        return yield* host.read(mount.plugin, uri, { caller: viewer(mount) }).pipe(Effect.mapError(resourceRefusal));
       }),
       watch: (mount, uri) => {
         const acquired = mounted(mount).pipe(
-          Effect.andThen(apps.subscribe(mount.app, uri, { caller: viewer(mount) }).pipe(Effect.mapError(resourceRefusal))),
+          Effect.andThen(host.subscribe(mount.plugin, uri, { caller: viewer(mount) }).pipe(Effect.mapError(resourceRefusal))),
         );
         const held = (opening: McpResourceEvent, updates: Stream.Stream<McpResourceUpdated>): Stream.Stream<McpResourceEvent> =>
           Stream.concat(

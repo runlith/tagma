@@ -97,8 +97,8 @@ import { readWorkflowLibrary } from './workflows/sources.js';
 import type { AgentRecovery } from '@runlith/agent/AgentRecovery';
 import type { ThreadTransitionStorage } from '@runlith/agent/thread/transition/port';
 import { HarnessRegistry } from '../threads/contract/service/harness.js';
-import { TagmaAppPoints } from '../tagma-apps/contract/service/points.js';
-import { makeTagmaAppAgents, TAGMA_APP_AGENTS } from './agents/declared/tagmaApps.js';
+import { PluginPoints } from '../plugins/contract/service/points.js';
+import { makeContributedAgents, PLUGIN_AGENTS } from './agents/declared/contributed.js';
 import { makeBuiltinAgents } from './agents/declared/builtin.js';
 import { makePluginAgents } from './agents/declared/plugins.js';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
@@ -128,7 +128,7 @@ export type NativeKernelRequirements =
   | HarnessRegistry
   | DeclaredCapabilities
   | ThreadEntryKinds
-  | TagmaAppPoints
+  | PluginPoints
   | ThreadHomes
   | TargetPreparation
   | Scope.Scope;
@@ -259,13 +259,13 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
   const capabilities = yield* capabilityDefinitions(yield* DeclaredCapabilities);
   const agentFiles = agentFilesOf(capabilities);
   const toolSources = threadToolSources();
-  const packaged = yield* makeTagmaAppAgents({ capabilities, sources: toolSources });
-  yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(TAGMA_APP_AGENTS, packaged.register), (withdraw) => Effect.sync(withdraw));
+  const contributed = yield* makeContributedAgents({ capabilities, sources: toolSources });
+  yield* Effect.acquireRelease((yield* PluginPoints).declare(PLUGIN_AGENTS, contributed.register), (withdraw) => Effect.sync(withdraw));
   const types = yield* makeDeclaredAgents({
     harnesses: installed.read,
     storePath: machine.path,
     files: agentFiles,
-    packages: [yield* makeBuiltinAgents(capabilities), packaged.packages, yield* makePluginAgents()],
+    packages: [yield* makeBuiltinAgents(capabilities), contributed.packages, yield* makePluginAgents()],
   }).pipe(Effect.provideService(NativeAgents, agents));
   return {
     asides,

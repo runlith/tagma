@@ -6,7 +6,7 @@ export type PluginHookPoint = (typeof PLUGIN_HOOK_POINTS)[number];
 export const PLUGIN_OPTION_TYPES = ['string', 'number', 'boolean', 'directory', 'file'] as const;
 export type PluginOptionType = (typeof PLUGIN_OPTION_TYPES)[number];
 
-export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook'] as const;
+export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution'] as const;
 export type PluginComponentKind = (typeof PLUGIN_COMPONENT_KINDS)[number];
 
 const Named = Schema.String.check(Schema.isMinLength(1));
@@ -47,7 +47,10 @@ export type PluginDeclared = typeof PluginDeclared.Type;
 
 export const pluginComponentSchema = Schema.Struct({
   kind: Schema.Literals(PLUGIN_COMPONENT_KINDS),
-  name: Schema.String.annotate({ description: 'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event.' }),
+  name: Schema.String.annotate({
+    description:
+      'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event, a process its command, a contribution its point.',
+  }),
   detail: Schema.optional(Schema.String).annotate({
     description: 'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of.',
   }),
@@ -74,6 +77,20 @@ export const pluginOptionSchema = Schema.Struct({
 });
 export type PluginOptionRow = typeof pluginOptionSchema.Type;
 
+const PLUGIN_PROCESS_STATES = ['stopped', 'starting', 'running', 'failed'] as const;
+export type PluginProcessState = (typeof PLUGIN_PROCESS_STATES)[number];
+
+const pluginProcessSchema = Schema.Struct({
+  state: Schema.Literals(PLUGIN_PROCESS_STATES),
+  tools: Schema.Finite.annotate({ description: 'Tools its process serves.' }),
+  restarts: Schema.Finite,
+  failure: Schema.optional(Schema.String).annotate({ description: 'Why it is failed, with the tail of what its process wrote.' }),
+  refused: Schema.optional(Schema.String).annotate({
+    description: 'Why its directory as it stands now is refused; a running process keeps the declaration it started with.',
+  }),
+});
+export type PluginProcessRow = typeof pluginProcessSchema.Type;
+
 export const pluginRowSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.NullOr(Schema.String),
@@ -92,6 +109,9 @@ export const pluginRowSchema = Schema.Struct({
   components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma took from it.' }),
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),
+  process: Schema.optional(pluginProcessSchema).annotate({
+    description: 'Its process on this machine, for a plugin that runs one or contributes to Tagma; it runs while any project enables it.',
+  }),
   refused: Schema.optional(Schema.String).annotate({
     description: 'Why its directory as it stands now cannot be read; a refused plugin contributes nothing.',
   }),

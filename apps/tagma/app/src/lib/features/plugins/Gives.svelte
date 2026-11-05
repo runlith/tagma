@@ -5,6 +5,7 @@
   import KeyRound from '@lucide/svelte/icons/key-round';
   import MonitorCheck from '@lucide/svelte/icons/monitor-check';
   import Plug from '@lucide/svelte/icons/plug';
+  import Puzzle from '@lucide/svelte/icons/puzzle';
   import Sparkles from '@lucide/svelte/icons/sparkles';
   import SquareSlash from '@lucide/svelte/icons/square-slash';
   import Terminal from '@lucide/svelte/icons/terminal';
@@ -32,6 +33,8 @@
     command: SquareSlash,
     agent: Bot,
     hook: Zap,
+    process: Terminal,
+    contribution: Puzzle,
   };
 
   const said = $derived(components.map(saidOf));

@@ -79,7 +79,7 @@ export const REFUSAL_WORDS = {
   'placement-refused': 'Thread could not be placed',
   'placement-unreadable': 'Thread placement unreadable',
   'query-too-short': 'Search words too short',
-  'app-thread-mismatch': 'Thread not bound to this app',
+  'plugin-thread-mismatch': 'Thread not bound to this plugin',
   'read-failed': 'Reading failed',
   'read-inaccessible': 'Reading cannot be opened',
   'read-not-retained': 'Reading could not be kept',

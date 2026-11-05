@@ -23,7 +23,7 @@ const runner = (options: CheckoutBuildsOptions, steps: BuildSteps = BuildSteps.d
   );
 
 const stepping = (ask: () => Effect.Effect<StepVerdict>): BuildSteps => ({
-  of: () => Effect.succeed([{ app: 'pin', title: 'Core pin', projectId: 7, ask }]),
+  of: () => Effect.succeed([{ plugin: 'pin', title: 'Core pin', projectId: 7, ask }]),
 });
 
 const git = Effect.fnUntraced(function* (cwd: string, ...args: string[]) {

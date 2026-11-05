@@ -49,7 +49,7 @@ export const makePlacements = Effect.gen(function* () {
     yield* Effect.matchEffect(ledger.sites, {
       onFailure: (failure) =>
         change(() => {
-          for (const name of fresh) states.set(name, unkept(`the ports of app sites could not be read: ${failure.message}`));
+          for (const name of fresh) states.set(name, unkept(`the ports of plugin sites could not be read: ${failure.message}`));
         }),
       onSuccess: (ports) => {
         const asked = [...fresh].map((name) => ({ name, port: ports.get(name) ?? null }));

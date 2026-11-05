@@ -101,7 +101,7 @@ import { Doctrine } from '../platform/contract/service/sections.js';
 import { GrantSigner } from '../platform/contract/service/grantSigner.js';
 import { ChangeRecord } from '../change-record/contract/service/record.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
-import { TagmaAppTools } from '../tagma-apps/contract/service/tools.js';
+import { PluginTools } from '../plugin-host/contract/service/tools.js';
 import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { ThreadMandate } from '../threads/contract/service/mandate.js';
 import { ThreadTeams } from '../threads/contract/service/team.js';
@@ -388,7 +388,7 @@ export const nativeAgentsLayer = Layer.effectDiscard(
       yield* ArtifactStore,
       yield* McpServers,
       kernel.mcpBound,
-      yield* TagmaAppTools,
+      yield* PluginTools,
       yield* WebSearch,
       yield* ModelAccess,
       kernel.webs,

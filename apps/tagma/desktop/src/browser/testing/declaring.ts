@@ -9,7 +9,7 @@ import { UNOCCLUDED } from '../placement.js';
 import { Profiles } from '../profiles.js';
 
 const PROFILE = 'declaring';
-const VIEW = viewFrameName({ _tag: 'AppView', project: 1, app: 'notes', view: 'board' });
+const VIEW = viewFrameName({ _tag: 'PluginView', project: 1, plugin: 'notes', view: 'board' });
 const SURFACE = `data:text/html,${encodeURIComponent(`<title>surface</title><iframe name='${VIEW}' src='https://viewer.invalid/'></iframe>`)}`;
 const PAGE = `<!doctype html><title>busy</title>
 <script>const spin = () => { const end = performance.now() + 40; while (performance.now() < end); setTimeout(spin, 0); }; spin();</script>

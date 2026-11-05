@@ -2062,6 +2062,21 @@
       "bun": "./src/plugin-formats/codex/list.ts",
       "default": null
     },
+    "./plugin-formats/tagma/format": {
+      "types": "./src/plugin-formats/tagma/format.ts",
+      "bun": "./src/plugin-formats/tagma/format.ts",
+      "default": null
+    },
+    "./plugin-host/contract/*": {
+      "types": "./src/plugin-host/contract/*.ts",
+      "bun": "./src/plugin-host/contract/*.ts",
+      "default": null
+    },
+    "./plugin-host/plugin-host": {
+      "types": "./src/plugin-host/plugin-host.ts",
+      "bun": "./src/plugin-host/plugin-host.ts",
+      "default": null
+    },
     "./plugins/contract/*": {
       "types": "./src/plugins/contract/*.ts",
       "bun": "./src/plugins/contract/*.ts",
@@ -2215,16 +2230,6 @@
     "./speech/*": {
       "types": "./src/speech/*.ts",
       "bun": "./src/speech/*.ts",
-      "default": null
-    },
-    "./tagma-apps/contract/*": {
-      "types": "./src/tagma-apps/contract/*.ts",
-      "bun": "./src/tagma-apps/contract/*.ts",
-      "default": null
-    },
-    "./tagma-apps/tagma-apps": {
-      "types": "./src/tagma-apps/tagma-apps.ts",
-      "bun": "./src/tagma-apps/tagma-apps.ts",
       "default": null
     },
     "./thread-record/*": {

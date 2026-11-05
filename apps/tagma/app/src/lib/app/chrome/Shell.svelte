@@ -15,7 +15,7 @@
   import DictationKeys from '$lib/features/speech/dictation/Keys.svelte';
   import PointView from '@runlith/layer/svelte/PointView.svelte';
   import { WindowParts } from '$lib/shared/window/parts.js';
-  import ShellTagmaApps from '$lib/features/tagma-apps/ShellTagmaApps.svelte';
+  import ShellPlugins from '$lib/features/plugin-views/ShellPlugins.svelte';
   import DictationArm from '$lib/features/speech/dictation/Arm.svelte';
   import TerminalCloses from '$lib/features/executions/terminal/CloseDialogs.svelte';
   import TerminalPanel from '$lib/features/executions/terminal/Panel.svelte';
@@ -166,7 +166,7 @@
 
 <DictationKeys />
 <PointView point={parts} props={{}} />
-<ShellTagmaApps />
+<ShellPlugins />
 <WarmHolds />
 <DictationArm />
 {#if host.isDesktop && host.os === 'macos'}

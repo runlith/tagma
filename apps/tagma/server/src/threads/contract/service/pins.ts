@@ -18,6 +18,6 @@ export class ThreadPins extends Context.Service<
 export class PinOffers extends Context.Service<
   PinOffers,
   {
-    require(app: string, view: string): Effect.Effect<void, ThreadInputRefused<'view-not-pinnable'>>;
+    require(plugin: string, view: string): Effect.Effect<void, ThreadInputRefused<'view-not-pinnable'>>;
   }
 >()('threads/PinOffers') {}

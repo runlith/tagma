@@ -39,8 +39,8 @@ import { surfaces as browserSurfaces } from '$lib/features/browser/surfaces.js';
 import { surfaces as checkoutSurfaces } from '$lib/features/checkout/surfaces.js';
 import { surfaces as graphSurfaces } from '$lib/features/graph/surfaces.js';
 import { surfaces as pluginSurfaces } from '$lib/features/plugins/surfaces.js';
+import { surfaces as pluginViewSurfaces } from '$lib/features/plugin-views/surfaces.js';
 import { surfaces as ruleSurfaces } from '$lib/features/rules/surfaces.js';
-import { surfaces as tagmaAppSurfaces } from '$lib/features/tagma-apps/surfaces.js';
 import { surfaces as threadSurfaces } from '$lib/features/threads/surfaces.js';
 import { items as browserItems, links as browserLinks } from '$lib/features/browser/links.js';
 import { items as checkoutItems, links as checkoutLinks } from '$lib/features/checkout/links.js';
@@ -64,8 +64,8 @@ const coreSurfaces = [
   ...checkoutSurfaces,
   ...graphSurfaces,
   ...pluginSurfaces,
+  ...pluginViewSurfaces,
   ...ruleSurfaces,
-  ...tagmaAppSurfaces,
   ...threadSurfaces,
 ];
 

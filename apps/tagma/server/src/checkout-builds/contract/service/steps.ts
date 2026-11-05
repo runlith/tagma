@@ -10,7 +10,7 @@ export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-
 export class BuildStepFailed extends Data.TaggedError('BuildStepFailed')<{ readonly message: string }> {}
 
 export type BeforeStep = {
-  readonly app: string;
+  readonly plugin: string;
   readonly title: string;
   readonly projectId: number;
   readonly ask: (input: StepAsk) => Effect.Effect<StepVerdict, BuildStepFailed>;

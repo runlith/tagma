@@ -2,7 +2,9 @@ import { Schema } from 'effect';
 
 export const BeforeBuild = Schema.Array(
   Schema.Struct({
-    tool: Schema.NonEmptyString.annotate({ description: 'The tool of the app’s process Tagma calls before a build from this checkout.' }),
+    tool: Schema.NonEmptyString.annotate({
+      description: 'The tool of the plugin’s process Tagma calls before a build from this checkout.',
+    }),
     title: Schema.NonEmptyString.annotate({ description: 'What the update card shows while the step runs.' }),
   }),
 );

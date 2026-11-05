@@ -164,7 +164,7 @@ export const serverNames: Builtin<'names', NamesParams> = {
       S5: {
         heads: ['Data', 'Info', 'Helper', 'Manager', 'Service'],
         allows: [
-          { head: 'Data', in: ['installation/contract/wire/layout.ts', 'plugins/sources.ts', 'tagma-apps/discovery.ts'] },
+          { head: 'Data', in: ['installation/contract/wire/layout.ts', 'plugins/sources.ts'] },
           { head: 'Helper', in: ['installation/contract/wire/layout.ts'] },
         ],
         exempt: [],

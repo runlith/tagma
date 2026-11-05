@@ -17,7 +17,7 @@ export type SpeechViewAsk = typeof SpeechViewAsk.Type;
 
 export const SPEECH_NOTIFICATION = 'tagma/notifications/speech';
 
-const SPEECH_REFERENCE = `An app view listens and speaks through Tagma's own speech with the request \`tagma/speech {action, …}\`: no keys, models or microphone of its own. Only app views get this method.
+const SPEECH_REFERENCE = `A plugin view listens and speaks through Tagma's own speech with the request \`tagma/speech {action, …}\`: no keys, models or microphone of its own. Only plugin views get this method.
 
 | \`action\` | Params | Answer |
 |---|---|---|

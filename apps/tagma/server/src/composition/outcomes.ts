@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
-import { TagmaAppPoints, TagmaAppPointRefused } from '../tagma-apps/contract/service/points.js';
-import { tagmaAppCaller } from '../tagma-apps/contract/wire/manifest.js';
+import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
+import { pluginCaller } from '../plugins/contract/wire/names.js';
 import { NotificationContributions, NOTIFIER } from '../notify/contract/service/contributions.js';
 import { OutcomeRefused, Outcomes } from '../notify/contract/service/outcomes.js';
 import { Senders } from '../notify/contract/service/senders.js';
@@ -8,22 +8,22 @@ import { sendersLayer } from '../notify/receiving.js';
 
 export const outcomes = Layer.effectContext(
   Effect.gen(function* () {
-    const points = yield* TagmaAppPoints;
+    const points = yield* PluginPoints;
     const senders = yield* Senders;
     return Context.make(Outcomes, { deliver: senders.deliver }).pipe(
       Context.add(NotificationContributions, {
         declare: (register) =>
           points.declare(
             NOTIFIER,
-            Effect.fnUntraced(function* ({ app, value, tools, caller }) {
+            Effect.fnUntraced(function* ({ plugin, value, tools, caller }) {
               if (tools === null || !tools.some((descriptor) => descriptor.name === value.tool)) {
-                return yield* new TagmaAppPointRefused({ point: NOTIFIER.app.name, reason: `the process serves no tool ${value.tool}` });
+                return yield* new PluginPointRefused({ point: NOTIFIER.plugin.name, reason: `the process serves no tool ${value.tool}` });
               }
-              return register(tagmaAppCaller(app.id), {
+              return register(pluginCaller(plugin.id), {
                 deliver: Effect.fnUntraced(function* (outcome) {
                   const answer = yield* caller
                     .call(
-                      app.id,
+                      plugin.id,
                       value.tool,
                       {
                         id: outcome.id,
@@ -36,7 +36,7 @@ export const outcomes = Layer.effectContext(
                     )
                     .pipe(Effect.mapError((cause) => new OutcomeRefused({ reason: cause.message })));
                   if ('isError' in answer && answer.isError === true) {
-                    return yield* new OutcomeRefused({ reason: `${app.id} answered notification ${outcome.id} with an error` });
+                    return yield* new OutcomeRefused({ reason: `${plugin.id} answered notification ${outcome.id} with an error` });
                   }
                 }),
               });

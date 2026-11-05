@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { CloneFailed, CommitUnreachable } from '@runlith/git/clone';
-import { Clock, Duration, Effect, FileSystem, Semaphore } from 'effect';
+import { Clock, Duration, Effect, FileSystem, Result, Semaphore } from 'effect';
 import { ChildProcessSpawner } from 'effect/process';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { SettableScope, SettingKey } from '../platform/contract/wire/setting.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import type { PluginPackage, PluginRefused, PluginUnreadable } from './contract/service/format.js';
-import { type PluginDescribed, type PluginPrepared, Plugins } from './contract/service/plugins.js';
+import { type PluginPackage, PluginRefused, type PluginUnreadable } from './contract/service/format.js';
+import { type PluginDescribed, type PluginPrepared, type PluginProcessReader, Plugins } from './contract/service/plugins.js';
+import type { PluginPoints } from './contract/service/points.js';
 import { componentName } from './contract/wire/names.js';
-import type { PluginDeclared, PluginOrigin, PluginRow, PluginSource } from './contract/wire/rows.js';
+import type { PluginDeclared, PluginOrigin, PluginProcessRow, PluginRow, PluginSource } from './contract/wire/rows.js';
 import {
   installedFrom,
   type PluginInstall,
@@ -21,7 +22,7 @@ import {
 } from './contract/wire/settings.js';
 import { componentsOf, consentOf } from './consent.js';
 import { type Enabling, enablingIn } from './enabling.js';
-import { collision, type NamesCollide, namesOf, type Read } from './reader.js';
+import { collision, hosted, type NamesCollide, namesOf, type Read } from './reader.js';
 import { type Bound, SECRET_KIND, type Shelf } from './shelf.js';
 import { cloneRoot, dropStage, fetchSource, sameSource, settle, sourceOf, type SourceUnreadable } from './sources.js';
 
@@ -100,9 +101,11 @@ const shownOf = (read: Read, bound: Bound) => ({
 export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
   readonly home: string;
+  readonly points: PluginPoints['Service'];
+  readonly processes: () => PluginProcessReader;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
 }) {
-  const { shelf, home, changed } = input;
+  const { shelf, home, points, processes, changed } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const owners = yield* SecretOwners;
@@ -152,7 +155,14 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         PluginUnreadable: (failure) => Effect.fail(refusedOf(failure)),
         NamesCollide: (failure) => Effect.fail(refusedOf(failure)),
       }),
+      Effect.tap((read) => {
+        const checked = points.check(read.id, read.package.contributes);
+        return Result.isFailure(checked) ? Effect.fail(refusedOf(new PluginRefused({ reason: checked.failure }))) : Effect.void;
+      }),
     );
+
+  const processOf = (id: string, pkg: PluginPackage): PluginProcessRow | undefined =>
+    hosted(pkg) ? (processes()(id) ?? { state: 'stopped', tools: 0, restarts: 0 }) : undefined;
 
   const boundOf = Effect.fnUntraced(function* (read: Read, root: string, projectId: number) {
     return yield* shelf
@@ -276,6 +286,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         components: [],
         ignored: [],
         options: [],
+        process: processes()(install.id),
         refused: reading.failure.message,
       } satisfies PluginRow;
     }
@@ -288,6 +299,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       description: pkg.description,
       format: read.format,
       ...shownOf(read, bound),
+      process: processOf(install.id, pkg),
     } satisfies PluginRow;
   });
 
@@ -441,6 +453,8 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
             ...(pkg.servers.length > 0 ? (['mcp-server'] as const) : []),
             ...(pkg.agents.length > 0 ? (['agent'] as const) : []),
             ...(pkg.hooks.length > 0 ? (['hook'] as const) : []),
+            ...(pkg.process !== null ? (['process'] as const) : []),
+            ...(Object.keys(pkg.contributes).length > 0 ? (['contribution'] as const) : []),
           ],
         })),
         Effect.catchTags({

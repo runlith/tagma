@@ -21,6 +21,7 @@
   import type { Here } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
+  import ProcessStep from '$lib/features/plugins/ProcessStep.svelte';
   import { PluginsRepo } from '$lib/features/plugins/Repo.js';
   import ServerSteps from '$lib/features/plugins/ServerSteps.svelte';
   import Tile from '$lib/features/plugins/Tile.svelte';
@@ -159,13 +160,20 @@
     {#if row.description !== null && row.description !== ''}<p class="max-w-prose text-body">{row.description}</p>{/if}
 
     {#if row.refused !== undefined}
-      <Callout tone="error" title="Tagma cannot read this plugin, so agents get nothing from it" note={row.refused} />
+      <Callout
+        tone="error"
+        title={row.process?.state === 'running'
+          ? 'Tagma cannot read the plugin’s files as they are now; the version that was working keeps running'
+          : 'Tagma cannot read this plugin, so agents get nothing from it'}
+        note={row.refused}
+      />
     {/if}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
-    {#if row.enabled && item.servers.length > 0}
+    {#if row.process !== undefined || (row.enabled && item.servers.length > 0)}
       <section class="grid rounded-lg border bg-raised px-4 py-1" aria-label="Its services">
-        <ServerSteps projectId={project.id} servers={item.servers} />
+        {#if row.process !== undefined}<ProcessStep process={row.process} here={row.enabled} />{/if}
+        {#if row.enabled}<ServerSteps projectId={project.id} servers={item.servers} />{/if}
       </section>
     {/if}
 

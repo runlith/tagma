@@ -4,7 +4,7 @@
   import type { VirtualAnchor } from '@runlith/primitives/float.svelte';
   import type { Rect } from '@runlith/primitives/place';
   import type { HoverIntent } from '@runlith/primitives/popover.svelte';
-  import TagmaAppIcon from '$lib/features/tagma-apps/TagmaAppIcon.svelte';
+  import PluginIcon from '$lib/features/plugin-views/PluginIcon.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import type { Reorder } from '$lib/shared/Reorder.svelte.js';
   import * as Popover from '$lib/shared/ui/popover/index.js';
@@ -85,7 +85,7 @@
 {#snippet face(place: RailPlace)}
   {@const Icon = place.icon}
   {#if place.iconUrl !== undefined}
-    <TagmaAppIcon
+    <PluginIcon
       src={place.iconUrl}
       class={cn(
         'size-3.5 shrink-0 transition-colors',

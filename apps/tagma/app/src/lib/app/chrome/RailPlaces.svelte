@@ -2,11 +2,11 @@
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import { Router } from '@runlith/layer/Router';
   import { Overlay } from '@runlith/primitives/Overlay.svelte';
-  import { launchesOf } from '$lib/features/tagma-apps/launchers.js';
-  import TagmaAppIcon from '$lib/features/tagma-apps/TagmaAppIcon.svelte';
-  import { ViewSets } from '$lib/features/tagma-apps/ViewSets.svelte.js';
-  import { ViewWindows } from '$lib/features/tagma-apps/windows/ViewWindows.js';
-  import WindowIcon from '$lib/features/tagma-apps/windows/WindowIcon.svelte';
+  import { launchesOf } from '$lib/features/plugin-views/launchers.js';
+  import PluginIcon from '$lib/features/plugin-views/PluginIcon.svelte';
+  import { ViewSets } from '$lib/features/plugin-views/ViewSets.svelte.js';
+  import { ViewWindows } from '$lib/features/plugin-views/windows/ViewWindows.js';
+  import WindowIcon from '$lib/features/plugin-views/windows/WindowIcon.svelte';
   import { AgentTypes } from '$lib/features/threads/AgentTypes.svelte.js';
   import LibraryIcon from '$lib/features/threads/LibraryIcon.svelte';
   import { AgentLibraryOverlay } from '$lib/features/threads/overlay.js';
@@ -59,7 +59,7 @@
       } satisfies RailPlace,
     }));
     const launches = launchesOf(sets.sets, project).map((launch): RailPlace => ({
-      id: launchPlaceId(launch.tagmaApp, launch.view),
+      id: launchPlaceId(launch.plugin, launch.view),
       label: launch.title,
       icon: WindowIcon,
       current: false,
@@ -106,7 +106,7 @@
       >
         {#snippet glyph()}
           {#if place.iconUrl !== undefined}
-            <TagmaAppIcon src={place.iconUrl} class="size-4" />
+            <PluginIcon src={place.iconUrl} class="size-4" />
           {:else}
             <Icon class="size-4" />
           {/if}

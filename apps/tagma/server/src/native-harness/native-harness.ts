@@ -18,7 +18,6 @@ import { instructionForm } from './steps/projectInstructions.js';
 import { developerForm } from './steps/developerForm.js';
 import { developerRetired, rulesRetired } from './steps/retired.js';
 import { nativeRowForm } from './steps/nativeRow.js';
-import { appCapabilitiesForm } from './steps/appCapabilities.js';
 import { START_ENTRY, StartEntry } from './contract/wire/start.js';
 import { NATIVE_RULES } from './contract/service/rules.js';
 import { instructionSource } from './turns/instructionRule.js';
@@ -70,7 +69,7 @@ export const nativeHarness = manifest({
   presentation: async () => (await import('./context/operations.js')).CONTEXT_PRESENTATION,
   live,
   retiredTables: ['retired_run_transition'],
-  formSteps: [instructionForm, developerForm, developerRetired, nativeRowForm, rulesRetired, appCapabilitiesForm],
+  formSteps: [instructionForm, developerForm, developerRetired, nativeRowForm, rulesRetired],
   entryKinds: [{ type: START_ENTRY, schema: StartEntry }],
   settings: [...NATIVE_SETTING_KEYS],
   settingSections: NATIVE_SETTING_SECTIONS,

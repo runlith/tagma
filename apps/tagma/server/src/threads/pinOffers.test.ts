@@ -1,18 +1,18 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
-import type { AppFaced } from '../platform/contract/service/contribution.js';
-import type { TagmaAppContribution } from '../tagma-apps/contract/service/points.js';
+import type { PluginFaced } from '../platform/contract/service/contribution.js';
+import type { PluginContribution } from '../plugins/contract/service/points.js';
 import { VIEWS } from '../views/contract/service/points.js';
 import type { PinContributions } from './contract/wire/pins.js';
 import { makePinnableViews } from './pinOffers.js';
 
-const contribution = (view: string): TagmaAppContribution<PinContributions> => ({
-  app: { id: 'poker', title: 'Poker', root: '/poker', data: null },
+const contribution = (view: string): PluginContribution<PinContributions> => ({
+  plugin: { id: 'poker', title: 'Poker', root: '/poker', data: '/poker-data' },
   value: [{ view }],
-  sibling: <B>(point: AppFaced<B>) =>
+  sibling: <B>(point: PluginFaced<B>) =>
     Object.is(point, VIEWS)
-      ? Schema.decodeUnknownSync(point.app.schema)([
+      ? Schema.decodeUnknownSync(point.plugin.schema)([
           { id: 'table', entry: 'ui/table.html' },
           { id: 'hand', entry: 'ui/hand.html' },
         ])
@@ -37,7 +37,7 @@ it.effect('a pin contribution naming an undeclared view refuses without admittin
   Effect.gen(function* () {
     const offers = makePinnableViews();
     expect(yield* Effect.flip(offers.register(contribution('ghost')))).toMatchObject({
-      _tag: 'TagmaAppPointRefused',
+      _tag: 'PluginPointRefused',
       point: 'pins',
       reason: expect.stringContaining('ghost'),
     });

@@ -48,7 +48,6 @@
     { id: 'builtin', label: 'Built-in' },
     { id: 'project', label: 'Project' },
     { id: 'personal', label: 'Personal' },
-    { id: 'app', label: 'Apps' },
     { id: 'plugin', label: 'Plugins' },
   ] as const;
   const shownScopes = $derived(search.trim() === '' ? scopes : byBest(scopes, found, (scope, entry) => entry.origin.scope === scope.id));

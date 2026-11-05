@@ -78,9 +78,9 @@
       "default": "./src/lib/shared/threads/staged.ts"
     },
     "./points/methods": {
-      "types": "./src/lib/features/tagma-apps/methods.ts",
-      "browser": "./src/lib/features/tagma-apps/methods.ts",
-      "default": "./src/lib/features/tagma-apps/methods.ts"
+      "types": "./src/lib/features/plugin-views/methods.ts",
+      "browser": "./src/lib/features/plugin-views/methods.ts",
+      "default": "./src/lib/features/plugin-views/methods.ts"
     },
     "./speech/captures": {
       "types": "./src/lib/features/speech/Captures.svelte.ts",

@@ -457,7 +457,7 @@ export const serve = async (build: Build): Promise<void> => {
             leaving: succession.leaving,
             opened: attempt.opened,
             hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
-            tagmaAppServer: `http://${LOOPBACK_HOST}:${port}`,
+            pluginServer: `http://${LOOPBACK_HOST}:${port}`,
             localOrigin: HttpServer.formatAddress(Context.get(localContext, HttpServer.HttpServer).address),
             marketplaces: SHIPPED_PRESETS,
             commitGate:
@@ -737,8 +737,8 @@ export const serve = async (build: Build): Promise<void> => {
         ),
       );
       tagma.runtime.runFork(
-        Effect.andThen(userEnvironment.ready, tagma.tagmaApps.start()).pipe(
-          Effect.tapCause((cause) => Effect.sync(() => console.error('[tagma] the installed apps did not start', Cause.squash(cause)))),
+        Effect.andThen(userEnvironment.ready, tagma.pluginHost.start()).pipe(
+          Effect.tapCause((cause) => Effect.sync(() => console.error('[tagma] the installed plugins did not start', Cause.squash(cause)))),
         ),
       );
     }),
