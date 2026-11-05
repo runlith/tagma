@@ -65,7 +65,8 @@ fields:
           "7abcb9a1",
           "bbed8039",
           "feef9784",
-          "13182a9f"
+          "13182a9f",
+          "6cc306ce"
         ]
       },
       {
@@ -85,6 +86,15 @@ fields:
         "for": [
           "edf810fe"
         ]
+      },
+      {
+        "at": "src/chainReturn.ts",
+        "for": [
+          "6cc306ce",
+          "360417ba",
+          "edf810fe",
+          "f37a2606"
+        ]
       }
     ],
     "id": "@runlith/sqlite-process",
@@ -103,4 +113,4 @@ sources:
   - kind: dir
     ref: packages/sqlite-process
 ---
-Runlith stores are SQLite files, and synchronous `bun:sqlite` runs in child processes so a query never stops the server's event loop. The package owns connections, Bun IPC and the shared reader-process pool; each store's writer stays a separate process, and outside stays an Effect `SqliteClient` without streams. The caller sets files and the reaction to connection loss and hands one `ProcessPool` to all stores of its runtime: the server binds mirrors to the machine store's pool. Where statements run is decided by whoever builds the pool: the product takes child processes, test worlds the same protocol in their own process.
+Runlith stores are SQLite files, and synchronous `bun:sqlite` runs in child processes so a query never stops the server's event loop. The package owns connections, Bun IPC, the shared reader-process pool and the return of a store onto an older migration chain; each store's writer stays a separate process, and outside stays an Effect `SqliteClient` without streams. The caller sets files and the reaction to connection loss and hands one `ProcessPool` to all stores of its runtime: the server binds mirrors to the machine store's pool. Where statements run is decided by whoever builds the pool: the product takes child processes, test worlds the same protocol in their own process.

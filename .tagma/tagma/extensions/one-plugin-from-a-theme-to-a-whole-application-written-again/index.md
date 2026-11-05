@@ -34,6 +34,13 @@ Draft from a design conversation with the operator on 2026-11-05. Nothing here i
 - **Everything at the side is a plugin.** Model providers, agent CLIs and speech providers included; a built-in one is a plugin that ships with Tagma. Model and harness adapters already install at run time. Speech providers have a contract but are compiled in.
 - **MCP is the wire.** A plugin process keeps speaking MCP over stdio, which is what makes any language possible. A server's MCP App window leaves the view core: it becomes a module view of the MCP client that wraps an iframe.
 - **Code, then manifest.** An author, or an agent asked to build one, writes TypeScript against the SDK. A manifest still exists, because Tagma must know what a plugin offers without running it: for the catalog, for consent, for a plugin with no process, and to refuse a broken version while the old one runs. The build emits it; nobody writes it by hand.
+- **The Plugins screen stays the one home.**
+  - Its project list splits into plugins and MCP servers; a server a plugin brought is marked with that plugin.
+  - Plugins built in the project appear there with the project as their source, so apps get no screen of their own.
+  - The sources stay the marketplaces. Tagma's also carries full plugins; Anthropic's and OpenAI's are translated, and what Tagma skips is named.
+  - Providers install here too, while their accounts and models stay in the model settings.
+  - A plugin's card names what it brings — tools, skills, agents, a section or window, a theme — and whether it runs a process on the machine.
+  - The header stops speaking only of what agents can use, since a plugin also changes the window.
 
 ## Proposed
 
@@ -70,7 +77,7 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 **Three depths on the agent layer.** The operator agreed all three are needed, built in this order.
 
 1. A plugin builds its own chat over threads. Today a process can create a thread with its own agent and tools, send turns and read them. Missing: a live event stream (`thread.subscribe` is the operator's), answering approvals, listing models. The same work opens the way for a separate program beside Tagma.
-2. A plugin reuses our thread. `chat-ui` becomes a component of the SDK over its `ChatConnection` port.
+2. A plugin reuses our thread through a host component: `<Thread id>` for a native plugin, `tagma.thread(element, id)` for a foreign one, drawing the whole thread. Publishing `chat-ui` over its `ChatConnection` port was rejected in [[5a36577a]]: alone it lacks Tagma's markdown, tool renderers and model picker, and it would turn the kit's protocol types into a public contract.
 3. A plugin adds to our chat: elements in slots and hooks on tool calls. It adds to the conversation and never takes it over.
 
 **A launcher-style application** needs a window without a frame, always on top, and a global shortcut. The shell has all three for its own dictation pill and quick hide; a plugin has none.
@@ -78,12 +85,12 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 ## Open
 
 - What exactly is promised to a plugin: which modules, which slots, which `tagma.*` calls.
-- One consent rule at install. A process runs as the operator with no question today; a marketplace plugin asks.
-- Whether an unreviewed plugin without a process shows its interface in an iframe; this is part of the consent rule.
 - A real identity for a plugin. `x-tagma-caller` proves nothing, and opening approvals or streams to it needs one first.
 - Distribution: one catalog, a Plugins screen in the window, machine or project scope.
 - When a process starts: it now lives from install on, which a machine with many plugins will feel.
 - What ships first.
+
+Trust and consent at install belong to a separate idea, which the operator put aside as not a priority.
 
 ## Not established
 
@@ -94,4 +101,4 @@ The reason is what the iframe costs today: no key forwarding to the window, menu
 
 ## On acceptance
 
-The spec overturns the split between plugin and app in [[b540be67]]; its MCP server as the wire stands. That block keeps the two apart because fitting apps into the plugin format would tie them to a standard made for agent configuration, and calling them plugins would give the word a meaning different from every neighbouring tool. This idea answers the first reason by making our format the full one and translating foreign formats into it. The second it accepts as a cost, since hosts with a single extension unit already call that unit a plugin. The spec also rewrites [[21acc718]] and [[59a77704]] in the plugin's terms, with [[15a61526]] and the `apps` skill following the code.
+The spec overturns the split between plugin and app in [[b540be67]]; its MCP server as the wire stands. That block keeps the two apart because fitting apps into the plugin format would tie them to a standard made for agent configuration, and calling them plugins would give the word a meaning different from every neighbouring tool. This idea answers the first reason by making our format the full one and translating foreign formats into it. The second it accepts as a cost, since hosts with a single extension unit already call that unit a plugin. The spec also rewrites [[21acc718]] and [[59a77704]] in the plugin's terms, with [[15a61526]] and the `apps` skill following the code. It closes [[25c23522]], since the Plugins screen takes the place of a separate apps screen.

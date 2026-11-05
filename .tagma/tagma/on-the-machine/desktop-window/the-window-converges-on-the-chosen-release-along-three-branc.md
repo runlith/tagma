@@ -15,7 +15,7 @@ sources:
     ref: apps/tagma/desktop/src/release.ts
     symbol: branchOf
 ---
-Every issued copy of the window decides for good: the rule it carries cannot be fixed at the person who already has it. So the window has three branches, and the question to the person — whether they came back from this release, whether the move is irreversible, whether the last attempt rolled back — is asked by the new release's `install-from` with its `ask` reply; the window only shows its `said` and repeats the call with `--agreed`. A person's refusal stands until the app is next opened.
+Every issued copy of the window decides for good: the rule it carries cannot be fixed at the person who already has it. So the window has three branches, and the question to the person — whether they came back from this release, whether the last attempt rolled back — is asked by the new release's `install-from` with its `ask` reply; the window only shows its `said` and repeats the call with `--agreed`. A person's refusal stands until the app is next opened.
 
 - **Branches compare release numbers**, not search the installed releases: an old app whose release was already cleaned out still becomes the app of the chosen one.
 - **A window that already ran on the chosen release follows the choice on any divergence.** After “Return”, the open window is newer than `current`, and the “newer installs its own” rule would ask “update again?” right after the press; instead the window becomes the app of the previous release. A just-opened copy newer than `current` installs itself.
