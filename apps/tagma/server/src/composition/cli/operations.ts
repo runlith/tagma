@@ -1,4 +1,6 @@
+import { ToolSchemaProjection } from '@runlith/llm/protocols/utils/tool-schema';
 import { toolInputSchema } from '@runlith/llm/schema/messages';
+import type { Operation } from '../../platform/contract/wire/operation.js';
 import { DOOR_FIELDS, offeringDoorFields } from '@runlith/agent/tool';
 import type { JsonObjectSchema, OperationsCli } from '../../cli/contract/service/operations.js';
 import { harnessRows } from '../../external-harnesses/hooks/rows.js';
@@ -10,6 +12,11 @@ import type { OperationRegistry } from '../../invocation/contract/service/regist
 import { Effect } from 'effect';
 import type { ChannelDoor } from './door.js';
 
+const operationSchema = (entry: Operation): JsonObjectSchema => {
+  const own = toolInputSchema(entry.params) as JsonObjectSchema;
+  return offeringDoorFields(own, DOOR_FIELDS) ?? own;
+};
+
 export const operationsCli = (
   channel: Channel,
   door: ChannelDoor,
@@ -17,10 +24,8 @@ export const operationsCli = (
 ): OperationsCli<OperationId> => ({
   registry,
   inputSchema: (schema) => toolInputSchema(schema) as JsonObjectSchema,
-  operationSchema: (entry) => {
-    const own = toolInputSchema(entry.params) as JsonObjectSchema;
-    return offeringDoorFields(own, DOOR_FIELDS) ?? own;
-  },
+  operationSchema,
+  toolSchema: (entry) => ToolSchemaProjection.flatRootObject(operationSchema(entry)) as JsonObjectSchema,
   blockRefFlag,
   version: PROGRAM_RELEASE,
   harness: (id, at) =>

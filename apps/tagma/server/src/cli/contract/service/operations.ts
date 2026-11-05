@@ -39,6 +39,7 @@ export type OperationsCli<Id extends string> = {
   readonly registry: OperationRegistry<Id>;
   readonly inputSchema: (schema: Schema.Top) => JsonObjectSchema;
   readonly operationSchema: (entry: Operation) => JsonObjectSchema;
+  readonly toolSchema: (entry: Operation) => JsonObjectSchema;
   readonly blockRefFlag: (name: string) => Flag.Flag<string>;
   readonly version: string;
   readonly harness: (id: string, at: Invocation) => Effect.Effect<BridgedHarness | null, HarnessUnreadable>;

@@ -101,7 +101,8 @@ export const mcpCatalog = <Id extends string>({
   registry,
   inputSchema,
   operationSchema,
-}: Pick<OperationsCli<Id>, 'registry' | 'inputSchema' | 'operationSchema'>) => {
+  toolSchema,
+}: Pick<OperationsCli<Id>, 'registry' | 'inputSchema' | 'operationSchema' | 'toolSchema'>) => {
   const served: readonly Id[] = registry.ids.filter((id) => registry.doors(id).includes('mcp'));
   const routable = (name: string): boolean => {
     const id = registry.named(name);
@@ -109,7 +110,7 @@ export const mcpCatalog = <Id extends string>({
   };
   const toolOf = (id: Id): McpServedTool => {
     const entry = registry.entry(id);
-    return { name: id, description: operationText(entry), inputSchema: operationSchema(entry), annotations: hintsOf(entry) };
+    return { name: id, description: operationText(entry), inputSchema: toolSchema(entry), annotations: hintsOf(entry) };
   };
   const listedOf = (id: Id) => {
     const entry = registry.entry(id);

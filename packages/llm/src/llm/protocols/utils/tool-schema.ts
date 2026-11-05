@@ -134,18 +134,35 @@ const describeTaggedRequirements = (
   const tagged = taggedAlternatives(alternatives);
   if (tagged === undefined) return properties;
   const requirements = alternatives.map((branch) => schemaRequired(branch).filter((name) => name !== tagged.tag));
+  const taken = alternatives.map((branch) => Object.keys(schemaProperties(branch)).filter((name) => name !== tagged.tag));
+  const shared = new Set(taken[0]?.filter((name) => taken.every((names) => names.includes(name))));
   const tagDescription = tagged.values
     .map((value, index) => {
       const required = requirements[index] ?? [];
-      return `${tagged.tag} ${value} requires ${required.length === 0 ? 'no other keys' : required.join(' and ')}`;
+      const optional = (taken[index] ?? []).filter((name) => !required.includes(name) && !shared.has(name));
+      const parts = [
+        ...(required.length === 0 ? [] : [`requires ${required.join(' and ')}`]),
+        ...(optional.length === 0 ? [] : [`optionally ${optional.join(', ')}`]),
+      ];
+      return `${tagged.tag} ${value} ${parts.length === 0 ? 'takes no other keys' : parts.join(', ')}`;
     })
     .join('; ');
   const described = { ...properties };
-  described[tagged.tag] = appendDescription(described[tagged.tag], `Variant requirements: ${tagDescription}.`);
-  for (const name of new Set(requirements.flat())) {
-    const values = tagged.values.filter((_, index) => requirements[index]?.includes(name));
-    if (values.length === alternatives.length) continue;
-    described[name] = appendDescription(described[name], `Required when ${tagged.tag} is ${values.join(' or ')}.`);
+  described[tagged.tag] = appendDescription(described[tagged.tag], `Variant keys: ${tagDescription}.`);
+  for (const name of new Set(taken.flat())) {
+    const takers = tagged.values.filter((_, index) => taken[index]?.includes(name));
+    const requirers = tagged.values.filter((_, index) => requirements[index]?.includes(name));
+    const only = takers.length === alternatives.length ? undefined : `Taken only when ${tagged.tag} is ${takers.join(' or ')}`;
+    const requiredIn = requirers.length === 0 || requirers.length === alternatives.length ? undefined : requirers;
+    const sentence =
+      only === undefined
+        ? requiredIn && `Required when ${tagged.tag} is ${requiredIn.join(' or ')}.`
+        : requiredIn === undefined
+          ? `${only}.`
+          : requiredIn.length === takers.length
+            ? `${only}, where it is required.`
+            : `${only}. Required when ${tagged.tag} is ${requiredIn.join(' or ')}.`;
+    if (sentence !== undefined) described[name] = appendDescription(described[name], sentence);
   }
   return described;
 };
