@@ -13,16 +13,7 @@ import { READING_CAPTURE, refusedByGit } from './failures.js';
 
 export const entryAt = Effect.fnUntraced(function* (git: Git['Service'], dir: string, revision: string | null, path: string) {
   if (revision === null) return null;
-  const found = (yield* treePathsAt(git, dir, revision, [path], { gitlinks: true, relative: 'cwd' })).get(path)!;
-  const entry = yield* Effect.fromResult(found).pipe(
-    Effect.catchTag('GitUnreadable', (failure) =>
-      revision !== 'HEAD'
-        ? Effect.fail(failure)
-        : Effect.flatMap(Effect.catchTag(commitOf(git, dir, 'HEAD', { capture: READING_CAPTURE }), 'GitRefused', refusedByGit), (head) =>
-            head === null ? Effect.succeed(null) : Effect.fail(failure),
-          ),
-    ),
-  );
+  const entry = yield* Effect.fromResult((yield* treePathsAt(git, dir, revision, [path], { gitlinks: true, relative: 'cwd' })).get(path)!);
   return entry === null ? null : { mode: entry.mode, object: entry.blob };
 });
 

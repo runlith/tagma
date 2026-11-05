@@ -9,8 +9,13 @@ import { PathRefused } from '../contract/service/authorship.js';
 import { returns } from '../lines/ends.js';
 import { READING_CAPTURE } from './failures.js';
 
-export const headBlob = (git: Git['Service'], dir: string, path: string): Effect.Effect<string | null, GitUnreadable | GitAnswerInvalid> =>
-  Effect.flatMap(workingTextsAt(configuredGit(git, 'thread-files-blob'), dir, 'HEAD', [path], { capture: READING_CAPTURE }), ([text]) =>
+export const headBlob = (
+  git: Git['Service'],
+  dir: string,
+  head: string,
+  path: string,
+): Effect.Effect<string | null, GitUnreadable | GitAnswerInvalid> =>
+  Effect.flatMap(workingTextsAt(configuredGit(git, 'thread-files-blob'), dir, head, [path], { capture: READING_CAPTURE }), ([text]) =>
     Effect.fromResult(text!),
   );
 

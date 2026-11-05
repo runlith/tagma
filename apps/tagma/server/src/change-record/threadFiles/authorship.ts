@@ -198,8 +198,13 @@ const blobEnd = (
     ),
   );
 
-const headEnd = (git: Git['Service'], dir: string, path: string): Effect.Effect<End, GitUnreadable | GitAnswerInvalid> =>
-  blobEnd(git, headBlob(git, dir, path), dir, 'HEAD', path);
+const headEnd = (
+  git: Git['Service'],
+  dir: string,
+  head: string | null,
+  path: string,
+): Effect.Effect<End, GitUnreadable | GitAnswerInvalid> =>
+  head === null ? Effect.succeed(null) : blobEnd(git, headBlob(git, dir, head, path), dir, head, path);
 
 const workingEnd = (files: FileSystem.FileSystem, dir: string, path: string): Effect.Effect<End, PathUnreadable | PathRefused> =>
   Effect.catchTag(working(files, dir, path), 'PathRefused', (failure) =>
@@ -215,6 +220,7 @@ const halfOf = Effect.fn('Authorship.half')(function* (
   cache: AuthorshipCache,
   rootId: RootId,
   dir: string,
+  commit: string | null,
   named: string,
   side: AuthorshipSide,
   bytes: End,
@@ -224,7 +230,7 @@ const halfOf = Effect.fn('Authorship.half')(function* (
 ): Effect.fn.Return<Half, ReadingFailure | GateRefusal<AuthorshipReadRefusal>> {
   const index = yield* blobEnd(git, stagedBlob(git, dir, named), dir, '', named);
   if (side === 'staged' && sameText(index, bytes)) return { head: null };
-  const head = yield* headEnd(git, dir, named);
+  const head = yield* headEnd(git, dir, commit, named);
   if (side === 'unstaged' && sameText(index, head)) return { head: { text: head } };
   const base = side === 'staged' ? head : index;
   const tip = side === 'staged' ? index : bytes;
@@ -380,13 +386,19 @@ export const authorshipAt = (
         asked,
       );
     }
-    const head = yield* entryAt(actingGit(readers.git, 'thread-files-object'), root.path, 'HEAD', named);
+    const objects = actingGit(readers.git, 'thread-files-object');
+    const headCommit = yield* Effect.catchTag(
+      commitOf(objects, root.path, 'HEAD', { capture: READING_CAPTURE }),
+      'GitRefused',
+      refusedByGit,
+    );
+    const head = yield* entryAt(objects, root.path, headCommit, named);
     const submodule = yield* workingSubmodule(readers.git, readers.files, root.path, named, head, side);
     if (submodule !== null) return submoduleAnswer(rootId, named, submodule);
     const bytes = yield* workingEnd(readers.files, root.path, named);
     let headRead: { readonly text: End } | null = null;
     if (side !== undefined) {
-      const half = yield* halfOf(readers.git, readers.walks, cache, rootId, root.path, named, side, bytes, width, opens, asked);
+      const half = yield* halfOf(readers.git, readers.walks, cache, rootId, root.path, headCommit, named, side, bytes, width, opens, asked);
       if ('answer' in half) return half.answer;
       headRead = half.head;
     }
@@ -402,7 +414,7 @@ export const authorshipAt = (
     const key = `${digestOf(bytes)}${NUL}${object ?? ''}${NUL}${judged?.print ?? ''}`;
     const kept = cache.keptAt(at, key, width, opens);
     if (kept !== null) return kept;
-    const base = headRead !== null ? headRead.text : yield* headEnd(readers.git, root.path, named);
+    const base = headRead !== null ? headRead.text : yield* headEnd(readers.git, root.path, headCommit, named);
     const writers = judged?.verdict.verdict === 'proven' ? judged.verdict.hands.map((hand) => hand.holder) : [];
     const carries = carriesOf(judged?.verdict, yield* readers.names(writers));
     const answer = yield* placedOf(

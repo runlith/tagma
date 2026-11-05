@@ -146,4 +146,26 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
       ).toBe('base\nother\n');
     }),
   );
+
+  it.effect('a repository with no commit yet reads a new file as wholly added, whole and as its unstaged half', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('unborn'));
+      const path = 'package.json';
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      yield* files.writeFileString(join(root, path), '{}\n');
+      const project = yield* world.stealthProject(root);
+      yield* projectLeaving(world, project);
+      const coverage = yield* Context.get(world.runtime.workspace, Coverage).cover(project);
+      const rootId = coverage.roots.find((row) => row.path === root)!.rootId;
+      for (const input of [{}, { side: 'unstaged' }]) {
+        const reply = yield* world.op('read_authorship', { rootId, path, ...input }, `project=${project}`);
+        if (reply.status !== 200) return yield* Effect.die(new Error(JSON.stringify(reply.body)));
+        const { authorship } = yield* Schema.decodeUnknownEffect(Schema.Struct({ authorship: PathAuthorship }))(reply.body);
+        expect(authorship.lines.every((line) => line.kind === 'added')).toBe(true);
+        expect(authorship.lines.map((line) => line.text).join('\n')).toBe('{}\n');
+      }
+    }),
+  );
 });
