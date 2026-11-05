@@ -11,6 +11,7 @@ import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import { executionWireLimits } from '../host/policy.js';
 import { executionHandshakeMs } from '../contract/wire/terminalBehavior.js';
 import type { TerminalFailure } from '../contract/service/terminals.js';
+import { TerminalUnavailable } from '../contract/wire/refusals.js';
 import { INVENTORY_PAGE } from '../store/terminalRows.js';
 
 export type HeldReading = {
@@ -113,7 +114,8 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
       Effect.logDebug(`the host inventory ${step} could not be read; the mirror is read again`, { reason: failure._tag }),
     );
 
-  const serial = <A, R>(work: Effect.Effect<A, never, R>): Effect.Effect<A, never, R> => flight.hold('inventory', work).pipe(Effect.orDie);
+  const serial = <A, R>(work: Effect.Effect<A, never, R>): Effect.Effect<A, TerminalUnavailable, R> =>
+    flight.hold('inventory', work).pipe(Effect.mapError((held) => new TerminalUnavailable({ owner: 'host', message: held.message })));
 
   const behind = (): boolean => synced === undefined || latest === undefined || latest._tag === 'Gap' || latest.revision > synced;
 
@@ -210,7 +212,7 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
     }
   });
 
-  const took = (update: InventoryFeedItem): Effect.Effect<void> =>
+  const took = (update: InventoryFeedItem): Effect.Effect<void, TerminalUnavailable> =>
     serial(
       Effect.gen(function* () {
         if (update._tag === 'Gap' || synced === undefined || update.revision > synced) {
@@ -226,14 +228,22 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
   const refresh = Effect.fnUntraced(function* () {
     wanted = true;
     for (const cell of cells.values()) cell.refreshing = true;
-    yield* serial(
-      Effect.gen(function* () {
-        while (wanted) {
-          wanted = false;
-          yield* take();
-        }
-      }),
+    const read = yield* Effect.result(
+      serial(
+        Effect.gen(function* () {
+          while (wanted) {
+            wanted = false;
+            yield* take();
+          }
+        }),
+      ),
     );
+    if (read._tag === 'Failure') {
+      wanted = false;
+      yield* Effect.logWarning('the host inventory was not read again; the terminals keep their last reading, marked stale', {
+        reason: read.failure.message,
+      });
+    }
   });
 
   const subscribed = (): Stream.Stream<InventoryFeedItem, TerminalFailure> =>
@@ -259,7 +269,7 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
       const read = reading();
       return { ...read, listeners: cell.listeners, stale: cell.refreshing || !read.whole };
     },
-    held: (fresh: boolean): Effect.Effect<HeldReading> =>
+    held: (fresh: boolean): Effect.Effect<HeldReading, TerminalUnavailable> =>
       serial(
         Effect.gen(function* () {
           if (fresh || behind()) yield* catchUp();
@@ -277,7 +287,7 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
     forget: (projectId: number): void => {
       cells.delete(projectId);
     },
-    moves: (): Effect.Effect<InventoryMoves> =>
+    moves: (): Effect.Effect<InventoryMoves, TerminalUnavailable> =>
       serial(
         Effect.gen(function* () {
           if (behind()) yield* catchUp();

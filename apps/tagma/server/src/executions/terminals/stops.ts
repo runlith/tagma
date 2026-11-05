@@ -108,7 +108,7 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({
 
   const commandChanges = (): Stream.Stream<InventoryFeedItem> => cell.changes();
 
-  const commandMoves = (): Effect.Effect<InventoryMoves> => cell.moves();
+  const commandMoves = (): Effect.Effect<InventoryMoves, TerminalUnavailable> => cell.moves();
 
   const processes = Effect.fn('Terminals.processes')(function* (execution: ExecutionRef) {
     return yield* executionEvidence.processes(execution);

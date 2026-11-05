@@ -215,6 +215,6 @@ export class ManagedCommands extends Context.Service<
       run?: string,
     ) => Effect.Effect<CommandSweep, TerminalFailure>;
     readonly changes: () => Stream.Stream<InventoryFeedItem>;
-    readonly moves: () => Effect.Effect<InventoryMoves>;
+    readonly moves: () => Effect.Effect<InventoryMoves, TerminalUnavailable>;
   }
 >()('tagma/executions/ManagedCommands') {}

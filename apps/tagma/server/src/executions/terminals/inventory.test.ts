@@ -1,6 +1,8 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Fiber, Queue, Stream } from 'effect';
+import { StallRecords } from '@runlith/held/holding';
+import { Deferred, Effect, Fiber, Queue, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { WireUnavailable, type ExecutionFeedItem } from '@runlith/executions/Executions';
 import type { Executions } from '@runlith/executions/Executions';
 import type { ExecutionEvidence } from '@runlith/executions/ExecutionEvidence';
@@ -17,11 +19,12 @@ const idOf = (n: number): string => `e-${String(n).padStart(6, '0')}`;
 
 const hostOver = Effect.fnUntraced(function* () {
   const asked = { subscriptions: 0, changes: 0, pages: 0 };
-  const host = { failing: false, sockets: 0, revision: 0 };
+  const host = { failing: false, silent: false, sockets: 0, revision: 0 };
   const held = new Map<string, { readonly summary: ExecutionSummary; readonly stamp: number }>();
   const left: Array<{ readonly ref: ExecutionRef; readonly stamp: number }> = [];
   let sorted: string[] | undefined;
   const deliveries = yield* Queue.unbounded<ExecutionFeedItem, WireUnavailable>();
+  const unanswered = yield* Deferred.make<void>();
   const unreachable = () => Effect.fail(new WireUnavailable({ kind: 'unreachable', reason: 'the host is gone', sent: false }));
   const port = {
     generation: () => Effect.succeed(1),
@@ -33,6 +36,7 @@ const hostOver = Effect.fnUntraced(function* () {
     changes: (since: number, limit: number) =>
       Effect.suspend(() => {
         asked.changes += 1;
+        if (host.silent) return Effect.andThen(Deferred.succeed(unanswered, undefined), Effect.never);
         if (host.failing) return unreachable();
         const executions = [...held.values()].filter((entry) => entry.stamp > since).map((entry) => entry.summary);
         const gone = left.filter((entry) => entry.stamp > since).map((entry) => entry.ref);
@@ -73,7 +77,7 @@ const hostOver = Effect.fnUntraced(function* () {
   };
   const push = (update: InventoryFeedItem) => Queue.offer(deliveries, { _tag: 'Inventory', update });
   const lose = Queue.fail(deliveries, new WireUnavailable({ kind: 'unreachable', reason: 'lost', sent: false }));
-  return { asked, host, inventory, hold, release, push, lose };
+  return { asked, host, inventory, hold, release, push, lose, unanswered };
 });
 
 const moved = (revision: number): InventoryFeedItem => ({ _tag: 'Moved', revision, usage: [] });
@@ -241,6 +245,23 @@ it.live('a reading the host did not answer is taken again at the next round, not
     expect({ stale: recovered.stale, whole: recovered.whole }).toEqual({ stale: false, whole: true });
     expect(recovered.stateOf(refOf(idOf(1)))).toBeDefined();
   }),
+);
+
+it.effect('a reading the host leaves unanswered past its ceiling is refused as unavailable, and the next reading asks the host again', () =>
+  Effect.gen(function* () {
+    const { host, inventory, hold, unanswered } = yield* hostOver();
+    hold(idOf(1));
+    host.silent = true;
+    const reading = yield* Effect.forkScoped(Effect.flip(inventory.held(true)));
+    yield* Deferred.await(unanswered);
+    yield* TestClock.adjust('2 minutes');
+    const refused = yield* Fiber.join(reading);
+    host.silent = false;
+    const next = yield* inventory.held(true);
+
+    expect(refused).toMatchObject({ _tag: 'TerminalUnavailable', owner: 'host' });
+    expect(next.stateOf(refOf(idOf(1)))).toBeDefined();
+  }).pipe(Effect.provideService(StallRecords, () => Effect.void)),
 );
 
 it.live(

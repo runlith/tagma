@@ -457,8 +457,16 @@ export const makeTerminalDischarge = Effect.fnUntraced(function* ({ installation
     const current = generation.success;
     const absentFrom = (reading: HeldReading) =>
       rows.success.filter((row) => row.execution.incarnation === current && reading.stateOf(row.execution) === undefined);
-    const mirrored = yield* cell.held(false);
-    const held = absentFrom(mirrored).length > 0 ? yield* cell.held(true) : mirrored;
+    const reading = yield* Effect.result(
+      Effect.flatMap(cell.held(false), (mirrored) => (absentFrom(mirrored).length > 0 ? cell.held(true) : Effect.succeed(mirrored))),
+    );
+    if (reading._tag === 'Failure') {
+      yield* Effect.logWarning('the disposition pass did not run: the host inventory could not be read', {
+        reason: reading.failure.message,
+      });
+      return { stamped: 0, discharged: 0, retained };
+    }
+    const held = reading.success;
     const absent = held.whole && current !== null ? absentFrom(held) : [];
     const ended = rows.success.filter((row) => held.stateOf(row.execution)?.phase === 'ended');
     const unproven: typeof absent = [];
