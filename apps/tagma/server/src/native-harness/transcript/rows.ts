@@ -4,7 +4,7 @@ import { ThreadStorageFailed, decodeThreadEventPayloadResult } from '@runlith/ag
 import type { ThreadTranscript, ThreadTranscriptEntry, ThreadTranscriptPage } from '@runlith/agent/transcript/rows';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
-import { threadEventFact } from '@runlith/agent/thread/ThreadEventDoor';
+import { threadEventFact, transcriptFact } from '@runlith/agent/thread/ThreadEventDoor';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadTranscriptQuery } from '@runlith/agent/thread/storage/aggregate';
 import type { ThreadEntryPlacement, ThreadEventFact } from '@runlith/agent/transcript/eventFold';
@@ -122,7 +122,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
       .where(eq(threadLog.threadId, threadId))
       .prepare(),
     suffix: db
-      .select({ kind: threadEvent.kind, payload: threadEvent.payload })
+      .select({ id: threadEvent.id, kind: threadEvent.kind, payload: threadEvent.payload })
       .from(threadEvent)
       .where(
         and(
@@ -431,7 +431,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
           ),
     suffix: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {
       const rows = yield* unit.run(planned.suffix.all({ threadId: id }));
-      const facts = yield* Effect.forEach(rows, (row) => factOf(kinds, row.kind, row.payload));
+      const facts = rows.map((row) => transcriptFact(kinds, row.kind, row.id, row.payload));
       return facts.filter(
         (fact) => fact.entry !== undefined || fact.withdrawn !== undefined || fact.rewound !== undefined || fact.restored !== undefined,
       );
@@ -585,7 +585,7 @@ export function factOf(kinds: ThreadEntryReader, kind: string, payload: unknown)
 }
 
 export function storedEntry(kinds: ThreadEntryReader, value: unknown): Effect.Effect<ThreadTranscriptEntry, ThreadStorageFailed> {
-  const read = kinds.decode(value);
+  const read = kinds.stored(value);
   return Result.isFailure(read)
     ? Effect.fail(new ThreadStorageFailed({ call: 'transcript.entry', cause: read.failure }))
     : Effect.succeed(read.success);

@@ -3,7 +3,7 @@ import { actDigest, callParts, evidenceKey, INPUT_OPERATION, type Evidence, type
 import type { ThreadMetadataRow, ThreadRow } from '../rows';
 import type { ThreadMetadataChange } from '../state';
 import { ThreadNotFoundError, type ThreadAtomicPatch } from '../storage/aggregate';
-import { decodeThreadEventPayload, type ThreadEventRecord } from '../events';
+import { admitThreadEventPayload, type ThreadEventRecord } from '../events';
 import { foldThreadEvents, sealThreadEvents, threadPlacementSeed, type ThreadLogState, type ThreadSealedEvent } from '../ThreadEventDoor';
 import { ThreadEventJournal, ThreadStore, ThreadTransitions, type ThreadTx, type ThreadWriteTx } from '../ThreadPorts';
 import type { ThreadAggregateStorage } from '../storage/aggregate';
@@ -337,7 +337,7 @@ function journalForm(
         position: head + index + 1,
         id,
         kind: body.kind,
-        payload: decodeThreadEventPayload(kinds, JSON.parse(JSON.stringify(body.payload))),
+        payload: admitThreadEventPayload(kinds, JSON.parse(JSON.stringify(body.payload))),
       })),
     catch: (cause) => new ThreadStorageFailed({ call: 'transition', cause }),
   });
@@ -471,7 +471,7 @@ export function sameVersion(left: ThreadVersion, right: ThreadVersion): boolean 
 function replayable(kinds: ThreadEntryReader, declared: readonly ThreadSealedEvent[]): Effect.Effect<void, ThreadStorageFailed> {
   return Effect.try({
     try: () => {
-      for (const { body } of declared) decodeThreadEventPayload(kinds, body.payload);
+      for (const { body } of declared) admitThreadEventPayload(kinds, body.payload);
     },
     catch: (cause) => new ThreadStorageFailed({ call: 'transition', cause }),
   });

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Result, type Effect } from 'effect';
 import { decodeThreadEventPayloadResult } from '@runlith/agent/thread/persisted';
-import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { crossingEntry, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ReadRollout } from '../contract/service/rolloutReads.js';
 import { recordVerdict, rolloutEventOf, scanRolloutFile, type RolloutRecord, type RolloutUnreadable } from './rolloutFile.js';
 import { revived, type CarriedRecord, type FoldRow, type Row, type RolloutLayer, type RolloutMeta } from './rolloutMeta.js';
@@ -204,7 +204,8 @@ export async function planCarry(
     const decoded = decodeThreadEventPayloadResult(kinds, row.payload);
     if (Result.isFailure(decoded))
       return refused('record-shape', `the event at position ${verdict.position} cannot be read: ${decoded.failure.message}`);
-    const event = { ...row, payload: decoded.success };
+    const { entry } = decoded.success;
+    const event = { ...row, payload: entry === undefined ? decoded.success : { ...decoded.success, entry: crossingEntry(entry) } };
     records.push({ record: 'event', row: event, event: { kind: String(row.kind), payload: decoded.success } });
     through = verdict.position;
     rows.push({ kind: 'event', row: event, weight: 5, bytes: sizeOf(event) });

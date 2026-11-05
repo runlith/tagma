@@ -127,26 +127,30 @@ export function degradedSync<A>(witness: ActivityWitness, place: string, why: st
   try {
     return compute();
   } catch (defect) {
-    const at = witness.clock.currentTimeMillisUnsafe();
-    const id = mint(at);
-    const { log, thread, run } = witness;
-    log.record({
-      _tag: 'Opened',
-      id,
-      at,
-      parent: run === null ? null : { run },
-      thread,
-      run,
-      project: null,
-      kind: FAULT.name,
-      actor: { kind: 'server', name: FAULT.name },
-      trigger: null,
-      attrs: { place },
-    });
-    log.record({ _tag: 'Noted', activity: id, at, note: degradedNote(place, why, Cause.die(defect)) });
-    log.record({ _tag: 'Ended', activity: id, at, outcome: 'ok', reason: null, message: null, result: {} });
+    toldDegraded(witness, place, why, defect);
     return fallback();
   }
+}
+
+export function toldDegraded(witness: ActivityWitness, place: string, why: string, defect: unknown): void {
+  const at = witness.clock.currentTimeMillisUnsafe();
+  const id = mint(at);
+  const { log, thread, run } = witness;
+  log.record({
+    _tag: 'Opened',
+    id,
+    at,
+    parent: run === null ? null : { run },
+    thread,
+    run,
+    project: null,
+    kind: FAULT.name,
+    actor: { kind: 'server', name: FAULT.name },
+    trigger: null,
+    attrs: { place },
+  });
+  log.record({ _tag: 'Noted', activity: id, at, note: degradedNote(place, why, Cause.die(defect)) });
+  log.record({ _tag: 'Ended', activity: id, at, outcome: 'ok', reason: null, message: null, result: {} });
 }
 
 export function body(recorded: ActivityBody): Effect.Effect<number | null> {

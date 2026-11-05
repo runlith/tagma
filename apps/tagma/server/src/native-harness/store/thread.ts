@@ -10,6 +10,7 @@ import type {
 } from '@runlith/agent/thread/rows';
 import type { ThreadProfileBirth } from '@runlith/agent/thread/agents/AgentProfile';
 import type { AgentApprovalMode } from '@runlith/agent/contracts';
+import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import type { ThreadTranscript, ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { Usage } from '@runlith/llm/schema/events';
@@ -56,7 +57,7 @@ export const threadHistoryItem = sqliteTable(
 );
 
 export function typeOf(entry: ThreadTranscriptEntry): string {
-  return entry.type;
+  return ThreadEntryUnreadable.is(entry) ? (entry.refusal.type ?? entry.type) : entry.type;
 }
 
 export function runIdOf(entry: ThreadTranscriptEntry): string | null {

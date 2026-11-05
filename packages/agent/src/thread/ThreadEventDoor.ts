@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Result } from 'effect';
 import { type ThreadEntryPlacement, type ThreadEventFact } from '../transcript/eventFold';
 import { TranscriptFold } from '../transcript/TranscriptFold';
 import { HistoryFold, moveThreadHistory } from './HistoryFold';
@@ -10,10 +10,10 @@ import type { ThreadEventLogStorage } from './storage/eventLog';
 import type { ThreadContextReading, ThreadHistory } from './rows';
 import type { ThreadTranscript, ThreadTranscriptEntry } from '../transcript/rows';
 import { mintThreadEventId } from './identity';
-import { decodeThreadEventPayload, type ThreadEventBody, type ThreadEventInput, type ThreadStepContext } from './events';
+import { admitThreadEventPayload, type ThreadEventBody, type ThreadEventInput, type ThreadStepContext } from './events';
 import { type ThreadPortFailure } from './ThreadBorder';
-import { ThreadStorageFailed } from './persisted';
-import { coreEntry, type ThreadEntryReader } from '../transcript/kinds';
+import { decodeThreadTranscriptFacetsResult, ThreadStorageFailed } from './persisted';
+import { coreEntry, ThreadEntryUndecodable, ThreadEntryUnreadable, type ThreadEntryReader } from '../transcript/kinds';
 
 export type ThreadLogState = {
   readonly history: ThreadHistory;
@@ -55,7 +55,7 @@ export const appendThreadEventsIn = Effect.fnUntraced(function* <TWrite = Thread
 function replayableThreadEvent(kinds: ThreadEntryReader, body: ThreadEventBody): Effect.Effect<void, ThreadPortFailure> {
   return Effect.try({
     try: () => {
-      decodeThreadEventPayload(kinds, body.payload);
+      admitThreadEventPayload(kinds, body.payload);
     },
     catch: (cause) => new ThreadStorageFailed({ call: 'append', cause }),
   });
@@ -103,6 +103,30 @@ export function threadEventFact(event: ThreadEventBody): ThreadEventFact {
     restored: restored ? { rewindId: restored.rewindId, runIds: restored.runIds } : undefined,
     branched,
   };
+}
+
+export function transcriptFact(kinds: ThreadEntryReader, kind: string, eventId: string, value: unknown): ThreadEventFact {
+  const formed = kinds.formEvent(value);
+  if (Result.isFailure(formed)) return unplacedFact(kinds, kind, eventId, formed.failure.message);
+  const facets = decodeThreadTranscriptFacetsResult(formed.success);
+  if (Result.isFailure(facets)) return unplacedFact(kinds, kind, eventId, facets.failure.message);
+  const { entry: shape, ...marks } = facets.success;
+  if (shape === undefined) return threadEventFact({ kind, payload: marks });
+  const entry = kinds.storedForm(shape);
+  return Result.isSuccess(entry)
+    ? threadEventFact({ kind, payload: { ...marks, entry: entry.success } })
+    : unplacedFact(kinds, kind, eventId, entry.failure.message);
+}
+
+function unplacedFact(kinds: ThreadEntryReader, kind: string, eventId: string, issue: string): ThreadEventFact {
+  const line = { type: kind, id: eventId };
+  kinds.degraded({
+    place: 'thread entry',
+    why: 'a stored event this build cannot place in the transcript stands in the thread as a diagnostic line, the journal keeping it',
+    repeat: `${kind}\n${issue}`,
+    failure: new Error(`Thread events of kind ${kind} cannot be placed in the transcript: ${issue}`),
+  });
+  return { kind, entry: new ThreadEntryUnreadable(line, new ThreadEntryUndecodable({ type: kind, id: eventId, issue }), line) };
 }
 
 export function foldThreadEvent(state: ThreadLogState, event: ThreadEventBody): ThreadLogState {

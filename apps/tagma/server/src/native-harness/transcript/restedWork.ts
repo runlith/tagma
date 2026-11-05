@@ -50,7 +50,14 @@ export type RestedAnswer = { readonly id: number } & (
   | { readonly kind: 'failed'; readonly reason: string }
 );
 
-export type RestedRead = { readonly id: number; readonly kind: 'read'; readonly reads: readonly RolloutRead[] };
+export type RestedDegraded = { readonly place: string; readonly why: string; readonly repeat: string; readonly message: string };
+
+export type RestedRead = {
+  readonly id: number;
+  readonly kind: 'read';
+  readonly reads: readonly RolloutRead[];
+  readonly degraded: readonly RestedDegraded[];
+};
 
 const WORKER = 'rested fold worker';
 
@@ -116,6 +123,8 @@ export const makeRestedWork = Effect.gen(function* () {
       if (start === null) return Effect.fail(workerGone(WORKER, 'its entry reader names no worker that folds with it'));
       return linkOf(start).run(asking, [], (note) => {
         for (const one of note.reads) read(one);
+        for (const { message, repeat, ...told } of note.degraded)
+          kinds.degraded({ ...told, repeat, failure: new Error(message, { cause: new Error(repeat) }) });
       });
     }).pipe(Effect.withSpan(span, { attributes: { rollout: rollout.path } }));
 

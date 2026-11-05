@@ -10,6 +10,7 @@ import {
   parseThreadPendingInteraction,
   parseTransportBinding,
   parseTransportCapabilities,
+  readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { and, eq, sql } from 'drizzle-orm';
 import { programOf } from '../../platform/store/programs.js';
@@ -115,12 +116,31 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
 });
 
 export function threadRowOf<T extends ThreadMetadataRow>(kinds: ThreadEntryReader, row: T): Effect.Effect<T, ThreadStorageFailed> {
+  const subject = `Thread ${row.id}`;
   return trusted<T>('threadRow', () => ({
     ...row,
     authority: parseThreadAuthority(row.authority),
-    bornOf: parseThreadBornOf(row.bornOf),
-    pendingInteraction: parseThreadPendingInteraction(kinds, row.pendingInteraction),
-    contextReading: parseThreadContextReading(kinds, row.contextReading),
+    bornOf: readableRowFact(
+      kinds,
+      subject,
+      'a birth record this build cannot read stands as none',
+      () => parseThreadBornOf(row.bornOf),
+      null,
+    ),
+    pendingInteraction: readableRowFact(
+      kinds,
+      subject,
+      'a parked question this build cannot read stands as none, so its thread still opens and its run can be stopped',
+      () => parseThreadPendingInteraction(kinds, row.pendingInteraction),
+      null,
+    ),
+    contextReading: readableRowFact(
+      kinds,
+      subject,
+      'a context reading this build cannot read stands as none until the next step measures it',
+      () => parseThreadContextReading(kinds, row.contextReading),
+      null,
+    ),
     transport: parseTransportBinding(row.transport),
     capabilities: parseTransportCapabilities(row.capabilities),
   }));

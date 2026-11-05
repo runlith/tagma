@@ -1,6 +1,7 @@
 import { Cause, Clock, Context, Deferred, Effect, Layer } from 'effect';
 import { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { witnessedReads } from '../journal/readWitness.js';
 import { threadAgentsLayer, threadCompactorLayer, threadFeaturesLayer, threadStorageLayer } from '@runlith/agent/thread/kernelPorts';
 import { ModelRuns, threadHostLayer } from '@runlith/agent/thread/ThreadPorts';
 import { ApprovalModes } from '@runlith/agent/modes/ApprovalModes';
@@ -201,6 +202,7 @@ function engineFeatures(
 
 export const threadEngineLayer = Layer.effectContext(
   Effect.gen(function* () {
+    yield* witnessedReads;
     const store = yield* MachineStore;
     const units = yield* MachineUnits;
     const records = yield* ThreadRecords;

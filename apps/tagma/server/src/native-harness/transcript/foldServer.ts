@@ -2,16 +2,16 @@
 
 import { createHash } from 'node:crypto';
 import { open, rename, rm, type FileHandle } from 'node:fs/promises';
-import { Schema } from 'effect';
+import { Result, Schema } from 'effect';
 import { Readable } from 'node:stream';
 import { createZstdDecompress } from 'node:zlib';
 import { decodeThreadEventPayloadResult, parseThreadRunUsage } from '@runlith/agent/thread/persisted';
 import type { ThreadCompactionCheckpointRow } from '@runlith/agent/thread/rows';
-import { isMetaRecord, revived, sourceEventText, sourceRecordsText } from '../../threads/journal/rolloutMeta.js';
+import { fingerprintedPayload, isMetaRecord, revived, sourceEventText, sourceRecordsText } from '../../threads/journal/rolloutMeta.js';
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
 import { entryOf, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { RolloutLineUnreadable, factOf } from '../../threads/journal/restedReads.js';
+import { RolloutLineUnreadable, factOf, transcriptFactOf } from '../../threads/journal/restedReads.js';
 import { stageRolloutFile } from '../../threads/journal/rolloutStaging.js';
 import { planCarry, rolloutLayers } from '../../threads/journal/rolloutCarry.js';
 import type { FoldRow } from '../../threads/journal/rolloutMeta.js';
@@ -24,6 +24,7 @@ import {
   TRANSCRIPT_SLOT_BYTES,
   type RestedAnswer,
   type RestedAsk,
+  type RestedDegraded,
   type RestedRead,
   type RestedTell,
   type RestedCompaction,
@@ -84,13 +85,12 @@ async function source(rollout: RolloutFiles, boundary: RolloutBoundary, read: Re
   return source(rollout, boundary, read, true);
 }
 
-async function* facts(
+async function* facts<Fact extends { readonly position: number }>(
   rollout: RolloutFiles,
   boundary: RolloutBoundary,
-  kinds: ThreadEntryReader,
   read: ReadRollout,
-): AsyncGenerator<NonNullable<ReturnType<typeof factOf>>> {
-  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+  factFrom: (line: string) => Fact | null,
+): AsyncGenerator<Fact> {
   const decoder = new TextDecoder();
   let rest = '';
   let corrupt = 0;
@@ -100,9 +100,9 @@ async function* facts(
     const lines = (rest + decoder.decode(chunk as Uint8Array, { stream: true })).split('\n');
     rest = lines.pop() ?? '';
     for (const line of lines) {
-      let fact: ReturnType<typeof factOf>;
+      let fact: Fact | null;
       try {
-        fact = factOf(line, decode);
+        fact = factFrom(line);
       } catch (failure) {
         if (!(failure instanceof RolloutLineUnreadable)) throw failure;
         if (corrupt === 0) first = failure.message;
@@ -147,7 +147,7 @@ async function certify(rollout: RolloutFiles, kinds: ThreadEntryReader, read: Re
       yield data;
     }
   }
-  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+  const decode = (value: unknown) => Result.succeed(fingerprintedPayload(kinds, value));
   for await (const line of wholeLinesOf(hashed())) {
     if (line === '') continue;
     if (opening) {
@@ -202,7 +202,7 @@ async function transcribe(
   if (boundary.kind === 'published' && (key.bytes !== boundary.source.bytes || key.position !== boundary.source.position))
     throw new RolloutLineUnreadable(`${rollout.path}: the transcript key does not name the published prefix`);
   const fold = new TranscriptFold([]);
-  for await (const fact of facts(rollout, boundary, kinds, read)) fold.place(fact.fact);
+  for await (const fact of facts(rollout, boundary, read, (line) => transcriptFactOf(line, kinds))) fold.place(fact.fact);
   const entries = fold.take();
   const target = rollout.transcript;
   const partial = `${target}.partial`;
@@ -261,7 +261,9 @@ async function history(
   read: ReadRollout,
 ): Promise<{ readonly history: ReturnType<HistoryFold['take']>; readonly bytes: number }> {
   const fold = new HistoryFold();
-  for await (const fact of facts(rollout, boundary, kinds, read)) fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
+  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+  for await (const fact of facts(rollout, boundary, read, (line) => factOf(line, decode)))
+    fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
   const folded = fold.take();
   return { history: folded, bytes: Buffer.byteLength(JSON.stringify(folded), 'utf8') };
 }
@@ -359,9 +361,17 @@ function taken(ask: Extract<RestedAsk, { readonly kind: 'carry-take' }>): Rested
   return { id: ask.id, kind: 'carried', rows };
 }
 
+//! A fold of one thread reports this many distinct degraded reads; the error list needs the first of each kind, not every record.
+const FOLD_DEGRADED = 64;
+
 async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<RestedAnswer> {
   const totals = totalledReads();
   const read = totals.observe;
+  const degraded = new Map<string, RestedDegraded>();
+  const leave = kinds.witnessing(({ place, why, repeat, failure }) => {
+    if (degraded.size < FOLD_DEGRADED)
+      degraded.set(repeat, { place, why, repeat, message: failure instanceof Error ? failure.message : String(failure) });
+  });
   try {
     if (ask.kind === 'certify') return { id: ask.id, kind: 'certified', frontier: await certify(ask.rollout, kinds, read) };
     if (ask.kind === 'digest')
@@ -375,8 +385,10 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
     if (ask.kind === 'layers') return { id: ask.id, kind: 'layers', layers: await rolloutLayers(ask.rollout.path, read) };
     return { id: ask.id, kind: 'history', ...(await history(ask.rollout, ask.boundary, kinds, read)) };
   } finally {
+    leave();
     const reads = totals.drain();
-    if (reads.length > 0) self.postMessage({ id: ask.id, kind: 'read', reads } satisfies RestedRead);
+    if (reads.length > 0 || degraded.size > 0)
+      self.postMessage({ id: ask.id, kind: 'read', reads, degraded: [...degraded.values()] } satisfies RestedRead);
   }
 }
 

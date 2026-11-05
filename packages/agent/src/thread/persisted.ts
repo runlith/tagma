@@ -7,7 +7,7 @@ import type { ThreadBornOf } from '../protocol/birth';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
 import type { ThreadContextReading, ThreadHistory, ThreadPendingInteraction, ThreadRunProgress, ThreadAuthority } from './rows';
-import type { ThreadTranscript } from '../transcript/rows';
+import type { ThreadTranscript, ThreadTranscriptEntry } from '../transcript/rows';
 import { type ThreadEntryReader, ThreadEntryUndecodable } from '../transcript/kinds';
 import { agentProfileSchema, type ThreadProfileBirth } from './agents/AgentProfile';
 import { transportBindingSchema, type TransportBinding } from './record';
@@ -137,19 +137,32 @@ export const decodeThreadEventFacetsResult = (value: unknown): Result.Result<typ
   return Result.isFailure(named) ? Result.fail(named.failure) : readFacets(value);
 };
 
-export const decodeThreadEventPayloadResult = (
-  kinds: ThreadEntryReader,
-  value: unknown,
-): Result.Result<ThreadEventPayload, Schema.SchemaError | ThreadEntryUndecodable> => {
-  const formed = kinds.formEvent(value);
-  if (Result.isFailure(formed)) return Result.fail(new ThreadEntryUndecodable({ type: null, id: null, issue: formed.failure.message }));
-  const facets = decodeThreadEventFacetsResult(formed.success);
-  if (Result.isFailure(facets)) return facets;
-  const { entry: shape, ...rest } = facets.success;
-  if (shape === undefined) return Result.succeed(rest);
-  const entry = kinds.read(shape);
-  return Result.isFailure(entry) ? Result.fail(entry.failure) : Result.succeed({ ...rest, entry: entry.success });
-};
+export const decodeThreadTranscriptFacetsResult = Schema.decodeUnknownResult(
+  Schema.Struct({
+    entry: threadEventPayloadSchema.fields.entry,
+    withdrawn: threadEventPayloadSchema.fields.withdrawn,
+    rewound: threadEventPayloadSchema.fields.rewound,
+    restored: threadEventPayloadSchema.fields.restored,
+    branched: threadEventPayloadSchema.fields.branched,
+  }),
+);
+
+const eventPayloadThrough =
+  (entryOf: (kinds: ThreadEntryReader, shape: unknown) => Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable>) =>
+  (kinds: ThreadEntryReader, value: unknown): Result.Result<ThreadEventPayload, Schema.SchemaError | ThreadEntryUndecodable> => {
+    const formed = kinds.formEvent(value);
+    if (Result.isFailure(formed)) return Result.fail(new ThreadEntryUndecodable({ type: null, id: null, issue: formed.failure.message }));
+    const facets = decodeThreadEventFacetsResult(formed.success);
+    if (Result.isFailure(facets)) return facets;
+    const { entry: shape, ...rest } = facets.success;
+    if (shape === undefined) return Result.succeed(rest);
+    const entry = entryOf(kinds, shape);
+    return Result.isFailure(entry) ? Result.fail(entry.failure) : Result.succeed({ ...rest, entry: entry.success });
+  };
+
+export const decodeThreadEventPayloadResult = eventPayloadThrough((kinds, shape) => kinds.storedForm(shape));
+
+export const admitThreadEventPayloadResult = eventPayloadThrough((kinds, shape) => kinds.read(shape));
 
 export const threadContextReadingSchema = Schema.Struct({
   usage: Usage,
@@ -188,7 +201,7 @@ export function parseThreadStreamTail(kinds: ThreadEntryReader, value: unknown):
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) throw new Error('Persisted thread stream tail cannot be read — expected a list of entries');
   return value.map((entry) => {
-    const read = kinds.decode(entry);
+    const read = kinds.stored(entry);
     if (Result.isFailure(read)) throw new Error(`Persisted thread stream tail cannot be read — ${read.failure.message}`);
     return read.success;
   });
@@ -289,6 +302,16 @@ export function parseThreadContextReading(kinds: ThreadEntryReader, value: unkno
   const parsed = decodeReading(formed.success);
   if (parsed._tag !== 'Success') refuse('context reading', parsed.failure);
   return parsed.success;
+}
+
+export function readableRowFact<A>(kinds: ThreadEntryReader, subject: string, why: string, parse: () => A, otherwise: A): A {
+  try {
+    return parse();
+  } catch (failure) {
+    const said = failure instanceof Error ? failure.message : String(failure);
+    kinds.degraded({ place: 'thread row', why, repeat: said, failure: new Error(`${subject}: ${said}`) });
+    return otherwise;
+  }
 }
 
 export const threadBornOfSchema = Schema.Struct({

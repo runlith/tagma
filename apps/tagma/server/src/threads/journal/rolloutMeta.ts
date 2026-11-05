@@ -1,8 +1,8 @@
-import { Effect } from 'effect';
+import { Effect, Result } from 'effect';
 import type { WorkerUnavailable } from '@runlith/utils/worker';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
-import { parseThreadRunUsage } from '@runlith/agent/thread/persisted';
-import type { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { decodeThreadEventPayloadResult, parseThreadRunUsage } from '@runlith/agent/thread/persisted';
+import type { ThreadEntryKinds, ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { and, asc, eq, lt, sql } from 'drizzle-orm';
 import { threadResource } from '../store/tables.js';
 import { threadBase, threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../store/journal.js';
@@ -23,6 +23,11 @@ import type { CarryAsk, Carrying } from './rolloutCarry.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 
 export type Row = Record<string, unknown>;
+
+export const fingerprintedPayload = (kinds: ThreadEntryReader, value: unknown): ThreadEventPayload => {
+  const read = decodeThreadEventPayloadResult(kinds, value);
+  return Result.isSuccess(read) ? read.success : (value as ThreadEventPayload);
+};
 
 export const sourceEventText = (event: {
   readonly position: number;
@@ -75,6 +80,7 @@ const DATE_FIELDS = [
   'detachedAt',
   'projectionEvictedAt',
   'heldAt',
+  'delegationAt',
 ] as const;
 
 export function frozen(row: Row): Row {

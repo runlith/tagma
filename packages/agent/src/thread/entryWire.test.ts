@@ -16,8 +16,20 @@ it.effect('wire ingress reads installed entries and preserves a refusal for an u
     expect(unknown).toBeInstanceOf(ThreadEntryUnreadable);
     if (!(unknown instanceof ThreadEntryUnreadable)) return;
     expect(unknown.refusal).toMatchObject({ _tag: 'ThreadEntryUndecodable', id: 'placed:1', type: 'placed' });
-    const encoded = yield* Schema.encodeEffect(threadEntryWireSchema)(unknown).pipe(Effect.result);
-    expect(Result.isFailure(encoded)).toBe(true);
+  }),
+);
+
+it.effect('an entry the store could not read crosses the wire as its diagnosis, without its body', () =>
+  Effect.gen(function* () {
+    const stored = { type: 'placed', id: 'placed:1', runId: 'run', occurredAt: 'then', rootId: 'a body the reader never sees' };
+    const held = makeThreadEntryReader({ products: [] }).stored(stored);
+    const carried = Result.getOrThrow(held);
+    const sent = yield* Schema.encodeEffect(threadEntryWireSchema)(carried);
+    const crossed = JSON.parse(JSON.stringify(sent));
+    expect(JSON.stringify(crossed)).not.toContain('a body the reader never sees');
+    const read = yield* Schema.decodeUnknownEffect(threadEntryWireSchema)(crossed);
+    expect(read).toBeInstanceOf(ThreadEntryUnreadable);
+    expect(read).toMatchObject({ id: 'placed:1', runId: 'run', occurredAt: 'then', refusal: { type: 'placed', id: 'placed:1' } });
   }),
 );
 

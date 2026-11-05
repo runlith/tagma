@@ -30,7 +30,7 @@ export const liveLayer = <Rpcs extends Rpc.Any>(
   Layer.unwrap(
     Effect.sync(() => {
       const handling = handlings();
-      return RpcServer.layer(group).pipe(
+      return RpcServer.layer(group, { disableFatalDefects: true }).pipe(
         Layer.provide(group.toLayer(handlers)),
         Layer.provide(websocketLayer(connections, feeds, handling)),
         Layer.provide(callLogLayer(verbs, handling)),

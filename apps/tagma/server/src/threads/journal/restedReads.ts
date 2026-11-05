@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { Data, Effect, Result } from 'effect';
 import { eq, sql } from 'drizzle-orm';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
-import { threadEventFact } from '@runlith/agent/thread/ThreadEventDoor';
+import { threadEventFact, transcriptFact } from '@runlith/agent/thread/ThreadEventDoor';
 import type {
   ThreadEventPayloadValue,
   ThreadEventRevision,
@@ -28,7 +28,7 @@ import {
 import { ROLLOUT_SUFFIX, rolloutStateOf, streamedRollout } from './rolloutForms.js';
 import { revived } from './rolloutMeta.js';
 import type { RolloutForms } from './rolloutForming.js';
-import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { journalProjectOf, threadPublishedSource, threadRolloutForm } from '../store/journal.js';
 import { sourceFiles } from './sourceFiles.js';
 import type { SourcePublisher } from './sourcePublisher.js';
@@ -307,9 +307,11 @@ async function rangeIn(decode: PayloadDecode, lines: AsyncGenerator<string>, win
 }
 
 function rowOf(decode: PayloadDecode, line: string): ThreadEventRow | null {
-  const fact = factOf(line, decode);
-  if (fact === null || typeof fact.row.position !== 'number') return null;
-  return { ...fact.row, payload: fact.payload } as ThreadEventRow;
+  const event = eventOfLine(line);
+  if (event === null) return null;
+  const row = revived(event);
+  const decoded = decode(row.payload);
+  return { ...row, payload: Result.isSuccess(decoded) ? decoded.success : row.payload } as ThreadEventRow;
 }
 
 async function rowAt(
@@ -374,6 +376,21 @@ async function positionIn(
 
 export type PayloadDecode = (value: unknown) => Result.Result<ThreadEventPayload, { readonly message: string }>;
 
+function eventOfLine(line: string) {
+  if (line === '') return null;
+  const read = readRolloutLine(line);
+  if ('failure' in read) throw new RolloutLineUnreadable(`the line ${read.failure}`);
+  if (read.record.kind !== 'event') return null;
+  const event = rolloutEventOf(read.record);
+  if (event === null) throw new RolloutLineUnreadable('an event line carries no position, id, kind and payload');
+  return event;
+}
+
+export function transcriptFactOf(line: string, kinds: ThreadEntryReader) {
+  const event = eventOfLine(line);
+  return event === null ? null : { position: event.position, fact: transcriptFact(kinds, event.kind, event.id, revived(event).payload) };
+}
+
 export function factOf(
   line: string,
   decode: PayloadDecode,
@@ -384,12 +401,8 @@ export function factOf(
   readonly row: Record<string, unknown>;
   readonly fact: ThreadEventFact;
 } | null {
-  if (line === '') return null;
-  const read = readRolloutLine(line);
-  if ('failure' in read) throw new RolloutLineUnreadable(`the line ${read.failure}`);
-  if (read.record.kind !== 'event') return null;
-  const event = rolloutEventOf(read.record);
-  if (event === null) throw new RolloutLineUnreadable('an event line carries no position, id, kind and payload');
+  const event = eventOfLine(line);
+  if (event === null) return null;
   const row = revived(event);
   const decoded = decode(row.payload);
   if (Result.isFailure(decoded)) {

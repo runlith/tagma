@@ -19,6 +19,7 @@ import {
   parseWithdrawnWords,
   parseThreadRunUsage,
   parseThreadStreamTail,
+  readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { seedThreadNotification, type ThreadNotificationRecord } from '@runlith/agent/thread/storage/settlement';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, type Placeholder, type SQL, sql } from 'drizzle-orm';
@@ -461,15 +462,32 @@ export const makeReaping = Effect.gen(function* () {
 });
 
 export function trustedRun(kinds: ThreadEntryReader, call: string, row: ThreadRunRow): Effect.Effect<ThreadRunRow, ThreadStorageFailed> {
+  const subject = `Run ${row.id}`;
+  const readable = <A>(why: string, parse: () => A, otherwise: A): A => readableRowFact(kinds, subject, why, parse, otherwise);
   return trusted(call, () => ({
     ...row,
-    progress: parseThreadRunProgress(row.progress),
-    usage: parseThreadRunUsage(row.usage),
+    progress: readable('a run progress this build cannot read stands as no stage', () => parseThreadRunProgress(row.progress), {
+      stage: null,
+      message: null,
+    }),
+    usage: readable('a run usage this build cannot read stands as unmeasured', () => parseThreadRunUsage(row.usage), null),
     streamTail: parseThreadStreamTail(kinds, row.streamTail),
-    failure: parseThreadRunFailure(row.failure),
-    settledBy: parseThreadSettledBy(row.settledBy),
-    settledNotification: parseThreadRunNotification(row.settledNotification),
-    stopRequest: parseThreadRunStopRequest(row.stopRequest),
-    withdrawnWords: parseWithdrawnWords(row.withdrawnWords),
+    failure: readable(
+      'a run failure this build cannot read leaves the run with its failure reason alone',
+      () => parseThreadRunFailure(row.failure),
+      null,
+    ),
+    settledBy: readable('who ended a run this build cannot read stands as unknown', () => parseThreadSettledBy(row.settledBy), null),
+    settledNotification: readable(
+      'a run-end notification this build cannot read stands as none',
+      () => parseThreadRunNotification(row.settledNotification),
+      null,
+    ),
+    stopRequest: readable(
+      'a stop request this build cannot read stands as none; the run can be stopped again',
+      () => parseThreadRunStopRequest(row.stopRequest),
+      null,
+    ),
+    withdrawnWords: readable('withdrawn words this build cannot read stand as none', () => parseWithdrawnWords(row.withdrawnWords), null),
   }));
 }

@@ -1,6 +1,6 @@
 import { Clock, Context, Effect } from 'effect';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
-import { readInboxItem } from '@runlith/agent/thread/persisted';
+import { readableRowFact, readInboxItem } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import {
   beforeBarrier,
@@ -130,6 +130,16 @@ export class ThreadInbox extends Context.Service<
 export const makeThreadInbox = Effect.gen(function* () {
   const kinds = yield* ThreadEntryKinds;
   const parseThreadInboxItem = (row: Parameters<typeof readInboxItem>[1]) => readInboxItem(kinds, row);
+  const readableItems = (rows: readonly Parameters<typeof readInboxItem>[1][]): readonly ThreadInboxItem[] =>
+    rows.flatMap((row) =>
+      readableRowFact(
+        kinds,
+        `Inbox item ${row.id}`,
+        'an inbox item this build cannot read is passed over, so it neither stalls its thread nor every waiting wake',
+        () => [parseThreadInboxItem(row)],
+        [],
+      ),
+    );
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
 
@@ -473,10 +483,7 @@ export const makeThreadInbox = Effect.gen(function* () {
           (rows) => trusted('readerItems', () => rows.map((row) => parseThreadInboxItem(row))),
         ),
       ),
-    pending: (threadId, tx) =>
-      read('pending', tx, (unit) =>
-        Effect.flatMap(ordered(threadId, unit), (rows) => trusted('pending', () => rows.map((row) => parseThreadInboxItem(row)))),
-      ),
+    pending: (threadId, tx) => read('pending', tx, (unit) => Effect.map(ordered(threadId, unit), readableItems)),
     pendingOf: (threadIds, tx) =>
       threadIds.length === 0
         ? Effect.succeed(new Map())
@@ -618,7 +625,7 @@ export const makeThreadInbox = Effect.gen(function* () {
               .orderBy(asc(threadInboxWake.at), asc(threadInboxWake.itemId))
               .limit(limit),
           ),
-          (rows) => trusted('pendingWakes', () => rows.map((row) => parseThreadInboxItem(row.item))),
+          (rows) => Effect.succeed(readableItems(rows.map((row) => row.item))),
         ),
       ),
     woke: (ids, tx) =>

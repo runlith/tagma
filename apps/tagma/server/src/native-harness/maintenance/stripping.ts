@@ -157,7 +157,7 @@ export const makeEventStripping = Effect.gen(function* () {
       .pipe(
         Effect.flatMap((row) => {
           if (row === undefined) return Effect.succeed(undefined);
-          const current = kinds.decode(row.entry);
+          const current = kinds.stored(row.entry);
           return Result.isFailure(current)
             ? Effect.fail(new ThreadStorageFailed({ call: 'ThreadEventStripping.rowOf', cause: current.failure }))
             : Effect.succeed({ entry: current.success });

@@ -1,5 +1,11 @@
 import { Effect, Option, Predicate, Result, Schema, SchemaGetter, SchemaIssue } from 'effect';
-import { makeThreadEntryReader, ThreadEntryKinds, ThreadEntryUnreadable } from '../transcript/kinds';
+import {
+  makeThreadEntryReader,
+  ThreadEntryKinds,
+  ThreadEntryUndecodable,
+  ThreadEntryUnreadable,
+  unreadableEntry,
+} from '../transcript/kinds';
 import { AgentPhase } from '../agent/AgentPhase';
 import { AgentSignalNotice } from '../agent/contracts';
 import { RUN_ENDINGS, RUN_STAGES, WORDS_WAITS } from '../transcript/live';
@@ -37,15 +43,18 @@ import {
 } from '../thread/persisted';
 
 const coreEntries = makeThreadEntryReader({ products: [] });
-const entryIdentity = Schema.Struct({
-  type: Schema.String,
-  id: Schema.NonEmptyString,
-  runId: Schema.optional(Schema.Unknown),
-  occurredAt: Schema.optional(Schema.Unknown),
-  rewound: Schema.optional(Schema.Unknown),
-});
-const readIdentityText = Schema.decodeUnknownResult(Schema.String);
-const readIdentityMark = Schema.decodeUnknownResult(ThreadRewindMark);
+const unreadableWire = Schema.toCodecJson(
+  Schema.Struct({
+    type: Schema.Literal('entry-unreadable'),
+    id: Schema.NonEmptyString,
+    runId: Schema.optional(Schema.String),
+    occurredAt: Schema.optional(Schema.String),
+    rewound: Schema.optional(ThreadRewindMark),
+    refused: Schema.Struct({ type: Schema.NullOr(Schema.String), issue: Schema.String }),
+  }),
+);
+const writeUnreadable = Schema.encodeUnknownResult(unreadableWire);
+const readUnreadable = Schema.decodeUnknownResult(unreadableWire);
 const entryValue = Schema.declare<ThreadTranscriptEntry>(
   (value): value is ThreadTranscriptEntry => Predicate.isObject(value) && typeof value.type === 'string' && typeof value.id === 'string',
   {
@@ -61,29 +70,36 @@ const installedKinds = Effect.map(
   Option.getOrElse(() => coreEntries),
 );
 const writeEntry = Effect.fnUntraced(function* (entry: ThreadTranscriptEntry) {
+  if (ThreadEntryUnreadable.is(entry)) {
+    const { type, issue } = entry.refusal;
+    const diagnosis = writeUnreadable({
+      type: entry.type,
+      id: entry.id,
+      runId: entry.runId,
+      occurredAt: entry.occurredAt,
+      rewound: entry.rewound,
+      refused: { type, issue },
+    });
+    if (Result.isSuccess(diagnosis)) return diagnosis.success;
+    return yield* Effect.fail(new SchemaIssue.InvalidValue({ message: diagnosis.failure.message }));
+  }
   const written = (yield* installedKinds).writeWire(entry);
   if (Result.isSuccess(written)) return written.success;
   return yield* Effect.fail(new SchemaIssue.InvalidValue({ message: written.failure.message }));
 });
 const readEntry = Effect.fnUntraced(function* (value: unknown) {
+  if (Predicate.isObject(value) && value.type === 'entry-unreadable') {
+    const diagnosis = readUnreadable(value);
+    if (Result.isSuccess(diagnosis)) {
+      const { refused, ...identity } = diagnosis.success;
+      return new ThreadEntryUnreadable(identity, new ThreadEntryUndecodable({ type: refused.type, id: identity.id, issue: refused.issue }));
+    }
+  }
   const read = (yield* installedKinds).readWire(value);
   if (Result.isSuccess(read)) return read.success;
-  const identity = yield* Schema.decodeUnknownEffect(entryIdentity)(value).pipe(
-    Effect.mapError(() => new SchemaIssue.InvalidValue({ message: read.failure.message })),
-  );
-  const runId = readIdentityText(identity.runId);
-  const occurredAt = readIdentityText(identity.occurredAt);
-  const rewound = readIdentityMark(identity.rewound);
-  return new ThreadEntryUnreadable(
-    {
-      type: identity.type,
-      id: identity.id,
-      runId: Result.isSuccess(runId) ? runId.success : undefined,
-      occurredAt: Result.isSuccess(occurredAt) ? occurredAt.success : undefined,
-      rewound: Result.isSuccess(rewound) ? rewound.success : undefined,
-    },
-    read.failure,
-  );
+  const unreadable = unreadableEntry(value, read.failure);
+  if (unreadable !== null) return unreadable;
+  return yield* Effect.fail(new SchemaIssue.InvalidValue({ message: read.failure.message }));
 });
 
 export const threadEntryWireSchema = Schema.Unknown.pipe(

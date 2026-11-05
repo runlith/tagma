@@ -80,11 +80,12 @@ describe('persisted thread contract', () => {
     expect(decode({ compacted: { keepFrom: -1, messages: [] } })._tag).toBe('Failure');
   });
 
-  test('a stored stream tail reads only kinds an installed module declares', () => {
-    const entries = [{ type: 'message', id: 'message-1', role: 'user', text: 'hi' }];
-    expect(parseThreadStreamTail(kinds, entries)).toEqual(entries);
-    expect(() => parseThreadStreamTail(kinds, [{ type: 'language-task', id: 'task-1' }])).toThrow('stream tail cannot be read');
-    expect(() => parseThreadStreamTail(kinds, [{ type: 'message', id: 'message-1' }])).toThrow('stream tail cannot be read');
+  test('a stored stream tail keeps an entry no kind reads as a line beside its neighbours, and refuses a value with no identity', () => {
+    const said = { type: 'message', id: 'message-1', role: 'user', text: 'hi' };
+    const [read, neighbour] = parseThreadStreamTail(kinds, [{ type: 'language-task', id: 'task-1' }, said]) ?? [];
+    expect(read).toMatchObject({ type: 'entry-unreadable', id: 'task-1' });
+    expect(neighbour).toEqual(said);
+    expect(() => parseThreadStreamTail(kinds, [{ type: 'message' }])).toThrow('stream tail cannot be read');
   });
 
   test('nullable slots answer null and refuse malformed bytes', () => {

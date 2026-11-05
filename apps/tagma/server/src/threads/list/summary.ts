@@ -10,6 +10,7 @@ import {
   parseThreadContextReading,
   parseThreadRunFailure,
   parseThreadRunProgress,
+  readableRowFact,
 } from '@runlith/agent/thread/persisted';
 import { thread } from '../store/kernel.js';
 import { DEFAULT_TITLE, type TitleProvenance } from '../../thread-record/contract/wire/title.js';
@@ -162,15 +163,26 @@ export function moveOf(row: {
   return { ...placed, live: false, state: unseen ? 'finished' : 'idle' };
 }
 
+const recapLineOf = (recap: ThreadRecap | null, status: RecapStatus | null): RecapLine | null =>
+  recap === null || status === null ? null : { summary: recap.summary, next: recap.next, generatedAt: recap.basis.generatedAt, status };
+
 export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown: boolean, now: Date): ThreadSummary {
+  const readable = <A>(parse: () => A, otherwise: A): A =>
+    readableRowFact(
+      kinds,
+      `Thread ${row.thread.id}`,
+      'a fact of a thread this build cannot read leaves its list row without that fact, so one thread never blanks the list',
+      parse,
+      otherwise,
+    );
   const thread = {
     ...row.thread,
     cacheGroup: row.thread.cacheGroup ?? row.thread.id,
     provider: row.thread.provider ?? 'external',
     switches: row.thread.switches ?? {},
   };
-  const progress = row.progress === null ? null : parseThreadRunProgress(row.progress);
-  const harness = parseExternalSession(row.harness);
+  const progress = row.progress === null ? null : readable(() => parseThreadRunProgress(row.progress), null);
+  const harness = readable(() => parseExternalSession(row.harness), null);
   const activeRun: ThreadActiveRun | null =
     row.runId === null || row.heartbeatAt === null || row.runStartedAt === null
       ? null
@@ -203,8 +215,8 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     ...thread,
     life: signals?.life ?? 'idle',
     owes: false,
-    bornOf: parseThreadBornOf(thread.bornOf),
-    contextReading: parseThreadContextReading(kinds, thread.contextReading),
+    bornOf: readable(() => parseThreadBornOf(thread.bornOf), null),
+    contextReading: readable(() => parseThreadContextReading(kinds, thread.contextReading), null),
     title: row.title ?? DEFAULT_TITLE,
     titleOrigin: row.titleOrigin ?? 'random',
     projectId: row.projectId,
@@ -226,7 +238,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
             runId: row.outcomeRunId,
             status: row.outcomeStatus as RunEnding['status'],
             failureReason: row.outcomeFailureReason,
-            failure: parseThreadRunFailure(row.outcomeFailure),
+            failure: readable(() => parseThreadRunFailure(row.outcomeFailure), null),
             hostStateFailure: false,
             provider: row.outcomeProvider,
             model: row.outcomeModel,
@@ -237,8 +249,6 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
     ask: askOf(kinds, thread.pendingInteraction, activeRun),
     saidLine: saidLineOf(row.said),
     recap:
-      !recapShown || row.recap === null || row.recapStatus === null
-        ? null
-        : { summary: row.recap.summary, next: row.recap.next, generatedAt: row.recap.basis.generatedAt, status: row.recapStatus },
+      !recapShown || row.recap === null || row.recapStatus === null ? null : readable(() => recapLineOf(row.recap, row.recapStatus), null),
   };
 }

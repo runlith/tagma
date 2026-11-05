@@ -3,7 +3,7 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
 import { it } from '@runlith/effect-test';
-import { Context, Effect, Exit, Layer, Schema, Stream } from 'effect';
+import { Context, Effect, Exit, Layer, Queue, Schema, Stream } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { Rpc, RpcClient, RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
@@ -14,16 +14,18 @@ import { CallLog, TAGMA_SOCKET_PATH } from './rpc.js';
 
 const group = RpcGroup.make(
   Rpc.make('probe.subscribe', { success: Schema.Number, stream: true }),
+  Rpc.make('probe.follow', { success: Schema.Number, stream: true }),
   Rpc.make('probe.break', { success: Schema.Number }),
 ).middleware(CallLog);
 
-const handlers = {
-  'probe.subscribe': () => Stream.make('not a number' as unknown as number),
-  'probe.break': () => Effect.die(new Error('the probe broke')),
-} as LiveHandlers<RpcGroup.Rpcs<typeof group>>;
-
 const served = Effect.fnUntraced(function* () {
   const recording = activityRecording();
+  const follows = yield* Queue.unbounded<number>();
+  const handlers = {
+    'probe.subscribe': () => Stream.make('not a number' as unknown as number),
+    'probe.follow': () => Stream.fromQueue(follows),
+    'probe.break': () => Effect.die(new Error('the probe broke')),
+  } as LiveHandlers<RpcGroup.Rpcs<typeof group>>;
   const server = HttpRouter.serve(liveLayer(group, handlers, {}, null), { disableListenLog: true, disableLogger: true }).pipe(
     Layer.provideMerge(BunHttpServer.layer({ hostname: '127.0.0.1', port: 0, gracefulShutdownTimeout: '20 millis' })),
     Layer.provide(
@@ -37,8 +39,20 @@ const served = Effect.fnUntraced(function* () {
   const protocol = liveProtocol(url.href).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
   const client = yield* Effect.provide(RpcClient.make(group), yield* Layer.build(protocol));
   const defects = () => recording.activities().flatMap((activity) => activity.notes.filter((note) => note.type === 'defect'));
-  return { client, defects };
+  return { client, defects, follows };
 });
+
+it.live('a live request that dies ends itself and leaves the rest of the connection running', () =>
+  Effect.gen(function* () {
+    const { client, follows } = yield* served();
+    const next = yield* Stream.toPull(client['probe.follow']());
+    yield* Queue.offer(follows, 1);
+    expect(yield* next).toEqual([1]);
+    expect(Exit.isFailure(yield* Effect.exit(client['probe.break']()))).toBe(true);
+    yield* Queue.offer(follows, 2);
+    expect(yield* next).toEqual([2]);
+  }),
+);
 
 it.live('a live request whose answer cannot be encoded ends by a defect that the operator`s error list keeps', () =>
   Effect.gen(function* () {

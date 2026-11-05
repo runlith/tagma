@@ -1,7 +1,6 @@
 import { Effect } from 'effect';
 import type { ThreadEventDelta } from '../transcript/eventFold';
-import { readThreadEvents } from './events';
-import { threadEventFact } from './ThreadEventDoor';
+import { transcriptFact } from './ThreadEventDoor';
 import type { ThreadPortFailure } from './ThreadBorder';
 import type { ThreadEventLogStorage } from './storage/eventLog';
 import type { ThreadEntryReader } from '../transcript/kinds';
@@ -21,8 +20,8 @@ export const threadWireDeltas = Effect.fnUntraced(function* <TTx>(
   const deltas: ThreadEventDelta[] = [];
   let cursor = afterPosition;
   for (;;) {
-    const page = yield* readThreadEvents(log, kinds, threadId, cursor, WIRE_DELTA_PAGE, tx);
-    for (const record of page) deltas.push({ position: record.position, ...threadEventFact(record) });
+    const page = yield* log.eventsAfter(threadId, cursor, WIRE_DELTA_PAGE, tx);
+    for (const record of page) deltas.push({ position: record.position, ...transcriptFact(kinds, record.kind, record.id, record.payload) });
     if (page.length < WIRE_DELTA_PAGE) return deltas;
     cursor = page[page.length - 1]?.position ?? cursor;
   }

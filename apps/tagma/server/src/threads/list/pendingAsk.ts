@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { parseThreadPendingInteraction } from '@runlith/agent/thread/persisted';
+import { parseThreadPendingInteraction, readableRowFact } from '@runlith/agent/thread/persisted';
 import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { THREAD_TOOL_CANCEL_VALUE, THREAD_TOOL_CONFIRM_KIND, THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
 import type { ThreadInteractionPrompt } from '@runlith/agent/transcript/entries';
@@ -25,23 +25,22 @@ export function askKey(kind: ThreadAsk['kind'], tools: readonly string[], text: 
     .slice(0, 32);
 }
 
+const readableAsk = (kinds: ThreadEntryReader, pending: unknown): ReturnType<typeof parseThreadPendingInteraction> =>
+  readableRowFact(
+    kinds,
+    'A parked question',
+    'a parked question this build cannot read leaves its list row without the question',
+    () => parseThreadPendingInteraction(kinds, pending),
+    null,
+  );
+
 export function standaloneAsk(kinds: ThreadEntryReader, pending: unknown): ThreadAsk | null {
-  let parsed;
-  try {
-    parsed = parseThreadPendingInteraction(kinds, pending);
-  } catch {
-    return null;
-  }
+  const parsed = readableAsk(kinds, pending);
   return parsed === null || parsed.action === undefined ? null : nativeAsk(kinds, pending, parsed.runId);
 }
 
 export function nativeAsk(kinds: ThreadEntryReader, pending: unknown, parkedRunId: string): ThreadAsk | null {
-  let parsed;
-  try {
-    parsed = parseThreadPendingInteraction(kinds, pending);
-  } catch {
-    return null;
-  }
+  const parsed = readableAsk(kinds, pending);
   if (parsed === null) return null;
   const entry = parsed;
   if (entry.status !== 'open' || entry.runId !== parkedRunId) return null;

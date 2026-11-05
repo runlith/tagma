@@ -2,7 +2,7 @@ import { Clock, Context, Effect } from 'effect';
 import { mintCursor, readCursor } from '@runlith/paging';
 import { THREAD_LIST, type ThreadDirectoryRow, type ThreadListQuery } from '@runlith/agent/collaboration/threads';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
-import { parseThreadContextReading, parseThreadRunFailure } from '@runlith/agent/thread/persisted';
+import { parseThreadContextReading, parseThreadRunFailure, readableRowFact } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { currentRunOf } from '@runlith/agent/thread/state';
@@ -161,10 +161,22 @@ export const makeThreadDirectory = Effect.gen(function* () {
                       : { provider: row.provider, model: row.model, reasoning: row.reasoning, account: row.account },
                   provider: row.provider,
                   capabilities: row.capabilities,
-                  contextReading: parseThreadContextReading(kinds, row.contextReading),
+                  contextReading: readableRowFact(
+                    kinds,
+                    `Thread ${row.threadId}`,
+                    'a context reading this build cannot read leaves its directory row without it',
+                    () => parseThreadContextReading(kinds, row.contextReading),
+                    null,
+                  ),
                   assignment: row.runStatus,
                   failureReason: row.failureReason,
-                  failure: parseThreadRunFailure(row.failure),
+                  failure: readableRowFact(
+                    kinds,
+                    `Thread ${row.threadId}`,
+                    'a run failure this build cannot read leaves its directory row with the failure reason alone',
+                    () => parseThreadRunFailure(row.failure),
+                    null,
+                  ),
                   run,
                 };
               }),

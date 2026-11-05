@@ -1,3 +1,4 @@
+import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
@@ -47,7 +48,8 @@ export function restoredFact(payload: ThreadEventPayloadValue, entry: unknown): 
 }
 
 export function toolEventIdentity(entry: ThreadTranscriptEntry | { readonly toolCallId: unknown; readonly runId: unknown }): string | null {
-  const call = entry as { readonly toolCallId?: unknown; readonly runId?: unknown };
+  const carried = 'type' in entry && ThreadEntryUnreadable.is(entry) ? entry.stored : null;
+  const call = (carried ?? entry) as { readonly toolCallId?: unknown; readonly runId?: unknown };
   if (typeof call.toolCallId !== 'string') return null;
   return `tool:${typeof call.runId === 'string' ? call.runId : ''}:${call.toolCallId}`;
 }

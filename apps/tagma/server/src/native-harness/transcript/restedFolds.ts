@@ -282,7 +282,7 @@ async function slotsOf(transcript: RestedTranscript, floor: number, roof: number
 }
 
 function fileEntry(kinds: ThreadEntryReader, line: string): ThreadTranscriptEntry {
-  const read = kinds.decode(JSON.parse(line));
+  const read = kinds.stored(JSON.parse(line));
   if (Result.isFailure(read)) throw read.failure;
   return read.success;
 }

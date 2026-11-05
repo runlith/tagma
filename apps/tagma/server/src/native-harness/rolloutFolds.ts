@@ -1,7 +1,7 @@
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { threadEventFact } from '@runlith/agent/thread/ThreadEventDoor';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
-import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { crossingEntry, ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { MachineStore, type StoreFailure } from '../platform/contract/service/store.js';
@@ -79,7 +79,7 @@ export const nativeRows: NativeFolds['rows'] = (threadId, records) => {
   for (const [ord, entry] of transcript.take().entries()) {
     rows.push({
       kind: 'entry',
-      row: { threadId, ord, entryId: entry.id, runId: runIdOf(entry), type: typeOf(entry), entry },
+      row: { threadId, ord, entryId: entry.id, runId: runIdOf(entry), type: typeOf(entry), entry: crossingEntry(entry) },
       weight: 6,
       bytes: sizeOf(entry),
     });

@@ -3,8 +3,13 @@ import { Effect, Schema } from 'effect';
 import { Message, ToolCallPart, ToolResultPart } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
 import type { AgentCallMeasurement } from '../agent/AgentCallMeasurement';
-import { decodeThreadEventPayloadResult, type ThreadCallMeasurement, threadEventPayloadSchema } from './persisted';
-import { ThreadEntryUndecodable, coreEntry, entryOf, type ThreadEntryReader } from '../transcript/kinds';
+import {
+  admitThreadEventPayloadResult,
+  decodeThreadEventPayloadResult,
+  type ThreadCallMeasurement,
+  threadEventPayloadSchema,
+} from './persisted';
+import { ThreadEntryUndecodable, ThreadEntryUnreadable, coreEntry, entryOf, type ThreadEntryReader } from '../transcript/kinds';
 import type { AgentToolModelOutput } from '../agent/ToolOutput';
 import type { StructuredValue } from '@runlith/utils/object';
 import {
@@ -104,6 +109,12 @@ export type ThreadEventInput = ThreadEventBody | ThreadEventDraft;
 
 export function decodeThreadEventPayload(kinds: ThreadEntryReader, value: unknown): ThreadEventPayload {
   const parsed = decodeThreadEventPayloadResult(kinds, value);
+  if (parsed._tag === 'Failure') throw eventPayloadFailure(value, parsed.failure);
+  return parsed.success;
+}
+
+export function admitThreadEventPayload(kinds: ThreadEntryReader, value: unknown): ThreadEventPayload {
+  const parsed = admitThreadEventPayloadResult(kinds, value);
   if (parsed._tag === 'Failure') throw eventPayloadFailure(value, parsed.failure);
   return parsed.success;
 }
@@ -274,7 +285,7 @@ function decodedEvidence<
 ): Effect.Effect<readonly ThreadEventEvidence<Omit<Row, 'payload'> & { readonly payload: ThreadEventPayload }>[], ThreadPortFailure> {
   return Effect.map(read, (rows) =>
     rows.map((row) => {
-      const parsed = decodeThreadEventPayloadResult(kinds, row.payload);
+      const parsed = admitThreadEventPayloadResult(kinds, row.payload);
       if (parsed._tag === 'Success') {
         return { _tag: 'Available', record: { ...row, payload: parsed.success } } as const;
       }
@@ -493,16 +504,18 @@ export function threadTailEvents(
   tail: ThreadTranscript,
   interruption: ThreadInterruptionMark | null,
 ): readonly ThreadEventBody[] {
-  const events = tail.map((entry) => {
-    if (!coreEntry(entry)) return threadEntryEvent(entry);
-    if (entry.type === 'reasoning' && entry.state === 'streaming') {
-      return threadEntryEvent({ ...entry, state: 'done' });
-    }
-    if (entry.type === 'message' && entry.role === 'assistant') {
-      return { kind: entry.type, payload: { entry, messages: [Message.assistant(entry.text)] } };
-    }
-    return threadEntryEvent(entry);
-  });
+  const events = tail
+    .filter((entry) => !ThreadEntryUnreadable.is(entry))
+    .map((entry) => {
+      if (!coreEntry(entry)) return threadEntryEvent(entry);
+      if (entry.type === 'reasoning' && entry.state === 'streaming') {
+        return threadEntryEvent({ ...entry, state: 'done' });
+      }
+      if (entry.type === 'message' && entry.role === 'assistant') {
+        return { kind: entry.type, payload: { entry, messages: [Message.assistant(entry.text)] } };
+      }
+      return threadEntryEvent(entry);
+    });
   return interruption ? [...events, threadInterruptionEvent(runId, interruption.steers)] : events;
 }
 

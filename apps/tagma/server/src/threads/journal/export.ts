@@ -6,7 +6,6 @@ import { MachineStore, type StoreDb } from '../../platform/contract/service/stor
 import type { Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
-import { decodeThreadEventPayloadResult } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import {
   conversationWrites,
@@ -21,6 +20,7 @@ import { type BaseLayer, byPosition, eventArmsOf } from './base.js';
 import { threadResource } from '../store/tables.js';
 import { foldedEntryId, restoredFact } from './foldedFacts.js';
 import {
+  fingerprintedPayload,
   frozen,
   revived,
   sourceEventText,
@@ -116,13 +116,8 @@ export const sourceFactFingerprint = Effect.fn('ThreadRollout.sourceFactFingerpr
     const events = yield* factsOfThread(db, input.threadId, layers, position, input.parts, PAGE);
     for (const event of events) {
       const whole = yield* wholeFact(event);
-      const decoded = decodeThreadEventPayloadResult(kinds, whole.payload);
-      if (Result.isFailure(decoded))
-        return yield* new RolloutSyncRefused({
-          reason: 'record-shape',
-          message: `the event ${event.fact.id} cannot be compared to its rollout: ${decoded.failure.message}`,
-        });
-      hash.update(sourceEventText({ position: event.fact.position, id: event.fact.id, kind: event.fact.kind, payload: decoded.success }));
+      const payload = fingerprintedPayload(kinds, whole.payload);
+      hash.update(sourceEventText({ position: event.fact.position, id: event.fact.id, kind: event.fact.kind, payload }));
     }
     position = events.at(-1)?.fact.position ?? position;
     if (events.length < PAGE) break;
