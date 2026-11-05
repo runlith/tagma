@@ -28,7 +28,7 @@ jobs:
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/execution-host/native/Cargo.lock', 'packages/execution-host/native/**/Cargo.toml', 'packages/execution-host/native/**/*.rs') }}
           restore-keys: native-${{ runner.os }}-${{ runner.arch }}-
       - name: build the interposer
-        run: cc -dynamiclib -o "$RUNNER_TEMP/fs-trace.dylib" .github/trace/fs-trace.c
+        run: cc -dynamiclib -arch arm64 -arch arm64e -o "$RUNNER_TEMP/fs-trace.dylib" .github/trace/fs-trace.c
       - name: run the files under the interposer
         working-directory: apps/tagma/server
         env:
