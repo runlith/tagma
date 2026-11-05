@@ -22,13 +22,20 @@ const quota: ProviderQuota = {
   read: unsupportedQuota,
 };
 
-const options = (call: ProfileCall): ProviderOptions | undefined => {
+export const thinkingOptions = (call: ProfileCall) => {
+  if (call.adaptive) {
+    const effort = AnthropicMessages.AnthropicEfforts.find((one) => one === call.rung);
+    return { thinking: { type: 'adaptive' as const }, outputConfig: effort === undefined ? undefined : { effort } };
+  }
   const budget = thinkingBudget(reasoningRung(call.rung), call.outputTokens);
-  return AnthropicMessages.options({
-    thinking: budget === undefined ? undefined : { type: 'enabled', budgetTokens: budget },
+  return { thinking: budget === undefined ? undefined : { type: 'enabled' as const, budgetTokens: budget }, outputConfig: undefined };
+};
+
+const options = (call: ProfileCall): ProviderOptions | undefined =>
+  AnthropicMessages.options({
+    ...thinkingOptions(call),
     disableParallelToolUse: call.parallelToolCalls === undefined ? undefined : !call.parallelToolCalls,
   });
-};
 
 const profile: ModelProfile = {
   output: { budget: ANTHROPIC_OUTPUT_RESERVATION, sent: true },

@@ -11,6 +11,7 @@ import { subscriptionToken } from '@runlith/llm/profiles/credential';
 import type { ModelProfile, ProviderQuota, ProviderRegistration } from '@runlith/llm/profiles/contract';
 import type { ModelCompactionPolicy } from '@runlith/llm/profiles/ModelCompactionPolicy';
 import { unsupportedQuota } from '@runlith/llm/profiles/quotaRead';
+import { thinkingOptions } from '@runlith/adapter-anthropic/profiles/anthropic';
 import { SUBSCRIPTION_CACHE_TTL_SECONDS, SUBSCRIPTION_PROVIDER, subscriptionDescription } from './description';
 
 export const SUBSCRIPTION_AUTHORIZE_URL = 'https://subscription.invalid/oauth/authorize';
@@ -40,13 +41,7 @@ const compaction: ModelCompactionPolicy = {
 const profile: ModelProfile = {
   output: { budget: OUTPUT_RESERVATION, sent: true },
   compaction,
-  options: (call) => {
-    const effort = AnthropicMessages.AnthropicEfforts.find((one) => one === call.rung);
-    return AnthropicMessages.options({
-      thinking: call.adaptive ? { type: 'adaptive' } : undefined,
-      outputConfig: call.adaptive && effort !== undefined ? { effort } : undefined,
-    });
-  },
+  options: (call) => AnthropicMessages.options(thinkingOptions(call)),
   model: (selection) =>
     Effect.succeed(
       AnthropicMessages.route
