@@ -211,6 +211,13 @@ while let line = readLine() {
     samples.append(Sample(at: now + ticks(spacing * Double(steps + 1)), x: to.x, y: to.y, down: false))
     play("swipe", samples, from: now)
     finger = nil
+  case "tap":
+    if finger != nil { fail("the digitizer already holds a finger") }
+    let point = (x: number(command, "x"), y: number(command, "y"))
+    play("tap", [
+      Sample(at: now, x: point.x, y: point.y, down: true),
+      Sample(at: now + ticks(interval), x: point.x, y: point.y, down: false),
+    ], from: now)
   case "release":
     if finger == nil { fail("the digitizer has no finger to release") }
     deliver(Sample(at: now, x: number(command, "x"), y: number(command, "y"), down: false))

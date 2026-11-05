@@ -66,9 +66,6 @@ async def main():
                 receipt(command, await launch(client, command["bundle"]))
             elif phase == "quiet":
                 receipt(command, await quiet(client, command["pid"]))
-            elif phase == "tap":
-                await client.tap(command["x"], command["y"])
-                receipt(command)
             else:
                 raise ValueError("unknown native input phase: " + phase)
 

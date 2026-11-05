@@ -155,7 +155,8 @@ export const nativeInput = Effect.fn('e2e.nativeTouch')(function* ({ tools, port
       isPressed = false;
     },
     tap: async (point) => {
-      await companion.send({ phase: 'tap', x: Math.round(point.x), y: Math.round(point.y) });
+      if (isPressed) throw new TouchFailed({ message: 'the native touch stream already holds a finger' });
+      await digitizer.send({ phase: 'tap', x: point.x, y: point.y });
     },
     launch: async (bundle) => Schema.decodeUnknownSync(PID)(await companion.send({ phase: 'launch', bundle })),
     quiescence: async (pid) => {

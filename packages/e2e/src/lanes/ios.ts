@@ -184,7 +184,7 @@ const channelScript = (url: string) => `(() => {
     const { call, expression } = JSON.parse(event.data);
     let text;
     try { text = (${transfer})(await (0, eval)('(' + expression + ')')); }
-    catch (error) { text = JSON.stringify({ thrown: String((error && error.stack) || error) }); }
+    catch (error) { text = JSON.stringify({ thrown: error instanceof Error ? error.name + ': ' + error.message + '\\n' + error.stack : String(error) }); }
     socket.send(JSON.stringify({ call, text }));
   };
 })()`;
