@@ -27,6 +27,14 @@ const layer = unitsLayer(MachineUnits, MachineStore).pipe(
 const changed = writes('history.test', [threadEvent, threadLog, threadHistoryItem]);
 const historyOf = (kinds: ThreadEntryReader) => makeHistoryStore({ reads: undefined }).pipe(Effect.provideService(ThreadEntryKinds, kinds));
 
+const released = (held: WeakRef<object>) =>
+  Effect.promise(async () => {
+    while (held.deref() !== undefined) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      Bun.gc(true);
+    }
+  });
+
 const exercise = Effect.fnUntraced(function* (rollback: boolean) {
   const store = yield* MachineStore;
   const units = yield* MachineUnits;
@@ -207,11 +215,10 @@ it.live('a history folded inside a unit leaves memory when the unit ends, though
         return Effect.andThen(reader.write(unit, id, next, 0), Effect.fail(new WeakRef(next)));
       })
       .pipe(Effect.flip);
-    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
-    Bun.gc(true);
     expect(kept).toHaveLength(2);
-    expect(loaded.deref()).toBeUndefined();
-    expect(written instanceof WeakRef && written.deref()).toBeUndefined();
+    expect(written).toBeInstanceOf(WeakRef);
+    yield* released(loaded);
+    yield* released(written as WeakRef<object>);
   }).pipe(Effect.provide(layer)),
 );
 
