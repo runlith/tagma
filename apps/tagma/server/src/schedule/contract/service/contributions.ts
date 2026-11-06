@@ -5,7 +5,11 @@ import { ScheduledTools } from '../wire/contributions.js';
 import type { Cadence } from '../wire/schedule.js';
 import type { Ticks } from './ticks.js';
 
-export const SCHEDULED = new ContributionPoint<never, ScheduledTools>('schedule/scheduled', { name: 'schedule', schema: ScheduledTools });
+export const SCHEDULED = new ContributionPoint<never, ScheduledTools>('schedule/scheduled', {
+  name: 'schedule',
+  title: 'Runs on a schedule',
+  schema: ScheduledTools,
+});
 
 export type ScheduleRegistration = (
   owner: string,

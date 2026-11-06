@@ -59,7 +59,7 @@ class NoCallsAnswered extends Data.TaggedError('NoCallsAnswered')<{}> {}
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('background plugin', (it) => {
   it.effect(
-    'a machine-enabled plugin stands with no process, its tick starts it as tagma, it takes its notification answer once, goes idle and starts again on the next tick, and withdraws both contributions when disabled',
+    'a plugin enabled in a project stands with no process, its tick starts it as tagma, it takes its notification answer once, goes idle and starts again on the next tick, and withdraws both contributions when disabled',
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {

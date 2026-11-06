@@ -6,7 +6,11 @@ import { PinOffers } from './contract/service/pins.js';
 import { ThreadInputRefused } from './contract/service/failure.js';
 import { type PinContributions, pinContributionsSchema } from './contract/wire/pins.js';
 
-export const PINS = new ContributionPoint<never, PinContributions>('threads/pins', { name: 'pins', schema: pinContributionsSchema });
+export const PINS = new ContributionPoint<never, PinContributions>('threads/pins', {
+  name: 'pins',
+  title: 'Pages a thread can keep above its feed',
+  schema: pinContributionsSchema,
+});
 
 export type PinnableViews = PinOffers['Service'] & { readonly register: PluginRegister<PinContributions> };
 

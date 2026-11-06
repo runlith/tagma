@@ -246,7 +246,7 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
         : key === 'gpu'
           ? { _tag: 'Graphics' }
           : key === 'pages'
-            ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'App — board'], close: [{ page, projectId: 5 }] }
+            ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'Plugin — board'], close: [{ page, projectId: 5 }] }
             : undefined,
   };
   const { view } = new LoadList().compose(
@@ -289,11 +289,15 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
   expect(row('renderer')).toMatchObject({ gpu: 0, gpuUnread: 1 });
   expect(row('renderer')?.processes[0]).toMatchObject({ gpu: undefined, gpuUnread: 'not measured' });
   expect(view.gpu).toEqual({ _tag: 'Measured' });
-  expect(row('renderer')).toMatchObject({ title: 'Page — Docs (example.com), App — board', close: [{ page, projectId: 5 }], share: 0.3 });
+  expect(row('renderer')).toMatchObject({
+    title: 'Page — Docs (example.com), Plugin — board',
+    close: [{ page, projectId: 5 }],
+    share: 0.3,
+  });
   expect(row('renderer')?.processes[0]?.killable).toBe(false);
   expect(view.totals.own.count).toBe(5);
   expect(view.totals.own.share).toBeCloseTo(0.68, 9);
-  expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), App — board', pid: 99, reason: 'different' }]);
+  expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), Plugin — board', pid: 99, reason: 'different' }]);
 });
 
 test('installation groups retain their role when their processes do not fit the reading', () => {

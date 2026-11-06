@@ -15,6 +15,7 @@ export const REFUSAL_WORDS = {
   'model-provider': 'Provider does not match the CLI',
   'model-switch-unsupported': 'Model setting not offered',
   'no-summarizer': 'No model to summarize',
+  'plugins-unreadable': 'Plugins could not be read',
   'summary-failed': 'Summary failed',
   'thread-project-missing': 'Thread has no project',
   'unknown-invocation': 'Invocation not found',

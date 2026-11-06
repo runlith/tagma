@@ -39,11 +39,15 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
   return { subjects, raised };
 };
 
-export const componentsOf = (loaded: PluginLoaded, dropped: ReadonlyMap<string, readonly string[]>): readonly PluginComponent[] => {
+export const componentsOf = (
+  loaded: PluginLoaded,
+  dropped: ReadonlyMap<string, readonly string[]>,
+  pointTitle: (name: string) => string | undefined,
+): readonly PluginComponent[] => {
   const mask = maskOf(loaded);
   return [
     ...(loaded.process === null ? [] : [{ kind: 'process', name: loaded.process.entry } satisfies PluginComponent]),
-    ...Object.keys(loaded.contributes).map((point): PluginComponent => ({ kind: 'contribution', name: point })),
+    ...Object.keys(loaded.contributes).map((point): PluginComponent => ({ kind: 'contribution', name: point, title: pointTitle(point) })),
     ...loaded.skills.map((skill): PluginComponent => ({ kind: 'skill', name: skill.name })),
     ...loaded.commands.map((command): PluginComponent => ({ kind: 'command', name: command.name })),
     ...loaded.servers.map((server): PluginComponent => ({ kind: 'mcp-server', name: server.name, detail: mask(reachOf(server)) })),

@@ -6,7 +6,11 @@ import type { PluginsUnreadable } from '../../../plugins/contract/service/plugin
 import type { PluginContribution } from '../../../plugins/contract/service/points.js';
 import { ToolEntries } from '../wire/audience.js';
 
-export const TOOLS = new ContributionPoint<never, ToolEntries>('plugin-host/tools', { name: 'tools', schema: ToolEntries });
+export const TOOLS = new ContributionPoint<never, ToolEntries>('plugin-host/tools', {
+  name: 'tools',
+  title: 'Tools agents can call',
+  schema: ToolEntries,
+});
 
 export const unservedTools = (sibling: PluginContribution<unknown>['sibling'], tools: readonly string[]): string | null => {
   const declared = new Map((sibling(TOOLS) ?? []).map((entry) => [entry.name, entry.audience]));

@@ -4,6 +4,7 @@ import { BeforeBuild, type StepAsk, type StepVerdict } from '../wire/steps.js';
 
 export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-builds/before-build', {
   name: 'beforeBuild',
+  title: 'Checks before Tagma builds a checkout',
   schema: BeforeBuild,
 });
 

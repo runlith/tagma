@@ -66,6 +66,7 @@ export const makePoints = () => {
       }
       return Result.succeed(checked satisfies PluginChecked);
     },
+    title: (name) => points.get(name)?.point.plugin.title,
     publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
       const entries = Object.entries(checked).flatMap(([name, value]) => {
         const declared = points.get(name);

@@ -18,7 +18,7 @@
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import Gives from '$lib/features/plugins/Gives.svelte';
-  import type { Here } from '$lib/features/plugins/here.js';
+  import { type Here, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
   import ProcessStep from '$lib/features/plugins/ProcessStep.svelte';
@@ -59,6 +59,7 @@
   );
   const plain = $derived(row.options.filter((option) => !option.sensitive));
   const skill = $derived(row.components.find((component) => component.kind === 'skill')?.name ?? null);
+  const refusal = $derived(row.refused ?? row.process?.refused);
 
   let busy = $state<string | null>(null);
   let failed = $state<Told | undefined>(undefined);
@@ -159,13 +160,13 @@
 
     {#if row.description !== null && row.description !== ''}<p class="max-w-prose text-body">{row.description}</p>{/if}
 
-    {#if row.refused !== undefined}
+    {#if refusal !== undefined}
       <Callout
         tone="error"
-        title={row.process?.state === 'running' || row.process?.state === 'idle'
-          ? 'Tagma cannot read the plugin’s files as they are now; the version that was working keeps running'
+        title={row.process?.refused !== undefined || stillWorking(row)
+          ? 'Tagma does not accept the plugin’s files as they are now, and keeps the version it last accepted'
           : 'Tagma cannot read this plugin, so agents get nothing from it'}
-        note={row.refused}
+        note={refusal}
       />
     {/if}
     {#if row.outdated}

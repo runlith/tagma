@@ -48,7 +48,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
     }),
   );
 
-  it.effect('an app process deletes a worktree with uncommitted work, keeping that work on its branch', () =>
+  it.effect('a plugin’s process deletes a worktree with uncommitted work, keeping that work on its branch', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;
       const files = yield* FileSystem.FileSystem;

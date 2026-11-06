@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { PluginProcessRow } from '@tagma/server/plugins/contract/wire/rows';
-  import Callout from '@runlith/chat-ui/Callout.svelte';
   import StepMark from '$lib/features/plugins/StepMark.svelte';
   import { failureSplit, processSaid } from '$lib/features/plugins/words.js';
 
@@ -24,12 +23,3 @@
     {/if}
   </span>
 </div>
-{#if process.refused !== undefined}
-  <div class="pb-2">
-    <Callout
-      tone="error"
-      title="Its changed files are not accepted, so the version that was working keeps running"
-      note={process.refused}
-    />
-  </div>
-{/if}

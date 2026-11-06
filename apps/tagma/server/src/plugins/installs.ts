@@ -93,8 +93,12 @@ const optionRows = (pkg: PluginPackage, values: Readonly<Record<string, string>>
     fallback: option.sensitive ? null : option.fallback,
   }));
 
-const shownOf = (read: Read, bound: Bound) => ({
-  components: componentsOf(bound.loaded, new Map(read.package.agents.map((agent) => [componentName(read.id, agent.name), agent.dropped]))),
+const shownOf = (read: Read, bound: Bound, points: PluginPoints['Service']) => ({
+  components: componentsOf(
+    bound.loaded,
+    new Map(read.package.agents.map((agent) => [componentName(read.id, agent.name), agent.dropped])),
+    points.title,
+  ),
   ignored: [...read.package.ignored, ...bound.skipped],
   options: optionRows(read.package, bound.options),
 });
@@ -217,7 +221,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         source: held.fetched,
         origin: held.origin ?? undefined,
         replaces: yield* untaken(read.id, held),
-        ...shownOf(read, bound),
+        ...shownOf(read, bound, points),
         consent: {
           runs: consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value),
           reaches: consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value),
@@ -308,7 +312,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       version: pkg.version,
       description: pkg.description,
       format: read.format,
-      ...shownOf(read, bound),
+      ...shownOf(read, bound, points),
       process: processOf(install.id, pkg),
       outdated: yield* outdatedOf(install.root, pkg),
     } satisfies PluginRow;

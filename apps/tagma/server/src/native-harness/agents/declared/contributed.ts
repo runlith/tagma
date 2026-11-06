@@ -20,6 +20,7 @@ const OWNER = 'native-harness';
 
 export const PLUGIN_AGENTS = new ContributionPoint<never, PluginAgentEntries>('native-harness/plugin-agents', {
   name: 'agents',
+  title: 'Agents you can start',
   schema: PluginAgentEntries,
 });
 

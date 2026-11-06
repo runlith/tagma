@@ -71,8 +71,10 @@ export function newerOf(row: PluginRow, entries: readonly EntryRow[]): string | 
 export const broughtBy = (servers: readonly McpServerRow[], id: string): readonly McpServerRow[] =>
   servers.filter((row) => row.scope === 'contributed' && row.contributor === id);
 
+export const stillWorking = (row: PluginRow): boolean => row.process?.state === 'running' || row.process?.state === 'idle';
+
 export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
-  if (row.refused !== undefined) return 'fails';
+  if (row.refused !== undefined && !stillWorking(row)) return 'fails';
   if (!row.enabled) return 'off';
   const states = [...servers.map(serverState), ...(row.process === undefined ? [] : [processState(row.process)])];
   if (states.includes('waits') || row.options.some((option) => option.required && !option.set)) return 'waits';

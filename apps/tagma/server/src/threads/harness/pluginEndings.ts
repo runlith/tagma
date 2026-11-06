@@ -9,7 +9,11 @@ import { ENDED_REASON, EndingTools, PLUGIN_BINDING } from '../contract/wire/plug
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 
-export const ENDINGS = new ContributionPoint<never, EndingTools>('threads/endings', { name: 'on', schema: EndingTools });
+export const ENDINGS = new ContributionPoint<never, EndingTools>('threads/endings', {
+  name: 'on',
+  title: 'Actions when a thread ends',
+  schema: EndingTools,
+});
 
 type Hook = { readonly tool: string; readonly contribution: PluginContribution<EndingTools> };
 

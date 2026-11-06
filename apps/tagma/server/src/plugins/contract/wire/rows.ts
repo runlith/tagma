@@ -54,6 +54,9 @@ export const pluginComponentSchema = Schema.Struct({
   detail: Schema.optional(Schema.String).annotate({
     description: 'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of.',
   }),
+  title: Schema.optional(Schema.String).annotate({
+    description: 'For a contribution, what its point gives a person, in the words of the point’s owner.',
+  }),
 });
 export type PluginComponent = typeof pluginComponentSchema.Type;
 
@@ -146,7 +149,9 @@ export const pluginPreviewSchema = Schema.Struct({
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),
   consent: Schema.Struct({
-    runs: Schema.Array(Schema.String).annotate({ description: 'What it runs as the operator: stdio MCP servers and hook commands.' }),
+    runs: Schema.Array(Schema.String).annotate({
+      description: 'What it runs as the operator: its own process, stdio MCP servers and hook commands.',
+    }),
     reaches: Schema.Array(Schema.String).annotate({ description: 'The remote MCP servers it reaches.' }),
     raises: Schema.Array(Schema.String).annotate({ description: 'The further facts installing it asks consent for.' }),
   }).annotate({ description: 'What installing it asks consent for wherever it runs.' }),

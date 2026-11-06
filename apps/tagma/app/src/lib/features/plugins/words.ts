@@ -73,23 +73,9 @@ export function saidOf(component: PluginComponent): ComponentSaid {
     case 'process':
       return { kind: 'process', title: 'A program of its own on this computer', detail: component.name };
     case 'contribution':
-      return { kind: 'contribution', title: CONTRIBUTIONS[component.name] ?? `Adds ${component.name} to Tagma`, detail };
+      return { kind: 'contribution', title: component.title ?? `Adds ${component.name} to Tagma`, detail };
   }
 }
-
-const CONTRIBUTIONS: Readonly<Record<string, string>> = {
-  tools: 'Tools agents can call',
-  agents: 'Agents you can start',
-  views: 'Pages inside Tagma',
-  results: 'Pages that show what a tool did',
-  surfaces: 'Sections in Tagma’s sidebar',
-  panes: 'Panels beside a thread',
-  launchers: 'Windows you open from the palette',
-  pins: 'Pages a thread can keep above its feed',
-  notify: 'Notifications',
-  schedule: 'Runs on a schedule',
-  on: 'Actions when a thread ends',
-};
 
 export const KINDS: Readonly<Record<PluginComponentKind, string>> = {
   skill: 'Skills',
