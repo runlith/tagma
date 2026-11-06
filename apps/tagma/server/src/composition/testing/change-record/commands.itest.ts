@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
@@ -11,7 +12,7 @@ import { collectReleased, sweepVersions } from '../../../change-record/record/ve
 import { workspaceChange } from '../../../change-record/store/tables.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { call, FILE, MINE, THEIRS } from '../checkoutFixture.js';
-import { base, commandLayer, commandWorld, fileReady } from './commandWorld.js';
+import { base, commandLayer, commandWorld } from './commandWorld.js';
 
 const printed = (lines: readonly string[]) => `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(' ')} > src/a.ts`;
 
@@ -94,17 +95,18 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
     () =>
       Effect.gen(function* () {
         const s = yield* commandWorld();
-        const peer = join(mkdtempSync(join(tmpdir(), 'peer-edit-')), 'landed');
-        execFileSync('mkfifo', [peer]);
+        const pipes = mkdtempSync(join(tmpdir(), 'peer-edit-'));
+        const [written, peer] = [join(pipes, 'written'), join(pipes, 'landed')];
+        execFileSync('mkfifo', [written, peer]);
         const running = yield* Effect.forkChild(
           call(s.mine.bash, {
-            command: `exec bun -e 'const fs = require("node:fs"); fs.writeFileSync("src/a.ts", "v1\\n"); fs.readFileSync(${JSON.stringify(peer)});'`,
+            command: `exec bun -e 'const fs = require("node:fs"); fs.writeFileSync("src/a.ts", "v1\\n"); fs.writeFileSync(${JSON.stringify(written)}, "v1\\n"); fs.readFileSync(${JSON.stringify(peer)});'`,
             description: 'Rewrite and wait for the peer edit',
           }),
         );
-        yield* fileReady(s.w.file, () => readFileSync(s.w.file, 'utf8') === 'v1\n');
+        yield* Effect.promise(() => readFile(written, 'utf8'));
         yield* call(s.theirs.edit, { path: 'src/a.ts', oldString: 'v1', newString: 'v2' });
-        writeFileSync(peer, 'landed\n');
+        yield* Effect.promise(() => writeFile(peer, 'landed\n'));
         yield* Fiber.join(running);
         yield* s.decided(MINE);
 
