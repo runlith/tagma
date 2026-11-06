@@ -19,13 +19,18 @@ import { doorTenant } from './projectTenant.js';
 const rowsFrom = Effect.fnUntraced(function* (quota: AccountQuota['Service']) {
   const frames = yield* Queue.unbounded<QuotaTable>();
   yield* Effect.forkScoped(Stream.runForEach(quota.changes, (frame) => Queue.offer(frames, frame)));
-  return Effect.fnUntraced(function* (accept: (row: AccountQuotaRow) => boolean) {
-    for (;;) {
-      const frame = yield* Queue.take(frames);
-      const row = frame.find(accept);
-      if (row !== undefined) return row;
-    }
-  });
+  let last: QuotaTable | null = null;
+  return Effect.fnUntraced(
+    function* (accept: (row: AccountQuotaRow) => boolean) {
+      for (;;) {
+        const frame = yield* Queue.take(frames);
+        last = frame;
+        const row = frame.find(accept);
+        if (row !== undefined) return row;
+      }
+    },
+    Effect.onInterrupt(() => Effect.logWarning('the quota table never held the awaited row', { last })),
+  );
 });
 
 const finishLogin = Effect.fnUntraced(function* (world: DoorFixture['Service'], projectId: number, account: string) {
