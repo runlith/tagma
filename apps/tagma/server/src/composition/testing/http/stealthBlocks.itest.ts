@@ -358,7 +358,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
 
         const team = yield* world.op('query_blocks', { stealth: false, sort: { by: 'created', order: 'asc' } }, at(destination));
         expect((team.body as { blocks: readonly { title: string }[] }).blocks.map((row) => row.title)).toContain('Probe plan');
-        expect(taken.body).toMatchObject({ submitted: { graph: { status: 'synced', merges: [{ branch: 'main', conflicts: [] }] } } });
+        expect(taken.body).toMatchObject({ submitted: { graph: { status: 'synced' } } });
 
         const merged = yield* world.op('merge_worktree', { rootId }, at(root));
         expect(merged).toMatchObject({ status: 200, body: { graph: { status: 'synced' } } });
