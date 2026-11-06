@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { absoluteSources } from '@runlith/bundle/maps';
 import { dirname, join, relative, resolve } from 'node:path';
 import { serverPort, surfaceDevPort } from '@tagma/server/installation/contract/wire/ports';
 import { CHANNEL } from '@tagma/server/composition/developer/channel';
+import { hostFile, hostModules as hostSpecifiers, UI_MODULE } from '@tagma/server/views/contract/wire/host';
 import { browserGuard } from '@runlith/vite-browser-guard/browserGuard';
 import { surfaceOut } from '../surfaceOut.js';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -22,6 +24,8 @@ const APP = resolve(import.meta.dirname, '..');
 
 const RUNTIME = resolve(APP, 'src/lib/app/runtime.ts');
 const STYLES = resolve(APP, 'src/app.css');
+const UI = resolve(APP, 'src/lib/features/plugin-views/ui.ts');
+const HOST_MODULES_ENV = 'PUBLIC_HOST_MODULES';
 
 export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
   const backendPort = serverPort(CHANNEL, process.env);
@@ -36,6 +40,7 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
       ...(sources.length === 0 ? [] : [rootSources(sources)]),
       browserGuard(),
       tailwindcss(),
+      hostModules(),
       sveltekit(),
       surfaceVersion(options.version),
       ...(maps === null && inputs === null ? [] : [releaseRecord(maps, inputs, options.clientInputsOnly ?? false)]),
@@ -82,6 +87,42 @@ function rootSources(sources: readonly string[]): Plugin {
       filter: { id: /\.css(?:\?|$)/u },
       handler(code, id) {
         return id.split('?')[0] === STYLES ? `${code}\n${scanned.join('\n')}\n` : null;
+      },
+    },
+  };
+}
+
+function hostModules(): Plugin {
+  const svelte = JSON.parse(readFileSync(createRequire(import.meta.url).resolve('svelte/package.json'), 'utf8')) as {
+    readonly exports: Readonly<Record<string, unknown>>;
+  };
+  const specifiers = hostSpecifiers(svelte.exports);
+  const sourceOf = (specifier: string): string => (specifier === UI_MODULE ? UI : specifier);
+  const shims = new Map(specifiers.map((specifier) => [`/${hostFile(specifier)}`, specifier]));
+  process.env[HOST_MODULES_ENV] = JSON.stringify({ imports: Object.fromEntries([...shims].map(([path, specifier]) => [specifier, path])) });
+  let building = false;
+  return {
+    name: 'tagma-host-modules',
+    configResolved(config) {
+      building = config.command === 'build';
+    },
+    buildStart() {
+      if (!building || this.environment.name !== 'client') return;
+      for (const specifier of specifiers) {
+        this.emitFile({ type: 'chunk', id: sourceOf(specifier), fileName: hostFile(specifier), preserveSignature: 'strict' });
+      }
+    },
+    resolveId: {
+      filter: { id: /^\/_app\/host\//u },
+      handler(id) {
+        return !building && shims.has(id) ? id : null;
+      },
+    },
+    load: {
+      filter: { id: /^\/_app\/host\//u },
+      handler(id) {
+        const specifier = shims.get(id);
+        return building || specifier === undefined ? null : `export * from ${JSON.stringify(sourceOf(specifier))};\n`;
       },
     },
   };

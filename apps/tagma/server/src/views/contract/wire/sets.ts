@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { PluginId, PluginLabel } from '../../../plugins/contract/wire/names.js';
+import { ViewModule } from './modules.js';
 import { LauncherEntry, SectionEntry, ViewEntry, ViewId } from './points.js';
 
 const PluginResult = Schema.Struct({
@@ -8,25 +9,29 @@ const PluginResult = Schema.Struct({
   view: ViewId,
 });
 
-export const ViewSite = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal('served'),
-    origin: Schema.String.annotate({
-      description: 'The origin of the plugin’s own site on the door this feed came through; its view entries and icons resolve against it.',
-    }),
+const ShownView = Schema.Struct({
+  id: ViewId,
+  live: ViewEntry.fields.live,
+  media: ViewEntry.fields.media,
+  module: ViewModule,
+});
+
+const ShownSection = Schema.Struct({
+  view: ViewId,
+  title: SectionEntry.fields.title,
+  icon: Schema.NullOr(Schema.String).annotate({
+    description: 'The address of its icon on the door the feed came through; null draws a neutral plugin glyph.',
   }),
-  Schema.Struct({ _tag: Schema.Literal('unserved'), reason: Schema.String }),
-]).pipe(Schema.toTaggedUnion('_tag'));
-export type ViewSite = typeof ViewSite.Type;
+});
+export type ShownSection = typeof ShownSection.Type;
 
 export const PluginViewSet = Schema.Struct({
   plugin: Schema.String,
   title: Schema.String,
-  site: ViewSite,
-  views: Schema.Array(ViewEntry),
+  views: Schema.Array(ShownView),
   results: Schema.Array(PluginResult),
-  surfaces: Schema.Array(SectionEntry),
-  panes: Schema.Array(SectionEntry),
+  surfaces: Schema.Array(ShownSection),
+  panes: Schema.Array(ShownSection),
   launchers: Schema.Array(LauncherEntry),
 });
 export type PluginViewSet = typeof PluginViewSet.Type;
@@ -36,6 +41,10 @@ export const PluginViewState = Schema.Struct({
   enabled: Schema.Array(PluginId).annotate({
     description:
       'The plugins this project enables, running or not: a plugin missing from `plugins` yet listed here is starting, restarting or failed, not withdrawn.',
+  }),
+  sheet: Schema.NullOr(Schema.String).annotate({
+    description:
+      'The address of the utilities sheet holding the window’s classes and every published plugin’s; null when no plugin adds a class.',
   }),
 });
 export type PluginViewState = typeof PluginViewState.Type;

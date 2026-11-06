@@ -24,7 +24,7 @@ const authored = (folder: string, fixture: string) =>
     await writeFile(join(folder, 'plugin.ts'), await readFile(fixture, 'utf8'));
     await rm(join(folder, 'plugin.test.ts'));
     await mkdir(join(folder, 'ui'));
-    await writeFile(join(folder, 'ui', 'board.html'), '<!doctype html><p>board</p>');
+    await writeFile(join(folder, 'ui', 'Board.svelte'), '<p>board</p>');
     await mkdir(join(folder, 'node_modules', '@runlith'), { recursive: true });
     await mkdir(join(folder, 'node_modules', '@types'), { recursive: true });
     await symlink(SDK, join(folder, 'node_modules', '@runlith', 'tagma'));
@@ -75,7 +75,8 @@ it.live(
           projects: [projectId],
           actions: [
             { id: 'sync', kind: 'action', title: 'Sync boards', keys: [{ keys: 'Mod+Alt+S', global: false }] },
-            { id: 'section:board', kind: 'section', title: 'Boards', keys: [{ keys: 'Mod+Alt+G', global: true }] },
+            { id: 'push', kind: 'action', title: 'Push boards', keys: [] },
+            { id: 'section:board', kind: 'section', view: 'board', title: 'Boards', keys: [{ keys: 'Mod+Alt+G', global: true }] },
           ],
         },
       ]);
@@ -86,6 +87,10 @@ it.live(
         said: `Synced from project ${projectId}`,
       });
       expect(host.reading('keys')?.state).toBe('running');
+      expect((yield* world.op('run_plugin_action', { plugin: 'keys', action: 'push' }, scope)).body).toMatchObject({
+        code: 'plugin-call-failed',
+        reason: 'The board service is down',
+      });
       expect((yield* world.op('run_plugin_action', { plugin: 'keys', action: 'nope' }, scope)).body).toMatchObject({
         code: 'plugin-action-unknown',
       });
@@ -94,7 +99,7 @@ it.live(
       yield* Effect.promise(() =>
         writePlugin(second, {
           id: 'second',
-          contributes: { views: [{ id: 'board', entry: 'ui/board.html' }], surfaces: [{ view: 'board', title: 'Second' }] },
+          contributes: { views: [{ id: 'board', entry: 'ui/Board.svelte' }], surfaces: [{ view: 'board', title: 'Second' }] },
         }),
       );
       expect(yield* world.op('install_plugin', { source: second }, scope)).toMatchObject({ status: 200 });

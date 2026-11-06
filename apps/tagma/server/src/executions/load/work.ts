@@ -3,8 +3,7 @@ import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import { ManagedCommands } from '../contract/service/commands.js';
-import type { PluginViewRef } from '../contract/service/load.js';
-import { LoadOwnerFacts, LoadPluginTitles, type OwnerFacts } from '../contract/service/owners.js';
+import { LoadOwnerFacts, type OwnerFacts } from '../contract/service/owners.js';
 import { Terminals } from '../contract/service/terminals.js';
 import type { CommandRecord } from '../contract/wire/commands.js';
 import type { TerminalRecord } from '../contract/wire/terminals.js';
@@ -22,14 +21,9 @@ export type Work = {
   readonly since: number;
 };
 
-export type PluginTitles = ReadonlyMap<string, string>;
-
-export const pluginTitleKey = (view: PluginViewRef): string => `${view.project}:${view.plugin}`;
-
 export type Named = {
   readonly work: ReadonlyMap<string, Work>;
   readonly threads: ReadonlyMap<string, OwnerFacts>;
-  readonly plugins: PluginTitles;
   readonly unread: string | undefined;
 };
 
@@ -51,19 +45,13 @@ export const makeWorkNames = Effect.gen(function* () {
   const terminals = yield* Terminals;
   const owners = yield* LoadOwnerFacts;
   const registry = yield* Projects;
-  const pluginTitles = yield* LoadPluginTitles;
   const commands = new Map<string, CommandRecord | null>();
   const threads = new Map<string, OwnerFacts>();
   const projects = new Map<number, string | undefined>();
-  const plugins = new Map<number, ReadonlyMap<string, string>>();
   let factsAt = 0;
 
   return {
-    read: Effect.fnUntraced(function* (
-      refs: readonly ExecutionRef[],
-      now: number,
-      views: readonly PluginViewRef[],
-    ): Effect.fn.Return<Named> {
+    read: Effect.fnUntraced(function* (refs: readonly ExecutionRef[], now: number): Effect.fn.Return<Named> {
       const problems: string[] = [];
       for (const ref of refs) {
         if (commands.has(ref.execution)) continue;
@@ -123,19 +111,8 @@ export const makeWorkNames = Effect.gen(function* () {
           for (const projectId of unnamed) projects.set(projectId, names.get(projectId));
         } else problems.push(`projects: ${reasonOf(listed.failure)}`);
       }
-      const shownPlugins = new Set(views.map((view) => view.project));
-      for (const projectId of shownPlugins) {
-        if (!stale && plugins.has(projectId)) continue;
-        const titles = yield* Effect.result(pluginTitles.read(projectId));
-        if (titles._tag === 'Success') plugins.set(projectId, titles.success);
-        else {
-          plugins.delete(projectId);
-          problems.push(`plugins: ${titles.failure.reason}`);
-        }
-      }
       if (stale) {
         factsAt = now;
-        for (const projectId of plugins.keys()) if (!shownPlugins.has(projectId)) plugins.delete(projectId);
         const shown = new Set<string>(shownThreads);
         const shownProjects = new Set([...work.values()].map((one) => one.projectId));
         for (const thread of threads.keys()) if (!shown.has(thread)) threads.delete(thread);
@@ -145,12 +122,7 @@ export const makeWorkNames = Effect.gen(function* () {
       for (const [execution, one] of work) named.set(execution, { ...one, project: projects.get(one.projectId) });
       const standing = new Set<string>(refs.map((ref) => ref.execution));
       for (const execution of commands.keys()) if (!standing.has(execution)) commands.delete(execution);
-      const pluginNames = new Map<string, string>();
-      for (const view of views) {
-        const title = plugins.get(view.project)?.get(view.plugin);
-        if (title !== undefined) pluginNames.set(pluginTitleKey(view), title);
-      }
-      return { work: named, threads, plugins: pluginNames, unread: problems.length === 0 ? undefined : problems.join('; ') };
+      return { work: named, threads, unread: problems.length === 0 ? undefined : problems.join('; ') };
     }),
   };
 });

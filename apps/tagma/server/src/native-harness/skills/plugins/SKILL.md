@@ -1,11 +1,11 @@
 ---
 name: plugins
-description: Build, change, install or debug a plugin in Tagma's format — a folder whose `plugin.ts` is written against `@runlith/tagma/plugin` and built by `tagma-plugin build` into `tagma-plugin.json` and `dist/process.js`, adding tools, views, sections, panes, launchers, agents, schedules, notifications, thread endings, build steps and themes inside Tagma with no deploy. Load before writing or editing anything in a project's `.tagma-plugins/<id>/`; when the operator asks for a plugin, a bridge to a service, a board, a game, a section inside Tagma or a new look for Tagma; when read_plugins shows such a plugin refused, outdated or its process failed, or a plugin view does not open. Installing a Claude Code or Codex plugin needs only install_plugin; connecting an existing MCP server is add_mcp_server.
+description: Build, change, install or debug a plugin in Tagma's format — a folder whose `plugin.ts` is written against `@runlith/tagma/plugin` and built by `tagma-plugin build` into `tagma-plugin.json`, `dist/process.js` and `dist/ui/`, adding tools, Svelte views, sections, panes, launchers, agents, schedules, notifications, thread endings, build steps and themes inside Tagma with no deploy. Load before writing or editing anything in a project's `.tagma-plugins/<id>/`; when the operator asks for a plugin, a bridge to a service, a board, a game, a section inside Tagma or a new look for Tagma; when read_plugins shows such a plugin refused, outdated or its process failed, or a plugin view does not compile or draw. Installing a Claude Code or Codex plugin needs only install_plugin; connecting an existing MCP server is add_mcp_server.
 ---
 
 # Plugins
 
-A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition written against `@runlith/tagma/plugin`. `tagma-plugin build` turns it into `tagma-plugin.json`, which Tagma reads without running anything, and `dist/process.js`, the process serving its handlers. Both are build output: never edit them by hand, and commit them with the sources.
+A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition written against `@runlith/tagma/plugin`. `tagma-plugin build` turns it into `tagma-plugin.json`, which Tagma reads without running anything, `dist/process.js`, the process serving its handlers, and `dist/ui/`, its views. All are build output: never edit them by hand, and commit them with the sources.
 
 ## Making and changing one
 
@@ -50,8 +50,8 @@ The `example` reference is a whole plugin with a tool, a resource and a section.
 - **`onNotification: onNotification(async (answer, ctx) => …)`** lets the process send notifications, and gets the operator's answer or dismissal as `{id, title, kind, answer, at}` (`kind` `answered` or `dismissed`), handed again until it succeeds: take it idempotently by `id`.
 - **`options: [{key, title, description, type?, sensitive?, required?, default?}]`.** `key` names the value: capitals, digits and `_`, at most 64, not starting with `TAGMA_` and none of `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `TMPDIR`. `type`: `string` (the default), `number`, `boolean`, `directory`, `file`. `default` stands while no value is set. `sensitive: true` keeps the value in the key store and masks it in everything the process answers. Read values from `ctx.options[key]`. The operator sets them on the plugin's card in Plugins, a secret one once the plugin runs in that project: tell them which to set, never ask for a value in chat, and answer what is missing while a required one is unset.
 - **`resident: true`** keeps the process running while the plugin is enabled, for one that holds a live connection to a service.
-- **`views: [{id, entry, live?, csp?}]`** — `id` lowercase letters, digits and inner hyphens, at most 40; `entry` an HTML page under `ui/`, as `ui/board.html` (Views). A view shows only where another field places it. `live: true` keeps a result view running while scrolled away, within the feed's budget. `csp` opens outside origins as MCP Apps does: `frameDomains` for embedded players, `resourceDomains` for images, media, fonts, scripts and styles, `connectDomains` for fetch and sockets, `baseUriDomains`; an entry naming this machine or a bare address is dropped.
-- **`results: [{tool, view}]`** draws the feed entry of a call to an `agents` or `own` tool with the view. **`surfaces: [{view, title, icon?}]`** — a project section at `/<project>/p/<id>/<view>` with a rail item and a palette action, `title` at most 40, `icon` an svg, png, webp, gif or jpg under `ui/`. **`panes`** — a side pane, the same shape. **`launchers: [{view, title}]`** — a palette action and a rail button opening the view in a window, `title` at most 60. **`pins: [{view}]`** — views a thread may pin above its feed. **`agents: [{id, path}]`** — Agents of a plugin.
+- **`views: {<id>: view('./ui/Board.svelte', {live?})}`** — `id` lowercase letters, digits and inner hyphens, at most 40; the entry a Svelte component of the folder (Views). A view shows only where another field places it. `live: true` keeps a result view running while scrolled away, within the feed's budget.
+- **`results: [{tool, view}]`** draws the feed entry of a call to an `agents` or `own` tool with the view. **`surfaces: [{view, title, icon?}]`** — a project section at `/<project>/p/<id>/<view>` with a rail item and a palette action, `title` at most 40, `icon` an svg, png, webp, gif or jpg file of the folder, as `ui/icon.svg`. **`panes`** — a side pane, the same shape. **`launchers: [{view, title}]`** — a palette action and a rail button opening the view in a window, `title` at most 60. **`pins: [{view}]`** — views a thread may pin above its feed. **`agents: [{id, path}]`** — Agents of a plugin.
 - **`themes: {<id>: {title, light?, dark?}}`** — how Tagma looks, as data with no process; the `themes` reference carries the colour groups, the check that keeps state colours in their meaning, and choosing it.
 
 A field that fails when the plugin starts — a view missing from `views`, a result for a tool that is not `agents` or `own`, an agent file that does not parse — fails its process with the reason naming it.
@@ -88,33 +88,26 @@ A field that fails when the plugin starts — a view missing from `views`, a res
 
 - A definition with any tool, resource, schedule, action, build step or handler has a process; one with only views, places and agents has none.
 - Tagma runs `dist/process.js` on its own runtime with no install, from the folder, as the operator; a `.env` is not loaded. Its environment is the options that have a value and Tagma's own variables, which the SDK reads for you. The build refuses native addons and imports of computed names, since neither could load there.
-- Its contributions stand while the plugin is enabled, before any process ran: agents see its tools from the manifest. The first call, tick, ending, notification, build step or view subscription starts the process; after a quiet period with no call in flight and no open subscription (five minutes by default) it stops and reads `idle`. A crash also leaves it `idle`, and the next demand waits out a backoff of 1 to 60 s. A rebuild restarts a running process once and an idle one takes it at its next start; files under `ui/` load anew in the view without a restart.
+- Its contributions stand while the plugin is enabled, before any process ran: agents see its tools from the manifest. The first call, tick, ending, notification, build step or view subscription starts the process; after a quiet period with no call in flight and no open subscription (five minutes by default) it stops and reads `idle`. A crash also leaves it `idle`, and the next demand waits out a backoff of 1 to 60 s. A rebuild that changes the process restarts a running one once and an idle one takes it at its next start; one that changes only views restarts nothing.
 - The SDK owns stdout for the protocol from the first byte: `console.log` and writes to `process.stdout`, those of modules loading included, go to stderr. The process exits when Tagma closes its input.
 
 ## Views
 
-A view is an HTML page under `ui/` on the plugin's own origin — `http://<id>.localhost:<port>` on the server's machine, the plugin's own HTTPS port through Tailscale from another device — so it loads its scripts, styles and images by relative URL. Its CSP reaches only the plugin; `csp` opens outside origins. A browser that does not resolve `*.localhost` (some Safari versions) shows no views and says so.
+A view is a Svelte 5 component of the folder, as `ui/Board.svelte`, mounted inside Tagma's window as part of the page: no frame, no origin, no protocol. `tagma-plugin build` type-checks it with the definition (an error reads `ui/Board.svelte(12,5): …`) and ships it with everything it imports under `dist/ui/`. Tagma compiles that for its own Svelte when the plugin is installed or rebuilt, so a Tagma update never needs a rebuild of the plugin; meanwhile the view reads as preparing.
 
-The page speaks JSON-RPC 2.0 with its host over `window.parent.postMessage` — the MCP Apps protocol, version `2026-01-26` — and takes only messages whose `event.source` is `window.parent`:
+- Import from `@runlith/tagma/ui`: `useTagma`, `TagmaRefused`, the `ToolFace` type, `Frame`, and Tagma's own `Button`, `Input`, `Textarea`, `Tooltip`, `Kbd`, `FadeText`, `PathText`, `Glyph`, `TileMeter`, `DropdownMenu` and `Dialog`. `svelte` and its client modules are the window's own; any other library is bundled into the view.
+- Import a large library by its deep paths, as `@lucide/svelte/icons/check`, never through its index: the view carries every file its imports load, and one barrel import of an icon set loads all of it.
+- Style with Tailwind classes and a component's `<style>`; the theme's tokens (`bg-background`, `text-muted-foreground`, `border-border`) follow the person's theme. A stylesheet import fails the build.
+- `<Frame src title height? fill? media?>` embeds someone else's site in a sandboxed frame on its own origin, which reaches no Tagma API. `media` lets that site ask for camera and microphone: the person allows it per origin where the view is shown, and the plugin's card says it uses camera and microphone.
 
-1. Request `ui/initialize` with `{protocolVersion, appInfo, appCapabilities}`. The answer's `hostContext` carries `tagma: {projectId, plugin, view, threadId?, key?}` (`threadId` in a thread's feed or pin, `key` in a pin), `theme` (`light` or `dark`), `styles.variables` (the MCP Apps CSS variables, `--color-background-primary` and the rest, valued from Tagma's theme), `containerDimensions`, `locale` and `timeZone`.
-2. Post the notification `ui/notifications/initialized`; the host notifies nothing before it.
-3. Post `ui/notifications/size-changed {height}` whenever the page's height changes. A frame in the feed is capped at a share of the window; sections and panes fill their space.
+`const tagma = useTagma<typeof plugin>()`, called in the component's script, answers the view's handle:
+<!-- view-capabilities -->
 
-Requests the view sends — at most 64 in flight; any other method answers `-32601`:
-- `tools/call {name, arguments}` — a `view` tool of its plugin, else `plugin-tool-unoffered`; the handler sees caller `operator`. The answer is the MCP result: `content`, `structuredContent`, `isError`.
-- `resources/read {uri}`; `resources/subscribe {uri}`, `resources/unsubscribe {uri}` — updates arrive as `notifications/resources/updated {uri}`, and a subscription survives restarts of the process.
-- `ui/open-link {url}` — an `http` or `https` link, only during a click inside the view.
-<!-- bridge-methods -->
+A `Reference:` names a section of this skill: ask for it in `references` of `load_skill`.
 
-The methods above are the ones this installation serves; a method outside the list answers `-32601`. A notification arrives as a JSON-RPC notification of that name. A `Reference:` names a section of this skill: ask for it in `references` of `load_skill`.
+In a result view the component takes the call as props, `{name, input, output, state, threadId}`, `state` one of `running`, `done` or `refused`, typed by `ToolFace<typeof plugin, '<tool>'>`. The feed may draw it days after the call: draw from these props, not from a fresh call. A feed entry is capped at a share of the window; sections and panes fill their space.
 
-Messages the host sends:
-- `ui/notifications/host-context-changed` with a new `theme`, `styles` or `containerDimensions`;
-- `ui/resource-teardown`, a request: answer it with `{}` within a second, then the frame goes;
-- in a result view, `ui/notifications/tool-input {arguments}`, then `ui/notifications/tool-result` with the stored MCP result, or `ui/notifications/tool-cancelled {reason}`. The feed may draw the view days after the call: draw from these, not from a fresh call.
-
-Views mount only in a project where the plugin is enabled; elsewhere a result shows as an ordinary tool card.
+A view that does not compile shows the reason where it stands and on the plugin's card, with **Fix with an agent**. A rebuild that changes only views keeps the running process; each open view mounts the new build. Views mount only in a project where the plugin is enabled; elsewhere a result shows as an ordinary tool card.
 
 ## Testing
 
@@ -137,4 +130,5 @@ Views mount only in a project where the plugin is enabled; elsewhere a result sh
 - `outdated: true` on the row — the sources moved past the last build: build again.
 - `process.state: failed`, its tools offered to no agent until a rebuild or a clean start — `process.failure` names a field that did not register; a listing that differs from the manifest, so the process was built from other sources: build again; or why it would not start, ending with its stderr.
 - A tool missing from an agent's catalog — the plugin is not enabled in that project, the tool's audience is not `agents`, or the agent lacks the `plugins` capability.
-- A blank view — it never posted `ui/notifications/initialized`, it listens to a source other than `window.parent`, or its CSP blocks what it loads; the browser console names the last.
+- A view that does not compile — its place and the plugin's card name the file and the reason; fix the source, build again, or ask Fix with an agent there.
+- A view that stays preparing — Tagma is compiling it; a large dependency graph takes longer, and a deep import shrinks it.

@@ -11,6 +11,7 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { timeCompact } from '$lib/shared/time.js';
+  import { COPY_LINK, PAGES_MENU } from './actions.js';
   import { showArtifact } from './panes.js';
   import { ThreadPages } from './ThreadPages.svelte.js';
 
@@ -25,8 +26,7 @@
   const host = Host.use();
   const keymap = Keymap.use();
   const panel = host.kind !== 'mobile';
-  const copyChord = 'Mod+C';
-  const copyKeys = keymap.spellText(copyChord);
+  const copyKeys = $derived(keymap.spell(COPY_LINK));
 
   const team = $derived(pages.members);
 
@@ -53,7 +53,7 @@
   }
 
   function pressed(event: KeyboardEvent, page: ThreadPage): void {
-    if (!keymap.matches(event, copyChord)) return;
+    if (keymap.actionAt(event, PAGES_MENU) !== COPY_LINK) return;
     event.preventDefault();
     void copy(page);
   }

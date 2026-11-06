@@ -27,16 +27,15 @@ export const REMOTE_OPERATIONS = {
     approval: ASKS_NEVER,
     ...operatorOnly,
     meaning:
-      "Read whether this server is open to paired devices on another network, the states of the door and its isolated views, the server's machine name, the pairing code that stands and which device is asking.",
+      "Read whether this server is open to paired devices on another network, the states of the door and the proxy of MCP App views, the server's machine name, the pairing code that stands and which device is asking.",
     grammar:
-      'A blocked door names its problem, Tailscale’s own words and the command or link that clears it; reading it again tries once more. `sandbox` reports the proxy of MCP App views and `sites` the own origin of each plugin with views, by plugin: their failure keeps the door ready. `pairing` is null until a code was made and while none stands.',
+      'A blocked door names its problem, Tailscale’s own words and the command or link that clears it; reading it again tries once more. `sandbox` reports the proxy of MCP App views: its failure keeps the door ready. `pairing` is null until a code was made and while none stands.',
     input: Schema.Struct({}),
     answer: arms({
       read: {
         enabled: Schema.Boolean,
         state: AccessState,
         sandbox: AccessState,
-        sites: Schema.Record(Schema.String, AccessState),
         machine: Schema.String,
         pairing: Schema.NullOr(Pairing),
         device: Schema.NullOr(Schema.String),

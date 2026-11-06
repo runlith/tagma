@@ -1,18 +1,8 @@
 <script lang="ts">
-  import type { ToolActivityEntry } from '@runlith/chat-ui/activity';
-  import type { ViewIdentity } from '@tagma/server/executions/contract/wire/viewName';
-  import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
-  import { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
-  import { ShellOps, type ShellPort } from '$lib/features/workspace/ShellOps.js';
-  import { Door } from '$lib/wire/Door.js';
-  import { Live } from '$lib/wire/Live.js';
-  import { SoundChannel } from '$lib/wire/SoundChannel.js';
-  import { TagmaMethods } from './methods.js';
-  import ResultFrame from '../views/ResultFrame.svelte';
-  import type { ViewDocument } from '../views/ViewBridge.js';
-  import ViewFrame from '../views/ViewFrame.svelte';
-  import { pluginHost } from './pluginHost.svelte.js';
-  import { ThreadTranscripts } from './ThreadTranscripts.js';
+  import type { ShellPort } from '$lib/features/workspace/ShellOps.js';
+  import MountedView from './MountedView.svelte';
+  import ViewFailed from './ViewFailed.svelte';
+  import ViewPreparing from './ViewPreparing.svelte';
   import { ViewSets } from './ViewSets.svelte.js';
 
   type Props = {
@@ -21,52 +11,42 @@
     projectId: number;
     threadId: string | null;
     key?: string | null;
-    entry?: ToolActivityEntry;
+    props?: Readonly<Record<string, unknown>>;
     fill?: boolean;
     ceiling?: number | null;
     shell?: ShellPort;
   };
 
-  let { plugin, view, projectId, threadId, key = null, entry, fill = false, ceiling = null, shell }: Props = $props();
+  let { plugin, view, projectId, threadId, key = null, props = {}, fill = false, ceiling = null, shell }: Props = $props();
 
-  const appShell = ShellOps.use();
-  const door = Door.use();
-  const live = Live.use();
-  const sound = SoundChannel.use();
-  const presence = ThreadPresence.use();
-  const transcripts = ThreadTranscripts.use();
   const sets = ViewSets.use();
-  const links = ExternalLinks.use();
-  const methods = TagmaMethods.use();
-  const owners = $derived({ door, live, sound, presence, transcripts, shell: shell ?? appShell, sets, links, methods: methods.items });
-
-  const project = $derived(projectId);
-  const pluginId = $derived(plugin);
-  const viewId = $derived(view);
-  const thread = $derived(threadId);
-  const pinned = $derived(key);
-  const shown = $derived(sets.view(pluginId, viewId));
-  const site = $derived(shown?.set.site ?? null);
-  const address = $derived(shown === undefined || site?._tag !== 'served' ? null : new URL(shown.view.entry, `${site.origin}/`).href);
-  const page = $derived.by((): ViewDocument | null => (address === null ? null : { src: address, csp: {}, permissions: {} }));
-  const host = $derived(pluginHost(owners, { projectId: project, plugin: pluginId, view: viewId, threadId: thread, key: pinned }));
-  const mount = $derived({ host, page });
-  const title = $derived(shown === undefined ? `${plugin}/${view}` : `${shown.set.title} · ${view}`);
-  const identity = $derived<ViewIdentity>({ _tag: 'PluginView', project, plugin: pluginId, view: viewId });
+  const shown = $derived(sets.view(plugin, view));
+  const title = $derived(shown?.set.title ?? plugin);
+  const built = $derived(shown?.view.module);
+  const facts = $derived({ projectId, plugin, view, threadId, key });
 </script>
 
 {#if sets.problem !== null}
   <p class="text-small text-chat-failure/90">{sets.problem}</p>
-{:else if site?._tag === 'unserved'}
-  <p class="text-small text-muted-foreground">The view {plugin}/{view} does not open here: {site.reason}</p>
-{:else if sets.known && page === null}
+{:else if built?.state === 'ready'}
+  <div
+    class={[fill && 'h-full min-h-0', ceiling !== null && 'overflow-auto']}
+    style:max-height={ceiling === null ? undefined : `${ceiling}px`}
+  >
+    {#key `${built.address}\n${JSON.stringify(facts)}`}
+      <MountedView address={built.address} {facts} {title} {props} {shell} />
+    {/key}
+  </div>
+{:else if built?.state === 'failed'}
+  <ViewFailed
+    title="This view does not compile"
+    {plugin}
+    {view}
+    {projectId}
+    message={built.file === null ? built.message : `${built.file}: ${built.message}`}
+  />
+{:else if built?.state === 'preparing'}
+  <ViewPreparing {title} />
+{:else if sets.known}
   <p class="text-small text-muted-foreground">The view {plugin}/{view} is not available in this project.</p>
-{:else if page !== null}
-  {#key mount}
-    {#if entry !== undefined}
-      <ResultFrame {entry} view={page} {host} {title} {identity} bordered={true} />
-    {:else}
-      <ViewFrame view={page} {host} {title} {identity} bordered={false} {fill} {ceiling} />
-    {/if}
-  {/key}
 {/if}

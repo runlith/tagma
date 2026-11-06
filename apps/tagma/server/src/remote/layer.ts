@@ -5,23 +5,16 @@ import type { Settings } from '../settings/contract/service/values.js';
 import { Access } from './contract/service/access.js';
 import { Devices } from './contract/service/devices.js';
 import type { Exposure } from './contract/service/exposure.js';
-import { PlacedSites, TerminalSite, type WantedSites } from './contract/service/sites.js';
+import { TerminalSite } from './contract/service/sites.js';
 import { makeKeeper } from './keeper.js';
 import { makeReach } from './reach.js';
 import { ledgerLayer } from './store/ledger.js';
 
-export const remoteLayer: Layer.Layer<
-  Access | Devices | PlacedSites | TerminalSite,
-  never,
-  MachineStore | MachineUnits | Settings | Exposure | WantedSites
-> = Layer.effectContext(
-  Effect.gen(function* () {
-    const reach = yield* makeReach;
-    const devices = yield* makeKeeper({ reach });
-    return Context.make(Access, reach).pipe(
-      Context.add(PlacedSites, reach),
-      Context.add(TerminalSite, reach.terminal),
-      Context.add(Devices, devices),
-    );
-  }),
-).pipe(Layer.provide(ledgerLayer));
+export const remoteLayer: Layer.Layer<Access | Devices | TerminalSite, never, MachineStore | MachineUnits | Settings | Exposure> =
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const reach = yield* makeReach;
+      const devices = yield* makeKeeper({ reach });
+      return Context.make(Access, reach).pipe(Context.add(TerminalSite, reach.terminal), Context.add(Devices, devices));
+    }),
+  ).pipe(Layer.provide(ledgerLayer));

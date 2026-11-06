@@ -24,7 +24,6 @@ export const remoteOrigin = sqliteTable('remote_origin', {
   settledAt: integer('settled_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-export const remoteSite = sqliteTable('remote_site', {
-  name: text('name').primaryKey(),
-  port: integer('port').notNull().unique(),
+export const remoteTerminal = sqliteTable('remote_terminal', {
+  port: integer('port').primaryKey(),
 });

@@ -64,7 +64,6 @@ export const servedChannelOn = (port: number) =>
           parts: Stream.never,
           declared: Effect.succeed([]),
           part: () => undefined,
-          views: () => [],
         }),
       );
       return Context.add(served, WindowActs, windows);

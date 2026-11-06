@@ -4,10 +4,12 @@ import { ProjectChanges } from '../projects/contract/service/changes.js';
 import type { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import type { PluginFormats } from './contract/service/format.js';
+import { type PluginFormats, PluginUnreadable } from './contract/service/format.js';
 import {
   EnabledPlugins,
   HostedPlugins,
+  PluginDigests,
+  PluginFaults,
   PluginPlaces,
   type PluginProcessControl,
   PluginProcesses,
@@ -32,7 +34,7 @@ const differing = (before: Options, after: Options): readonly string[] =>
   );
 
 export const pluginsLayer: Layer.Layer<
-  Plugins | EnabledPlugins | HostedPlugins | PluginPoints | PluginProcesses,
+  Plugins | EnabledPlugins | HostedPlugins | PluginPoints | PluginProcesses | PluginFaults | PluginDigests,
   never,
   | Settings
   | Projects
@@ -63,7 +65,22 @@ export const pluginsLayer: Layer.Layer<
     });
     const shelf = yield* makeShelf({ home });
     const digests = yield* makeDigests;
-    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched });
+    const found = new Map<string, Map<string, string>>();
+    const faults = PluginFaults.of({
+      put: (plugin, point, reason) => {
+        const held = found.get(plugin) ?? new Map<string, string>();
+        if (held.get(point) === reason) return;
+        found.set(plugin, held.set(point, reason));
+        PubSub.publishUnsafe(pulses, null);
+      },
+      clear: (plugin, point) => {
+        if (found.get(plugin)?.delete(point) !== true) return;
+        if (found.get(plugin)?.size === 0) found.delete(plugin);
+        PubSub.publishUnsafe(pulses, null);
+      },
+    });
+    const faultsOf = (id: string) => [...(found.get(id) ?? [])].map(([point, reason]) => ({ point, reason }));
+    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched, faults: faultsOf });
     const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses, inputs });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);
@@ -89,6 +106,16 @@ export const pluginsLayer: Layer.Layer<
       Context.add(HostedPlugins, hosted),
       Context.add(PluginPoints, points),
       Context.add(PluginProcesses, processes),
+      Context.add(PluginFaults, faults),
+      Context.add(
+        PluginDigests,
+        PluginDigests.of({
+          views: (root, paths) =>
+            digests
+              .digest(root, paths, 'views')
+              .pipe(Effect.mapError((failure) => new PluginUnreadable({ path: root, reason: failure.reason }))),
+        }),
+      ),
     );
   }),
 );

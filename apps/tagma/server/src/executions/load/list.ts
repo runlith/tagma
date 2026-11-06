@@ -168,7 +168,7 @@ export class LoadList {
     background: readonly BackgroundWork[],
   ): { readonly view: LoadView; readonly point: LoadPoint | undefined } {
     const cores = reading.cores;
-    const part: PartLookup = (key) => parts.row(key, named.plugins);
+    const part: PartLookup = (key) => parts.row(key);
     const built = new Map<string, Building>();
     const open: Open = (key, kind, title, extra = {}) => {
       const standing = built.get(key);

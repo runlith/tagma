@@ -5,7 +5,7 @@ import { writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { makeDoorWorld } from '../doorFixture.js';
 
 const tool = (name: string, audience: string) => ({ name, audience, description: name, inputSchema: { type: 'object' } });
-const views = [{ id: 'board', entry: 'ui/board.html' }];
+const views = [{ id: 'board', entry: 'ui/Board.svelte' }];
 
 const REFUSED: readonly { readonly contributes: Readonly<Record<string, unknown>>; readonly reason: string }[] = [
   {
@@ -36,7 +36,8 @@ const REFUSED: readonly { readonly contributes: Readonly<Record<string, unknown>
   { contributes: { tools: [tool('x'.repeat(60), 'agents')] }, reason: `contributes.tools: ${'x'.repeat(60)} named under` },
   {
     contributes: { themes: { swapped: { title: 'Swapped', dark: { signals: { failure: '#a3be8c' } } } } },
-    reason: "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
+    reason:
+      "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
   },
 ];
 
@@ -56,5 +57,33 @@ it.live('a manifest whose points do not agree with each other refuses its instal
       if (answer.status === 200) installed.push(id);
       expect(answer.body).toMatchObject({ code: 'plugin-refused', reason: expect.stringContaining(reason) });
     }
+  }),
+);
+
+it.live('a plugin row says a view uses the camera and microphone only when a view frames a site with media', () =>
+  Effect.gen(function* () {
+    const world = yield* makeDoorWorld();
+    const scope = `project=${yield* world.stealthProject()}`;
+    const installed: string[] = [];
+    yield* Effect.addFinalizer(() =>
+      Effect.forEach(installed, (id) => world.op('uninstall_plugin', { id }, scope), { discard: true }).pipe(Effect.orDie),
+    );
+    const detailOf = Effect.fnUntraced(function* (id: string, views: readonly Readonly<Record<string, unknown>>[]) {
+      const root = yield* world.directory(id);
+      yield* Effect.promise(() => writePlugin(root, { id, contributes: { views } }));
+      const answer = yield* world.op('install_plugin', { source: root, enabled: false }, scope);
+      installed.push(id);
+      const { plugin } = answer.body as {
+        readonly plugin: { readonly components: readonly { readonly name: string; readonly detail?: string }[] };
+      };
+      return plugin.components.find((component) => component.name === 'views')?.detail;
+    });
+    expect(
+      yield* detailOf('meeting', [
+        { id: 'room', entry: 'ui/Room.svelte', media: true },
+        { id: 'list', entry: 'ui/List.svelte' },
+      ]),
+    ).toBe('Uses camera and microphone');
+    expect(yield* detailOf('plain', [{ id: 'list', entry: 'ui/List.svelte' }])).toBeUndefined();
   }),
 );

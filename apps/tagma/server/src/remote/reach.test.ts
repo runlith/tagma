@@ -13,7 +13,6 @@ import {
   type SiteKeeping,
   WithdrawalRefused,
 } from './contract/service/exposure.js';
-import { WantedSites } from './contract/service/sites.js';
 import { remoteEnabled } from './keys.js';
 import { makeReach } from './reach.js';
 import { Ledger } from './store/ledger.js';
@@ -41,7 +40,6 @@ type Door = {
   readonly point?: Exposure['Service']['point'];
   readonly withdraw?: Exposure['Service']['withdraw'];
   readonly ledger?: Ledger['Service'];
-  readonly sites?: ReadonlySet<string>;
 };
 
 const door = (given: Door) =>
@@ -59,17 +57,15 @@ const door = (given: Door) =>
       amend: unused,
     }),
   ).pipe(
-    Context.add(Ledger, given.ledger ?? Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN), sites: Effect.succeed(new Map()) })),
+    Context.add(Ledger, given.ledger ?? Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN), terminal: Effect.succeed(null) })),
     Context.add(
       Exposure,
       Exposure.of({
         expose: given.expose ?? (() => Stream.never),
-        place: () => Stream.never,
         point: given.point ?? (() => Effect.die('this door points no terminal site')),
         withdraw: given.withdraw ?? (() => Effect.void),
       }),
     ),
-    Context.add(WantedSites, WantedSites.of({ names: given.sites === undefined ? Stream.never : Stream.succeed(given.sites) })),
   );
 
 it.effect('switching access off withdraws the mapping of the settled origin again after each refusal', () =>
@@ -128,11 +124,7 @@ it.effect('a listener that cannot open leaves the door blocked with its reason',
     const refused = { ...listener, open: Effect.fail(new ListenerRefused({ reason: 'port 5710 is taken' })) };
     yield* Effect.forkScoped(reach.serve(refused));
     yield* Queue.offer(switches, true);
-    yield* reach.moved.pipe(
-      Stream.mapEffect(() => reach.read),
-      Stream.filter((read) => read.state._tag === 'blocked'),
-      Stream.runHead,
-    );
+    yield* Effect.repeat(reach.read, { until: (read) => read.state._tag === 'blocked' });
     expect((yield* reach.read).state).toEqual({
       _tag: 'blocked',
       problem: 'listener-failed',
@@ -148,22 +140,22 @@ it.effect('the terminal endpoint gets an HTTPS site of its own, follows the endp
     const switches = yield* Queue.unbounded<boolean>();
     const exposed = yield* Deferred.make<void>();
     const withdrawals = yield* Queue.unbounded<readonly [number, readonly number[]]>();
-    const kept = new Map<string, number>([['music', 11_001]]);
+    const kept: { port: number | null } = { port: null };
     const asks: PointAsk[] = [];
     const ledger = Ledger.of({
       ...unreadLedger,
       origin: Effect.succeed(ORIGIN),
-      sites: Effect.sync(() => new Map(kept)),
-      keepSite: (name, port) =>
+      terminal: Effect.sync(() => kept.port),
+      keepTerminal: (port) =>
         Effect.sync(() => {
-          kept.set(name, port);
+          kept.port = port;
         }),
     });
     const point: Exposure['Service']['point'] = Effect.fnUntraced(function* (asked: PointAsk, keep: SiteKeeping) {
       asks.push(asked);
       const port = asked.port ?? 12_001;
-      if (port !== asked.port) yield* Effect.orDie(keep(asked.name, port));
-      return { name: asked.name, port, state: { _tag: 'ready', origin: `${ORIGIN}:${port}` } as const };
+      if (port !== asked.port) yield* Effect.orDie(keep(port));
+      return { port, state: { _tag: 'ready', origin: `${ORIGIN}:${port}` } as const };
     });
     const reach = yield* Effect.provide(
       makeReach,
@@ -187,12 +179,7 @@ it.effect('the terminal endpoint gets an HTTPS site of its own, follows the endp
       [null, 5801],
       [12_001, 5802],
     ]);
-    expect(kept).toEqual(
-      new Map([
-        ['music', 11_001],
-        [':terminal', 12_001],
-      ]),
-    );
+    expect(kept.port).toBe(12_001);
 
     yield* Queue.offer(switches, false);
     expect(yield* Queue.take(withdrawals)).toEqual([PORT, [12_001]]);
@@ -200,22 +187,27 @@ it.effect('the terminal endpoint gets an HTTPS site of its own, follows the endp
   }),
 );
 
-it.effect('a site whose port cannot be read is blocked with the store’s reason while the door stays ready', () =>
+it.effect('a terminal site whose port cannot be read is blocked with the store’s reason while the door stays ready', () =>
   Effect.gen(function* () {
     const switches = yield* Queue.unbounded<boolean>();
+    const exposed = yield* Deferred.make<void>();
     const down = new SqlError({ reason: new ConnectionError({ cause: new Error('down'), message: 'the machine store is down' }) });
-    const ledger = Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN), sites: Effect.fail(down) });
-    const reach = yield* Effect.provide(makeReach, door({ switches, expose: readied, ledger, sites: new Set(['music']) }));
+    const ledger = Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN), terminal: Effect.fail(down) });
+    const reach = yield* Effect.provide(
+      makeReach,
+      door({
+        switches,
+        ledger,
+        expose: () => Stream.concat(readied(), Stream.drain(Stream.fromEffect(Deferred.succeed(exposed, undefined)))),
+      }),
+    );
     yield* Effect.forkScoped(reach.serve(listener));
     yield* Queue.offer(switches, true);
-    yield* reach.moved.pipe(
-      Stream.filter(() => reach.site('music')._tag === 'blocked'),
-      Stream.runHead,
-    );
-    expect(reach.site('music')).toEqual({
+    yield* Deferred.await(exposed);
+    expect(yield* Effect.flip(reach.terminal.origin(5801))).toEqual({
       _tag: 'blocked',
       problem: 'refused',
-      detail: 'the ports of plugin sites could not be read: the machine store is down',
+      detail: 'the port of the terminal site could not be read: the machine store is down',
       command: null,
       link: null,
     });

@@ -32,10 +32,11 @@
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
-  import { spellChord, spellKey } from '$lib/shared/chordSpelling.js';
+  import { spellKey } from '$lib/shared/chordSpelling.js';
   import { cn } from '$lib/shared/utils.js';
   import MatchText from '$lib/shared/MatchText.svelte';
   import { ProjectWindows } from '$lib/shared/desktop/ProjectWindows.js';
+  import { MENU_REMOVE, MENU_RENAME, MENU_WINDOW, PROJECT_MENU } from './actions.js';
   import { ProjectCreation } from './ProjectCreation.svelte.js';
   import { STORAGE } from './projectStorage.js';
 
@@ -59,10 +60,14 @@
   const host = Host.use();
   const keymap = Keymap.use();
   const windows = ProjectWindows.find();
-  const newWindowKeys = spellChord({ key: 'Enter', meta: host.apple, ctrl: !host.apple, alt: false, shift: false }, host.apple);
-  const removeChord = 'Mod+Backspace';
-  const removeKeys = keymap.spellText(removeChord);
-  const renameKeys = spellKey('F2', host.apple);
+  const newWindowKeys = $derived(keymap.spell(MENU_WINDOW));
+  const removeKeys = $derived(keymap.spell(MENU_REMOVE));
+  const renameKeys = $derived(keymap.spell(MENU_RENAME));
+  const ROW_ACTS: Readonly<Record<string, string>> = {
+    [MENU_REMOVE]: '[data-project-remove]',
+    [MENU_RENAME]: '[data-project-rename]',
+    [MENU_WINDOW]: '[data-new-window]',
+  };
 
   let query = $state('');
 
@@ -99,14 +104,8 @@
   }
 
   function pressed(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
-    const act = keymap.matches(event, removeChord)
-      ? '[data-project-remove]'
-      : event.key === 'F2'
-        ? '[data-project-rename]'
-        : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
-          ? '[data-new-window]'
-          : null;
-    if (act === null) return;
+    const act = ROW_ACTS[keymap.actionAt(event, PROJECT_MENU) ?? ''];
+    if (act === undefined) return;
     const button = event.currentTarget.querySelector<HTMLElement>(act);
     if (button === null) return;
     event.preventDefault();
@@ -115,9 +114,11 @@
 
   function submit(event: KeyboardEvent): void {
     const first = found[0]?.item;
-    if (event.key !== 'Enter' || event.isComposing || first === undefined) return;
+    if (event.isComposing || first === undefined) return;
+    const beside = windows !== undefined && keymap.actionAt(event, PROJECT_MENU) === MENU_WINDOW;
+    if (!beside && event.key !== 'Enter') return;
     event.preventDefault();
-    if (windows !== undefined && (event.metaKey || event.ctrlKey)) windows.openProject(visits.resume(first));
+    if (beside) windows.openProject(visits.resume(first));
     else go(first);
     menu.close();
   }

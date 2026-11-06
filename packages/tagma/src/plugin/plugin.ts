@@ -42,16 +42,45 @@ export type ToolAudience = Exclude<ToolEntry['audience'], 'tagma'>;
 
 type Parsed<S> = S extends StandardSchemaV1<any, infer Output> ? Output : Readonly<Record<never, never>>;
 
-export type Tool<S extends InputSchema | undefined = InputSchema | undefined> = {
+export type Tool<S extends InputSchema | undefined = InputSchema | undefined, A extends ToolAudience = ToolAudience, R = unknown> = {
   readonly description: ToolEntry['description'];
-  readonly audience: ToolAudience;
+  readonly audience: A;
   readonly input?: S;
   readonly title?: string;
   readonly readOnly?: boolean;
   readonly destructive?: boolean;
   readonly idempotent?: boolean;
   readonly openWorld?: boolean;
-  readonly run: (input: Parsed<S>, ctx: PluginContext) => Promise<unknown>;
+  readonly run: (input: Parsed<S>, ctx: PluginContext) => Promise<R>;
+};
+
+type Encoded<S> = S extends StandardSchemaV1<infer Input, any> ? Input : Readonly<Record<never, never>>;
+
+type ToolsOf<Plugin> = Plugin extends { readonly tools: infer Tools } ? Tools : Readonly<Record<never, never>>;
+
+type ViewToolNames<Plugin> = {
+  readonly [Name in keyof ToolsOf<Plugin>]: ToolsOf<Plugin>[Name] extends { readonly audience: 'view' } ? Name : never;
+}[keyof ToolsOf<Plugin>];
+
+type ToolIO<Handler> = Handler extends Tool<infer S, any, infer Output> ? { readonly input: Encoded<S>; readonly output: Output } : never;
+
+export type ViewTools<Plugin> = {
+  readonly [Name in ViewToolNames<Plugin>]: ToolIO<ToolsOf<Plugin>[Name]> extends {
+    readonly input: infer Input;
+    readonly output: infer Output;
+  }
+    ? keyof Input extends never
+      ? (input?: Input) => Promise<Output>
+      : (input: Input) => Promise<Output>
+    : never;
+};
+
+export type ToolFace<Plugin, Name extends keyof ToolsOf<Plugin> & string> = {
+  readonly name: Name;
+  readonly input: ToolIO<ToolsOf<Plugin>[Name]>['input'];
+  readonly output: ToolIO<ToolsOf<Plugin>[Name]>['output'] | undefined;
+  readonly state: 'running' | 'done' | 'refused';
+  readonly threadId: string;
 };
 
 export type Resource = {
@@ -84,7 +113,11 @@ export type AskedHandler = (asked: AskedInput, ctx: PluginContext) => Promise<vo
 
 export type NotificationHandler = (answer: NotificationInput, ctx: PluginContext) => Promise<void>;
 
-export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify' | 'actions';
+type ViewPoint = PluginPoints['views'][number];
+
+export type View = { readonly entry: ViewPoint['entry']; readonly live?: ViewPoint['live'] };
+
+export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify' | 'actions' | 'views';
 
 export type PluginData = { readonly [Point in Exclude<keyof PluginPoints, HandledPoint>]?: PluginPoints[Point] };
 
@@ -96,6 +129,7 @@ export type PluginDefinition = PluginData & {
   readonly options?: PluginEnvelope['options'];
   readonly tools?: Readonly<Record<string, Tool<any>>>;
   readonly resources?: Readonly<Record<string, Resource>>;
+  readonly views?: Readonly<Record<string, View>>;
   readonly schedules?: Readonly<Record<string, Schedule>>;
   readonly beforeBuild?: Readonly<Record<string, BuildStep>>;
   readonly actions?: Readonly<Record<string, Action>>;
@@ -109,9 +143,13 @@ type Unknown<Definition> = { readonly [Field in Exclude<keyof Definition, keyof 
 export const definePlugin = <const Definition extends PluginDefinition>(definition: Definition & Unknown<Definition>): Definition =>
   definition;
 
-export const tool = <S extends InputSchema | undefined = undefined>(declared: Tool<S>): NoInfer<Tool<S>> => declared;
+export const tool = <S extends InputSchema | undefined = undefined, A extends ToolAudience = ToolAudience, R = unknown>(
+  declared: Tool<S, A, R>,
+): NoInfer<Tool<S, A, R>> => declared;
 
 export const resource = (declared: Resource): Resource => declared;
+
+export const view = (entry: string, options: { readonly live?: true } = {}): View => ({ entry: entry.replace(/^\.\//u, ''), ...options });
 
 export const schedule = (declared: Schedule): Schedule => declared;
 

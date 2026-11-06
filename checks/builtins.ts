@@ -239,6 +239,10 @@ export const platforms: Builtin<'platforms', PlatformsParams> = {
         at: 'packages/tagma/src/plugin/build.ts',
         why: "imports the plugin.ts of the folder it builds, an author's code outside the tree",
       },
+      {
+        at: 'apps/tagma/app/src/lib/features/plugin-views/PluginModules.ts',
+        why: "imports a plugin's views, which the server compiles outside the tree and serves by an address the view set names",
+      },
     ],
     packages: {
       '@lode/inspection': { names: ['bun:sqlite', 'node:child_process'] },

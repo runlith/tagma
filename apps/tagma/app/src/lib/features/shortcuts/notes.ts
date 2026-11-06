@@ -1,4 +1,4 @@
-import { chordId } from '@tagma/server/platform/contract/wire/chord';
+import { chordId, type HostChord } from '@tagma/server/platform/contract/wire/chord';
 import type { Host } from '@runlith/layer/Host';
 import type { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import type { Row, Shortcuts } from './Shortcuts.svelte.js';
@@ -11,21 +11,23 @@ type Note = {
   readonly act: { readonly label: string; readonly run: () => void } | null;
 };
 
-export function notesOf(row: Row, shortcuts: Shortcuts, keymap: Keymap, host: Host, allow: (() => void) | null = null): readonly Note[] {
+export function notesOf(
+  row: Row,
+  shortcuts: Shortcuts,
+  keymap: Keymap,
+  host: Host,
+  grant: (chord: HostChord, global: boolean) => void,
+  allow: (() => void) | null = null,
+): readonly Note[] {
   const notes: Note[] = [];
-  for (const displaced of row.displaced) {
-    const chord = keymap.spellChord(displaced.chord);
-    const key = `displaced ${chordId(displaced.chord)}`;
-    if (displaced.by.kind === 'shell')
-      notes.push({
-        key,
-        kind: 'kept',
-        chord,
-        text: host.isDesktop ? 'Tagma keeps this chord' : 'Your browser keeps this chord',
-        act: null,
-      });
-    else notes.push({ key, kind: 'displaced', chord, text: `taken by ${shortcuts.titleOf(displaced.by.action)}`, act: null });
-  }
+  for (const displaced of row.displaced)
+    notes.push({
+      key: `displaced ${chordId(displaced.chord)}`,
+      kind: displaced.by.kind === 'shell' ? 'kept' : 'displaced',
+      chord: keymap.spellChord(displaced.chord),
+      text: `taken by ${shortcuts.holderTitle(displaced.by)}`,
+      act: null,
+    });
   for (const binding of row.bound) {
     const chord = keymap.spellChord(binding.chord);
     const key = chordId(binding.chord);
@@ -35,7 +37,7 @@ export function notesOf(row: Row, shortcuts: Shortcuts, keymap: Keymap, host: Ho
         kind: 'offered',
         chord,
         text: 'Offered in every app',
-        act: { label: 'Work in every app', run: () => void shortcuts.everywhere(row.keyed.id, binding.chord, true) },
+        act: { label: 'Work in every app', run: () => grant(binding.chord, true) },
       });
     if (!binding.global) continue;
     if (!host.isDesktop) {

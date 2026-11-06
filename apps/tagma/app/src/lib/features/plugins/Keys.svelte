@@ -4,7 +4,8 @@
   import { Router } from '@runlith/layer/Router';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { rebindHref } from '$lib/features/shortcuts/href.js';
-  import { Shortcuts } from '$lib/features/shortcuts/Shortcuts.svelte.js';
+  import { Shortcuts, type Taken } from '$lib/features/shortcuts/Shortcuts.svelte.js';
+  import TakenLine from '$lib/features/shortcuts/TakenLine.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
 
@@ -18,22 +19,13 @@
   const displaced = $derived(shortcuts.displacedOf(plugin));
   const offered = $derived(host.isDesktop ? shortcuts.offeredOf(plugin) : []);
 
-  let taken = $state<{ readonly action: string; readonly chord: HostChord; readonly by: string } | null>(null);
+  let taken = $state<Taken | null>(null);
 
-  const holderTitle = (by: { readonly kind: 'shell' } | { readonly kind: 'action'; readonly action: string }): string =>
-    by.kind === 'shell' ? (host.isDesktop ? 'Tagma itself' : 'your browser') : shortcuts.titleOf(by.action);
-
-  function everywhere(action: string, chord: HostChord): void {
-    const holder = shortcuts.holder(action, chord, true);
-    if (holder === null) void shortcuts.everywhere(action, chord, true);
-    else if (holder.kind === 'action') taken = { action, chord, by: shortcuts.titleOf(holder.action) };
+  function grant(action: string, chord: HostChord, global: boolean): void {
+    taken = shortcuts.ask({ action, chord, global, mode: 'grant' });
   }
 
-  function useHere(): void {
-    const move = taken;
-    taken = null;
-    if (move !== null) void shortcuts.take(move.action, move.chord, true, 'add');
-  }
+  const rebind = (action: string): void => void router.goto(rebindHref(router, action));
 </script>
 
 {#if displaced.length > 0 || offered.length > 0}
@@ -43,35 +35,42 @@
       {#each displaced as one (`${one.action} ${chordId(one.chord)}`)}
         <div class="flex min-w-0 items-center gap-2 px-3 py-2 text-small" data-displaced={one.action}>
           <span class="min-w-0 flex-1 text-muted-foreground">
-            <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> for “{shortcuts.titleOf(one.action)}” is taken by {holderTitle(one.by)}.
+            <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> for “{shortcuts.titleOf(one.action)}” is taken by {shortcuts.holderTitle(
+              one.by,
+            )}.
           </span>
-          <Button variant="outline" size="xs" onclick={() => void router.goto(rebindHref(router, one.action))}>Rebind</Button>
+          <Button variant="outline" size="xs" onclick={() => rebind(one.action)}>Rebind</Button>
         </div>
       {/each}
       {#each offered as one (`${one.action} ${chordId(one.chord)}`)}
-        <div class="flex min-w-0 items-center gap-2 px-3 py-2 text-small" data-offered={one.allowed ? 'allowed' : 'asked'}>
+        {@const refused = one.answer?.grant === 'taken' || one.answer?.grant === 'unavailable'}
+        <div
+          class="flex min-w-0 items-center gap-2 px-3 py-2 text-small"
+          data-offered={!one.allowed ? 'asked' : refused ? 'refused' : 'allowed'}
+        >
           <span class="min-w-0 flex-1 text-muted-foreground">
-            {#if one.allowed}
-              <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> runs “{one.title}” in every app.
-            {:else}
+            {#if !one.allowed}
               <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> runs “{one.title}” in Tagma; the plugin offers it in every app.
+            {:else if one.answer?.grant === 'taken'}
+              Another app holds <Kbd chord={keymap.spellChord(one.chord)} size="sm" />, so “{one.title}” runs only in Tagma.
+            {:else if one.answer?.grant === 'unavailable'}
+              <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> for “{one.title}”: {one.answer.reason ??
+                'this chord cannot work in every app here'}.
+            {:else}
+              <Kbd chord={keymap.spellChord(one.chord)} size="sm" /> runs “{one.title}” in every app.
             {/if}
           </span>
-          {#if one.allowed}
-            <Button variant="outline" size="xs" onclick={() => void shortcuts.everywhere(one.action, one.chord, false)}
-              >Only in Tagma</Button
-            >
+          {#if !one.allowed}
+            <Button variant="outline" size="xs" onclick={() => grant(one.action, one.chord, true)}>Work in every app</Button>
+          {:else if refused}
+            <Button variant="outline" size="xs" onclick={() => rebind(one.action)}>Rebind</Button>
           {:else}
-            <Button variant="outline" size="xs" onclick={() => everywhere(one.action, one.chord)}>Work in every app</Button>
+            <Button variant="outline" size="xs" onclick={() => grant(one.action, one.chord, false)}>Only in Tagma</Button>
           {/if}
         </div>
       {/each}
       {#if taken !== null}
-        <div class="flex min-w-0 items-center gap-2 px-3 py-2 text-small text-muted-foreground" data-taken>
-          <span class="flex-1"><Kbd chord={keymap.spellChord(taken.chord)} size="sm" /> runs {taken.by}.</span>
-          <Button variant="outline" size="xs" onclick={useHere}>Use here</Button>
-          <Button variant="ghost" size="xs" onclick={() => (taken = null)}>Cancel</Button>
-        </div>
+        <TakenLine {taken} size="xs" class="px-3 py-2" onclose={() => (taken = null)} />
       {/if}
     </div>
   </section>

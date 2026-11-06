@@ -105,7 +105,6 @@ export type WindowKeys = {
   readonly chords: readonly string[];
   readonly claimed: readonly string[];
   readonly framed: readonly FramedKey[];
-  readonly served: readonly string[];
   readonly global: readonly GlobalKey[];
 };
 
@@ -115,12 +114,22 @@ export type KeyGrant = 'held' | 'taken' | 'needs-accessibility' | 'unavailable';
 
 export type GlobalAnswer = { readonly chord: string; readonly grant: KeyGrant; readonly reason: string | null };
 
+export type OwnedAction = {
+  readonly id: string;
+  readonly title: string;
+  readonly keys: readonly (string | { readonly keys: string; readonly global: true })[];
+};
+
 export interface DesktopKeys {
   publish(keys: WindowKeys): void;
   onPress(listener: (press: KeyPress) => void): () => void;
   kept(): Promise<readonly string[]>;
   answers(): Promise<readonly GlobalAnswer[]>;
   onAnswers(listener: (answers: readonly GlobalAnswer[]) => void): () => void;
+  //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
+  readonly owned?: () => Promise<readonly OwnedAction[]>;
+  //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
+  readonly perform?: (action: string) => void;
 }
 
 export interface DesktopFiles {

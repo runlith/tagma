@@ -14,6 +14,7 @@
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
+  import { TAB_CLOSE, TAB_REOPEN } from '$lib/features/workspace/action.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
   import { holdProject } from '$lib/features/workspace/holds.js';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -203,8 +204,8 @@
         return true;
       });
     const releases = [
-      bound('tab.close', () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
-      bound('tab.reopen', () => void act(() => closedPages.reopen())),
+      bound(TAB_CLOSE, () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
+      bound(TAB_REOPEN, () => void act(() => closedPages.reopen())),
       bound('browser.address', edit),
       bound('history.back', () => navigate('back')),
       bound('history.forward', () => navigate('forward')),

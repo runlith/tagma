@@ -1,6 +1,7 @@
 import { SENT_FRAME_SAMPLES, SENT_HEADER_BYTES } from '@tagma/server/speech/contract/wire/listening';
 import type { SoundChannel } from '$lib/wire/SoundChannel.js';
-import type { FeedFailure } from '../../views/ViewFeeds.js';
+
+type FeedFailure = { readonly code: string; readonly reason: string; readonly unblock: readonly string[] };
 
 const SENT_RATE = 16_000;
 const BACKLOG_MS = 10_000;

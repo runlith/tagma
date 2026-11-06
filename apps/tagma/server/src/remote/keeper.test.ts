@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Context, Effect, Stream } from 'effect';
+import { Context, Effect } from 'effect';
 import { TestClock } from 'effect/testing';
 import { makeKeeper } from './keeper.js';
 import type { Reach } from './reach.js';
@@ -17,9 +17,6 @@ const reach: Reach = {
   sandboxOrigin: null,
   read: Effect.die('the pairing code reads only the origin of a ready door'),
   serve: () => Effect.die('the pairing code reads only the origin of a ready door'),
-  site: () => ({ _tag: 'off' }),
-  at: () => null,
-  moved: Stream.never,
   terminal: { origin: () => Effect.die('the pairing code reads only the origin of a ready door') },
 };
 

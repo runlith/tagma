@@ -59,7 +59,7 @@ e2e(
       main.evaluate((_electron, count) => (globalThis as unknown as { declaring: Declaring }).declaring.next(count), seen);
     const profile = await main.evaluate(() => (globalThis as unknown as { declaring: Declaring }).declaring.profile);
     const isPage = (document: Held) => document._tag === 'Page' && document.page === 'page-1';
-    const isView = (document: Held) => document._tag === 'PluginView' && document.plugin === 'notes' && document.view === 'board';
+    const isView = (document: Held) => document._tag === 'McpView' && document.server === 'notes';
     const nestedPid = () => main.evaluate(() => (globalThis as unknown as { declaring: Declaring }).declaring.nestedPid());
     const standing = async (declaration: WindowDeclaration) => {
       const nested = await nestedPid();

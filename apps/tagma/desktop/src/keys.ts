@@ -25,15 +25,14 @@ const isGlobal = (value: unknown): value is GlobalKey => {
 const decoded = (value: unknown): WindowKeys | null => {
   const keys = value as Partial<Record<keyof WindowKeys, unknown>> | null;
   if (keys === null || typeof keys !== 'object') return null;
-  const { chords, claimed, framed, served, global } = keys;
+  const { chords, claimed, framed, global } = keys;
   return strings(chords) &&
     strings(claimed) &&
-    strings(served) &&
     Array.isArray(framed) &&
     framed.every(isFramed) &&
     Array.isArray(global) &&
     global.every(isGlobal)
-    ? { chords, claimed, framed, served, global }
+    ? { chords, claimed, framed, global }
     : null;
 };
 
@@ -59,6 +58,10 @@ export class Keys implements KeyFollower {
     });
     ipcMain.handle(KEYS.kept, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.kept() : []));
     ipcMain.handle(KEYS.answers, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.globals.answers() : []));
+    ipcMain.handle(KEYS.owned, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.globals.owned() : []));
+    ipcMain.on(KEYS.perform, (event, action: unknown) => {
+      if (typeof action === 'string' && this.fronts.trusts(event.senderFrame?.url)) this.globals.perform(action);
+    });
     this.globals.onAnswers((answers) => {
       for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(KEYS.answered, answers);
     });

@@ -25,20 +25,20 @@
     row.bound.some((binding) => keymap.spellChord(binding.chord).toLocaleLowerCase().includes(needle));
 
   const groups = $derived.by(() => {
-    const byTitle = new Map<string, { readonly title: string; readonly plugin: boolean; readonly rows: Row[] }>();
+    const byOwner = new Map<string, { readonly key: string; readonly title: string; readonly plugin: boolean; readonly rows: Row[] }>();
     for (const row of shortcuts.rows) {
       if (!matches(row)) continue;
       const owner = row.listed.action.by;
-      const title = owner?.title ?? row.listed.area;
-      const group = byTitle.get(title) ?? { title, plugin: owner !== undefined, rows: [] };
+      const key = owner === undefined ? `area ${row.listed.area}` : `plugin ${owner.plugin}`;
+      const group = byOwner.get(key) ?? { key, title: owner?.title ?? row.listed.area, plugin: owner !== undefined, rows: [] };
       group.rows.push(row);
-      byTitle.set(title, group);
+      byOwner.set(key, group);
     }
-    return [...byTitle.values()].toSorted((one, other) => Number(one.plugin) - Number(other.plugin));
+    return [...byOwner.values()].toSorted((one, other) => Number(one.plugin) - Number(other.plugin));
   });
 
   const placeOf = (row: Row): string | null =>
-    row.keyed.place === 'terminal' ? 'In a terminal' : row.bound.some((binding) => binding.global) ? 'In every app' : null;
+    row.listed.action.region !== undefined ? row.listed.action.where : row.bound.some((binding) => binding.global) ? 'In every app' : null;
 
   $effect(() => {
     const aimed = rebind;
@@ -54,7 +54,7 @@
   {#if shortcuts.problem !== null}
     <p class="pt-3 text-small text-muted-foreground">{shortcuts.problem}</p>
   {/if}
-  {#each groups as group (group.title)}
+  {#each groups as group (group.key)}
     <Group title={group.title}>
       {#each group.rows as row, index (row.keyed.id)}
         {@const place = placeOf(row)}

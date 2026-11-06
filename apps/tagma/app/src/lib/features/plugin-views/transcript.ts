@@ -16,7 +16,7 @@ type Scan = {
   readonly hungry: boolean;
 };
 
-const toolStateOf = (state: ToolEntry['toolState']): NonNullable<TranscriptEntry['tool']>['state'] => {
+export const toolStateOf = (state: ToolEntry['toolState']): NonNullable<TranscriptEntry['tool']>['state'] => {
   switch (state) {
     case 'input-streaming':
     case 'input-available':

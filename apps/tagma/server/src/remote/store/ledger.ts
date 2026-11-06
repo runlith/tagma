@@ -4,7 +4,7 @@ import { MachineStore, type StoreFailure } from '../../platform/contract/service
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { DevicePlace } from '../contract/service/devices.js';
-import { device, pairing, remoteOrigin, remoteSite } from './tables.js';
+import { device, pairing, remoteOrigin, remoteTerminal } from './tables.js';
 
 export type DeviceRow = typeof device.$inferSelect;
 
@@ -15,8 +15,8 @@ export class Ledger extends Context.Service<
     seen(id: string, at: Date, until: Date): Effect.Effect<void, StoreFailure>;
     readonly origin: Effect.Effect<string | null, StoreFailure>;
     settle(origin: string): Effect.Effect<void, StoreFailure>;
-    readonly sites: Effect.Effect<ReadonlyMap<string, number>, StoreFailure>;
-    keepSite(name: string, port: number): Effect.Effect<void, StoreFailure>;
+    readonly terminal: Effect.Effect<number | null, StoreFailure>;
+    keepTerminal(port: number): Effect.Effect<void, StoreFailure>;
     issue(codeDigest: string, expiresAt: Date): Effect.Effect<void, StoreFailure>;
     exchange(codeDigest: string, now: Date, paired: DeviceRow): Effect.Effect<boolean, StoreFailure>;
     revoke(id: string, now: Date): Effect.Effect<boolean, StoreFailure>;
@@ -48,16 +48,13 @@ export const makeLedger = Effect.gen(function* () {
         Effect.andThen(unit.run(db.delete(remoteOrigin)), unit.run(db.insert(remoteOrigin).values({ origin, settledAt }))),
       );
     }),
-    sites: Effect.map(
-      units.read((unit) => unit.run(db.select().from(remoteSite).all())),
-      (rows) => new Map(rows.map((row) => [row.name, row.port])),
+    terminal: Effect.map(
+      units.read((unit) => unit.run(db.select().from(remoteTerminal).get())),
+      (row) => row?.port ?? null,
     ),
-    keepSite: Effect.fn('Ledger.keepSite')(function* (name, port) {
-      yield* units.write(writes('Ledger.keepSite', [remoteSite]), (unit) =>
-        Effect.andThen(
-          unit.run(db.delete(remoteSite).where(or(eq(remoteSite.name, name), eq(remoteSite.port, port)))),
-          unit.run(db.insert(remoteSite).values({ name, port })),
-        ),
+    keepTerminal: Effect.fn('Ledger.keepTerminal')(function* (port) {
+      yield* units.write(writes('Ledger.keepTerminal', [remoteTerminal]), (unit) =>
+        Effect.andThen(unit.run(db.delete(remoteTerminal)), unit.run(db.insert(remoteTerminal).values({ port }))),
       );
     }),
     issue: Effect.fn('Ledger.issue')(function* (codeDigest, expiresAt) {

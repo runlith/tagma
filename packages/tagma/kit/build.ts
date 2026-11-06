@@ -1,6 +1,8 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { BunPlugin } from 'bun';
+import oxidePackage from '@tailwindcss/oxide/package.json' with { type: 'json' };
+import sveltePackage from 'svelte/package.json' with { type: 'json' };
 import ts from 'typescript';
 import { hostSpecifiers, workspaceManifests } from '../src/adapter/hostModules';
 import { syncGenerated } from './generated';
@@ -291,7 +293,7 @@ const plugins = await Bun.build({
   naming: { entry: '[dir]/[name].js', chunk: 'plugin/[name]-[hash].js' },
   target: 'bun',
   splitting: true,
-  external: ['typescript'],
+  external: ['typescript', 'svelte', 'svelte/*', '@tailwindcss/oxide'],
   minify: true,
   plugins: [workspaceHost],
 });
@@ -336,7 +338,11 @@ await writeFile(
       },
       bin: { create: './kit/create.ts', 'tagma-plugin': `${builtFile(CLI)}.js` },
       files: ['rules', 'adapter', 'plugin', 'host.d.ts', 'types', 'kit/create.ts', 'kit/template'],
-      dependencies: { typescript: `^${ts.version}` },
+      dependencies: {
+        typescript: `^${ts.version}`,
+        svelte: `^${sveltePackage.version}`,
+        '@tailwindcss/oxide': `^${oxidePackage.version}`,
+      },
       peerDependencies: { effect: manifest.peerDependencies.effect },
       peerDependenciesMeta: { effect: { optional: true } },
     },

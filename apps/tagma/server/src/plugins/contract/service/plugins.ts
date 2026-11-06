@@ -29,6 +29,19 @@ import type {
 
 export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home: string }>()('tagma/plugins/PluginPlaces') {}
 
+export class PluginDigests extends Context.Service<
+  PluginDigests,
+  { views(root: string, paths: readonly string[]): Effect.Effect<string | null, PluginUnreadable> }
+>()('tagma/plugins/PluginDigests') {}
+
+export class PluginFaults extends Context.Service<
+  PluginFaults,
+  {
+    put(plugin: string, point: string, reason: string): void;
+    clear(plugin: string, point: string): void;
+  }
+>()('tagma/plugins/PluginFaults') {}
+
 export type PluginResolved = {
   readonly source: PluginSource;
   readonly origin: PluginOrigin;
@@ -177,6 +190,7 @@ type PluginHosted = {
   readonly root: string;
   readonly data: string;
   readonly revision: string;
+  readonly processRevision: string | null;
   readonly outputs: readonly string[];
   readonly process: PluginProcess | null;
   readonly contributes: Readonly<Record<string, unknown>>;

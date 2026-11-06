@@ -347,10 +347,10 @@ it.live('a rebuild drains the serving call before replacing its process, and a c
         }),
       ),
     );
-    yield* Effect.repeat(world.titles.read(projectId), {
-      schedule: Schedule.spaced('20 millis'),
-      until: (titles) => titles.get('fixture') === 'Fixture again',
-    });
+    yield* Effect.repeat(
+      Effect.sync(() => host.title('fixture')),
+      { schedule: Schedule.spaced('20 millis'), until: (title) => title === 'Fixture again' },
+    );
     const meanwhile = yield* Effect.forkScoped(said('pid'));
     yield* Effect.yieldNow;
     expect(serving.pollUnsafe()).toBeUndefined();

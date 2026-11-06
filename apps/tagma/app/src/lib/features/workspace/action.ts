@@ -1,11 +1,15 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { hostChordOf } from '@tagma/server/platform/contract/wire/chord';
 import type { Host } from '@runlith/layer/Host';
-import { type KeyClass, type Resolver, Service } from '@runlith/layer/key';
-import type { Keyed } from '$lib/app/keys/resolve.js';
+import { type KeyClass, Service } from '@runlith/layer/key';
+import { type Keyed, type Place, WINDOW } from '$lib/app/keys/resolve.js';
 import { Point } from '@runlith/layer/Point';
 import type { Component } from 'svelte';
 import type { Surface } from '$lib/features/workspace/surface.js';
+
+export const TAB_CLOSE = 'tab.close';
+
+export const TAB_REOPEN = 'tab.reopen';
 
 export type ActionEnv = {
   readonly project: Project | null;
@@ -31,6 +35,7 @@ type Common = {
   readonly keys?: DefaultKeys;
   readonly tabKeys?: DefaultKeys;
   readonly hold?: boolean;
+  readonly claims?: true;
   readonly by?: ActionOwner;
   available?(env: ActionEnv): boolean;
   listed?(env: ActionEnv): boolean;
@@ -39,11 +44,19 @@ type Common = {
 };
 
 export type Action = Common &
-  ({ readonly region?: undefined; run?(env: ActionEnv): void | Promise<void> } | { readonly region: 'terminal'; readonly run?: undefined });
+  (
+    | { readonly region?: undefined; run?(env: ActionEnv): void | Promise<void> }
+    | { readonly region: Place; readonly where: string; readonly run?: undefined }
+  );
 
-export type ActionList = readonly Action[] | ((app: Resolver) => readonly Action[]);
+export type ActionList = readonly Action[] | (() => readonly Action[]);
 
-export type ActionSet = { readonly id: string; readonly area: string; readonly actions: ActionList };
+export type ActionSet = {
+  readonly id: string;
+  readonly area: string;
+  readonly actions: ActionList;
+  readonly settled?: () => boolean;
+};
 
 export type Listed = { readonly area: string; readonly action: Action };
 
@@ -53,7 +66,7 @@ const forHost = (keys: DefaultKeys | undefined, mac: boolean): readonly DefaultK
 export const keyedOf = (actions: readonly Action[], host: Host): readonly Keyed[] =>
   actions.map((action) => ({
     id: action.id,
-    place: action.region ?? 'window',
+    place: action.region ?? WINDOW,
     hold: action.hold === true,
     rank: action.by?.rank ?? null,
     defaults: forHost(host.kind !== 'desktop' && action.tabKeys !== undefined ? action.tabKeys : action.keys, host.apple).flatMap((key) => {
@@ -62,7 +75,13 @@ export const keyedOf = (actions: readonly Action[], host: Host): readonly Keyed[
     }),
   }));
 
-export class ActionCatalog extends Service<{ readonly listed: readonly Listed[] }>()('ActionCatalog', { tier: 'app' }) {}
+export interface Catalog {
+  readonly listed: readonly Listed[];
+  readonly settled: boolean;
+  titleOf(action: string): string;
+}
+
+export class ActionCatalog extends Service<Catalog>()('ActionCatalog', { tier: 'app' }) {}
 
 export const Actions = Point.define<ActionSet>()('Actions', {
   tier: 'app',

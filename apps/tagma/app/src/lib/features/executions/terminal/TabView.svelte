@@ -3,6 +3,7 @@
   import { terminalPaneOf } from '../kind.js';
   import { holdTerminal } from './owner.js';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { TAB_CLOSE } from '$lib/features/workspace/action.js';
   import type { SidePane } from '$lib/shared/panes/pane.js';
   import Body from './Body.svelte';
   import { closeFocused, routeKey } from './keys.js';
@@ -29,7 +30,7 @@
     if (worktree !== null && tab !== null) routeKey(event, keymap, tab, (act) => terminals.perform(act, worktree, tab.key));
   }
 
-  $effect(() => appKeys.handle('tab.close', () => closeFocused(section, tab)));
+  $effect(() => appKeys.handle(TAB_CLOSE, () => closeFocused(section, tab)));
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

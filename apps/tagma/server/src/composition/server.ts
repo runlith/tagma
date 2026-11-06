@@ -77,8 +77,7 @@ import { portsOf } from '../installation/contract/wire/ports.js';
 import { unfinishedTransfer } from '../installation/move/transfer.js';
 import { holdJunction, homesIntegrated, installationsRefreshed } from './junction.js';
 import { localGate } from './http/local.js';
-import { makeLocalSites, loopbackSix, sandboxServing } from './http/sites.js';
-import { PlacedSites } from '../remote/contract/service/sites.js';
+import { sandboxRoutes } from './http/sandbox.js';
 import { Connections } from '../socket/connections.js';
 import { RESTARTING_CLOSE } from '../platform/contract/wire/live.js';
 import { remoteDriving, remoteListener, remoteServing } from './http/remote.js';
@@ -108,7 +107,6 @@ import { installedCli } from '../enforcement/commits/hooks.js';
 import { artifactRoutes } from './http/artifacts.js';
 
 const LOOPBACK_HOST = '127.0.0.1';
-const LOOPBACK_SIX = '::1';
 
 const SHUTDOWN_GRACE = '1 second';
 
@@ -432,7 +430,6 @@ export const serve = async (build: Build): Promise<void> => {
         Effect.asVoid,
       ),
   };
-  const localSites = await Effect.runPromise(phase('local sites placed', Scope.provide(makeLocalSites(sandboxPort), localScope)));
   const runtimeScope = await Effect.runPromise(Scope.make());
   const tagma: ServerRuntime = await Effect.runPromise(
     phase(
@@ -449,7 +446,6 @@ export const serve = async (build: Build): Promise<void> => {
             artifactsPath: join(dataPath, 'artifacts'),
             artifactOrigin: `http://localhost:${artifactPort}`,
             sandboxPort,
-            sites: localSites,
             sourcePath: serverPath,
             codePath,
             source,
@@ -672,20 +668,18 @@ export const serve = async (build: Build): Promise<void> => {
     ),
   ).pipe(Layer.provide(observations));
 
-  const sandboxAt = (hostname: string) =>
-    sandboxServing(tagma.views, Context.get(tagma.door, Access), Context.get(tagma.door, PlacedSites)).pipe(
+  const sandbox = opening(
+    'sandbox door opened',
+    HttpRouter.serve(sandboxRoutes(Context.get(tagma.door, Access)), { disableLogger: true, middleware: requestLine }).pipe(
       Layer.provide(
         BunHttpServer.layer({
-          hostname,
+          hostname: LOOPBACK_HOST,
           port: sandboxPort,
           idleTimeout: READ_DEADLINE,
           gracefulShutdownTimeout: SHUTDOWN_GRACE,
         }),
       ),
-    );
-  const sandbox = opening(
-    'sandbox door opened',
-    Layer.merge(sandboxAt(LOOPBACK_HOST), loopbackSix(sandboxAt(LOOPBACK_SIX), localSites, `[::1]:${sandboxPort}`)),
+    ),
   ).pipe(Layer.provide(observations));
 
   process.on('SIGHUP', () => process.kill(process.pid, 'SIGTERM'));

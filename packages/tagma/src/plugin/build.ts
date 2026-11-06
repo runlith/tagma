@@ -3,11 +3,14 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BunPlugin } from 'bun';
-import ts from 'typescript';
 import { manifestRefusal } from './checks.generated.js';
+import { computedImports } from './computed.js';
 import { describePlugin, manifestOf, PluginInvalid, PROCESS_ENTRY } from './describe.js';
+import { BuildFailed } from './failure.js';
 import type { PluginDefinition } from './plugin.js';
 import type { PluginEnvelope } from './points.generated.js';
+import { typeCheck } from './types.js';
+import { buildViews, publishViews } from './views.js';
 
 export const MANIFEST = 'tagma-plugin.json';
 
@@ -17,47 +20,7 @@ const NAMESPACE = 'tagma-plugin';
 
 const ENTRY = `${NAMESPACE}:process`;
 
-const isMetaRequire = (node: ts.Node): boolean =>
-  ts.isPropertyAccessExpression(node) &&
-  node.name.text === 'require' &&
-  ts.isMetaProperty(node.expression) &&
-  node.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
-
-const computedImports = (code: string): number => {
-  const source = ts.createSourceFile('process.js', code, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
-  const requires = new Set<string>();
-  const aliases = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && isMetaRequire(node.initializer))
-      requires.add(node.name.text);
-    ts.forEachChild(node, aliases);
-  };
-  aliases(source);
-  let computed = 0;
-  const calls = (node: ts.Node): void => {
-    if (ts.isCallExpression(node)) {
-      const callee = node.expression;
-      const loads =
-        callee.kind === ts.SyntaxKind.ImportKeyword || isMetaRequire(callee) || (ts.isIdentifier(callee) && requires.has(callee.text));
-      const [specifier] = node.arguments;
-      if (loads && (specifier === undefined || !ts.isStringLiteralLike(specifier))) computed += 1;
-    }
-    ts.forEachChild(node, calls);
-  };
-  calls(source);
-  return computed;
-};
-
-type BuildStep = 'package' | 'types' | 'definition' | 'bundle' | 'check';
-
-export class BuildFailed extends Error {
-  constructor(
-    readonly step: BuildStep,
-    readonly reason: string,
-  ) {
-    super(reason);
-    this.name = 'BuildFailed';
-  }
-}
+const DRAFT_BUILD = { hash: '0'.repeat(64), sources: [] };
 
 type Built = { readonly manifest: PluginEnvelope; readonly process: boolean };
 
@@ -70,24 +33,6 @@ const versionOf = async (directory: string): Promise<string> => {
   const { version } = JSON.parse(text) as { readonly version?: unknown };
   if (typeof version !== 'string' || version === '') throw new BuildFailed('package', `${path} names no version`);
   return version;
-};
-
-const typeCheck = (directory: string): void => {
-  const path = join(directory, 'tsconfig.json');
-  const read = ts.readConfigFile(path, ts.sys.readFile);
-  if (read.error !== undefined) throw new BuildFailed('types', ts.flattenDiagnosticMessageText(read.error.messageText, '\n'));
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, directory, undefined, path);
-  const program = ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, noEmit: true } });
-  const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
-  if (diagnostics.length > 0)
-    throw new BuildFailed(
-      'types',
-      ts.formatDiagnostics(diagnostics, {
-        getCanonicalFileName: (name) => name,
-        getCurrentDirectory: () => directory,
-        getNewLine: () => '\n',
-      }),
-    );
 };
 
 const definitionOf = async (directory: string): Promise<PluginDefinition> => {
@@ -169,7 +114,7 @@ const sourceHash = async (directory: string, sources: readonly string[]): Promis
 export const buildPlugin = async (folder: string): Promise<Built> => {
   const directory = await realpath(resolve(folder));
   const version = await versionOf(directory);
-  typeCheck(directory);
+  await typeCheck(directory);
   const definition = await definitionOf(directory);
   const described = (() => {
     try {
@@ -179,20 +124,41 @@ export const buildPlugin = async (folder: string): Promise<Built> => {
       throw error;
     }
   })();
-  const { code, read } = await bundled(directory);
-  const sources = sourcesOf(directory, read);
   const { id, title, description, process, options, contributes } = manifestOf(described);
-  const build = { hash: await sourceHash(directory, sources), sources };
-  const text = `${JSON.stringify({ id, title, version, description, process, options, build, contributes }, null, 2)}\n`;
-  const manifest = JSON.parse(text) as PluginEnvelope;
-  const refused = manifestRefusal(manifest);
-  if (refused !== null) throw new BuildFailed('check', `${MANIFEST}: ${refused}`);
-  const entry = join(directory, PROCESS_ENTRY);
-  if (described.process === null) await rm(entry, { force: true });
-  else {
-    await mkdir(dirname(entry), { recursive: true });
-    await writeFile(entry, code);
+  const drafted = manifestRefusal(
+    JSON.parse(JSON.stringify({ id, title, version, description, process, options, build: DRAFT_BUILD, contributes })),
+  );
+  if (drafted !== null) throw new BuildFailed('check', `${MANIFEST}: ${drafted}`);
+  const { code, read } = await bundled(directory);
+  const points = described.contributes;
+  const entries = (points.views ?? []).map((shown) => shown.entry);
+  const icons = [...(points.surfaces ?? []), ...(points.panes ?? [])].flatMap((section) =>
+    section.icon === undefined ? [] : [section.icon],
+  );
+  const views = entries.length === 0 ? null : await buildViews({ directory, entries, icons });
+  try {
+    const sources = sourcesOf(directory, [...read, ...(views?.read ?? [])]);
+    const build = { hash: await sourceHash(directory, sources), sources };
+    const contributed = {
+      ...contributes,
+      ...(points.views === undefined
+        ? {}
+        : { views: points.views.map((shown) => (views?.media.has(shown.entry) ? { ...shown, media: true } : shown)) }),
+    };
+    const text = `${JSON.stringify({ id, title, version, description, process, options, build, contributes: contributed }, null, 2)}\n`;
+    const manifest = JSON.parse(text) as PluginEnvelope;
+    const refused = manifestRefusal(manifest);
+    if (refused !== null) throw new BuildFailed('check', `${MANIFEST}: ${refused}`);
+    const entry = join(directory, PROCESS_ENTRY);
+    if (described.process === null) await rm(entry, { force: true });
+    else {
+      await mkdir(dirname(entry), { recursive: true });
+      await writeFile(entry, code);
+    }
+    await publishViews(views, directory);
+    await writeFile(join(directory, MANIFEST), text);
+    return { manifest, process: described.process !== null };
+  } finally {
+    if (views !== null) await rm(views.stage, { recursive: true, force: true });
   }
-  await writeFile(join(directory, MANIFEST), text);
-  return { manifest, process: described.process !== null };
 };

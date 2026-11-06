@@ -1,79 +1,105 @@
-import type { Heard } from '@tagma/server/speech/contract/wire/listening';
-import { SPEECH_NOTIFICATION, SpeechViewAsk } from '@tagma/server/speech/contract/wire/view';
-import { Result, Schema } from 'effect';
-import type { Door } from '$lib/wire/Door.js';
-import type { LiveConnection } from '$lib/wire/Live.js';
-import type { SoundChannel } from '$lib/wire/SoundChannel.js';
-import { INVALID_PARAMS, type ViewCall, type ViewMethod, ViewRefusal } from '../views/ViewBridge.js';
-import { type FeedOpening, ViewFeeds } from '../views/ViewFeeds.js';
+import type { Heard, RecognizerAsk } from '@tagma/server/speech/contract/wire/listening';
+import type { SpeakAsk } from '@tagma/server/speech/contract/wire/speaking';
+import { Stream } from 'effect';
+import type { CapabilityMount, CapabilityOwners } from '$lib/features/plugin-views/capabilities.js';
 import { microphoneMissing, Sender } from './dictation/Sender.js';
 import { Playback } from './Playback.js';
 
-const decode = Schema.decodeUnknownResult(SpeechViewAsk);
+type SpeechListener = {
+  readonly heard: (event: Heard) => void;
+  readonly ended: (failure: string | null) => void;
+};
 
-type Recognition = { admitted: boolean; sender: Sender | null };
+type Recognition = {
+  finish(): Promise<unknown>;
+  stop(): void;
+};
 
-type RecognizeAsk = Extract<SpeechViewAsk, { readonly action: 'recognize' }>;
+const LOST = new Set(['paused', 'refused', 'closed']);
 
-export const speechMethod = (door: Door, live: LiveConnection, sound: SoundChannel, projectId: number): ViewMethod => {
-  const playbacks = new WeakMap<AbortSignal, Playback>();
-  const feeds = new ViewFeeds<Recognition>(live, SPEECH_NOTIFICATION, 'speech');
-  const lens = { project: String(projectId) };
-  const playbackOf = (call: ViewCall): Playback => {
-    const standing = playbacks.get(call.mounted);
-    if (standing !== undefined) return standing;
-    const playback = new Playback(live);
-    playbacks.set(call.mounted, playback);
-    call.mounted.addEventListener('abort', () => playback.silence(), { once: true });
-    return playback;
+export const viewSpeech = ({ door, live, sound }: CapabilityOwners, mount: CapabilityMount) => {
+  const lens = { project: String(mount.projectId) };
+  const playback = new Playback(live);
+  const standing = new Set<() => void>();
+  mount.ended.addEventListener(
+    'abort',
+    () => {
+      playback.silence();
+      for (const stop of [...standing]) stop();
+    },
+    { once: true },
+  );
+
+  const status = async () => {
+    const read = await door.perform('speech_status', {}, lens, { signal: mount.ended });
+    if (read.status !== 'read') throw new Error(`speech_status answered ${read.status}`);
+    return read.speech;
   };
-  const recognition = (ask: RecognizeAsk, call: ViewCall): FeedOpening<Recognition, Heard> => ({
-    open: async (row, fail) => {
-      const status = await door.perform('speech_status', {}, lens, { signal: call.signal });
-      if (status.status !== 'read') throw new Error(`the server answered ${status.status}`);
-      if (!row.standing()) throw new Error('the view was torn down');
-      const at = status.speech.mic;
-      if (at === 'caller') {
-        const missing = microphoneMissing();
-        if (missing !== null) throw new Error(missing.reason);
-        row.state.sender = new Sender(sound, row.id, fail);
-        if (!(await row.state.sender.start())) throw new Error('the browser microphone did not start');
-        if (!row.standing()) throw new Error('the view was torn down');
+
+  const recognize = async (ask: { readonly recognizer?: RecognizerAsk }, listener: SpeechListener): Promise<Recognition> => {
+    if (mount.ended.aborted) throw new Error('the view was unmounted');
+    const at = (await status()).mic;
+    const id = crypto.randomUUID();
+    let admitted = false;
+    let over = false;
+    let sender: Sender | null = null;
+    let held: { readonly unsubscribe: () => void } | null = null;
+    let offStatus = () => {};
+    const stop = (failure: string | null): void => {
+      if (over) return;
+      over = true;
+      standing.delete(cut);
+      held?.unsubscribe();
+      offStatus();
+      sender?.stop();
+      listener.ended(failure);
+    };
+    const cut = () => stop(null);
+    standing.add(cut);
+    if (at === 'caller') {
+      const missing = microphoneMissing();
+      if (missing !== null) {
+        stop(missing.reason);
+        throw new Error(missing.reason);
       }
-      return (client) =>
-        client['speech.recognize']({ id: row.id, tracks: [{ source: 'mic', at, echoCancel: true }], recognizer: ask.recognizer });
-    },
-    seen: (row, event) => {
-      if (event.kind === 'state' && event.state === 'live') row.state.admitted = true;
-    },
-    opened: (row) => row.state.sender?.connect(),
-    released: (row) => row.state.sender?.stop(),
-  });
-  return async (params, call) => {
-    const decoded = decode(params, { onExcessProperty: 'error' });
-    if (Result.isFailure(decoded)) throw new ViewRefusal(INVALID_PARAMS, decoded.failure.message);
-    const ask = decoded.success;
-    if (call.mounted.aborted || call.signal.aborted) throw new Error('the view was torn down');
-    switch (ask.action) {
-      case 'status':
-        return await door.perform('speech_status', {}, lens, { signal: call.signal });
-      case 'speak': {
-        const { action, ...input } = ask;
-        return { status: 'spoken', ...(await playbackOf(call).speak(input, call.signal)) };
+      sender = new Sender(sound, id, (failure) => stop(failure.reason));
+      if (!(await sender.start()) || over) {
+        stop('the browser microphone did not start');
+        throw new Error('the browser microphone did not start');
       }
-      case 'silence':
-        return { status: 'stopped', voices: playbackOf(call).silence() };
-      case 'unsubscribe':
-        feeds.owned(call, ask.subscription).release();
-        return {};
-      case 'finish': {
-        const row = feeds.owned(call, ask.subscription);
-        if (!row.state.admitted) throw new Error('wait for the live state before finishing recognition');
-        row.state.sender?.end();
-        return await door.perform('finish_recognition', { id: row.id }, lens, { signal: call.signal });
-      }
-      case 'recognize':
-        return await feeds.subscribe(call, { admitted: false, sender: null }, recognition(ask, call));
     }
+    held = live.hold<Heard | null>(
+      (client) =>
+        client['speech.recognize']({ id, tracks: [{ source: 'mic', at, echoCancel: true }], recognizer: ask.recognizer }).pipe(
+          Stream.concat(Stream.succeed(null)),
+        ),
+      (event) => {
+        if (event === null) return stop(null);
+        if (event.kind === 'state' && event.state === 'live') admitted = true;
+        listener.heard(event);
+      },
+      (failure) => stop(failure.message),
+      'feed',
+      'once',
+    );
+    offStatus = live.subscribeStatus((now) => {
+      if (LOST.has(now)) stop(`the live connection is ${now}`);
+    });
+    sender?.connect();
+    return {
+      finish: async () => {
+        if (!admitted) throw new Error('wait for the live state before finishing recognition');
+        sender?.end();
+        return door.perform('finish_recognition', { id }, lens, { signal: mount.ended });
+      },
+      stop: cut,
+    };
+  };
+
+  return {
+    status,
+    recognize,
+    speak: (ask: SpeakAsk) => playback.speak(ask, mount.ended),
+    silence: () => playback.silence(),
   };
 };

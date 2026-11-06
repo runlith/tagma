@@ -24,6 +24,7 @@ import type {
   SurfaceRefusal,
   SwipeDirection,
   SwipePhase,
+  OwnedAction,
   WindowKeys,
 } from './bridge.js';
 import { APPEARANCE, BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, KEYS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
@@ -126,6 +127,8 @@ const keys: DesktopKeys = {
   kept: () => ipcRenderer.invoke(KEYS.kept) as Promise<readonly string[]>,
   answers: () => ipcRenderer.invoke(KEYS.answers) as Promise<readonly GlobalAnswer[]>,
   onAnswers: (listener) => listen<readonly GlobalAnswer[]>(KEYS.answered, listener),
+  owned: () => ipcRenderer.invoke(KEYS.owned) as Promise<readonly OwnedAction[]>,
+  perform: (action) => ipcRenderer.send(KEYS.perform, action),
 };
 
 const RECEIVER_ONLY = /\/TemporaryItems\/NSIRD_[^/]*\//;

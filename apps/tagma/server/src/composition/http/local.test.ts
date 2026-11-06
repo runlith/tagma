@@ -20,7 +20,7 @@ test('a caller with no browser origin and a page of this machine reach the local
   expect((await asked({ origin: 'http://localhost:5632' })).status).toBe(200);
 });
 
-test('an opaque view, the sandbox, a plugin site, another site and a rebound name are refused before the door answers', async () => {
+test('an opaque view, the sandbox, a *.localhost name, another site and a rebound name are refused before the door answers', async () => {
   for (const headers of <Record<string, string>[]>[
     { origin: 'null' },
     { origin: `http://127.0.0.1:${SANDBOX}` },

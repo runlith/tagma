@@ -20,6 +20,8 @@ export const KEYS = {
   kept: 'keys:kept',
   answers: 'keys:answers',
   answered: 'keys:answered',
+  owned: 'keys:owned',
+  perform: 'keys:perform',
 } as const;
 
 export const UPDATES = {

@@ -90,7 +90,13 @@
     },
     "./plugin": {
       "types": "./src/plugin/plugin.ts",
+      "browser": "./src/plugin/plugin.ts",
       "default": "./src/plugin/plugin.ts"
+    },
+    "./plugin/bundling": {
+      "types": "./src/plugin/bundling.ts",
+      "bun": "./src/plugin/bundling.ts",
+      "default": null
     },
     "./plugin/process": {
       "types": "./src/plugin/process.ts",
@@ -138,6 +144,9 @@
     "@runlith/mcp": "workspace:*",
     "@runlith/utils": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
+    "@tailwindcss/oxide": "catalog:",
+    "svelte": "catalog:",
+    "svelte2tsx": "catalog:",
     "typescript": "catalog:"
   },
   "devDependencies": {

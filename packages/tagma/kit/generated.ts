@@ -11,6 +11,9 @@ const ENVELOPE = { file: join(server, 'plugin-formats/tagma/contract/wire/manife
 const VERDICT = { file: join(server, 'checkout-builds/contract/wire/steps.ts'), binding: 'StepVerdict' };
 const CONTRIBUTIONS = { file: join(server, 'plugins/contract/wire/contributions.ts'), binding: 'contributionsRefusal' };
 const LABEL = { file: join(server, 'plugins/contract/wire/names.ts'), binding: 'PluginLabel' };
+const GRAPH = { file: join(server, 'views/contract/wire/graph.ts'), binding: 'ViewGraph' };
+const COMPILE = join(server, 'views/contract/wire/compile.ts');
+const HOST = join(server, 'views/contract/wire/host.ts');
 
 const GENERATED = {
   points: join(plugin, 'points.generated.ts'),
@@ -125,6 +128,7 @@ const declaredFaces = async (): Promise<readonly Face[]> => {
 const pointsText = async (faces: readonly Face[]): Promise<string> => {
   const envelope = schemaOf(await loaded(ENVELOPE.file, ENVELOPE.binding), 'the plugin manifest envelope');
   const verdict = schemaOf(await loaded(VERDICT.file, VERDICT.binding), 'the build step verdict');
+  const graph = schemaOf(await loaded(GRAPH.file, GRAPH.binding), 'the view graph');
   const indent = (text: string) => text.replaceAll('\n', '\n  ');
   return [
     `export type PluginEnvelope = ${printed(envelope)};`,
@@ -134,6 +138,8 @@ const pointsText = async (faces: readonly Face[]): Promise<string> => {
     '};',
     '',
     `export type BuildVerdict = ${printed(verdict)};`,
+    '',
+    `export type ViewGraph = ${printed(graph)};`,
     '',
     `export const POINT_NAMES = [${faces.map(({ name }) => `'${name}'`).join(', ')}] as const satisfies readonly (keyof PluginPoints)[];`,
     '',
@@ -148,10 +154,19 @@ const checksEntry = (faces: readonly Face[]): string =>
     `import { ${CONTRIBUTIONS.binding} } from ${JSON.stringify(CONTRIBUTIONS.file)};`,
     `import { ${ENVELOPE.binding} } from ${JSON.stringify(ENVELOPE.file)};`,
     `import { ${LABEL.binding} } from ${JSON.stringify(LABEL.file)};`,
+    `import { ${GRAPH.binding} } from ${JSON.stringify(GRAPH.file)};`,
+    `export { GRAPH_FILE, VIEW_GRAPH } from ${JSON.stringify(GRAPH.file)};`,
+    `export { viewCompileOptions, viewModuleOptions } from ${JSON.stringify(COMPILE)};`,
+    `export { hostModules, UI_MODULE } from ${JSON.stringify(HOST)};`,
     ...faces.map((face, at) => `import { ${face.binding} as face${at} } from ${JSON.stringify(face.file)};`),
     `const faces = new Map([${faces.map((_, at) => `face${at}`).join(', ')}].map((face) => [face.name, face]));`,
     `const decodeEnvelope = Schema.decodeUnknownResult(${ENVELOPE.binding});`,
     `const decodeId = Schema.decodeUnknownResult(${LABEL.binding});`,
+    `const decodeGraph = Schema.decodeUnknownResult(${GRAPH.binding});`,
+    'export const graphRefusal = (graph: unknown): string | null => {',
+    "  const decoded = decodeGraph(graph, { onExcessProperty: 'error' });",
+    '  return Result.isFailure(decoded) ? decoded.failure.message : null;',
+    '};',
     'export const manifestRefusal = (manifest: unknown): string | null => {',
     "  const decoded = decodeEnvelope(manifest, { onExcessProperty: 'error' });",
     '  if (Result.isFailure(decoded)) return decoded.failure.message;',
@@ -193,9 +208,20 @@ const checksText = async (faces: readonly Face[]): Promise<string> => {
 };
 
 const CHECKS_TYPES = [
+  "import type { CompileOptions, ModuleCompileOptions } from 'svelte/compiler';",
+  '',
   'export declare const manifestRefusal: (manifest: unknown) => string | null;',
   '',
   'export declare const pluginIdRefusal: (id: unknown) => string | null;',
+  '',
+  'export declare const graphRefusal: (graph: unknown) => string | null;',
+  '',
+  "export declare const VIEW_GRAPH: 'dist/ui';",
+  "export declare const GRAPH_FILE: 'graph.json';",
+  'export declare const UI_MODULE: string;',
+  'export declare const viewCompileOptions: (path: string, dependency: boolean) => CompileOptions;',
+  'export declare const viewModuleOptions: (path: string) => ModuleCompileOptions;',
+  'export declare const hostModules: (svelteExports: Readonly<Record<string, unknown>>) => readonly string[];',
   '',
 ].join('\n');
 

@@ -1,8 +1,13 @@
 import { chordId, type HostChord } from '@tagma/server/platform/contract/wire/chord';
 
-export type Place = 'window' | 'terminal';
+export type Place = string;
+
+export const WINDOW: Place = 'window';
 
 type Proposal = { readonly chord: HostChord; readonly global: boolean };
+
+export const consumed = (chord: HostChord, hold: boolean): readonly HostChord[] =>
+  hold && !chord.shift ? [chord, { ...chord, shift: true }] : [chord];
 
 export type Keyed = {
   readonly id: string;
@@ -60,13 +65,14 @@ export function resolveKeys(actions: readonly Keyed[], person: PersonKeys, kept:
   const bindings: Binding[] = [];
   const displaced: Displaced[] = [];
   const place = (keyed: Keyed, proposal: Proposal, mine: boolean): void => {
-    const global = proposal.global && keyed.place === 'window' && (mine || keyed.rank === null);
-    const holder = holding.holder(proposal.chord, keyed.place, global);
+    const global = proposal.global && keyed.place === WINDOW && (mine || keyed.rank === null);
+    const chords = consumed(proposal.chord, keyed.hold);
+    const holder = chords.map((chord) => holding.holder(chord, keyed.place, global)).find((one) => one !== null) ?? null;
     if (holder !== null) {
       displaced.push({ action: keyed.id, chord: proposal.chord, global, by: holder });
       return;
     }
-    holding.take(keyed.id, proposal.chord, keyed.place, global);
+    for (const chord of chords) holding.take(keyed.id, chord, keyed.place, global);
     bindings.push({
       action: keyed.id,
       chord: proposal.chord,
@@ -89,13 +95,21 @@ export function resolveKeys(actions: readonly Keyed[], person: PersonKeys, kept:
 
 const conflicting = (binding: Binding, place: Place, global: boolean): boolean => global || binding.global || binding.place === place;
 
-export function holderOf(table: KeyTable, keyed: Keyed, chord: HostChord, global: boolean, kept: readonly HostChord[]): Holder | null {
-  const id = chordId(chord);
-  if (kept.some((held) => chordId(held) === id)) return SHELL;
-  const found = table.bindings.find(
+const meets = (binding: Binding, wanted: ReadonlySet<string>): boolean =>
+  consumed(binding.chord, binding.hold).some((chord) => wanted.has(chordId(chord)));
+
+const contested = (table: KeyTable, keyed: Keyed, chord: HostChord, global: boolean): readonly Binding[] => {
+  const wanted = new Set(consumed(chord, keyed.hold).map(chordId));
+  return table.bindings.filter(
     (binding) =>
-      binding.action !== keyed.id && chordId(binding.chord) === id && conflicting(binding, keyed.place, global && keyed.place === 'window'),
+      binding.action !== keyed.id && meets(binding, wanted) && conflicting(binding, keyed.place, global && keyed.place === WINDOW),
   );
+};
+
+export function holderOf(table: KeyTable, keyed: Keyed, chord: HostChord, global: boolean, kept: readonly HostChord[]): Holder | null {
+  const wanted = new Set(consumed(chord, keyed.hold).map(chordId));
+  if (kept.some((held) => wanted.has(chordId(held)))) return SHELL;
+  const found = contested(table, keyed, chord, global)[0];
   return found === undefined ? null : { kind: 'action', action: found.action };
 }
 
@@ -119,19 +133,21 @@ const settled = (person: PersonKeys, keyed: Keyed, chosen: readonly Proposal[]):
 type Take = { readonly keyed: Keyed; readonly chord: HostChord; readonly global: boolean; readonly mode: 'replace' | 'add' };
 
 export function takeChord(table: KeyTable, actions: readonly Keyed[], person: PersonKeys, take: Take): PersonKeys {
-  const id = chordId(take.chord);
-  const global = take.global && take.keyed.place === 'window';
+  const global = take.global && take.keyed.place === WINDOW;
+  const dropped = new Map<string, Set<string>>();
+  for (const binding of contested(table, take.keyed, take.chord, global))
+    dropped.set(binding.action, (dropped.get(binding.action) ?? new Set<string>()).add(chordId(binding.chord)));
   let next = person;
-  for (const binding of table.bindings) {
-    if (binding.action === take.keyed.id || chordId(binding.chord) !== id || !conflicting(binding, take.keyed.place, global)) continue;
-    const holder = actions.find((keyed) => keyed.id === binding.action);
-    if (holder === undefined) continue;
-    next = settled(
-      next,
-      holder,
-      boundOf(table, holder.id).filter((proposal) => chordId(proposal.chord) !== id),
-    );
+  for (const [action, chords] of dropped) {
+    const holder = actions.find((keyed) => keyed.id === action);
+    if (holder !== undefined)
+      next = settled(
+        next,
+        holder,
+        boundOf(table, action).filter((proposal) => !chords.has(chordId(proposal.chord))),
+      );
   }
+  const id = chordId(take.chord);
   const kept = take.mode === 'replace' ? [] : boundOf(table, take.keyed.id).filter((proposal) => chordId(proposal.chord) !== id);
   return settled(next, take.keyed, [...kept, { chord: take.chord, global }]);
 }

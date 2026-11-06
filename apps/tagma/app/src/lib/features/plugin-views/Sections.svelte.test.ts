@@ -15,6 +15,7 @@ import { Live } from '$lib/wire/Live.js';
 import { Sections } from './Sections.svelte.js';
 import { sectionDeclarations } from './sections.js';
 import { PluginActions } from './PluginActions.svelte.js';
+import { PluginModules } from './PluginModules.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { sectionSurface } from './surfaces.js';
 import { ViewSets } from './ViewSets.svelte.js';
@@ -24,10 +25,9 @@ import { Effect } from 'effect';
 const board = (projectId: number): PluginViewSet => ({
   plugin: 'board',
   title: 'Board',
-  site: { _tag: 'unserved', reason: 'test' },
-  views: [{ id: 'main', entry: 'ui/main.html' }],
+  views: [{ id: 'main', module: { state: 'preparing' } }],
   results: [],
-  surfaces: [{ view: 'main', title: `Board of ${projectId}` }],
+  surfaces: [{ view: 'main', title: `Board of ${projectId}`, icon: null }],
   panes: [],
   launchers: [],
 });
@@ -55,14 +55,14 @@ function stand(served: { readonly actions?: readonly PluginActionSet[]; readonly
             ? { plugins: served.actions ?? [] }
             : asked.projectId === undefined
               ? { plugins: [] }
-              : ({ plugins: [board(asked.projectId)], enabled: ['board'] } satisfies PluginViewState),
+              : ({ plugins: [board(asked.projectId)], enabled: ['board'], sheet: null } satisfies PluginViewState),
         ),
       );
       return { unsubscribe: () => undefined };
     },
   };
   const boot = Layer.mergeAll(Layer.of(Live, live as never), Layer.of(Workspace, served.workspace ?? soloWorkspace()));
-  const mounted = mountShell(Layer.mergeAll(Sections, ViewSets, PluginActions, Actions, ProjectFocus, Keymap), boot, {
+  const mounted = mountShell(Layer.mergeAll(Sections, ViewSets, PluginModules, PluginActions, Actions, ProjectFocus, Keymap), boot, {
     at: { projectId: 1, branch: null },
   });
   app = mounted;
@@ -117,15 +117,14 @@ test("a plugin section's act opens the section in the context project when it en
     title: 'Merge requests',
     rank: 0,
     projects: [3, 2],
-    actions: [{ id: 'section:list', kind: 'section', title: 'Merge requests', keys: [{ keys: 'Mod+Alt+G', global: false }] }],
+    actions: [{ id: 'section:list', kind: 'section', view: 'list', title: 'Merge requests', keys: [{ keys: 'Mod+Alt+G', global: false }] }],
   };
   const projects = [1, 2, 3].map((id) => ({ id, name: `p${id}`, kind: 'folder' }));
   const world = stand({ actions: [set], workspace: soloWorkspace({ projects }) });
   await flush();
-  const app = { resolve: world.app.resolve };
   const action = world.app
     .resolve(Actions)
-    .items.flatMap(({ actions }) => (typeof actions === 'function' ? actions(app) : actions))
+    .items.flatMap(({ actions }) => (typeof actions === 'function' ? actions() : actions))
     .find((one) => one.id === 'plugin.mrs.section:list');
   const went: unknown[] = [];
   const ops = {

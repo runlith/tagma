@@ -683,10 +683,27 @@
       "browser": "./src/views/contract/wire/points.ts",
       "default": "./src/views/contract/wire/points.ts"
     },
-    "./views/contract/wire/bridge": {
-      "types": "./src/views/contract/wire/bridge.ts",
-      "browser": "./src/views/contract/wire/bridge.ts",
-      "default": "./src/views/contract/wire/bridge.ts"
+    "./views/contract/wire/capabilities": {
+      "types": "./src/views/contract/wire/capabilities.ts",
+      "browser": "./src/views/contract/wire/capabilities.ts",
+      "default": "./src/views/contract/wire/capabilities.ts"
+    },
+    "./views/contract/wire/host": {
+      "types": "./src/views/contract/wire/host.ts",
+      "browser": "./src/views/contract/wire/host.ts",
+      "bun": "./src/views/contract/wire/host.ts",
+      "default": "./src/views/contract/wire/host.ts"
+    },
+    "./views/contract/wire/compile": {
+      "types": "./src/views/contract/wire/compile.ts",
+      "bun": "./src/views/contract/wire/compile.ts",
+      "default": "./src/views/contract/wire/compile.ts"
+    },
+    "./views/contract/wire/modules": {
+      "types": "./src/views/contract/wire/modules.ts",
+      "browser": "./src/views/contract/wire/modules.ts",
+      "bun": "./src/views/contract/wire/modules.ts",
+      "default": "./src/views/contract/wire/modules.ts"
     },
     "./secrets/contract/wire/rows": {
       "types": "./src/secrets/contract/wire/rows.ts",
@@ -2648,11 +2665,6 @@
       "bun": "./src/views/contract/*.ts",
       "default": null
     },
-    "./views/files": {
-      "types": "./src/views/files.ts",
-      "bun": "./src/views/files.ts",
-      "default": null
-    },
     "./views/views": {
       "types": "./src/views/views.ts",
       "bun": "./src/views/views.ts",
@@ -2804,6 +2816,7 @@
     "marked": "catalog:",
     "mediabunny": "1.62.1",
     "sharp": "catalog:",
+    "svelte": "catalog:",
     "uuidv7": "1.2.1",
     "web-push": "3.6.7"
   },

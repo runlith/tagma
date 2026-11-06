@@ -2,9 +2,9 @@ import type { Press } from '@tagma/server/platform/contract/wire/chord';
 import { Host } from '@runlith/layer/Host';
 import { Service } from '@runlith/layer/key';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
-import type { Place } from '$lib/app/keys/resolve.js';
+import { WINDOW } from '$lib/app/keys/resolve.js';
 import { TerminalAppearance } from '../appearance/Settings.svelte.js';
-import { actOf, TOGGLE } from './actions.js';
+import { actOf, TERMINAL, TOGGLE } from './actions.js';
 
 export type KeymapPolicy = 'app-first' | 'terminal-first';
 
@@ -71,8 +71,6 @@ export type ResolveContext = {
   readonly layout?: LayoutCategory;
   readonly inTerminal?: boolean;
 };
-
-type TerminalKeys = { readonly mac: boolean; actionOf(press: Press, place: Place): string | null };
 
 const META_INPUT_SOURCE_IDS: ReadonlySet<string> = new Set(['com.apple.keylayout.us', 'com.apple.keylayout.usinternational-pc']);
 
@@ -210,7 +208,7 @@ export class TerminalKeymap extends Service<TerminalKeymap>()('TerminalKeymap', 
 
   constructor(
     private readonly host: Host,
-    private readonly keys: TerminalKeys,
+    private readonly keys: Keymap,
     readonly policy: () => KeymapPolicy = () => 'app-first',
     readonly macOptionAsAlt: () => MacOptionAsAltSetting = () => 'auto',
   ) {
@@ -218,12 +216,12 @@ export class TerminalKeymap extends Service<TerminalKeymap>()('TerminalKeymap', 
   }
 
   private act(event: KeymapEvent, press: Press, context: ResolveContext): Resolution | null {
-    const act = actOf(this.keys.actionOf(press, 'terminal') ?? '');
+    const act = actOf(this.keys.actionOf(press, TERMINAL) ?? '');
     const copyWithout = act?._tag === 'copy' && !this.host.apple && controlLetter(press) && context.hasSelection !== true;
     if (act !== null && (event.repeat !== true || act._tag === 'select-all') && !copyWithout) {
       return this.policy() === 'terminal-first' && yields(act, press) ? ENGINE : { kind: 'act', act };
     }
-    if (event.repeat === true || this.keys.actionOf(press, 'window') !== TOGGLE) return null;
+    if (event.repeat === true || this.keys.actionOf(press, WINDOW) !== TOGGLE) return null;
     return context.inTerminal === true && controlLetter(press) ? null : TOGGLING;
   }
 

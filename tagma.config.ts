@@ -144,6 +144,7 @@ export default defineConfig({
           'apps/tagma/app/src/routes/**/+*.{ts,js,svelte}',
           'apps/tagma/app/src/hooks.{client,server,universal}.{ts,js}',
           'apps/tagma/app/src/service-worker.ts',
+          'apps/tagma/app/src/lib/features/plugin-views/ui.ts',
         ],
         kinds: ['function', 'class', 'const', 'type', 'interface', 'enum', 'namespace', 'default'],
         published: ['packages/tagma'],
@@ -431,7 +432,7 @@ export default defineConfig({
     'server-names': serverNames,
     platforms,
     reexports: Code.noReexports({
-      allows: ['**/ui/*/index.ts', 'packages/primitives/src/dialog/index.ts'],
+      allows: ['**/ui/*/index.ts', 'packages/primitives/src/dialog/index.ts', 'apps/tagma/app/src/lib/features/plugin-views/ui.ts'],
       files: {
         exclude: ['**/*.d.ts', '**/*.generated.*'],
         extensions: ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.svelte'],

@@ -14,7 +14,6 @@ import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { Connections } from '../../../socket/connections.js';
 import { Access } from '../../../remote/contract/service/access.js';
-import { PlacedSites } from '../../../remote/contract/service/sites.js';
 import { ViewLanes } from '../../../executions/contract/service/views.js';
 import { Devices } from '../../../remote/contract/service/devices.js';
 import { type AccessState, DEVICE_COOKIE, DEVICE_REVOKED_CLOSE, PAIRING_ENDPOINT } from '../../../remote/contract/wire/access.js';
@@ -27,20 +26,17 @@ import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.j
 import { manifestText } from '../../../plugin-formats/tagma/testing/folder.js';
 import { startupStateSchema } from '../../../installation/contract/wire/restart.js';
 import { remoteDriving, remoteListener, remoteServing } from '../../http/remote.js';
-import { sandboxRoutes } from '../../http/sites.js';
+import { sandboxRoutes } from '../../http/sandbox.js';
 import { doorServicesOf } from '../doorServices.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { REPORT_PATH } from '../../../desktop-browser/contract/wire/channel.js';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
 
 const ORIGIN = 'https://tagma-test.tail0000.ts.net';
-const SITE = `${ORIGIN}:11001`;
 const ELSEWHERE = 'https://other.tail0000.ts.net';
 
 const certified = Latch.makeUnsafe(true);
 let sandboxState: AccessState = { _tag: 'certificate', origin: `${ORIGIN}:8443` };
-let siteRefused = false;
-const SITE_REFUSAL: AccessState = { _tag: 'blocked', problem: 'refused', detail: 'tailscale serve failed once', command: null, link: null };
 const pointed: { port: number; target: number }[] = [];
 
 const forged = {
@@ -81,28 +77,11 @@ const reachedIn = (world: World, state: string) =>
 const setup = Effect.gen(function* () {
   const world = yield* makeDoorWorld({
     own: 'it installs a plugin and changes remote access for the whole server',
-    exposure: exposedAt(
-      ORIGIN,
-      certified,
-      'test-machine',
-      () => sandboxState,
-      (at) => (siteRefused ? SITE_REFUSAL : { _tag: 'ready', origin: at }),
-      pointed,
-    ),
+    exposure: exposedAt(ORIGIN, certified, 'test-machine', () => sandboxState, pointed),
   });
   const files = yield* FileSystem.FileSystem;
   const root = yield* world.directory('project');
   const project = yield* world.stealthProject(root);
-  const plugin = yield* world.directory('plugin-static');
-  const ui = join(plugin, 'ui');
-  yield* files.makeDirectory(ui, { recursive: true });
-  yield* files.writeFileString(
-    join(plugin, MANIFEST),
-    manifestText({ id: 'static', title: 'Static', contributes: { views: [{ id: 'page', entry: 'ui/page.html' }] } }),
-  );
-  yield* files.writeFileString(join(ui, 'page.html'), '<!doctype html><script type="module" src="./view.js"></script>');
-  yield* files.writeFileString(join(ui, 'view.js'), 'export default 42;');
-  expect(yield* world.op('install_plugin', { source: plugin }, `project=${project}`)).toMatchObject({ status: 200 });
   const home = yield* world.directory('remote');
   const shell = yield* world.directory('shell');
   yield* files.writeFileString(join(shell, 'index.html'), '<!doctype html><title>Tagma</title>');
@@ -316,51 +295,33 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
     }),
   );
 
-  it.effect('a phone is handed each plugin’s own remote site, which alone serves its views and whose pages the door refuses', () =>
+  it.effect('a page on the door’s site but another port is refused as the door’s origin, and the proxy answers only at its own host', () =>
     Effect.gen(function* () {
-      const { world, project } = yield* Remote;
+      const { world } = yield* Remote;
       const device = yield* paired();
-      const protocol = yield* websocketProtocol({ origin: ORIGIN, cookie: `${DEVICE_COOKIE}=${device.credential}` });
-      const site = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const client = yield* Effect.provide(RpcClient.make(LiveRpc), yield* Layer.build(protocol));
-          const served = yield* Stream.runHead(
-            client['views.subscribe']({ projectId: project }).pipe(
-              Stream.map((state) => state.plugins.find((set) => set.plugin === 'static')?.site),
-              Stream.filter((found) => found?._tag === 'served'),
-            ),
-          );
-          return Option.getOrThrow(served);
-        }),
-      );
-      expect(site?._tag, 'the phone was handed no site for the plugin').toBe('served');
-      if (site?._tag !== 'served') return;
-      expect(site.origin).toBe(SITE);
-      const host = new URL(site.origin).host;
+      const neighbour = `${ORIGIN}:8443`;
       const { handler, dispose } = HttpRouter.toWebHandler(
-        sandboxRoutes(world.runtime.views, Context.get(world.runtime.door, Access), Context.get(world.runtime.door, PlacedSites)).pipe(
+        sandboxRoutes(Context.get(world.runtime.door, Access)).pipe(
           Layer.provide(HttpServer.layerServices),
           Layer.provideMerge(HttpPlatform.layer),
           Layer.provideMerge(BunFileSystem.layer),
         ),
         { disableLogger: true },
       );
-      const page = yield* Effect.promise(() => handler(new Request('http://127.0.0.1/ui/page.html', { headers: { host } })));
-      expect(page.status).toBe(200);
-      expect((page.headers.get('content-security-policy') ?? '').split('; ')).toContain(
-        'frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:* ' + ORIGIN,
-      );
+      const proxy = yield* Effect.promise(() => handler(new Request('http://127.0.0.1/', { headers: { host: new URL(neighbour).host } })));
+      expect(proxy.status).toBe(200);
+      expect((yield* Effect.promise(() => proxy.text())).length).toBeGreaterThan(0);
       const wrongHost = yield* Effect.promise(() =>
-        handler(new Request('http://127.0.0.1/ui/page.html', { headers: { host: `${new URL(ORIGIN).host}:8443` } })),
+        handler(new Request('http://127.0.0.1/', { headers: { host: `${new URL(ORIGIN).host}:11001` } })),
       );
       expect(wrongHost.status).toBe(404);
       yield* Effect.promise(() => dispose());
       expect(
         yield* refusal(
-          yield* remote('/api/op/create_pairing', { method: 'POST', body: {}, credential: device.credential, origin: site.origin }),
+          yield* remote('/api/op/create_pairing', { method: 'POST', body: {}, credential: device.credential, origin: neighbour }),
         ),
       ).toEqual([403, 'origin-refused']);
-      expect(yield* socket(device.credential, { origin: site.origin })).toMatchObject({ opened: false });
+      expect(yield* socket(device.credential, { origin: neighbour })).toMatchObject({ opened: false });
       const read = yield* remote('/health', { credential: device.credential, origin: null, headers: { 'sec-fetch-site': 'same-site' } });
       expect(yield* refusal(read)).toEqual([403, 'origin-refused']);
     }),
@@ -573,28 +534,6 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
       sandboxState = { _tag: 'certificate', origin: `${ORIGIN}:8443` };
       yield* switched(true);
       yield* reached('ready');
-    }),
-  );
-
-  it.effect('a plugin site refused once leaves the door ready, is placed again when the access is read, and keeps its port', () =>
-    Effect.gen(function* () {
-      const { world } = yield* Remote;
-      const siteOf = Effect.suspend(() =>
-        Effect.map(world.op('read_remote_access', {}), (answer) => (answer.body as { sites: Record<string, AccessState> }).sites['static']),
-      );
-      const settles = (tag: AccessState['_tag']) =>
-        Effect.retry(
-          Effect.flatMap(siteOf, (site) => (site?._tag === tag ? Effect.succeed(site) : Effect.fail(new NotYet({ waiting: tag })))),
-          { schedule: Schedule.spaced('50 millis') },
-        );
-      yield* switched(false);
-      yield* reached('off');
-      siteRefused = true;
-      yield* switched(true);
-      yield* reached('ready');
-      expect((yield* settles('blocked'))._tag).toBe('blocked');
-      siteRefused = false;
-      expect(yield* settles('ready')).toEqual({ _tag: 'ready', origin: SITE });
     }),
   );
 

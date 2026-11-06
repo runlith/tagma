@@ -3,6 +3,7 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { Actions } from '$lib/features/workspace/action.js';
   import { launchesOf } from './launchers.js';
+  import { pluginAction } from './PluginActions.svelte.js';
   import { ViewSets } from './ViewSets.svelte.js';
   import { ViewWindows } from './windows/ViewWindows.js';
 
@@ -23,7 +24,7 @@
       id: LAUNCHERS,
       area: 'Plugins',
       actions: launches.map((launch) => ({
-        id: `plugin.${launch.plugin}.${launch.view}`,
+        id: pluginAction(launch.plugin, `window:${launch.view}`),
         title: launch.title,
         keywords: ['plugin', 'open', 'window', launch.plugin],
         order: 60,

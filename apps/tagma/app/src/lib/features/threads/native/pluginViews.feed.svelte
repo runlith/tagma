@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
   import type { ChatEntryOf } from '@runlith/chat-ui/renderers';
-  import PluginView from '../../plugin-views/PluginView.svelte';
   import { ViewSets } from '../../plugin-views/ViewSets.svelte.js';
   import type { ShownThread } from '../ShownThread.js';
+  import PluginCard from './PluginCard.svelte';
 
   let { shown, kinds, contributor }: { shown: ShownThread; kinds: EntryKinds; contributor: string } = $props();
 
@@ -13,7 +13,9 @@
     new Map(
       sets.sets.flatMap((set) => {
         const live = new Set(set.views.filter((view) => view.live === true).map((view) => view.id));
-        return set.results.map((result) => [result.name, { plugin: set.plugin, view: result.view, live: live.has(result.view) }] as const);
+        return set.results.map(
+          (result) => [result.name, { plugin: set.plugin, view: result.view, tool: result.tool, live: live.has(result.view) }] as const,
+        );
       }),
     ),
   );
@@ -30,7 +32,7 @@
 
 {#snippet resultView(entry: ChatEntryOf<'tool'>)}
   {@const result = results.get(entry.toolName)}
-  {#if result !== undefined}
-    <PluginView plugin={result.plugin} view={result.view} projectId={shown.projectId} threadId={shown.id} {entry} />
+  {#if result !== undefined && shown.id !== null}
+    <PluginCard {entry} plugin={result.plugin} view={result.view} tool={result.tool} projectId={shown.projectId} threadId={shown.id} />
   {/if}
 {/snippet}

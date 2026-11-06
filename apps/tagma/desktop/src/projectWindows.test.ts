@@ -154,7 +154,7 @@ const keyed = () => {
     grant: () => holds.grant,
     watch: () => () => undefined,
   };
-  const globals = new Globals(new GlobalShortcuts(true), dictation, true);
+  const globals = new Globals(new GlobalShortcuts(), dictation, true);
   let windows: InstanceType<typeof ProjectWindows> | undefined;
   const mac = process.platform === 'darwin';
   const keys = new Keys(
@@ -357,7 +357,7 @@ test('a global pressed with no window open opens one and delivers the press once
   expect(presses(opened!)).toHaveLength(2);
 });
 
-test('the hide action runs in main over every window and reaches none, and a hold global arms Dictation and answers from its state', () => {
+test('the hide action runs in main over every window and reaches none, from its global and from a window’s press alike, and a hold global arms Dictation and answers from its state', async () => {
   const { windows, holds } = keyed();
   windows.create(surface);
   windows.create(new URL('/runlith/chat', surface));
@@ -378,6 +378,12 @@ test('the hide action runs in main over every window and reaches none, and a hol
   windows.reveal();
   expect(every()).toBe(true);
   expect(presses(window!)).toEqual([]);
+  const from = { sender: window!.webContents, senderFrame: { url: surface.toString() } };
+  expect(await invoked.get(KEYS.owned)?.(from)).toEqual([
+    { id: 'tagma.hide', title: 'Hide and show Tagma', keys: [{ keys: 'Mod+Shift+L', global: true }] },
+  ]);
+  handlers.get(KEYS.perform)?.(from, 'tagma.hide');
+  expect(some()).toBe(false);
 
   expect(holds.armed).toEqual([{ meta: false, ctrl: false, alt: true, shift: false, key: 'Space' }]);
   expect(chords.has('Alt+Space')).toBe(false);

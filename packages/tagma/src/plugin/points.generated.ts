@@ -229,12 +229,7 @@ export type PluginPoints = {
     readonly id: string;
     readonly entry: string;
     readonly live?: boolean;
-    readonly csp?: {
-      readonly connectDomains?: readonly string[];
-      readonly resourceDomains?: readonly string[];
-      readonly frameDomains?: readonly string[];
-      readonly baseUriDomains?: readonly string[];
-    };
+    readonly media?: true;
   }[];
 };
 
@@ -246,6 +241,18 @@ export type BuildVerdict = {
   readonly verdict: 'stop';
   readonly reason: string;
   readonly thread?: string;
+};
+
+export type ViewGraph = {
+  readonly files: {
+    readonly [key: string]: {
+      readonly imports: {
+        readonly [key: string]: string | 'host';
+      };
+      readonly dependency?: true;
+    };
+  };
+  readonly candidates: readonly string[];
 };
 
 export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

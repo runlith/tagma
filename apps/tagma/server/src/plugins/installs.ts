@@ -11,7 +11,7 @@ import { type PluginPackage, PluginRefused, type PluginUnreadable } from './cont
 import { type PluginDescribed, type PluginPrepared, type PluginProcessControl, Plugins } from './contract/service/plugins.js';
 import type { PluginPoints } from './contract/service/points.js';
 import { componentName } from './contract/wire/names.js';
-import type { PluginDeclared, PluginOrigin, PluginProcessRow, PluginRow, PluginSource } from './contract/wire/rows.js';
+import type { PluginDeclared, PluginFault, PluginOrigin, PluginProcessRow, PluginRow, PluginSource } from './contract/wire/rows.js';
 import {
   installedFrom,
   type PluginInstall,
@@ -111,8 +111,9 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly processes: () => PluginProcessControl;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
   readonly touched: (id: string) => Effect.Effect<void>;
+  readonly faults: (id: string) => readonly PluginFault[];
 }) {
-  const { shelf, digests, home, points, processes, changed, touched } = input;
+  const { shelf, digests, home, points, processes, changed, touched, faults } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const owners = yield* SecretOwners;
@@ -285,6 +286,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       root: install.root,
       enabled: enabled.running.has(install.id),
       everywhere: enabled.everywhere.has(install.id),
+      faults: faults(install.id),
     };
     const reading = yield* Effect.result(
       Effect.flatMap(shelf.read(install.root, install.declared ?? null), (read) =>

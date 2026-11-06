@@ -121,7 +121,6 @@ const lending = () => {
         const now = () => latest('exposure') ?? held;
         return {
           expose: (port, settled) => now().expose(port, settled),
-          place: (asked, reserved, keep) => now().place(asked, reserved, keep),
           point: (asked, keep) => now().point(asked, keep),
           withdraw: (port, pointed) => now().withdraw(port, pointed),
         };

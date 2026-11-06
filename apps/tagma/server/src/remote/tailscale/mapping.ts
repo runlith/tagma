@@ -3,8 +3,6 @@ import type { ServeConfig, Session } from './tailnet.js';
 export const HTTPS_PORTS = [443, 8443] as const;
 export type HttpsPort = (typeof HTTPS_PORTS)[number];
 
-export const SITE_PORTS: readonly number[] = Array.from({ length: 999 }, (_, at) => 11_001 + at);
-
 export const POINTED_PORTS: readonly number[] = Array.from({ length: 99 }, (_, at) => 12_001 + at);
 
 export type Holder =

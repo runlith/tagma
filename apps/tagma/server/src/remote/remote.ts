@@ -7,8 +7,8 @@ export const remote = manifest({
   ...declaration,
   bodies: async () => Object.values((await import('./operations.js')).REMOTE_PAIRS),
   tables: async () => {
-    const [{ device, pairing, remoteOrigin, remoteSite }] = await Promise.all([import('./store/tables.js')]);
-    return { entities: [device, pairing, remoteOrigin, remoteSite], history: [] };
+    const [{ device, pairing, remoteOrigin, remoteTerminal }] = await Promise.all([import('./store/tables.js')]);
+    return { entities: [device, pairing, remoteOrigin, remoteTerminal], history: [] };
   },
   settings: [remoteEnabled],
   settingSections: REMOTE_SETTING_SECTIONS,

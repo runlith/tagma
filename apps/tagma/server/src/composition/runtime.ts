@@ -33,7 +33,7 @@ import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
 import { LiveWorks } from '../platform/contract/service/live.js';
-import { BridgeMethods } from '../views/contract/service/bridge.js';
+import { ViewCapabilities } from '../views/contract/service/capabilities.js';
 import { Handoff } from '../platform/contract/service/handoff.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
@@ -182,7 +182,6 @@ import type { RuntimeStatus } from './http/status.js';
 import { ReservedNames } from '../projects/contract/service/names.js';
 import { Api } from '../http/contract/wire/Api.js';
 import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
-import { type LocalSites, makeLocalSites } from './http/sites.js';
 import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
 import { localAddress } from './http/address.js';
@@ -195,8 +194,8 @@ import { views } from '../views/views.js';
 import { appearance } from '../appearance/appearance.js';
 import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
-import { PluginViews, ViewSites } from '../views/contract/service/views.js';
-import { WantedSites } from '../remote/contract/service/sites.js';
+import { ViewPlaces } from '../views/contract/service/places.js';
+import { PluginViews } from '../views/contract/service/views.js';
 import { HostPlace, PLUGIN_QUIET, PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { machineStoreLayer } from '../installation/registry/restore.js';
 import { installation } from '../installation/installation.js';
@@ -328,7 +327,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     artifactsPath?: string;
     artifactOrigin?: string;
     sandboxPort?: number;
-    sites?: LocalSites;
     sourcePath: string;
     codePath?: string;
     source?: ProcessProvenance;
@@ -627,7 +625,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.succeed(ToolOutputsPlace, options.toolOutputsPath === undefined ? {} : { path: options.toolOutputsPath }),
                 ),
-                Layer.provide(Layer.succeed(BridgeMethods, { all: assembly.bridgeMethods })),
+                Layer.provide(Layer.succeed(ViewCapabilities, { all: assembly.viewCapabilities })),
                 Layer.provide(BunFileSystem.layer),
               ),
             ),
@@ -643,12 +641,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                       ({ tailscaleExposure }) => tailscaleExposure(sandboxPort),
                     ),
                     options.exposure,
-                  ),
-                ),
-                Layer.provide(
-                  Layer.effect(
-                    WantedSites,
-                    Effect.map(PluginViews, (shown) => ({ names: shown.standing })),
                   ),
                 ),
               ),
@@ -702,7 +694,16 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               ),
             ),
             Layer.provideMerge(
-              Layer.merge(closing('plugin views', views.lifetimes.installation), closing('themes', appearance.lifetimes.installation)),
+              Layer.merge(
+                closing(
+                  'plugin views',
+                  views.lifetimes.installation.pipe(
+                    Layer.provide(Layer.succeed(ViewPlaces, { home: join(dataPath ?? pluginsHome, 'views') })),
+                    Layer.provide(BunFileSystem.layer),
+                  ),
+                ),
+                closing('themes', appearance.lifetimes.installation),
+              ),
             ),
             Layer.provideMerge(
               closing(
@@ -815,7 +816,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(MachineWorld, { world: machine }),
     Context.make(WorktreeHome, { path: join(installationAnchor(store.path), WORKTREE_HOME) }),
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
-    Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
     Context.make(LaneEndpoint, localEndpoint),
     Context.make(DoorAddress, localAddress(options.localOrigin)),
   );

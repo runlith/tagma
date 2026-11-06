@@ -52,7 +52,8 @@ export const pluginComponentSchema = Schema.Struct({
       'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event, a process the module it runs, a contribution its point.',
   }),
   detail: Schema.optional(Schema.String).annotate({
-    description: 'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of.',
+    description:
+      'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of; for a contribution, what its point says the entries ask of the person’s devices.',
   }),
   title: Schema.optional(Schema.String).annotate({
     description: 'For a contribution, what its point gives a person, in the words of the point’s owner.',
@@ -103,6 +104,12 @@ const pluginProcessSchema = Schema.Struct({
 });
 export type PluginProcessRow = typeof pluginProcessSchema.Type;
 
+const pluginFaultSchema = Schema.Struct({
+  point: Schema.String.annotate({ description: 'The contribution point whose owner found it, such as views.' }),
+  reason: Schema.String,
+});
+export type PluginFault = typeof pluginFaultSchema.Type;
+
 export const pluginRowSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.NullOr(Schema.String),
@@ -131,6 +138,10 @@ export const pluginRowSchema = Schema.Struct({
   unhashed: Schema.optional(Schema.String).annotate({ description: 'Why its sources could not be hashed, when `outdated` is null.' }),
   refused: Schema.optional(Schema.String).annotate({
     description: 'Why its directory as it stands now cannot be read; a refused plugin contributes nothing.',
+  }),
+  faults: Schema.Array(pluginFaultSchema).annotate({
+    description:
+      'What Tagma found wrong with a published contribution, such as views that do not compile; its other contributions keep working.',
   }),
 });
 export type PluginRow = typeof pluginRowSchema.Type;

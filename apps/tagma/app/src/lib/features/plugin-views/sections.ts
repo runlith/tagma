@@ -17,7 +17,7 @@ export const sectionDeclarations = (sets: readonly PluginViewSet[]): readonly Su
       payload: { component: SectionPath },
       label: section.title,
       icon: Puzzle,
-      iconUrl: section.icon === undefined || set.site._tag !== 'served' ? undefined : new URL(section.icon, `${set.site.origin}/`).href,
+      iconUrl: section.icon ?? undefined,
       rail: RAIL_FROM + place,
       stands: 'project',
       remembers: false,

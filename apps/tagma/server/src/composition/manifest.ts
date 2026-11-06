@@ -28,8 +28,8 @@ import { LIVE_WORK, type LiveWork } from '../platform/contract/service/live.js';
 import { MACHINE_REGISTRY, type RegistryOwner } from '../platform/contract/service/machineRegistry.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { NamedRight } from '../platform/contract/service/access.js';
-import { BRIDGE_METHODS } from '../views/contract/service/bridge.js';
-import type { BridgeMethod } from '../views/contract/wire/bridge.js';
+import { VIEW_CAPABILITIES } from '../views/contract/service/capabilities.js';
+import type { CapabilityDeclaration } from '../views/contract/wire/capabilities.js';
 import type { ServerParts } from './build.js';
 import { type LiveGroup, liveRpc } from './rpc.js';
 import type { CORE_MODULES } from './core.js';
@@ -71,7 +71,7 @@ export type Assembly = {
   readonly homeFollowers: readonly HomeFollower[];
   readonly machineRegistry: readonly RegistryOwner[];
   readonly liveWork: readonly LiveWork[];
-  readonly bridgeMethods: readonly BridgeMethod[];
+  readonly viewCapabilities: readonly CapabilityDeclaration[];
   readonly creationSteps: readonly CreationStep[];
   readonly rights: readonly NamedRight[];
   readonly entryKinds: ThreadEntryReader;
@@ -187,7 +187,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
     machineRegistry: MACHINE_REGISTRY.collect(modules).map(({ entry }) => entry),
     liveWork: LIVE_WORK.collect(modules).map(({ entry }) => entry),
-    bridgeMethods: BRIDGE_METHODS.collect(modules).map(({ entry }) => entry),
+    viewCapabilities: VIEW_CAPABILITIES.collect(modules).map(({ entry }) => entry),
     creationSteps,
     rights,
     entryKinds: entryKinds(modules, rested),

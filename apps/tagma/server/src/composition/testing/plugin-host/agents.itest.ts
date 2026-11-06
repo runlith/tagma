@@ -4,7 +4,6 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import type { LLMEvent } from '@runlith/llm/schema/events';
 import { Clock, Context, Data, Deferred, Effect, Fiber, FileSystem, Layer, Schedule, Stream } from 'effect';
-import { LoadPluginTitles } from '../../../executions/contract/service/owners.js';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { PluginHost } from '../../../plugin-host/contract/service/supervision.js';
@@ -187,8 +186,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
 
       const held = yield* Effect.forkChild(host.call('fixture', 'hold', {}, {}));
       yield* files.writeFileString(join(plugin, MANIFEST), manifestText(folder('Fixture again')));
-      const titles = Context.get(world.runtime.owners, LoadPluginTitles);
-      yield* until(Effect.map(titles.read(projectId), (read) => read.get('fixture') === 'Fixture again'));
+      yield* until(Effect.sync(() => host.title('fixture') === 'Fixture again'));
 
       yield* Deferred.succeed(gate, undefined);
       yield* files.writeFileString(join(world.dataHome, 'agent-plugin-data', 'fixture', 'release'), '');

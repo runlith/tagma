@@ -63,13 +63,16 @@ export const actOf = (action: string): TerminalAct | null => ACTS.get(action) ??
 
 export const TOGGLE = 'terminal.toggle-terminals';
 
+export const TERMINAL = 'terminal';
+
 export const actionOf = (act: TerminalAct): string =>
   act._tag === 'select-index' ? `terminal.tab-${act.index + 1}` : act._tag === 'toggle-terminals' ? TOGGLE : `terminal.${act._tag}`;
 
 export const terminalActions: readonly Action[] = ROWS.map((one): Action => ({
   id: one.id,
   title: one.title,
-  region: 'terminal',
+  region: TERMINAL,
+  where: 'In a terminal',
   keys: one.keys,
   ...(one.tabKeys === undefined ? {} : { tabKeys: one.tabKeys }),
 }));

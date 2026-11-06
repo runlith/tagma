@@ -21,7 +21,7 @@ test('a renderer lists the documents its frames belong to: the interface, a page
     { pid: 18, type: 'Tab', creationTime: 1_008 },
     { pid: 19, type: 'Tab', creationTime: 1_009 },
   ];
-  const plugin = viewFrameName({ _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' });
+  const plugin = viewFrameName({ _tag: 'McpView', server: 'notes' });
   const mcp = viewFrameName({ _tag: 'McpView', server: 'linear' });
   const hosted: Hosted[] = [
     {
@@ -63,9 +63,9 @@ test('a renderer lists the documents its frames belong to: the interface, a page
       kind: 'renderer',
       documents: [
         { _tag: 'McpView', server: 'linear' },
-        { _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' },
+        { _tag: 'McpView', server: 'notes' },
       ],
     },
-    { pid: 19, createdMs: 1_009, kind: 'renderer', documents: [{ _tag: 'PluginView', project: 3, plugin: 'notes', view: 'board' }] },
+    { pid: 19, createdMs: 1_009, kind: 'renderer', documents: [{ _tag: 'McpView', server: 'notes' }] },
   ]);
 });

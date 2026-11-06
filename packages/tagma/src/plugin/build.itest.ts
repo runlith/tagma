@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { mcpCallerMeta } from '@runlith/mcp/caller';
+import { graphFiles, svelteFiles } from './bundling.js';
+import { viewCompileOptions, viewModuleOptions } from './checks.generated.js';
 
 const sdk = resolve(import.meta.dir, '../..');
 const cli = join(import.meta.dir, 'cli.ts');
@@ -159,21 +161,22 @@ test('a template folder builds through tagma-plugin into a manifest whose proces
 });
 
 const REFUSED = [
-  { declared: "  views: [{ id: 'board', entry: 'board.html' }],", step: 'check', reason: 'contributes.views: Expected a string matching' },
+  { declared: "  views: { board: { entry: 'ui/board.html' } },", step: 'check', reason: 'contributes.views: ' },
   {
     declared: "  options: [{ key: 'PATH', title: 'Path', description: 'Where.' }],",
     step: 'check',
     reason: 'PATH is a variable every process is started with',
   },
   {
-    declared: "  views: [{ id: 'board', entry: 'ui/board.html' }], surfaces: [{ view: 'nowhere', title: 'Nowhere' }],",
+    declared: "  views: { board: { entry: 'ui/board.svelte' } }, surfaces: [{ view: 'nowhere', title: 'Nowhere' }],",
     step: 'check',
     reason: 'contributes.surfaces: names the view nowhere, which contributes.views does not declare',
   },
   {
     declared: "  themes: { swapped: { title: 'Swapped', dark: { signals: { failure: '#a3be8c' } } } },",
     step: 'check',
-    reason: "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
+    reason:
+      "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
   },
   {
     declared:
@@ -195,6 +198,210 @@ test('a plugin the server would refuse or its process could not load stops the b
       expect(built.out).toContain(`The build stopped at ${step}`);
       expect(built.out).toContain(reason);
       expect(await Bun.file(join(plugin, 'tagma-plugin.json')).exists()).toBe(false);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const BOARD = [
+  '<script lang="ts">',
+  "  import { Button, useTagma } from '@runlith/tagma/ui';",
+  "  import Star from 'glyphs/icons/star.svelte';",
+  "  import { counter } from './counter.svelte';",
+  '  const tagma = useTagma();',
+  '</script>',
+  '<div class="grid-cols-7 p-2"><Star /><Button onclick={() => counter.up()}>{counter.n}</Button></div>',
+  '<style>div { color: red; }</style>',
+  '',
+].join('\n');
+
+const SIDE = [
+  '<script lang="ts">',
+  "  import { Frame } from '@runlith/tagma/ui';",
+  "  import logo from './logo.png';",
+  "  import { counter } from './counter.svelte';",
+  '</script>',
+  '<img src={logo} alt="" /><Frame src="https://meet.example" media />{counter.n}',
+  '',
+].join('\n');
+
+const COUNTER = [
+  'class Counter {',
+  '  n = $state(0);',
+  '  up(): void {',
+  '    this.n += 1;',
+  '  }',
+  '}',
+  'export const counter: Counter = new Counter();',
+  '',
+].join('\n');
+
+const VIEWS_DEFINITION = [
+  "import { definePlugin, view } from '@runlith/tagma/plugin';",
+  '',
+  'export default definePlugin({',
+  "  id: 'board',",
+  "  title: 'Board',",
+  "  views: { board: view('./ui/Board.svelte'), side: view('./ui/Side.svelte', { live: true }) },",
+  "  surfaces: [{ view: 'board', title: 'Board', icon: 'ui/icon.svg' }],",
+  '});',
+  '',
+].join('\n');
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+
+const viewsFolder = async () => {
+  const { root, plugin } = await folder('board');
+  await symlink(join(sdk, 'node_modules/svelte'), join(plugin, 'node_modules/svelte'));
+  await mkdir(join(plugin, 'node_modules/glyphs/icons'), { recursive: true });
+  await writeFile(join(plugin, 'node_modules/glyphs/package.json'), JSON.stringify({ name: 'glyphs', version: '1.2.3' }));
+  await writeFile(join(plugin, 'node_modules/glyphs/icons/star.svelte'), '<svg viewBox="0 0 1 1"><path d="M0 0" /></svg>\n');
+  await mkdir(join(plugin, 'ui'), { recursive: true });
+  const files: Readonly<Record<string, string | Buffer>> = {
+    'plugin.ts': VIEWS_DEFINITION,
+    'ui/Board.svelte': BOARD,
+    'ui/Side.svelte': SIDE,
+    'ui/counter.svelte.ts': COUNTER,
+    'ui/icon.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" />\n',
+    'ui/logo.png': PNG,
+  };
+  for (const [path, content] of Object.entries(files)) await writeFile(join(plugin, path), content);
+  return { root, plugin };
+};
+
+test('a plugin of Svelte views ships its view graph: own files in place, a dependency by name and version, the candidates, and a graph that bundles with no node_modules', async () => {
+  const { root, plugin } = await viewsFolder();
+  try {
+    expect(await run([process.execPath, cli, 'build', plugin], root)).toMatchObject({ code: 0 });
+    const ui = join(plugin, 'dist/ui');
+    const graph = JSON.parse(await readFile(join(ui, 'graph.json'), 'utf8'));
+    expect(graph.files['ui/Board.svelte'].imports).toMatchObject({
+      '@runlith/tagma/ui': 'host',
+      'svelte/internal/client': 'host',
+      './counter.svelte': 'ui/counter.svelte.ts',
+      'glyphs/icons/star.svelte': '_modules/glyphs@1.2.3/icons/star.svelte',
+    });
+    expect(graph.files['ui/Side.svelte'].imports).toMatchObject({
+      './logo.png': 'ui/logo.png',
+      './counter.svelte': 'ui/counter.svelte.ts',
+    });
+    expect(Object.keys(graph.files)).toEqual([...Object.keys(graph.files)].sort());
+    expect(graph.files['ui/icon.svg']).toEqual({ imports: {} });
+    expect(graph.files['_modules/glyphs@1.2.3/icons/star.svelte'].dependency).toBe(true);
+    expect(graph.files['ui/Board.svelte'].dependency).toBeUndefined();
+    expect(await readFile(join(ui, 'ui/counter.svelte.ts'), 'utf8')).toBe(COUNTER);
+    expect(await Bun.file(join(ui, '_modules/glyphs@1.2.3/icons/star.svelte')).exists()).toBe(true);
+    expect(graph.candidates).toEqual([...new Set<string>(graph.candidates)].sort());
+    expect(graph.candidates).toEqual(expect.arrayContaining(['grid-cols-7', 'p-2']));
+
+    const manifest = JSON.parse(await readFile(join(plugin, 'tagma-plugin.json'), 'utf8'));
+    expect(manifest.contributes.views).toEqual([
+      { id: 'board', entry: 'ui/Board.svelte' },
+      { id: 'side', entry: 'ui/Side.svelte', live: true, media: true },
+    ]);
+    expect(manifest.process).toBeUndefined();
+    expect(manifest.build.sources).toEqual(
+      expect.arrayContaining([
+        'package.json',
+        'plugin.ts',
+        'ui/Board.svelte',
+        'ui/Side.svelte',
+        'ui/counter.svelte.ts',
+        'ui/icon.svg',
+        'ui/logo.png',
+      ]),
+    );
+    expect(manifest.build.sources.some((path: string) => path.includes('glyphs'))).toBe(false);
+
+    await writeFile(join(ui, 'stale.txt'), 'left by an earlier build');
+    expect(await run([process.execPath, cli, 'build', plugin], root)).toMatchObject({ code: 0 });
+    expect(await Bun.file(join(ui, 'stale.txt')).exists()).toBe(false);
+
+    const alone = await mkdtemp(join(tmpdir(), 'tagma-graph-'));
+    try {
+      await cp(ui, alone, { recursive: true });
+      const compiler = await import('svelte/compiler');
+      const bundle = await Bun.build({
+        entrypoints: [join(alone, 'ui/Board.svelte'), join(alone, 'ui/Side.svelte')],
+        plugins: [
+          graphFiles({ root: alone, graph, hosts: new Set(['@runlith/tagma/ui']) }),
+          svelteFiles({
+            compiler,
+            graphPath: (absolute) => relative(alone, absolute),
+            component: (path) => viewCompileOptions(path, graph.files[path]?.dependency === true),
+            module: viewModuleOptions,
+            failed: () => undefined,
+          }),
+        ],
+        target: 'browser',
+        splitting: true,
+        throw: false,
+      });
+      expect(bundle.logs.map(String)).toEqual([]);
+      expect(bundle.success).toBe(true);
+      const code = (await Promise.all(bundle.outputs.map((output) => output.text()))).join('\n');
+      expect(code).toContain('grid-cols-7');
+      expect(code).toContain('M0 0');
+    } finally {
+      await rm(alone, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const VIEW_REFUSED = [
+  {
+    file: 'ui/compiled.js',
+    text: "import { push } from 'svelte/internal/client';\nexport const compiled = push;\n",
+    import: "  import { compiled } from './compiled';",
+    reason: "ui/compiled.js imports svelte/internal/client, which only Svelte's compiler writes",
+  },
+  {
+    file: 'ui/addon.node',
+    text: 'not an addon',
+    import: "  import './addon.node';",
+    reason: 'is a native addon, which a view cannot carry',
+  },
+  {
+    file: 'ui/lazy.ts',
+    text: 'export const lazy = (name: string) => import(name);\n',
+    import: "  import { lazy } from './lazy';\n  lazy;",
+    reason: 'the views name a module by a computed value in 1 import or require call',
+  },
+  {
+    file: 'ui/style.css',
+    text: 'div { color: red; }\n',
+    import: "  import './style.css';",
+    reason: "ui/Board.svelte imports ./style.css: a view styles itself with Tailwind classes and its components' <style>",
+  },
+  {
+    file: 'ui/compile.ts',
+    text: "export { compile } from 'svelte/compiler';\n",
+    import: "  import { compile } from './compile';\n  compile;",
+    reason: 'ui/compile.ts imports svelte/compiler, which the window does not serve to a view',
+  },
+  {
+    file: 'ui/Broken.svelte',
+    text: '<div>{</div>\n',
+    import: "  import Broken from './Broken.svelte';\n  Broken;",
+    reason: 'ui/Broken.svelte: ',
+  },
+] as const;
+
+test('a view the window could not load stops the build with the reason, naming the file: a compile error, a stylesheet, a native addon, a computed import, a compiler import', async () => {
+  const { root, plugin } = await viewsFolder();
+  try {
+    for (const refused of VIEW_REFUSED) {
+      await writeFile(join(plugin, refused.file), refused.text);
+      await writeFile(join(plugin, 'ui/Board.svelte'), BOARD.replace('  const tagma', `${refused.import}\n  const tagma`));
+      const built = await run([process.execPath, cli, 'build', plugin], root);
+      expect(built.code).toBe(1);
+      expect(built.out).toContain('The build stopped at views');
+      expect(built.out).toContain(refused.reason);
+      expect(await Bun.file(join(plugin, 'tagma-plugin.json')).exists()).toBe(false);
+      await rm(join(plugin, refused.file));
     }
   } finally {
     await rm(root, { recursive: true, force: true });

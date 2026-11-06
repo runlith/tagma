@@ -77,6 +77,7 @@ const plugin: PluginRow = {
   source,
   origin: { marketplace: 'fixture', entry: 'greeter' },
   root: '/data/agent-plugins/greeter',
+  faults: [],
   enabled: true,
   everywhere: false,
   components: [{ kind: 'skill', name: 'greeter-hello' }],

@@ -20,7 +20,7 @@ const TEARDOWN = 'ui/resource-teardown';
 
 export type ViewParams = Readonly<Record<string, unknown>>;
 
-export type ViewCall = {
+type ViewCall = {
   readonly signal: AbortSignal;
   readonly mounted: AbortSignal;
   readonly notify: (method: string, params: ViewParams) => void;

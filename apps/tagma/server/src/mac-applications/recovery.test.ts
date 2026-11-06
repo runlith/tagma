@@ -54,7 +54,6 @@ it.effect('an unchanged window retries a lost process reader and removes only it
               const process = processes.find((process) => key === `window:${process.pid}`);
               return process === undefined ? undefined : { host: 'window', process };
             },
-            views: () => [],
           }),
         ),
         Effect.provideService(

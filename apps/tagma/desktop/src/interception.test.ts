@@ -31,11 +31,8 @@ const WINDOW = tableOf({
   chords: ['Cmd+W', 'Cmd+Z', 'Cmd+K', 'Cmd+R', 'Shift+Cmd+T', 'Escape', 'Shift+A', 'Alt+Space'],
   claimed: ['Cmd+W', 'Cmd+Z', 'Cmd+K', 'Shift+Cmd+T'],
   framed: [{ chord: 'Cmd+Equal', frame: 'http://127.0.0.1:5634/a/0123456789ab/v/1' }],
-  served: ['http://127.0.0.1:5700'],
   global: [],
 });
-
-const SERVED = 'http://127.0.0.1:5700/views/board/';
 
 const press = (held: Partial<Input>, frame: string | null = null) => {
   const chord = chordOfInput(input(held), true);
@@ -67,13 +64,7 @@ test('a press is read by the layout the way the platform matcher reads it, inclu
   expect(press({ key: 'я', code: 'KeyZ', meta: true })).toMatchObject({ chord: 'Cmd+Z' });
 });
 
-test('a frame Tagma serves forwards the published chords that carry Cmd, Ctrl or Alt, and a foreign frame only the chords declared for its address', () => {
-  expect(press({ key: 'k', code: 'KeyK', meta: true }, SERVED)).toEqual({ chord: 'Cmd+K', page: null, frame: SERVED, global: false });
-  expect(press({ key: ' ', code: 'Space', alt: true }, SERVED)).toMatchObject({ chord: 'Alt+Space' });
-  expect(press({ key: 'Escape', code: 'Escape' }, SERVED)).toBeNull();
-  expect(press({ key: 'A', code: 'KeyA', shift: true }, SERVED)).toBeNull();
-  expect(press({ key: 'x', code: 'KeyX', meta: true }, SERVED)).toBeNull();
-
+test('a frame forwards only the chords declared for its address', () => {
   const page = 'http://127.0.0.1:5634/a/0123456789ab/v/1#totals';
   expect(press({ key: '=', code: 'Equal', meta: true }, page)).toEqual({ chord: 'Cmd+Equal', page: null, frame: page, global: false });
   expect(press({ key: 'k', code: 'KeyK', meta: true }, page)).toBeNull();

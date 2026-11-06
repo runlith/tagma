@@ -24,6 +24,7 @@ import type { RestartRecords } from '../../installation/contract/service/restart
 import type { InstalledChannel } from '../../installation/contract/service/channel.js';
 import type { ConsoleKeyRollback, DowngradeSteps } from '../../installation/contract/service/steps.js';
 import type { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
+import type { ViewFiles } from '../../views/contract/service/places.js';
 import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import type { JudgingServices } from '../../enforcement/serving.js';
 import type { OperationChecks } from '../../invocation/contract/service/operationChecks.js';
@@ -65,7 +66,7 @@ import { invocationAssembly } from '../../invocation/assembly.js';
 import { callOwnersOf } from '../callOwners.js';
 import { OwedCalls } from '../../threads/contract/service/owedCalls.js';
 import type { Access } from '../../remote/contract/service/access.js';
-import type { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
+import type { TerminalSite } from '../../remote/contract/service/sites.js';
 import type { LaneEndpoint } from '../../executions/contract/service/views.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import type { Subscriptions } from '../../push/contract/service/subscriptions.js';
@@ -110,6 +111,7 @@ export type RuntimeDoor =
   | AccountQuota
   | SignIns
   | ArtifactStore
+  | ViewFiles
   | WorkspaceInputs
   | PreparedChanges
   | ScratchAreas
@@ -118,7 +120,6 @@ export type RuntimeDoor =
   | HarnessPermissions
   | ThreadHarness
   | Access
-  | PlacedSites
   | TerminalSite
   | LaneEndpoint
   | Devices

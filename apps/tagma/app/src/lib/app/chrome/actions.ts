@@ -4,7 +4,7 @@ import FolderPlus from '@lucide/svelte/icons/folder-plus';
 import PanelLeft from '@lucide/svelte/icons/panel-left';
 import { labelOf } from '$lib/features/workspace/mark.js';
 import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
-import type { Action, ActionList } from '$lib/features/workspace/action.js';
+import { type Action, type ActionList, TAB_CLOSE, TAB_REOPEN } from '$lib/features/workspace/action.js';
 import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
 import { Host } from '@runlith/layer/Host';
 import { Overlay } from '@runlith/primitives/Overlay.svelte';
@@ -13,6 +13,22 @@ import { SidePanes } from '../panes/SidePanes.svelte.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 import { ProjectCreation } from './ProjectCreation.svelte.js';
 import { Standing } from './Standing.svelte.js';
+
+export const PROJECT_MENU = 'project-menu';
+
+export const MENU_RENAME = 'project-menu.rename';
+
+export const MENU_WINDOW = 'project-menu.window';
+
+export const MENU_REMOVE = 'project-menu.remove';
+
+const menuRow = (id: string, title: string, keys: readonly string[]): Action => ({
+  id,
+  title,
+  region: PROJECT_MENU,
+  where: 'In the project menu',
+  keys,
+});
 
 const togglePalette = (overlay: Overlay, group?: 'files'): void => {
   if (overlay.isOpen(Palette)) overlay.close(Palette);
@@ -48,7 +64,7 @@ const keys: readonly Action[] = [
     },
   },
   {
-    id: 'tab.close',
+    id: TAB_CLOSE,
     title: 'Close the focused tab',
     palette: false,
     keys: ['Mod+W'],
@@ -63,8 +79,7 @@ const keys: readonly Action[] = [
       env.resolve(DesktopTabs).closeWindow();
     },
   },
-  { id: 'tab.reopen', title: 'Reopen the closed tab', palette: false, keys: ['Mod+Shift+T'], tabKeys: [], run: () => undefined },
-  { id: 'tagma.hide', title: 'Hide and show Tagma', keys: [{ keys: 'Mod+Shift+L', global: true }], tabKeys: [] },
+  { id: TAB_REOPEN, title: 'Reopen the closed tab', palette: false, claims: true, keys: ['Mod+Shift+T'], tabKeys: [] },
 ];
 
 const update: Action = {
@@ -91,6 +106,9 @@ const update: Action = {
 
 export const actions: ActionList = [
   ...keys,
+  menuRow(MENU_RENAME, 'Rename the project', ['F2']),
+  { ...menuRow(MENU_WINDOW, 'Open the project in a new window', ['Mod+Enter']), tabKeys: [] },
+  menuRow(MENU_REMOVE, 'Remove the project from Tagma', ['Mod+Backspace']),
   {
     id: 'column.toggle',
     order: 30,

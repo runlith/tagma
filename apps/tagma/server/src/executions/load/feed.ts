@@ -151,7 +151,7 @@ export const makeMachineLoad = Effect.fnUntraced(function* (
             let point: LoadPoint | undefined;
             if (pulse._tag === 'Read') {
               const refs = pulse.reading.groups.flatMap((group) => (group.owner._tag === 'Execution' ? [group.owner.execution] : []));
-              const named = yield* names.read(refs, composedAt, parts.plugins());
+              const named = yield* names.read(refs, composedAt);
               const read = list.compose(pulse.reading, named, parts, pulse.readAt, yield* background.standing);
               state = { _tag: 'Read', view: read.view };
               point = read.point;

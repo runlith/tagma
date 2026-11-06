@@ -5,6 +5,7 @@ import { Service } from '@runlith/layer/key';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { TAB_REOPEN } from '$lib/features/workspace/action.js';
 import { ProjectRung, type ProjectAim } from '$lib/features/workspace/ProjectRung.js';
 import { Door } from '$lib/wire/Door.js';
 import { showPage } from './panes.js';
@@ -58,7 +59,7 @@ export class ClosedPages extends Service<ClosedPages>()('ClosedPages', { tier: '
   }
 
   private listen(keymap: Keymap): () => void {
-    return keymap.handle('tab.reopen', () => {
+    return keymap.handle(TAB_REOPEN, () => {
       if (!this.armed || this.route()?.projectId !== this.aim.projectId) return false;
       this.reopen().catch((error: unknown) => this.notices.refusal(error));
       return true;

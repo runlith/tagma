@@ -3,12 +3,11 @@ import { Cause, Duration, Effect, Exit, FiberHandle, Queue, Schedule, Scope, Str
 import { Settings } from '../settings/contract/service/values.js';
 import type { Access } from './contract/service/access.js';
 import { Exposure, type ExposureStep, type Listener, WithdrawalRefused } from './contract/service/exposure.js';
-import type { PlacedSites, TerminalSite } from './contract/service/sites.js';
+import type { TerminalSite } from './contract/service/sites.js';
 import type { AccessState } from './contract/wire/access.js';
 import { remoteEnabled } from './keys.js';
-import { makePlacements } from './placements.js';
 import { Ledger } from './store/ledger.js';
-import { makeTerminalSite, TERMINAL_SITE } from './terminalSite.js';
+import { makeTerminalSite } from './terminalSite.js';
 
 const RETRY_PAUSE = Duration.seconds(5);
 
@@ -18,19 +17,17 @@ const OFF: AccessState = { _tag: 'off' };
 
 const SETTING_UP: AccessState = { _tag: 'setting-up' };
 
-export type Reach = Access['Service'] &
-  PlacedSites['Service'] & {
-    readonly origin: string | null;
-    readonly ready: boolean;
-    readonly name: string;
-    readonly terminal: TerminalSite['Service'];
-  };
+export type Reach = Access['Service'] & {
+  readonly origin: string | null;
+  readonly ready: boolean;
+  readonly name: string;
+  readonly terminal: TerminalSite['Service'];
+};
 
 export const makeReach = Effect.gen(function* () {
   const settings = yield* Settings;
   const exposure = yield* Exposure;
   const ledger = yield* Ledger;
-  const placements = yield* makePlacements;
   const nudges = yield* Queue.sliding<void>(1);
   const host = hostname();
   let state: AccessState = OFF;
@@ -66,7 +63,7 @@ export const makeReach = Effect.gen(function* () {
   const exposed = Effect.fnUntraced(function* (listener: Listener) {
     state = SETTING_UP;
     sandbox = SETTING_UP;
-    yield* Effect.addFinalizer(() => Effect.andThen(placements.forget, terminal.forget));
+    yield* Effect.addFinalizer(() => terminal.forget);
     const scope = yield* Effect.scope;
     let opened = false;
     yield* Stream.runForEach(exposure.expose(listener.port, settled), (step) =>
@@ -86,7 +83,7 @@ export const makeReach = Effect.gen(function* () {
         }),
       ),
     );
-    if (ready()) return yield* placements.run;
+    if (ready()) return yield* Effect.never;
   }, Effect.scoped);
 
   const attempt = Effect.fnUntraced(function* (listener: Listener) {
@@ -112,13 +109,10 @@ export const makeReach = Effect.gen(function* () {
     if (settled === null) return;
     const pointed = Effect.map(
       Effect.mapError(
-        ledger.sites,
+        ledger.terminal,
         (failure) => new WithdrawalRefused({ reason: `the port of the terminal site could not be read: ${failure.message}` }),
       ),
-      (ports): readonly number[] => {
-        const site = ports.get(TERMINAL_SITE);
-        return site === undefined ? [] : [site];
-      },
+      (site): readonly number[] => (site === null ? [] : [site]),
     );
     const withdrawn = Effect.flatMap(pointed, (sites) => exposure.withdraw(port, sites)).pipe(
       Effect.tapError((refused) =>
@@ -147,7 +141,7 @@ export const makeReach = Effect.gen(function* () {
     },
     read: Effect.sync(() => {
       if (state._tag === 'blocked') Queue.offerUnsafe(nudges, undefined);
-      return { enabled, state, sandbox, sites: placements.read(), machine: machineName() };
+      return { enabled, state, sandbox, machine: machineName() };
     }),
     serve: Effect.fnUntraced(function* (listener) {
       settled = yield* ledger.origin;
@@ -158,13 +152,6 @@ export const makeReach = Effect.gen(function* () {
       );
       return yield* Effect.never;
     }, Effect.scoped),
-    site: (name) => {
-      if (!enabled) return OFF;
-      if (parentOrigin() === null) return state._tag === 'blocked' ? state : SETTING_UP;
-      return placements.state(name) ?? SETTING_UP;
-    },
-    at: (at) => (at === undefined || parentOrigin() === null ? null : placements.at(at)),
-    moved: placements.moved,
     terminal: terminal.site,
   };
   return reach;

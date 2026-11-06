@@ -150,50 +150,20 @@ layer(Layer.merge(tailscaleExposure(SANDBOX), fakeTailscale), { excludeTestServi
     }),
   );
 
-  it.effect(
-    'each site gets an HTTPS port of its own past the taken and reserved ones, keeps its port, and withdrawal takes every owned site',
-    () =>
-      Effect.gen(function* () {
-        const foreign = mapping(11_001, target(9999));
-        given({ TCP: { ...foreign.TCP }, Web: { ...foreign.Web, ...mapping(443, target(PORT)).Web } });
-        const kept: [string, number, boolean][] = [];
-        const keep = (name: string, port: number) =>
-          Effect.sync(() => {
-            kept.push([name, port, `${HOST}:${port}` in served().Web]);
-          });
-        const exposure = yield* Exposure;
-        const asked = [
-          { name: 'music', port: null },
-          { name: 'poker', port: 11_005 },
-        ];
-        const placed = yield* Stream.runCollect(exposure.place(asked, [11_002], keep));
-        expect(kept).toEqual([['music', 11_003, false]]);
-        expect(new Map(placed.map((site) => [site.name, site]))).toEqual(
-          new Map([
-            ['music', { name: 'music', port: 11_003, state: { _tag: 'ready', origin: `https://${HOST}:11003` } }],
-            ['poker', { name: 'poker', port: 11_005, state: { _tag: 'ready', origin: `https://${HOST}:11005` } }],
-          ]),
-        );
-        expect(served().Web[`${HOST}:11003`]).toEqual({ Handlers: { '/': { Proxy: target(SANDBOX) } } });
-        yield* withdraw;
-        expect(served().Web).toEqual(foreign.Web);
-      }),
-  );
-
   it.effect('a pointed site keeps its HTTPS port while its loopback target moves, and withdrawal takes it only when named', () =>
     Effect.gen(function* () {
       given({ TCP: {}, Web: {} });
-      const kept: [string, number][] = [];
-      const keep = (name: string, port: number) =>
+      const kept: number[] = [];
+      const keep = (port: number) =>
         Effect.sync(() => {
-          kept.push([name, port]);
+          kept.push(port);
         });
       const exposure = yield* Exposure;
-      const first = yield* exposure.point({ name: 'terminal', port: null, target: 6001 }, keep);
-      expect(first).toEqual({ name: 'terminal', port: 12_001, state: { _tag: 'ready', origin: `https://${HOST}:12001` } });
-      expect(kept).toEqual([['terminal', 12_001]]);
+      const first = yield* exposure.point({ port: null, target: 6001 }, keep);
+      expect(first).toEqual({ port: 12_001, state: { _tag: 'ready', origin: `https://${HOST}:12001` } });
+      expect(kept).toEqual([12_001]);
       expect(served().Web[`${HOST}:12001`]).toEqual({ Handlers: { '/': { Proxy: target(6001) } } });
-      const moved = yield* exposure.point({ name: 'terminal', port: 12_001, target: 6002 }, keep);
+      const moved = yield* exposure.point({ port: 12_001, target: 6002 }, keep);
       expect(moved.port).toBe(12_001);
       expect(kept).toHaveLength(1);
       expect(served().Web[`${HOST}:12001`]).toEqual({ Handlers: { '/': { Proxy: target(6002) } } });

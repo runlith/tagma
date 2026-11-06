@@ -408,7 +408,7 @@ app.whenReady().then(() => {
   dictation = new Dictation((down) => new PillWindow(surfaceUrl, down), inputHelperIn(app.getPath('exe')), fronts);
   dictation.install();
   const mac = process.platform === 'darwin';
-  globals = new Globals(new GlobalShortcuts(mac), dictation, mac);
+  globals = new Globals(new GlobalShortcuts(), dictation, mac);
   const keys = new Keys(
     fronts,
     globals,

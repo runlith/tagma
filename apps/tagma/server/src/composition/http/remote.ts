@@ -19,7 +19,7 @@ import type { Connections } from '../../socket/connections.js';
 import type { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
 import { ListenerRefused, type Listener } from '../../remote/contract/service/exposure.js';
 import { Access } from '../../remote/contract/service/access.js';
-import { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
+import { TerminalSite } from '../../remote/contract/service/sites.js';
 import { LaneEndpoint, type ViewLanes } from '../../executions/contract/service/views.js';
 import { remoteEndpoint } from './endpoint.js';
 import { remoteAddress } from './address.js';
@@ -41,8 +41,6 @@ import { artifactRoutes } from './artifacts.js';
 import { admissionOf, doorLayer, socketOperationsLayer } from './door.js';
 import { doorCompositionLayer, type DoorServices } from './handlers.js';
 import type { RuntimeStatus } from './status.js';
-import { ViewSites } from '../../views/contract/service/views.js';
-import { remoteSites } from './sites.js';
 
 const PAIRING_BODY_BYTES = 1024;
 
@@ -198,8 +196,7 @@ export const remoteServing = (remote: RemoteDoor) =>
       };
       const shell =
         remote.appDist === undefined ? null : yield* HttpStaticServer.make({ root: remote.appDist, spa: true, cacheControl: 'no-cache' });
-      const door = Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
-        Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
+      const door = Context.add(remote.door, LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))).pipe(
         Context.add(DoorAddress, remoteAddress(access)),
       );
       const app = Layer.mergeAll(

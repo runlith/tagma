@@ -7,7 +7,6 @@ export type AccessReading = {
   readonly enabled: boolean;
   readonly state: AccessState;
   readonly sandbox: AccessState;
-  readonly sites: Readonly<Record<string, AccessState>>;
   readonly machine: string;
 };
 

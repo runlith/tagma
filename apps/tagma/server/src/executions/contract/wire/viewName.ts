@@ -1,12 +1,11 @@
 import { Result, Schema } from 'effect';
-import { McpViewDocument, PluginViewDocument } from './load.js';
+import { McpViewDocument } from './load.js';
 
-const ViewIdentity = Schema.Union([PluginViewDocument, McpViewDocument]);
-export type ViewIdentity = typeof ViewIdentity.Type;
+export type ViewIdentity = typeof McpViewDocument.Type;
 
 const PREFIX = 'tagma-view:';
 
-const decode = Schema.decodeUnknownResult(Schema.fromJsonString(ViewIdentity));
+const decode = Schema.decodeUnknownResult(Schema.fromJsonString(McpViewDocument));
 
 export const viewFrameName = (view: ViewIdentity): string => `${PREFIX}${JSON.stringify(view)}`;
 

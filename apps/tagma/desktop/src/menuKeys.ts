@@ -1,4 +1,5 @@
 import { type HostChord, chordId } from '@tagma/server/platform/contract/wire/chord';
+import { chordsOfAccelerator } from './accelerators.js';
 
 type MenuEntry = {
   readonly role?: string | undefined;
@@ -31,45 +32,6 @@ const ROLES: Readonly<Record<string, (mac: boolean) => string | null>> = {
 const KEPT_ROLES = ['quit', 'hide', 'hideothers', 'minimize', 'togglefullscreen'] as const;
 
 const APPKIT_TAB_BAR: HostChord = { meta: true, ctrl: false, alt: false, shift: true, key: 'T' };
-
-const KEYS: Readonly<Record<string, string>> = {
-  '-': 'Minus',
-  '=': 'Equal',
-  '`': 'Backquote',
-  '[': 'BracketLeft',
-  ']': 'BracketRight',
-  '\\': 'Backslash',
-  ';': 'Semicolon',
-  "'": 'Quote',
-  ',': 'Comma',
-  '.': 'Period',
-  '/': 'Slash',
-  Up: 'ArrowUp',
-  Down: 'ArrowDown',
-  Left: 'ArrowLeft',
-  Right: 'ArrowRight',
-  Return: 'Enter',
-  Esc: 'Escape',
-};
-
-function chordsOfAccelerator(text: string, mac: boolean): readonly HostChord[] {
-  const parts = text.split('+');
-  const named = parts.pop();
-  if (named === undefined) return [];
-  const held = new Set(parts.map((part) => part.toLowerCase()));
-  const plus = named === 'Plus';
-  const key = plus ? 'Equal' : (KEYS[named] ?? (named.length === 1 ? named.toUpperCase() : named));
-  const command = held.has('command') || held.has('cmd') || ((held.has('commandorcontrol') || held.has('cmdorctrl')) && mac);
-  const control = held.has('control') || held.has('ctrl') || ((held.has('commandorcontrol') || held.has('cmdorctrl')) && !mac);
-  const chord: HostChord = {
-    meta: command || held.has('super') || held.has('meta'),
-    ctrl: control,
-    alt: held.has('alt') || held.has('option'),
-    shift: held.has('shift'),
-    key,
-  };
-  return plus ? [{ ...chord, shift: true }, chord] : [chord];
-}
 
 export function menuChords(items: readonly MenuEntry[], mac: boolean): ReadonlySet<string> {
   const chords = new Set<string>(mac ? [chordId(APPKIT_TAB_BAR)] : []);

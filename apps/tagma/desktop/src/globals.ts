@@ -1,9 +1,9 @@
 import type { GlobalShortcuts, Shortcut } from '@runlith/desktop-host/GlobalShortcuts';
 import { type HostChord, hostChordOf } from '@tagma/server/platform/contract/wire/chord';
-import type { GlobalAnswer, GlobalKey, KeyPress } from './bridge.js';
+import { acceleratorOf } from './accelerators.js';
+import type { GlobalAnswer, GlobalKey, KeyPress, OwnedAction } from './bridge.js';
 import type { HoldGrant } from './Dictation.js';
-
-const HIDE_ACTION = 'tagma.hide';
+import { HIDE_ACTION, OWNED } from './kept.js';
 
 export interface HoldPort {
   arm(chord: HostChord | null): Promise<void>;
@@ -51,7 +51,7 @@ export class Globals {
       seen.add(key.chord);
       const chord = hostChordOf(key.chord, this.mac);
       if (chord === null) refuse(key.chord, `${key.chord} is no chord.`);
-      else if (!key.hold) taps.set(key.chord, { chord, press: () => this.press(key) });
+      else if (!key.hold) taps.set(key.chord, { accelerator: acceleratorOf(chord, this.mac), press: () => this.press(key) });
       else if (held === null) {
         held = chord;
         standing.push({ chord: key.chord, answer: null });
@@ -84,8 +84,16 @@ export class Globals {
     this.registrar.dispose();
   }
 
+  owned(): readonly OwnedAction[] {
+    return OWNED;
+  }
+
+  perform(action: string): void {
+    if (action === HIDE_ACTION) this.target?.toggleHidden();
+  }
+
   private press(key: GlobalKey): void {
-    if (key.action === HIDE_ACTION) this.target?.toggleHidden();
+    if (OWNED.some((owned) => owned.id === key.action)) this.perform(key.action);
     else this.target?.deliver({ chord: key.chord, page: null, frame: null, global: true });
   }
 

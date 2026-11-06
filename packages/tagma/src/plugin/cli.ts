@@ -2,8 +2,9 @@
 import { watch } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve, sep } from 'node:path';
-import { BuildFailed, buildPlugin, MANIFEST } from './build.js';
+import { buildPlugin, MANIFEST } from './build.js';
 import { pluginIdRefusal } from './checks.generated.js';
+import { BuildFailed } from './failure.js';
 import { pluginTemplate } from './template.js';
 
 const USAGE = [

@@ -1,6 +1,6 @@
 import { chordId, type HostChord, hostChordOf } from '@tagma/server/platform/contract/wire/chord';
 import { describe, expect, test } from 'vitest';
-import { globalOf, type Keyed, type PersonKeys, resolveKeys, takeChord } from './resolve.js';
+import { globalOf, holderOf, type Keyed, type PersonKeys, resolveKeys, takeChord } from './resolve.js';
 
 const chord = (text: string): HostChord => {
   const parsed = hostChordOf(text, true);
@@ -74,6 +74,25 @@ describe('resolveKeys', () => {
       'thread.new': ['Cmd+K'],
     });
     expect(bound(actions, person).table.displaced).toEqual([]);
+  });
+
+  test('a hold owns its chord with Shift too, so that chord is taken by the hold and taking it moves the hold off', () => {
+    const dictate = action('dictation.hold', ['Alt+Space'], { hold: true });
+    const find = action('palette.open', ['Mod+K']);
+    const actions = [dictate, find];
+    const mine = { 'palette.open': [{ chord: chord('Alt+Shift+Space'), global: false }] };
+    const { holds, table } = bound(actions, mine);
+    expect([holds('Alt+Space'), holds('Alt+Shift+Space')]).toEqual([[], ['palette.open']]);
+    expect(table.displaced.map((one) => [one.action, chordId(one.chord), one.by])).toEqual([
+      ['dictation.hold', 'Alt+Space', { kind: 'action', action: 'palette.open' }],
+    ]);
+    const plain = bound(actions);
+    expect(holderOf(plain.table, find, chord('Alt+Shift+Space'), false, [])).toEqual({ kind: 'action', action: 'dictation.hold' });
+    const person = takeChord(plain.table, actions, {}, { keyed: find, chord: chord('Alt+Shift+Space'), global: false, mode: 'add' });
+    expect(Object.fromEntries(Object.entries(person).map(([id, chosen]) => [id, chosen.map((one) => chordId(one.chord))]))).toEqual({
+      'dictation.hold': [],
+      'palette.open': ['Cmd+K', 'Alt+Shift+Space'],
+    });
   });
 
   test('a plugin chord asked for every app stays in the window until the person allows it', () => {

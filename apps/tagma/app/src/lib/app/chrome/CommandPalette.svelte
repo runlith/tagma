@@ -95,7 +95,7 @@
     },
   };
 
-  const declared = $derived(registry.of());
+  const declared = $derived(registry.of().filter((action) => action.run !== undefined || keymap.handles(action.id)));
 
   const model = new PaletteModel(
     workspace,
@@ -190,7 +190,7 @@
       return;
     }
     if (row.kind === 'action') {
-      void Promise.resolve(row.action.run?.(env())).catch((error: unknown) => notices.refusal(error));
+      keymap.run(row.action.id);
       return;
     }
     const where = row.kind === 'thread' ? (row.hit.project?.name ?? project?.name) : project?.name;

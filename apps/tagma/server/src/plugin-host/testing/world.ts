@@ -4,7 +4,6 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import { join } from 'node:path';
 import { Context, type Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { graphFixture, tempRootEffect } from '../../composition/testing/graphFixture.js';
-import { LoadPluginTitles } from '../../executions/contract/service/owners.js';
 import { FileWatcher } from '../../platform/contract/service/watch.js';
 import { tagmaFormat } from '../../plugin-formats/tagma/format.js';
 import { type PluginFolder, writePlugin } from '../../plugin-formats/tagma/testing/folder.js';
@@ -70,7 +69,6 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
     return {
       host,
       plugins: installed,
-      titles: Context.get(built, LoadPluginTitles),
       tools: Context.get(built, PluginTools),
       secrets: Context.get(built, Secrets),
       said,

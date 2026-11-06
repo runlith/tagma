@@ -8,6 +8,7 @@
   import Reveal from './Reveal.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { TAB_CLOSE } from '$lib/features/workspace/action.js';
   import TabRail from '$lib/shared/TabRail.svelte';
   import { Seams } from '$lib/shared/seams/Seams.svelte.js';
   import { Button } from '$lib/shared/ui/button/index.js';
@@ -45,7 +46,7 @@
 
   $effect(() => appKeys.handle(TOGGLE, ({ page }) => page === null && document.activeElement?.closest('.xterm') != null));
 
-  $effect(() => appKeys.handle('tab.close', () => closeFocused(panel, worktree?.current ?? null)));
+  $effect(() => appKeys.handle(TAB_CLOSE, () => closeFocused(panel, worktree?.current ?? null)));
 
   function split(): void {
     const tab = worktree?.current ?? null;

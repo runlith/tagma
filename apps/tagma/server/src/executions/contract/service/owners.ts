@@ -10,10 +10,3 @@ export class LoadOwnerFacts extends Context.Service<
     readonly read: (threads: readonly string[]) => Effect.Effect<ReadonlyMap<string, OwnerFacts>, OwnerFactsUnread>;
   }
 >()('tagma/executions/LoadOwnerFacts') {}
-
-export class LoadPluginTitles extends Context.Service<
-  LoadPluginTitles,
-  {
-    readonly read: (projectId: number) => Effect.Effect<ReadonlyMap<string, string>, OwnerFactsUnread>;
-  }
->()('tagma/executions/LoadPluginTitles') {}

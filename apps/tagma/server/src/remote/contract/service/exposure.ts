@@ -8,13 +8,11 @@ export type ExposureStep =
   | { readonly _tag: 'ready'; readonly origin: string; readonly sandbox: AccessState; readonly machine: string | null }
   | Blocked;
 
-export type SiteAsk = { readonly name: string; readonly port: number | null };
+export type PointAsk = { readonly port: number | null; readonly target: number };
 
-export type PointAsk = SiteAsk & { readonly target: number };
+export type SitePlaced = { readonly port: number | null; readonly state: AccessState };
 
-export type SitePlaced = { readonly name: string; readonly port: number | null; readonly state: AccessState };
-
-export type SiteKeeping = (name: string, port: number) => Effect.Effect<void, Blocked>;
+export type SiteKeeping = (port: number) => Effect.Effect<void, Blocked>;
 
 export class WithdrawalRefused extends Data.TaggedError('WithdrawalRefused')<{ readonly reason: string }> {}
 
@@ -22,7 +20,6 @@ export class Exposure extends Context.Service<
   Exposure,
   {
     expose(port: number, settled: string | null): Stream.Stream<ExposureStep>;
-    place(asked: readonly SiteAsk[], reserved: readonly number[], keep: SiteKeeping): Stream.Stream<SitePlaced>;
     point(asked: PointAsk, keep: SiteKeeping): Effect.Effect<SitePlaced>;
     withdraw(port: number, pointed: readonly number[]): Effect.Effect<void, WithdrawalRefused>;
   }

@@ -7,7 +7,7 @@ A notes board per project: agents add notes with a tool, each call draws the boa
 ```ts
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { definePlugin, type PluginContext, Refusal, resource, tool } from '@runlith/tagma/plugin';
+import { definePlugin, type PluginContext, Refusal, resource, tool, view } from '@runlith/tagma/plugin';
 import { z } from 'zod';
 
 type Note = { readonly id: number; readonly text: string; readonly at: number };
@@ -69,7 +69,7 @@ export default definePlugin({
       },
     }),
   },
-  views: [{ id: 'board', entry: 'ui/board.html' }],
+  views: { board: view('./ui/Board.svelte') },
   results: [{ tool: 'add_note', view: 'board' }],
   surfaces: [{ view: 'board', title: 'Notes' }],
 });
@@ -93,92 +93,31 @@ test('a note an agent adds reaches the board of its project only', async () => {
 });
 ```
 
-## `ui/board.html`
+## `ui/Board.svelte`
 
-```html
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      body { margin: 0; padding: 12px; font: var(--font-text-sm-size, 13px) var(--font-sans, sans-serif);
-             color: var(--color-text-primary); background: var(--color-background-primary); }
-      li { padding: 4px 0; border-bottom: 1px solid var(--color-border-secondary); }
-      .muted { color: var(--color-text-secondary); }
-    </style>
-  </head>
-  <body>
-    <ul id="notes"></ul>
-    <p id="note" class="muted"></p>
-    <script type="module" src="./board.js"></script>
-  </body>
-</html>
+```svelte
+<script lang="ts">
+  import { Button, useTagma } from '@runlith/tagma/ui';
+  import type plugin from '../plugin';
+
+  type Note = { readonly id: number; readonly text: string };
+
+  const tagma = useTagma<typeof plugin>();
+  const board = tagma.resource(`notes://project/${tagma.projectId}`);
+  const notes = $derived((board.current as { readonly notes?: readonly Note[] } | undefined)?.notes ?? []);
+</script>
+
+<ul class="divide-y divide-border">
+  {#each notes as note (note.id)}
+    <li class="py-1 text-small">{note.text}</li>
+  {:else}
+    <li class="py-1 text-small text-muted-foreground">No notes yet.</li>
+  {/each}
+</ul>
+{#if board.failure !== null}
+  <p class="text-small text-chat-failure">{board.failure}</p>
+{/if}
+<Button size="sm" variant="ghost" onclick={() => void tagma.tools.list_notes()}>Refresh</Button>
 ```
 
-## `ui/board.js`
-
-```js
-const PROTOCOL = '2026-01-26';
-const waiting = new Map();
-let next = 0;
-
-const post = (message) => window.parent.postMessage(message, '*');
-const request = (method, params = {}) =>
-  new Promise((resolve, reject) => {
-    const id = `n${++next}`;
-    waiting.set(id, { resolve, reject });
-    post({ jsonrpc: '2.0', id, method, params });
-  });
-
-const applyContext = (context) => {
-  if (context?.theme) document.documentElement.dataset.theme = context.theme;
-  for (const [name, value] of Object.entries(context?.styles?.variables ?? {})) document.documentElement.style.setProperty(name, value);
-};
-
-let height = 0;
-const fit = () => {
-  const now = Math.ceil(document.documentElement.getBoundingClientRect().height);
-  if (now === height) return;
-  height = now;
-  post({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { height } });
-};
-new ResizeObserver(fit).observe(document.body);
-
-const show = (notes) => {
-  const list = document.getElementById('notes');
-  list.replaceChildren(...notes.map((note) => Object.assign(document.createElement('li'), { textContent: note.text })));
-  document.getElementById('note').textContent = notes.length === 0 ? 'No notes yet.' : '';
-};
-
-const refresh = async () => {
-  const answer = await request('tools/call', { name: 'list_notes', arguments: {} });
-  if (answer.isError) throw new Error(answer.content?.[0]?.text ?? 'list_notes failed');
-  show(answer.structuredContent.notes);
-};
-
-window.addEventListener('message', (event) => {
-  if (event.source !== window.parent) return;
-  const data = event.data;
-  if (data?.jsonrpc !== '2.0') return;
-  if (data.method === undefined && data.id !== undefined) {
-    const held = waiting.get(data.id);
-    waiting.delete(data.id);
-    if (data.error) held?.reject(new Error(data.error.message));
-    else held?.resolve(data.result);
-    return;
-  }
-  if (data.method === 'ui/resource-teardown') post({ jsonrpc: '2.0', id: data.id, result: {} });
-  else if (data.method === 'ui/notifications/host-context-changed') applyContext(data.params);
-  else if (data.method === 'notifications/resources/updated') void refresh();
-});
-
-const handshake = await request('ui/initialize', { protocolVersion: PROTOCOL, appInfo: { name: 'notes-board', version: '1' }, appCapabilities: {} });
-applyContext(handshake.hostContext);
-post({ jsonrpc: '2.0', method: 'ui/notifications/initialized', params: {} });
-await request('resources/subscribe', { uri: `notes://project/${handshake.hostContext.tagma.projectId}` });
-await refresh().catch((failure) => {
-  document.getElementById('note').textContent = failure.message;
-});
-```
-
-The same page serves the section and the feed entry of `add_note`: in the feed it could also read the call from `ui/notifications/tool-result`, and here it shows the whole board instead.
+The same component draws the section and the feed entry of `add_note`. In the feed it also receives the call as props, `{name, input, output, state, threadId}`; here it shows the whole board instead, followed live through the resource.

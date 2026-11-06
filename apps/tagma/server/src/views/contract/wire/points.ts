@@ -1,4 +1,3 @@
-import { McpAppCsp } from '@runlith/mcp/apps';
 import { Schema } from 'effect';
 import { HeldChordText, parseChord, writeChord } from '../../../platform/contract/wire/chord.js';
 import type { PluginFace, PointHeld } from '../../../platform/contract/wire/contribution.js';
@@ -8,19 +7,27 @@ export const ViewId = Schema.String.check(Schema.isPattern(/^[a-z0-9](?:[a-z0-9-
   description: 'The view, named within its plugin: lowercase letters, digits and inner hyphens.',
 });
 
+const OWN_FILE = /^(?!_modules\/)(?!\.{1,2}(?:\/|$))[^/\\\0]+(?:\/(?!\.{1,2}(?:\/|$))[^/\\\0]+)*$/u;
+
+const ownFile = (extension: RegExp) =>
+  Schema.String.check(
+    Schema.isPattern(OWN_FILE),
+    Schema.makeFilter((path: string) => extension.test(path) || `ends in ${extension.source.replace(/\\|\$/gu, '')}`),
+    Schema.isMaxLength(200),
+  );
+
 export const ViewEntry = Schema.Struct({
   id: ViewId,
-  entry: Schema.String.check(
-    Schema.isPattern(/^ui\/(?:(?!\.\.?\/)[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.html$/u),
-    Schema.isMaxLength(200),
-  ).annotate({ description: 'The HTML page of the view inside the plugin’s ui/ directory, e.g. ui/table.html.' }),
+  entry: ownFile(/\.svelte$/u).annotate({
+    description: 'The Svelte component of the view, by its path from the plugin’s root, as dist/ui/ ships it, e.g. ui/Table.svelte.',
+  }),
   live: Schema.optional(Schema.Boolean).annotate({
     description:
       'true: a view in a tool result keeps running while scrolled away, within the feed’s budget. Absent: it unmounts out of sight.',
   }),
-  csp: Schema.optional(McpAppCsp).annotate({
+  media: Schema.optional(Schema.Literal(true)).annotate({
     description:
-      'The outside origins the page may reach, as an MCP Apps CSP declaration: frameDomains for embedded players, resourceDomains for images, media, scripts and styles, connectDomains for fetch and sockets. Absent: the page reaches only its own plugin. An entry that names this machine, a bare address or more than one source is dropped.',
+      'true: the view embeds a site with <Frame media>, which may ask the person for the camera and microphone. The build writes it.',
   }),
 });
 export type ViewEntry = typeof ViewEntry.Type;
@@ -53,14 +60,9 @@ export const SectionEntry = Schema.Struct({
   title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40)).annotate({
     description: 'What the navigation, the palette and the pane header call it.',
   }),
-  icon: Schema.optional(
-    Schema.String.check(
-      Schema.isPattern(/^ui\/(?:(?!\.\.?\/)[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:svg|png|webp|gif|jpg)$/u),
-      Schema.isMaxLength(200),
-    ),
-  ).annotate({
+  icon: Schema.optional(ownFile(/\.(?:svg|png|webp|gif|jpg)$/u)).annotate({
     description:
-      'An image file inside the plugin’s ui/ directory, served from the plugin’s own origin like its views. Absent: a neutral plugin glyph.',
+      'An image file by its path from the plugin’s root, as dist/ui/ ships it, e.g. ui/icon.svg. Absent: a neutral plugin glyph.',
   }),
 });
 export type SectionEntry = typeof SectionEntry.Type;
@@ -109,7 +111,12 @@ type ShortcutEntry = typeof ShortcutEntry.Type;
 export const ShortcutEntries = Schema.Array(ShortcutEntry);
 export type ShortcutEntries = typeof ShortcutEntries.Type;
 
-export const VIEWS_FACE: PluginFace<ViewEntries> = { name: 'views', title: 'Pages inside Tagma', schema: ViewEntries };
+export const VIEWS_FACE: PluginFace<ViewEntries> = {
+  name: 'views',
+  title: 'Pages inside Tagma',
+  schema: ViewEntries,
+  uses: (views) => (views.some((view) => view.media === true) ? 'Uses camera and microphone' : null),
+};
 
 export const undeclaredViews = (sibling: PointHeld['sibling'], named: readonly string[]): string | null => {
   const declared = new Set((sibling(VIEWS_FACE) ?? []).map((view) => view.id));

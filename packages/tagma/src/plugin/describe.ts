@@ -90,6 +90,7 @@ const HANDLED_BY: Readonly<Record<HandledPoint, keyof PluginDefinition>> = {
   on: 'onThreadEnded',
   notify: 'onNotification',
   actions: 'actions',
+  views: 'views',
 };
 
 const HANDLED: ReadonlySet<string> = new Set(Object.keys(HANDLED_BY));
@@ -102,6 +103,7 @@ const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, tr
   options: true,
   tools: true,
   resources: true,
+  views: true,
   schedules: true,
   beforeBuild: true,
   actions: true,
@@ -158,6 +160,7 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     options,
     resident,
     resources,
+    views,
     schedules,
     beforeBuild,
     actions,
@@ -194,10 +197,12 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
       ? []
       : [tagmaTool(handlerTools.notification, 'Receives the answer to a notification this plugin sent.')]),
   ];
+  const shown = Object.entries(views ?? {}).map(([id, declared]) => ({ id, entry: declared.entry, live: declared.live }));
   const handled = tools.length > 0 || Object.keys(resources ?? {}).length > 0;
   const contributes: Partial<PluginPoints> = {
     ...dataOf(definition),
     ...(tools.length === 0 ? {} : { tools }),
+    ...(shown.length === 0 ? {} : { views: shown }),
     ...(scheduled.length === 0 ? {} : { schedule: scheduled }),
     ...(steps.length === 0 ? {} : { beforeBuild: steps }),
     ...(acts.length === 0 ? {} : { actions: acts }),

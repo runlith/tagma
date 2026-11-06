@@ -16,6 +16,8 @@ import { sectionSurface } from './surfaces.js';
 const SECTIONS = 'plugin-views:sections';
 const ACTIONS = 'plugin-views:actions';
 
+export const pluginAction = (plugin: string, act: string): string => `plugin.${plugin}.${act}`;
+
 const titleOf = (row: PluginActionRow): string =>
   row.kind === 'section' ? `Go to ${row.title}` : row.kind === 'pane' ? `Open ${row.title} beside` : row.title;
 
@@ -30,9 +32,8 @@ async function act(env: ActionEnv, set: PluginActionSet, row: PluginActionRow, p
   }
   const shell = shellActs(env.resolve(ShellOps), notices);
   if (env.project?.id !== project) await shell.openProject(project, 'palette');
-  const view = row.id.slice(row.id.indexOf(':') + 1);
-  if (row.kind === 'section') await shell.revealSurface(sectionSurface(set.plugin, view));
-  else await shell.openPane(PLUGIN_PANE, paneId(set.plugin, view));
+  if (row.kind === 'section') await shell.revealSurface(sectionSurface(set.plugin, row.view));
+  else await shell.openPane(PLUGIN_PANE, paneId(set.plugin, row.view));
 }
 
 const pluginActions = (sets: readonly PluginActionSet[], workspace: Workspace): readonly Action[] =>
@@ -41,7 +42,7 @@ const pluginActions = (sets: readonly PluginActionSet[], workspace: Workspace): 
     const target = (env: ActionEnv): number | null =>
       enables(env.project?.id) ? env.project!.id : (workspace.projects.find((project) => enables(project.id))?.id ?? null);
     return set.actions.map((row): Action => ({
-      id: `plugin.${set.plugin}.${row.id}`,
+      id: pluginAction(set.plugin, row.id),
       title: titleOf(row),
       keywords: [set.title, 'plugin'],
       order: 70,
@@ -66,20 +67,29 @@ export class PluginActions extends Service<PluginActions>()('PluginActions', { t
       (state) => {
         plugins.sets = state.plugins;
         plugins.problem = null;
+        plugins.heard = true;
       },
       (failure) => {
-        if (failure.kind === 'subscription') plugins.problem = failure.message;
+        if (failure.kind !== 'subscription') return;
+        plugins.problem = failure.message;
+        plugins.heard = true;
       },
     );
     scope.defer(() => held.unsubscribe());
     scope.defer(
-      plugins.actions.register(ACTIONS, { id: ACTIONS, area: 'Plugins', actions: () => pluginActions(plugins.sets, plugins.workspace) }),
+      plugins.actions.register(ACTIONS, {
+        id: ACTIONS,
+        area: 'Plugins',
+        actions: () => pluginActions(plugins.sets, plugins.workspace),
+        settled: () => plugins.heard,
+      }),
     );
     return plugins;
   }
 
   sets = $state.raw<readonly PluginActionSet[]>([]);
   problem = $state<string | null>(null);
+  private heard = $state(false);
   private shown: (() => void) | null = null;
 
   constructor(

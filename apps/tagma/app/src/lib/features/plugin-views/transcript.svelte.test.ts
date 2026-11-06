@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-import { TRANSCRIPT_CHANGED } from '@tagma/server/views/contract/wire/bridge';
 import { ChatFold } from '@runlith/chat-ui/ChatFold.svelte';
 import type { ThreadSessionStatus } from '@runlith/chat-ui/session/ThreadSession.svelte';
-import { flushSync } from 'svelte';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { type ViewCall, ViewBridge, type ViewParams } from '../views/ViewBridge.js';
-import { pluginHost } from './pluginHost.svelte.js';
-import type { TranscriptPort, TranscriptSeat } from './ThreadTranscripts.js';
+import { flushSync, tick } from 'svelte';
+import { expect, test } from 'vitest';
+import type { TranscriptSeat } from './ThreadTranscripts.js';
 import { TranscriptFollow } from './transcript.js';
+import { type Transcript, transcriptReading } from './transcriptReading.svelte.js';
 
 type Raw = Record<string, unknown> & { readonly id: string };
 
@@ -170,36 +168,24 @@ class Seat implements TranscriptSeat {
   }
 }
 
-const mounted = (seat: Seat) => {
-  const port: TranscriptPort = { take: () => seat };
-  const host = pluginHost({ transcripts: port, methods: [] } as unknown as Parameters<typeof pluginHost>[0], {
-    projectId: 1,
-    plugin: 'poker',
-    view: 'table',
-    threadId: null,
-    key: null,
+const read = (seat: Seat) => {
+  const transcript = transcriptReading({ take: () => seat }, 1, 't1');
+  const stop = $effect.root(() => {
+    $effect(() => {
+      void transcript.entries;
+      void transcript.tail;
+    });
   });
-  const told: ViewParams[] = [];
-  const mount = new AbortController();
-  const call = (): ViewCall => ({
-    signal: new AbortController().signal,
-    mounted: mount.signal,
-    notify: (method, params) => {
-      if (method === TRANSCRIPT_CHANGED) told.push(params);
-    },
-  });
-  return { host, told, mount, call };
+  flushSync();
+  return { transcript, stop };
 };
 
-beforeEach(() => {
-  vi.useFakeTimers();
+const shown = (transcript: Transcript) => ({
+  entries: transcript.entries.map((entry) => entry.id),
+  tail: transcript.tail.map((entry) => entry.text),
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-test('a mounted view lists a thread, sees the reply stream and a tool run, pages back, and follows a rewind', async () => {
+test('a view reads a thread as it streams, runs a tool, pages back and follows a rewind', async () => {
   const fold = new ChatFold();
   fold.apply([
     reset(
@@ -210,114 +196,69 @@ test('a mounted view lists a thread, sees the reply stream and a tool run, pages
   ]);
   const seat = new Seat(fold);
   seat.pages.push([message('m0', 'user', 'zero')]);
-  const { host, told, call } = mounted(seat);
+  const { transcript, stop } = read(seat);
 
-  const reading = host.methods['tagma/transcript']!({ threadId: 't1' }, call());
-  flushSync();
-  expect(await reading).toMatchObject({
-    type: 'initial',
-    more: true,
-    entries: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }],
-    tail: [{ id: 'a1', text: 'He' }],
-  });
-  await vi.advanceTimersByTimeAsync(0);
+  expect(shown(transcript)).toEqual({ entries: ['m1', 'm2', 'm3'], tail: ['He'] });
+  expect(transcript.more).toBe(true);
 
   fold.apply([grow('a1', 'llo')]);
   flushSync();
+  expect(shown(transcript).tail).toEqual(['Hello']);
+
   fold.apply([settle(message('a1', 'assistant', 'Hello')), append(tool('t1', 'input-available'))]);
   flushSync();
   fold.apply([settle({ ...tool('t1', 'output-available'), toolOutput: 'a b' })]);
   flushSync();
+  expect(transcript.entries.at(-1)).toMatchObject({ id: 't1', tool: { state: 'done', output: 'a b' } });
+
+  await transcript.older();
+  expect(shown(transcript).entries).toEqual(['m0', 'm1', 'm2', 'm3', 'a1', 't1']);
+  expect(transcript.more).toBe(false);
+
   fold.apply([mark(['m3', 'a1', 't1'], { by: 'rewind-1', scope: 'from' })]);
   flushSync();
-  expect(told.map((event) => event.type)).toEqual(['tail', 'entry', 'entry', 'tail', 'entry', 'removed']);
-  expect(told[0]).toMatchObject({ tail: { restart: false, id: 'a1', text: 'llo' } });
-  expect(told[2]).toMatchObject({ entry: { id: 't1', tool: { state: 'running' } } });
-  expect(told[4]).toMatchObject({ entry: { id: 't1', tool: { state: 'done', output: 'a b' } } });
-  expect(told[5]).toMatchObject({ ids: ['m3', 'a1', 't1'] });
-
-  expect(await host.methods['tagma/transcript/older']!({ threadId: 't1' }, call())).toMatchObject({
-    threadId: 't1',
-    entries: [{ id: 'm0' }],
-    more: false,
-  });
+  expect(shown(transcript).entries).toEqual(['m0', 'm1', 'm2']);
+  stop();
 });
 
-test('over the view bridge the answer is posted first and the reply streams after it as notifications', async () => {
-  const fold = new ChatFold();
-  fold.apply([reset([message('m1', 'user', 'go')], [message('a1', 'assistant', 'He')])]);
-  const seat = new Seat(fold);
-  const host = pluginHost({ transcripts: { take: () => seat }, methods: [] } as unknown as Parameters<typeof pluginHost>[0], {
-    projectId: 1,
-    plugin: 'poker',
-    view: 'table',
-    threadId: null,
-    key: null,
-  });
-  const posted: {
-    readonly id?: number;
-    readonly method?: string;
-    readonly result?: { readonly type: string };
-    readonly params?: ViewParams;
-  }[] = [];
-  const frame = {};
-  const bridge = new ViewBridge(
-    { origin: 'http://poker.localhost', source: () => frame, post: (message) => posted.push(message as never) },
-    host,
-    {
-      src: 'http://poker.localhost/ui/table.html',
-      csp: {},
-      permissions: {},
-    },
-  );
-  const send = (data: object) => bridge.receive({ source: frame, origin: 'http://poker.localhost', data: { jsonrpc: '2.0', ...data } });
-
-  send({ method: 'ui/notifications/initialized' });
-  send({ id: 1, method: 'tagma/transcript', params: { threadId: 't1' } });
-  flushSync();
-  await vi.advanceTimersByTimeAsync(0);
-  fold.apply([grow('a1', 'llo')]);
-  flushSync();
-
-  expect(posted.map((message) => message.id ?? message.method)).toEqual([1, TRANSCRIPT_CHANGED]);
-  expect(posted[0]!.result).toMatchObject({ type: 'initial', entries: [{ id: 'm1' }], tail: [{ id: 'a1' }] });
-  expect(posted[1]!.params).toMatchObject({ type: 'tail', threadId: 't1', tail: { restart: false, id: 'a1', text: 'llo' } });
-});
-
-test('a view that stops watching, or is torn down, gives the session back and hears nothing more', async () => {
+test('a view that stops reading gives the session back, and reading again opens a fresh one', async () => {
   const fold = new ChatFold();
   fold.apply([reset([message('m1', 'user', 'one')])]);
   const seat = new Seat(fold);
-  const { host, told, mount, call } = mounted(seat);
-
-  const reading = host.methods['tagma/transcript']!({ threadId: 't1' }, call());
-  flushSync();
-  await reading;
-  await vi.advanceTimersByTimeAsync(0);
-
-  expect(await host.methods['tagma/transcript/unwatch']!({ threadId: 't1' }, call())).toEqual({ watched: true });
+  const transcript = transcriptReading({ take: () => seat }, 1, 't1');
+  const watch = () => {
+    const stop = $effect.root(() => {
+      $effect(() => {
+        void transcript.entries;
+      });
+    });
+    flushSync();
+    return stop;
+  };
+  watch()();
+  await tick();
   expect(seat.released).toBe(1);
-  fold.apply([append(message('m2', 'assistant', 'two'))]);
-  flushSync();
-  expect(told).toEqual([]);
-  expect(await host.methods['tagma/transcript/unwatch']!({ threadId: 't1' }, call())).toEqual({ watched: false });
-  await expect(host.methods['tagma/transcript/older']!({ threadId: 't1' }, call())).rejects.toThrow('not watched');
 
-  const again = host.methods['tagma/transcript']!({ threadId: 't1' }, call());
-  flushSync();
-  await again;
-  mount.abort();
+  fold.apply([append(message('m2', 'assistant', 'two'))]);
+  const stop = watch();
+  expect(shown(transcript).entries).toEqual(['m1', 'm2']);
+  stop();
+  await tick();
   expect(seat.released).toBe(2);
 });
 
-test('a thread that cannot be read refuses the view with the reason and holds nothing', async () => {
-  const seat = new Seat(new ChatFold());
-  seat.status = 'failed';
-  seat.problem = 'The thread is gone.';
-  const { host, call } = mounted(seat);
+test('a thread that fails after its first page says why and gives its session back', () => {
+  const fold = new ChatFold();
+  fold.apply([reset([message('m1', 'user', 'one')])]);
+  const seat = new Seat(fold);
+  const { transcript, stop } = read(seat);
+  expect(shown(transcript).entries).toEqual(['m1']);
 
-  const reading = host.methods['tagma/transcript']!({ threadId: 't1' }, call());
+  seat.problem = 'The thread is gone.';
+  seat.status = 'failed';
   flushSync();
-  await expect(reading).rejects.toThrow('The thread is gone.');
+
+  expect(transcript.failure).toBe('The thread is gone.');
   expect(seat.released).toBe(1);
+  stop();
 });

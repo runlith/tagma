@@ -1,5 +1,4 @@
 import { Context, Effect, Layer, Schedule, Semaphore, Stream } from 'effect';
-import { LoadPluginTitles } from '../executions/contract/service/owners.js';
 import { EnabledPlugins, HostedPlugins, PluginProcesses } from '../plugins/contract/service/plugins.js';
 import { PluginPoints } from '../plugins/contract/service/points.js';
 import { HostPlace, PluginHost } from './contract/service/supervision.js';
@@ -10,7 +9,7 @@ import { makeOffers } from './toolPoint.js';
 const ASKED_AGAIN = '5 seconds';
 
 export const pluginHostLayer: Layer.Layer<
-  PluginHost | PluginTools | LoadPluginTitles,
+  PluginHost | PluginTools,
   never,
   HostPlace | PluginPoints | HostedPlugins | EnabledPlugins | PluginProcesses
 > = Layer.effectContext(
@@ -75,6 +74,6 @@ export const pluginHostLayer: Layer.Layer<
         read: supervisor.read,
         subscribe: supervisor.subscribe,
       }),
-    ).pipe(Context.add(PluginTools, offers), Context.add(LoadPluginTitles, { read: () => Effect.sync(supervisor.titles) }));
+    ).pipe(Context.add(PluginTools, offers));
   }),
 );

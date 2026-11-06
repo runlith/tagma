@@ -7,6 +7,8 @@ import { waitUntil } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
 import { mountShell, soloWorkspace, testShellOps, type TestApp } from '$lib/app/testing.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+import { ActionRunner } from '$lib/app/keys/ports.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { FileOpener } from '$lib/features/checkout/files/FileOpener.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
@@ -74,4 +76,56 @@ test('selecting a colliding block search result navigates to its exact identity'
   document.querySelectorAll<HTMLElement>('[data-palette-row="block"]')[1]!.click();
   await waitUntil(() => visited.length === 1);
   expect(visited[0]?.href).toBe(`/home/b/${second}`);
+});
+
+test('a palette pick runs the action through its handlers: a window action only a handler serves is listed, and a handler overrides the action’s own run', async () => {
+  const door = testDoor(async () => new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json' } }));
+  const mounted = mountRepo(PaletteRepo, { door, queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) });
+  closeRepo = mounted.unmount;
+  const heard: string[] = [];
+  app = mountShell(
+    Layer.mergeAll(
+      Layer.of(PaletteRepo, mounted.repo),
+      Keymap,
+      ActionRegistry,
+      Layer.provide(ActionRunner, function* () {
+        return yield* ActionRegistry;
+      }),
+      Actions,
+      Actions.contribute('test', {
+        id: 'test',
+        area: 'Window',
+        actions: [
+          { id: 'browser.find', title: 'Find in the page' },
+          { id: 'thread.new', title: 'New thread', run: () => void heard.push('own run') },
+        ],
+      }),
+    ),
+    Layer.mergeAll(
+      Layer.of(Door, door),
+      Layer.of(Workspace, soloWorkspace({ active: { id: 1, name: 'home' }, activeId: 1, contextProject: { id: 1, name: 'home' } })),
+      Layer.of(SectionRegistry, {} as never),
+      Layer.of(SettingsRepo, { catalog: stubFamily() } as never),
+      Layer.of(FileOpener, {} as never),
+      Layer.of(Asking, {} as never),
+      Layer.of(Notices, {} as never),
+      testShellOps,
+    ),
+    { at: undefined },
+  );
+  app.get(ActionRegistry).attach(app.app);
+  const keymap = app.get(Keymap);
+  keymap.handle('browser.find', () => heard.push('find') > 0);
+  keymap.handle('thread.new', () => heard.push('override') > 0);
+  app.draw();
+  const pick = async (title: string): Promise<void> => {
+    app!.dialogs.open(CommandPalette as never, { group: 'actions', query: title });
+    await waitUntil(() => [...document.querySelectorAll('[data-palette-row="action"]')].some((row) => row.textContent?.includes(title)));
+    [...document.querySelectorAll<HTMLElement>('[data-palette-row="action"]')].find((row) => row.textContent?.includes(title))!.click();
+  };
+
+  await pick('Find in the page');
+  await pick('New thread');
+  await waitUntil(() => heard.length === 2);
+  expect(heard).toEqual(['find', 'override']);
 });

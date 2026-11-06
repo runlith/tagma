@@ -6,7 +6,7 @@ import { Service } from '@runlith/layer/key';
 import { spellChord } from '$lib/shared/chordSpelling.js';
 import { DesktopKeys } from '$lib/shared/desktop/DesktopKeys.js';
 import { ActionRunner, type Origin, type Runner } from './ports.js';
-import type { Binding, KeyTable, Place } from './resolve.js';
+import { type Binding, consumed, type KeyTable, type Place, WINDOW } from './resolve.js';
 
 type Handler = (origin: Origin) => boolean;
 
@@ -46,9 +46,9 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
   private holdsByChord: ReadonlyMap<string, Binding> = new Map();
   private readonly handlers = new Map<string, readonly Held[]>();
   private readonly holds = new Map<string, readonly Hold[]>();
-  private served: readonly string[] = [];
-  private holding: { readonly hold: Hold; readonly key: string } | null = null;
+  private holding: { readonly hold: Hold; readonly code: string } | null = null;
   private capturing: Capture | null = null;
+  private tabled = false;
   private published = '';
 
   constructor(
@@ -70,7 +70,7 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
     const holds = new Map<string, Binding>();
     for (const binding of table.bindings) {
       const id = chordId(binding.chord);
-      if (binding.hold) holds.set(chordId({ ...binding.chord, shift: false }), binding);
+      if (binding.hold) for (const chord of consumed(binding.chord, true)) holds.set(chordId(chord), binding);
       if (binding.global) globals.set(id, binding);
       const place = places.get(binding.place) ?? new Map<string, Binding>();
       place.set(id, binding);
@@ -79,17 +79,12 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
     this.places = places;
     this.globals = globals;
     this.holdsByChord = holds;
+    this.tabled = true;
     this.publish();
   }
 
-  serve(origins: readonly string[]): () => void {
-    this.served = origins;
-    this.publish();
-    return () => {
-      if (this.served !== origins) return;
-      this.served = [];
-      this.publish();
-    };
+  handles(action: string): boolean {
+    return (this.handlers.get(action)?.length ?? 0) > 0;
   }
 
   handle(action: string, run: Handler, framed?: string): () => void {
@@ -143,12 +138,6 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
     return pressed(pressOf(event), this.mac);
   }
 
-  matches(event: KeyboardEvent, text: string): boolean {
-    const chord = this.chordOf(event);
-    const wanted = hostChordOf(text, this.mac);
-    return chord !== null && wanted !== null && chordId(chord) === chordId(wanted);
-  }
-
   actionAt(event: KeyboardEvent, place: Place): string | null {
     return this.actionOf(pressOf(event), place);
   }
@@ -163,7 +152,7 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
   }
 
   run(action: string, origin: Origin = HERE): boolean {
-    const foreign = origin.frame !== null && !this.served.some((served) => origin.frame?.startsWith(served) === true);
+    const foreign = origin.frame !== null;
     for (const held of (this.handlers.get(action) ?? []).toReversed()) {
       if (foreign && (held.framed === undefined || origin.frame?.startsWith(held.framed) !== true)) continue;
       if (held.run(origin)) return true;
@@ -178,28 +167,32 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
       if (chord !== null) capturing(chord);
       return;
     }
-    const binding = press.global ? this.globals.get(press.chord) : this.places.get('window')?.get(press.chord);
+    const binding = press.global ? this.globals.get(press.chord) : this.places.get(WINDOW)?.get(press.chord);
     if (binding !== undefined && !binding.hold) this.run(binding.action, { page: press.page, frame: press.frame });
   }
 
   private publish(): void {
-    if (this.desktop === undefined) return;
-    const window = [...(this.places.get('window')?.values() ?? [])].filter(
-      (binding) => !binding.hold && (this.runner.owns(binding.action) || (this.handlers.get(binding.action)?.length ?? 0) > 0),
-    );
+    if (this.desktop === undefined || !this.tabled) return;
+    const chords: string[] = [];
+    const claimed: string[] = [];
+    const byAction = new Map<string, string[]>();
+    for (const binding of this.places.get(WINDOW)?.values() ?? []) {
+      if (binding.hold) continue;
+      const owned = this.runner.owns(binding.action);
+      if (!owned && !this.handles(binding.action)) continue;
+      const id = chordId(binding.chord);
+      chords.push(id);
+      if (owned) claimed.push(id);
+      byAction.set(binding.action, [...(byAction.get(binding.action) ?? []), id]);
+    }
     const keys: WindowKeys = {
-      chords: window.map((binding) => chordId(binding.chord)),
-      claimed: window.filter((binding) => this.runner.owns(binding.action)).map((binding) => chordId(binding.chord)),
+      chords,
+      claimed,
       framed: [...this.handlers].flatMap(([action, held]) =>
         held.flatMap((one) =>
-          one.framed === undefined
-            ? []
-            : window
-                .filter((binding) => binding.action === action)
-                .map((binding) => ({ chord: chordId(binding.chord), frame: one.framed! })),
+          one.framed === undefined ? [] : (byAction.get(action) ?? []).map((chord) => ({ chord, frame: one.framed! })),
         ),
       ),
-      served: this.served,
       global: [...this.globals.values()].map((binding) => ({ chord: chordId(binding.chord), action: binding.action, hold: binding.hold })),
     };
     const told = JSON.stringify(keys);
@@ -211,7 +204,7 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
   private tapped = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || event.isComposing || this.capturing !== null) return;
     const chord = this.chordOf(event);
-    const binding = chord === null ? undefined : this.places.get('window')?.get(chordId(chord));
+    const binding = chord === null ? undefined : this.places.get(WINDOW)?.get(chordId(chord));
     if (binding === undefined || binding.hold) return;
     if (this.run(binding.action)) event.preventDefault();
   };
@@ -231,19 +224,19 @@ export class Keymap extends Service<Keymap>()('Keymap', { tier: 'app' }) {
     }
     if (event.defaultPrevented) return;
     const chord = this.chordOf(event);
-    const binding = chord === null ? undefined : this.holdsByChord.get(chordId({ ...chord, shift: false }));
+    const binding = chord === null ? undefined : this.holdsByChord.get(chordId(chord));
     const hold = binding === undefined ? undefined : this.holds.get(binding.action)?.at(-1);
     if (chord === null || hold === undefined) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.repeat) return;
-    this.holding = { hold, key: chord.key };
+    this.holding = { hold, code: event.code };
     hold.press(event.shiftKey);
   };
 
   private lifted = (event: KeyboardEvent): void => {
     const holding = this.holding;
-    if (holding === null || this.chordOf(event)?.key !== holding.key) return;
+    if (holding === null || event.code !== holding.code) return;
     event.preventDefault();
     event.stopPropagation();
     this.holding = null;

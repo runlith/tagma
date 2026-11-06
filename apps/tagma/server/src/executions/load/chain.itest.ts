@@ -14,18 +14,12 @@ import type { Background } from '../../platform/contract/service/background.js';
 import type { WindowDeclaration } from '../contract/wire/load.js';
 import { makeHostLoad, makeMachineLoad } from './feed.js';
 import { makeWindowDeclarations, partNames } from './windows.js';
-import { pluginTitleKey, type WorkNames } from './work.js';
+import type { WorkNames } from './work.js';
 
 const machine = { _tag: 'Local', machine: 'fixture' } as const;
 
 const names: WorkNames = {
-  read: (_refs, _now, views) =>
-    Effect.succeed({
-      work: new Map(),
-      threads: new Map(),
-      plugins: new Map(views.map((view) => [pluginTitleKey(view), 'Notes'])),
-      unread: undefined,
-    }),
+  read: () => Effect.succeed({ work: new Map(), threads: new Map(), unread: undefined }),
 };
 
 const background: Background['Service'] = { run: () => Effect.die('no background work runs here'), standing: Effect.succeed([]) };
@@ -122,11 +116,10 @@ layer(desktopWorld('load-chain-'), { excludeTestServices: true })('the window de
           seq: fake.next(),
           declaration: declaration(
             member(202, 'renderer', [{ _tag: 'Page', page }]),
-            member(203, 'renderer', [{ _tag: 'PluginView', project: seeded.id, plugin: 'notes', view: 'board' }]),
             member(204, 'renderer', [{ _tag: 'McpView', server: 'linear' }]),
           ),
         });
-        yield* Stream.runHead(Stream.filter(windows.parts, (parts) => parts.length === 5));
+        yield* Stream.runHead(Stream.filter(windows.parts, (parts) => parts.length === 4));
 
         const rows = yield* Queue.unbounded<ReadonlyArray<{ readonly kind: string; readonly title: string; readonly close?: unknown }>>();
         yield* Effect.forkScoped(
@@ -137,20 +130,20 @@ layer(desktopWorld('load-chain-'), { excludeTestServices: true })('the window de
         );
         const view = yield* Queue.take(rows);
         const titled = (kind: string) => view.filter((row) => row.kind === kind).map((row) => row.title);
-        expect(titled('renderer').toSorted()).toEqual(['MCP view — linear', 'Page — example.com', 'Plugin — Notes']);
+        expect(titled('renderer').toSorted()).toEqual(['MCP view — linear', 'Page — example.com']);
         expect(titled('graphics')).toEqual(['Graphics']);
         expect(titled('interface')).toEqual(['Interface']);
         expect(view.find((row) => row.title.startsWith('Page'))?.close).toEqual([{ page, projectId: seeded.id }]);
-        expect(view.find((row) => row.title.startsWith('Plugin'))?.close).toBeUndefined();
+        expect(view.find((row) => row.title.startsWith('MCP'))?.close).toBeUndefined();
 
         fake.sent({
           kind: 'declaration',
           seq: fake.next(),
-          declaration: declaration(member(203, 'renderer', [{ _tag: 'PluginView', project: seeded.id, plugin: 'notes', view: 'board' }])),
+          declaration: declaration(member(204, 'renderer', [{ _tag: 'McpView', server: 'linear' }])),
         });
         let replaced = yield* Queue.take(rows);
         while (replaced.some((row) => row.title.startsWith('Page'))) replaced = yield* Queue.take(rows);
-        expect(replaced.filter((row) => row.kind === 'renderer').map((row) => row.title)).toEqual(['Plugin — Notes']);
+        expect(replaced.filter((row) => row.kind === 'renderer').map((row) => row.title)).toEqual(['MCP view — linear']);
 
         fake.close();
         let ended = yield* Queue.take(rows);

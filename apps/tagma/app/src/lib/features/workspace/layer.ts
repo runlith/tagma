@@ -10,7 +10,7 @@ import { TileRungSource } from './TileRung.js';
 import { WallClock } from './WallClock.svelte.js';
 import { Workspace } from './Selection.svelte.js';
 import { Actions } from './action.js';
-import { actions } from './actions.js';
+import { SurfaceActions } from './actions.js';
 import { Columns } from './column.js';
 import { Surfaces, SurfaceRegistry } from './surface.js';
 
@@ -19,7 +19,7 @@ export const WorkspaceLayer = Layer.mergeAll(
   SurfaceRegistry,
   Columns,
   Actions,
-  Actions.contribute('workspace', { id: 'workspace', area: 'Navigation', actions }),
+  SurfaceActions,
   Workspace,
   ProjectsRepo,
   ProjectsFeed,

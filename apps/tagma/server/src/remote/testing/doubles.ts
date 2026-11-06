@@ -3,8 +3,6 @@ import { Exposure, type ExposureStep, type SitePlaced } from '../contract/servic
 import type { AccessState } from '../contract/wire/access.js';
 import { Ledger } from '../store/ledger.js';
 
-const SITE_PORT = 11_001;
-
 const POINTED_PORT = 12_001;
 
 const unread = () => Effect.die('the test reads this member of the ledger without giving it');
@@ -14,8 +12,8 @@ export const unreadLedger = Ledger.of({
   seen: unread,
   origin: unread(),
   settle: unread,
-  sites: unread(),
-  keepSite: unread,
+  terminal: unread(),
+  keepTerminal: unread,
   issue: unread,
   exchange: unread,
   revoke: unread,
@@ -27,7 +25,6 @@ export const exposedAt = (
   certified: Latch.Latch,
   machine = 'test-machine',
   sandbox: () => AccessState = () => ({ _tag: 'certificate', origin: `${origin}:8443` }),
-  site: (at: string) => AccessState = (at) => ({ _tag: 'ready', origin: at }),
   pointed: { port: number; target: number }[] = [],
 ): Layer.Layer<Exposure> =>
   Layer.succeed(
@@ -47,26 +44,13 @@ export const exposedAt = (
             ),
           );
         }),
-      place: (asked, reserved, keep) =>
-        Stream.suspend(() => {
-          const taken = new Set([...reserved, ...asked.flatMap(({ port }) => (port === null ? [] : [port]))]);
-          return Stream.mapEffect(Stream.fromIterable(asked), ({ name, port }) => {
-            let placed = port ?? SITE_PORT;
-            while (port === null && taken.has(placed)) placed += 1;
-            taken.add(placed);
-            return Effect.match(placed === port ? Effect.void : keep(name, placed), {
-              onFailure: (refused): SitePlaced => ({ name, port: placed, state: refused }),
-              onSuccess: (): SitePlaced => ({ name, port: placed, state: site(`${origin}:${placed}`) }),
-            });
-          });
-        }),
-      point: ({ name, port, target }, keep) =>
+      point: ({ port, target }, keep) =>
         Effect.suspend(() => {
           const placed = port ?? POINTED_PORT;
           pointed.push({ port: placed, target });
-          return Effect.match(placed === port ? Effect.void : keep(name, placed), {
-            onFailure: (refused): SitePlaced => ({ name, port: placed, state: refused }),
-            onSuccess: (): SitePlaced => ({ name, port: placed, state: site(`${origin}:${placed}`) }),
+          return Effect.match(placed === port ? Effect.void : keep(placed), {
+            onFailure: (refused): SitePlaced => ({ port: placed, state: refused }),
+            onSuccess: (): SitePlaced => ({ port: placed, state: { _tag: 'ready', origin: `${origin}:${placed}` } }),
           });
         }),
       withdraw: () => Effect.void,

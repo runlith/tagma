@@ -2,6 +2,13 @@ import type { SwallowedFailuresParams } from '@runlith/tagma/rules/effect';
 
 export const ALLOWED: SwallowedFailuresParams['allow'] = [
   {
+    path: 'apps/tagma/server/src/views/modules/builds.ts',
+    symbol: 'makeBuilds.onSuccess',
+    form: 'catch',
+    site: 'cdc9a92f',
+    why: "Sweeping a plugin's older view builds is best-effort cleanup: the build just made stands either way, the failure is logged, and the plugin's next compile sweeps again.",
+  },
+  {
     path: 'apps/tagma/server/src/mcp/waits.ts',
     symbol: 'quietly',
     form: 'catch',

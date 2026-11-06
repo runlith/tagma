@@ -1,4 +1,4 @@
-import { beforeBuild, definePlugin, schedule, tool } from '@runlith/tagma/plugin';
+import { beforeBuild, definePlugin, schedule, tool, view } from '@runlith/tagma/plugin';
 import { Schema } from 'effect';
 
 const noted = async (data: string, line: string): Promise<void> => {
@@ -10,7 +10,7 @@ const noted = async (data: string, line: string): Promise<void> => {
 export default definePlugin({
   id: 'accept',
   title: 'Acceptance',
-  views: [{ id: 'board', entry: 'ui/board.html' }],
+  views: { board: view('ui/Board.svelte') },
   tools: {
     echo: tool({
       description: 'Echoes the text it is given.',

@@ -115,12 +115,15 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     if (revision === null) {
       return yield* new PluginUnreadable({ path: install.root, reason: `${outputs.join(' or ')} went missing while it was read` });
     }
+    const processRevision =
+      pkg.process === null ? null : yield* digests.digest(install.root, [pkg.process.entry], 'process').pipe(Effect.mapError(unreadable));
     return {
       id,
       title: pkg.title ?? pkg.name,
       root: install.root,
       data: shelf.data(id),
       revision,
+      processRevision,
       outputs,
       process: pkg.process,
       contributes: pkg.contributes,

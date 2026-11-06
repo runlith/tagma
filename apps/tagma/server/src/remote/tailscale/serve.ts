@@ -1,19 +1,11 @@
 import { Effect, Layer, Semaphore, Stream } from 'effect';
-import {
-  Exposure,
-  type ExposureStep,
-  type PointAsk,
-  type SiteAsk,
-  type SiteKeeping,
-  type SitePlaced,
-} from '../contract/service/exposure.js';
+import { Exposure, type ExposureStep, type PointAsk, type SiteKeeping, type SitePlaced } from '../contract/service/exposure.js';
 import type { AccessState, Blocked } from '../contract/wire/access.js';
 import { DNS_SETTINGS_LINK, DOWNLOAD_LINK, blocked, serveCommand, serveRefusal } from './blocks.js';
 import { locateCli, runCli, succeeded } from './cli.js';
 import {
   HTTPS_PORTS,
   POINTED_PORTS,
-  SITE_PORTS,
   holderOf,
   originOf,
   pointsHome,
@@ -41,18 +33,6 @@ type Standing = {
 };
 
 type Place = { readonly httpsPort: HttpsPort; readonly holder: Holder };
-
-type Chosen = {
-  readonly name: string;
-  readonly port: number;
-  readonly origin: string;
-  readonly mapped: boolean;
-  readonly moved: boolean;
-};
-
-type Configure = (port: number) => Effect.Effect<void, Blocked>;
-
-type Plan = { readonly unplaced: readonly SitePlaced[]; readonly chosen: readonly Chosen[]; readonly configure: Configure };
 
 const located = Effect.gen(function* () {
   const binary = yield* locateCli;
@@ -162,80 +142,6 @@ const expose = (port: number, proxyPort: number, settled: string | null): Stream
     ),
   );
 
-const plan = Effect.fnUntraced(function* (
-  writes: Semaphore.Semaphore,
-  proxyPort: number,
-  asked: readonly SiteAsk[],
-  reserved: readonly number[],
-): Effect.fn.Return<Plan, Blocked> {
-  const binary = yield* located;
-  const host = hostOf(yield* readStatus(binary));
-  if (host === null) return yield* Effect.fail(NO_DNS_NAME);
-  const sessions = sessionsOf(yield* readServeConfig(binary));
-  const target = targetOf(proxyPort);
-  const taken = new Set([...reserved, ...asked.flatMap(({ port }) => (port === null ? [] : [port]))]);
-  const unplaced: SitePlaced[] = [];
-  const chosen: Chosen[] = [];
-  for (const { name, port } of asked) {
-    const kept = port !== null && holderOf(sessions, host, port, target)._tag !== 'other' ? port : null;
-    const free =
-      kept ?? SITE_PORTS.find((candidate) => !taken.has(candidate) && holderOf(sessions, host, candidate, target)._tag === 'free');
-    if (free === undefined) {
-      unplaced.push({
-        name,
-        port,
-        state: blocked('port-taken', `HTTPS ports ${SITE_PORTS[0]}–${SITE_PORTS.at(-1)} on ${host} already serve other mappings.`),
-      });
-      continue;
-    }
-    taken.add(free);
-    chosen.push({
-      name,
-      port: free,
-      origin: originOf(host, free),
-      mapped: holderOf(sessions, host, free, target)._tag === 'tagma',
-      moved: free !== port,
-    });
-  }
-  const configure = Effect.fn('tailscale.serveSite')(function* (port: number) {
-    yield* startServe(binary, port, target);
-  }, writes.withPermit);
-  return { unplaced, chosen, configure };
-});
-
-const served = Effect.fnUntraced(function* (configure: Configure, keep: SiteKeeping, site: Chosen): Effect.fn.Return<AccessState, Blocked> {
-  if (site.moved) yield* keep(site.name, site.port);
-  if (!site.mapped) yield* configure(site.port);
-  if (yield* originAnswers(site.origin)) return { _tag: 'ready', origin: site.origin };
-  return blocked('refused', `${site.origin} did not answer while it was being set up.`);
-});
-
-const settled = (configure: Configure, keep: SiteKeeping, site: Chosen): Effect.Effect<SitePlaced> => {
-  const placed = (state: AccessState): SitePlaced => ({ name: site.name, port: site.port, state });
-  return Effect.match(served(configure, keep, site), { onFailure: placed, onSuccess: placed });
-};
-
-const placeSites = (
-  writes: Semaphore.Semaphore,
-  proxyPort: number,
-  asked: readonly SiteAsk[],
-  reserved: readonly number[],
-  keep: SiteKeeping,
-): Stream.Stream<SitePlaced> =>
-  Stream.unwrap(
-    Effect.match(plan(writes, proxyPort, asked, reserved), {
-      onFailure: (refusal) => Stream.fromIterable(asked.map(({ name, port }): SitePlaced => ({ name, port, state: refusal }))),
-      onSuccess: ({ unplaced, chosen, configure }) =>
-        Stream.concat(
-          Stream.fromIterable(unplaced),
-          Stream.mapEffect(Stream.fromIterable(chosen), (site) => settled(configure, keep, site), {
-            concurrency: 'unbounded',
-            unordered: true,
-          }),
-        ),
-    }),
-  );
-
 const pointed = Effect.fn('Exposure.point')(function* (
   writes: Semaphore.Semaphore,
   asked: PointAsk,
@@ -257,10 +163,10 @@ const pointed = Effect.fn('Exposure.point')(function* (
     );
   }
   const origin = originOf(host, port);
-  if (port !== asked.port) yield* keep(asked.name, port);
+  if (port !== asked.port) yield* keep(port);
   if (holderOf(sessions, host, port, target)._tag !== 'tagma') yield* writes.withPermit(startServe(binary, port, target));
   if (!(yield* originAnswers(origin))) return yield* Effect.fail(blocked('refused', `${origin} did not answer while it was being set up.`));
-  return { name: asked.name, port, state: { _tag: 'ready', origin } };
+  return { port, state: { _tag: 'ready', origin } };
 });
 
 export const tailscaleExposure = (proxyPort: number): Layer.Layer<Exposure> =>
@@ -270,10 +176,9 @@ export const tailscaleExposure = (proxyPort: number): Layer.Layer<Exposure> =>
       const writes = yield* Semaphore.make(1);
       return Exposure.of({
         expose: (port, settled) => expose(port, proxyPort, settled),
-        place: (asked, reserved, keep) => placeSites(writes, proxyPort, asked, reserved, keep),
         point: (asked, keep) =>
           Effect.match(pointed(writes, asked, keep), {
-            onFailure: (state): SitePlaced => ({ name: asked.name, port: asked.port, state }),
+            onFailure: (state): SitePlaced => ({ port: asked.port, state }),
             onSuccess: (placed) => placed,
           }),
         withdraw: (port, sites) => withdraw([port, proxyPort], sites),

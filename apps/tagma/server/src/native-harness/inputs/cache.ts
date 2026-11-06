@@ -8,7 +8,7 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { ProjectGroups } from '../../projects/contract/service/registry.js';
 import { type ProjectRow, reaching } from '../../projects/contract/wire/project.js';
 import { WorkspaceInputs, type MemberSkills, type WorkspaceInputAim, type WorkspaceInputSet } from '../contract/service/inputs.js';
-import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
+import type { CapabilityDeclaration } from '../../views/contract/wire/capabilities.js';
 import { readMemberSkills, readWorkspaceInputs, withMembers } from './walk.js';
 
 type Bound = { readonly at: TargetAt; readonly root: string; readonly sources: WorkspaceInputSet };
@@ -29,7 +29,7 @@ const signatureOf = (enabled: readonly PluginLoaded[]): string => JSON.stringify
 
 export const workspaceInputsLayer = (
   own: (projectRoot: string) => readonly string[],
-  bridge: readonly BridgeMethod[],
+  capabilities: readonly CapabilityDeclaration[],
 ): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings | EnabledPlugins | ProjectGroups> =>
   Layer.effectContext(
     Effect.map(
@@ -62,7 +62,7 @@ export const workspaceInputsLayer = (
               ),
             );
         const walkWith = (projectId: number, root: string, enabled: readonly PluginLoaded[]) =>
-          readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled, bridge });
+          readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled, capabilities });
         const memberOf = (member: ProjectRow, remembered: boolean) => {
           const key = walkOf(member.id, member.rootPath);
           const standing = remembered ? memberWalks.get(key) : undefined;

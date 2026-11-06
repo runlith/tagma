@@ -1,4 +1,4 @@
-import { mcpAppResult } from '@runlith/mcp/apps';
+import { type McpAppCallResult, mcpAppResult } from '@runlith/mcp/apps';
 import type { McpCaller } from '@runlith/mcp/caller';
 import { Effect, PubSub, Stream } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -8,12 +8,11 @@ import type { PluginContribution, PluginRef } from '../plugins/contract/service/
 import { PluginActions } from './contract/service/actions.js';
 import { ACTIONS, SHORTCUTS } from './contract/service/points.js';
 import type { PluginActionRow, PluginActionSet, PluginActionState } from './contract/wire/actions.js';
-import type { ActionEntries, SectionEntries, ShortcutEntries } from './contract/wire/points.js';
-import { callRefusal, READ_PLUGINS, unreadable } from './refusals.js';
+import type { ActionEntries, ShortcutEntries } from './contract/wire/points.js';
+import { callRefusal, READ_PLUGINS, refusal, unreadable } from './refusals.js';
+import type { Sections } from './sections.js';
 
 type Held<W> = { readonly plugin: PluginRef; readonly value: W };
-
-type Sections = { readonly of: (plugin: string) => SectionEntries };
 
 export const makeActions = Effect.fnUntraced(function* (input: {
   readonly moves: PubSub.PubSub<number | null>;
@@ -56,22 +55,20 @@ export const makeActions = Effect.fnUntraced(function* (input: {
         title: entry.title,
         keys: keysOf(entry.id),
       })),
-      ...surfaces
-        .of(plugin)
-        .map((entry): PluginActionRow => ({
-          id: `section:${entry.view}`,
-          kind: 'section',
-          title: entry.title,
-          keys: keysOf(`section:${entry.view}`),
-        })),
-      ...panes
-        .of(plugin)
-        .map((entry): PluginActionRow => ({
-          id: `pane:${entry.view}`,
-          kind: 'pane',
-          title: entry.title,
-          keys: keysOf(`pane:${entry.view}`),
-        })),
+      ...surfaces.of(plugin).map((entry): PluginActionRow => ({
+        id: `section:${entry.view}`,
+        kind: 'section',
+        view: entry.view,
+        title: entry.title,
+        keys: keysOf(`section:${entry.view}`),
+      })),
+      ...panes.of(plugin).map((entry): PluginActionRow => ({
+        id: `pane:${entry.view}`,
+        kind: 'pane',
+        view: entry.view,
+        title: entry.title,
+        keys: keysOf(`pane:${entry.view}`),
+      })),
     ];
   };
 
@@ -100,6 +97,11 @@ export const makeActions = Effect.fnUntraced(function* (input: {
     return text === '' ? null : text;
   };
 
+  const answered = (result: McpAppCallResult) =>
+    result.isError === true
+      ? Effect.fail(refusal('plugin-call-failed', sentence(result) ?? 'The action failed and gave no reason.'))
+      : Effect.succeed(sentence(result));
+
   return {
     contributions: {
       actions: { point: ACTIONS, register: holding(actions) },
@@ -126,7 +128,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
         const result = yield* host
           .callAdmitted(plugin, admit, declared.tool, {}, { caller })
           .pipe(Effect.mapError((failure) => (failure instanceof GateRefusal ? failure : callRefusal(failure))));
-        return sentence(mcpAppResult(result));
+        return yield* answered(mcpAppResult(result));
       }),
     }),
   };

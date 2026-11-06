@@ -1,5 +1,4 @@
 import { expect } from 'bun:test';
-import { realpathSync } from 'node:fs';
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +26,7 @@ import { Schedules } from '../../../schedule/contract/service/schedules.js';
 import { schedule } from '../../../schedule/schedule.js';
 import { memorySecretsLayer } from '../../../secrets/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
-import type { ViewSites } from '../../../views/contract/service/views.js';
+import { ViewPlaces } from '../../../views/contract/service/places.js';
 import { views as viewsModule } from '../../../views/views.js';
 import { buildSteps } from '../../buildSteps.js';
 import { ticks } from '../../ticks.js';
@@ -42,7 +41,6 @@ const FIXTURE = join(import.meta.dir, 'sdkFixture.ts');
 const DESCRIBED = 'Echoes the text it is given.';
 const HOUR = 3_600_000;
 const QUIET = 30_000;
-const SITES: ViewSites['Service'] = { site: (plugin) => ({ _tag: 'served', origin: `https://${plugin}.example` }), moved: Stream.never };
 const files = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);
 
 class NeverHeld extends Data.TaggedError('NeverHeld')<{}> {}
@@ -67,16 +65,21 @@ const authored = (folder: string) =>
     await writeFile(join(folder, 'plugin.ts'), await readFile(FIXTURE, 'utf8'));
     await rm(join(folder, 'plugin.test.ts'));
     await mkdir(join(folder, 'ui'));
-    await writeFile(join(folder, 'ui', 'board.html'), '<!doctype html><p>board</p>');
+    await writeFile(join(folder, 'ui', 'Board.svelte'), '<p>board</p>');
     await mkdir(join(folder, 'node_modules', '@runlith'), { recursive: true });
     await mkdir(join(folder, 'node_modules', '@types'), { recursive: true });
     await symlink(SDK, join(folder, 'node_modules', '@runlith', 'tagma'));
     await symlink(join(SDK, 'node_modules', '@types', 'bun'), join(folder, 'node_modules', '@types', 'bun'));
     await symlink(join(SDK, 'node_modules', 'effect'), join(folder, 'node_modules', 'effect'));
+    await symlink(join(SDK, 'node_modules', 'svelte'), join(folder, 'node_modules', 'svelte'));
   });
 
 const clocked = (home: string) =>
-  Layer.mergeAll(schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks)), buildSteps, viewsModule.lifetimes.installation).pipe(
+  Layer.mergeAll(
+    schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks)),
+    buildSteps,
+    viewsModule.lifetimes.installation.pipe(Layer.provide(Layer.succeed(ViewPlaces, { home: join(home, 'views') }))),
+  ).pipe(
     Layer.provideMerge(
       pluginHost.lifetimes.installation.pipe(
         Layer.provide(Layer.succeed(HostPlace, { server: null, quiet: QUIET })),
@@ -142,12 +145,15 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         const views = world.runtime.views;
         const [shown] = yield* Stream.runCollect(
           Stream.take(
-            Stream.filter(views.sets(projectId, SITES), (state) => state.plugins.some((set) => set.plugin === 'accept')),
+            Stream.filter(views.sets(projectId), (state) =>
+              state.plugins.some((set) => set.plugin === 'accept' && set.views.every((view) => view.module.state !== 'preparing')),
+            ),
             1,
           ),
         );
-        expect(shown?.plugins.find((set) => set.plugin === 'accept')).toMatchObject({ views: [{ id: 'board', entry: 'ui/board.html' }] });
-        expect(yield* views.file('accept', 'ui/board.html')).toBe(realpathSync(join(folder, 'ui', 'board.html')));
+        expect(shown?.plugins.find((set) => set.plugin === 'accept')).toMatchObject({
+          views: [{ id: 'board', module: { state: 'ready' } }],
+        });
 
         yield* withDemo((demo) =>
           Effect.gen(function* () {

@@ -6,14 +6,23 @@ const PluginActionKey = Schema.Struct({
   global: Schema.Boolean.annotate({ description: 'true: the plugin asks for the chord to work in every app. The person allows it.' }),
 });
 
-export const PluginActionRow = Schema.Struct({
-  id: Schema.String.annotate({
-    description: 'The plugin’s own action id, or section:<view> and pane:<view> for the acts that open a section or a pane.',
+const keys = Schema.Array(PluginActionKey).annotate({ description: 'The chords the plugin proposes for it.' });
+
+export const PluginActionRow = Schema.Union([
+  Schema.Struct({
+    id: Schema.String.annotate({ description: 'The plugin’s own action id.' }),
+    kind: Schema.Literal('action'),
+    title: Schema.String,
+    keys,
   }),
-  kind: Schema.Literals(['action', 'section', 'pane']),
-  title: Schema.String,
-  keys: Schema.Array(PluginActionKey).annotate({ description: 'The chords the plugin proposes for it.' }),
-});
+  Schema.Struct({
+    id: Schema.String.annotate({ description: 'section:<view> or pane:<view>, as the plugin’s shortcuts name the act.' }),
+    kind: Schema.Literals(['section', 'pane']),
+    view: Schema.String.annotate({ description: 'The view the act opens.' }),
+    title: Schema.String,
+    keys,
+  }),
+]);
 export type PluginActionRow = typeof PluginActionRow.Type;
 
 export const PluginActionSet = Schema.Struct({

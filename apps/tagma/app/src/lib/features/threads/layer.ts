@@ -9,6 +9,7 @@ import { DraftShelf } from './native/DraftShelf.svelte.js';
 import { ThreadContributions } from './native/layer.js';
 import { PageDraft } from './PageDraft.js';
 import { ThreadChats } from './ThreadChats.js';
+import { ViewRepairs } from '$lib/features/plugin-views/Repairs.js';
 import { Asking } from './Asking.js';
 import { ThreadPreferences } from './native/preferences.js';
 import { SurfaceChoices } from './external/Surface.svelte.js';
@@ -103,6 +104,10 @@ export const HarnessLayer = Layer.mergeAll(
       (thread, project) => words.of(thread, project),
       (thread) => words.read(thread),
     );
+  }),
+  Layer.provide(ViewRepairs, function* () {
+    const asking = yield* Asking;
+    return { fix: (projectId: number, request: string) => asking.ask({ projectId }, request) };
   }),
   ThreadFolds,
   ContextPanelState,

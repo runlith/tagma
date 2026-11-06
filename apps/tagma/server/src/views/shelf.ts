@@ -1,5 +1,3 @@
-import { realpath } from 'node:fs/promises';
-import { join, sep } from 'node:path';
 import { mcpAppResult } from '@runlith/mcp/apps';
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceUpdated } from '@runlith/mcp/resources';
@@ -12,10 +10,11 @@ import { pluginToolName } from '../plugin-host/contract/wire/audience.js';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
 import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
 import { PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
-import { PluginViews, type ViewFailure, type ViewMount, type ViewSites } from './contract/service/views.js';
-import type { ResultEntries, ViewEntries } from './contract/wire/points.js';
-import type { PluginViewSet, PluginViewState, ViewRefusalCode } from './contract/wire/sets.js';
+import { PluginViews, type ViewFailure, type ViewMount } from './contract/service/views.js';
+import type { ResultEntries, SectionEntry, ViewEntries } from './contract/wire/points.js';
+import type { PluginViewSet, PluginViewState, ShownSection, ViewRefusalCode } from './contract/wire/sets.js';
 import { makeLaunchers } from './launchers.js';
+import { makeBuilds } from './modules/builds.js';
 import { callRefusal, READ_PLUGINS, refusal, unreadable } from './refusals.js';
 import { makeSections } from './sections.js';
 
@@ -39,19 +38,23 @@ export const makeShelf = Effect.gen(function* () {
   const surfaces = makeSections({ point: SURFACES, changed: bump });
   const panes = makeSections({ point: PANES, changed: bump });
   const launchers = makeLaunchers({ changed: bump });
+  const builds = yield* makeBuilds({ changed: bump });
 
-  const registerViews = ({ plugin, value }: PluginContribution<ViewEntries>) =>
-    Effect.sync(() => {
-      if (value.length === 0) return () => undefined;
-      const standing: Shown = { plugin, views: value };
-      shown.set(plugin.id, standing);
+  const registerViews = Effect.fnUntraced(function* ({ plugin, value }: PluginContribution<ViewEntries>) {
+    if (value.length === 0) return () => undefined;
+    const standing: Shown = { plugin, views: value };
+    shown.set(plugin.id, standing);
+    const unbuilt = yield* builds.publish(plugin, value);
+    return () => {
+      unbuilt();
+      if (shown.get(plugin.id) !== standing) return;
+      shown.delete(plugin.id);
       bump();
-      return () => {
-        if (shown.get(plugin.id) !== standing) return;
-        shown.delete(plugin.id);
-        bump();
-      };
-    });
+    };
+  });
+
+  const sectionsOf = (plugin: string, entries: readonly SectionEntry[]): readonly ShownSection[] =>
+    entries.map(({ view, title, icon }) => ({ view, title, icon: icon === undefined ? null : builds.iconOf(plugin, icon) }));
 
   const registerResults = ({ plugin, value }: PluginContribution<ResultEntries>) =>
     Effect.sync(() => {
@@ -65,7 +68,7 @@ export const makeShelf = Effect.gen(function* () {
       };
     });
 
-  const setsOf = (enabled: readonly string[], sites: ViewSites['Service']): readonly PluginViewSet[] =>
+  const setsOf = (enabled: readonly string[]): readonly PluginViewSet[] =>
     enabled.flatMap((id) => {
       const standing = shown.get(id);
       return standing === undefined
@@ -74,11 +77,15 @@ export const makeShelf = Effect.gen(function* () {
             {
               plugin: id,
               title: standing.plugin.title,
-              site: sites.site(id),
-              views: standing.views,
+              views: standing.views.map(({ id: view, live, media }) => ({
+                id: view,
+                live,
+                media,
+                module: builds.moduleOf(id, view) ?? { state: 'preparing' as const },
+              })),
               results: (results.get(id) ?? []).map((result) => ({ ...result, name: pluginToolName(id, result.tool) })),
-              surfaces: surfaces.of(id),
-              panes: panes.of(id),
+              surfaces: sectionsOf(id, surfaces.of(id)),
+              panes: sectionsOf(id, panes.of(id)),
               launchers: launchers.of(id),
             },
           ];
@@ -99,41 +106,21 @@ export const makeShelf = Effect.gen(function* () {
 
   return {
     ...PluginViews.of({
-      sets: (projectId, sites) =>
+      sets: (projectId) =>
         Stream.unwrap(
           Effect.map(PubSub.subscribe(moved), (moves) =>
-            Stream.concat(Stream.succeed(null), Stream.merge(Stream.fromSubscription(moves), Stream.as(sites.moved, null))).pipe(
+            Stream.concat(Stream.succeed(null), Stream.fromSubscription(moves)).pipe(
               Stream.filter((move) => move === null || move === projectId),
               Stream.mapEffect(() =>
                 Effect.map(enabledPlugins.held(projectId), (held): PluginViewState => {
                   const enabled = held();
-                  return { plugins: setsOf(enabled, sites), enabled };
+                  return { plugins: setsOf(enabled), enabled, sheet: null };
                 }),
               ),
               Stream.changesWith((left, right) => JSON.stringify(left) === JSON.stringify(right)),
             ),
           ),
         ),
-      standing: Stream.unwrap(
-        Effect.map(PubSub.subscribe(moved), (moves) =>
-          Stream.concat(Stream.succeed(null), Stream.fromSubscription(moves)).pipe(
-            Stream.map((): ReadonlySet<string> => new Set(shown.keys())),
-            Stream.changesWith((left, right) => left.size === right.size && [...left].every((id) => right.has(id))),
-          ),
-        ),
-      ),
-      file: Effect.fn('PluginViews.file')(function* (plugin, path) {
-        const standing = shown.get(plugin);
-        if (standing === undefined || !path.startsWith('ui/') || path.split('/').some((part) => part === '..' || part === '')) return null;
-        const { root } = standing.plugin;
-        return yield* Effect.promise(() =>
-          Promise.all([realpath(root), realpath(join(root, 'ui')), realpath(join(root, path))]).then(
-            ([home, views, file]) => (views === join(home, 'ui') && file.startsWith(`${views}${sep}`) ? file : null),
-            () => null,
-          ),
-        );
-      }),
-      csp: (plugin, path) => Effect.succeed(shown.get(plugin)?.views.find((view) => view.entry === path)?.csp ?? {}),
       call: Effect.fn('PluginViews.call')(function* (mount, tool, args, caller) {
         const admit = Effect.gen(function* () {
           yield* mounted(mount);
@@ -180,6 +167,7 @@ export const makeShelf = Effect.gen(function* () {
     mounted,
     moves: moved,
     bump,
+    files: builds.files,
     viewed: (): ReadonlyMap<string, PluginRef> => new Map([...shown].map(([id, standing]) => [id, standing.plugin])),
     contributions: {
       views: { point: VIEWS, register: registerViews },

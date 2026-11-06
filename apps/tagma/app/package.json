@@ -9,7 +9,6 @@
       "types": "./scripts/surfaceConfig.ts",
       "default": "./scripts/surfaceConfig.ts"
     },
-    "./compilerOptions": "./compilerOptions.js",
     "./composition": {
       "types": "./src/lib/app/composition.ts",
       "browser": "./src/lib/app/composition.ts",
@@ -77,10 +76,10 @@
       "browser": "./src/lib/shared/threads/staged.ts",
       "default": "./src/lib/shared/threads/staged.ts"
     },
-    "./points/methods": {
-      "types": "./src/lib/features/plugin-views/methods.ts",
-      "browser": "./src/lib/features/plugin-views/methods.ts",
-      "default": "./src/lib/features/plugin-views/methods.ts"
+    "./points/capabilities": {
+      "types": "./src/lib/features/plugin-views/capabilities.ts",
+      "browser": "./src/lib/features/plugin-views/capabilities.ts",
+      "default": "./src/lib/features/plugin-views/capabilities.ts"
     },
     "./speech/captures": {
       "types": "./src/lib/features/speech/Captures.svelte.ts",
@@ -168,9 +167,9 @@
       "default": "./src/lib/app/hostOs.ts"
     },
     "./theme": {
-      "types": "./src/lib/shared/Theme.svelte.ts",
-      "browser": "./src/lib/shared/Theme.svelte.ts",
-      "default": "./src/lib/shared/Theme.svelte.ts"
+      "types": "./src/lib/shared/Theme.ts",
+      "browser": "./src/lib/shared/Theme.ts",
+      "default": "./src/lib/shared/Theme.ts"
     },
     "./files/opener": {
       "types": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
@@ -303,16 +302,6 @@
       "browser": "./src/lib/features/speech/Row.svelte",
       "svelte": "./src/lib/features/speech/Row.svelte",
       "default": null
-    },
-    "./views/bridge": {
-      "types": "./src/lib/features/views/ViewBridge.ts",
-      "browser": "./src/lib/features/views/ViewBridge.ts",
-      "default": "./src/lib/features/views/ViewBridge.ts"
-    },
-    "./views/feeds": {
-      "types": "./src/lib/features/views/ViewFeeds.ts",
-      "browser": "./src/lib/features/views/ViewFeeds.ts",
-      "default": "./src/lib/features/views/ViewFeeds.ts"
     },
     "./markdown/MarkdownBody.svelte": {
       "types": "./src/lib/features/graph/MarkdownBody.svelte",

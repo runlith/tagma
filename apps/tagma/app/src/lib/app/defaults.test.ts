@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { keptChords } from '@tagma/desktop/kept';
+import { keptChords, OWNED } from '@tagma/desktop/kept';
 import { chordId, type HostChord, hostChordOf } from '@tagma/server/platform/contract/wire/chord';
 import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
@@ -38,14 +38,13 @@ const composed = (): readonly Action[] => {
     { ladder: LADDER, data: 'lazy' },
   );
   unmount = () => graph.unmount();
-  const app = { resolve: graph.get };
-  return graph.get(Actions).items.flatMap(({ actions }) => (typeof actions === 'function' ? actions(app) : actions));
+  return graph.get(Actions).items.flatMap(({ actions }) => (typeof actions === 'function' ? actions() : actions));
 };
 
 const parsed = (texts: readonly string[], mac: boolean): readonly HostChord[] => texts.flatMap((text) => hostChordOf(text, mac) ?? []);
 
 test("no two of Tagma's own defaults hold one chord on any host, measured against the chords that host keeps", () => {
-  const actions = composed();
+  const actions = [...composed(), ...OWNED.map((owned): Action => ({ id: owned.id, title: owned.title, keys: owned.keys, tabKeys: [] }))];
   const hosts = [
     { host: new Host('desktop', 'macos'), kept: parsed(keptChords('darwin'), true) },
     { host: new Host('desktop', 'linux'), kept: parsed(keptChords('linux'), false) },

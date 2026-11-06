@@ -13,7 +13,8 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import { notesOf } from './notes.js';
-  import { Shortcuts } from './Shortcuts.svelte.js';
+  import { Shortcuts, type Taken } from './Shortcuts.svelte.js';
+  import TakenLine from './TakenLine.svelte';
 
   let { action, capturing = false }: { action: string; capturing?: boolean } = $props();
 
@@ -33,13 +34,14 @@
   const row = $derived(shortcuts.rowOf(action));
   const first = $derived(row?.bound[0] ?? null);
   const everywhere = $derived(host.isDesktop && row !== undefined && row.keyed.place === 'window');
-  const notes = $derived(row === undefined ? [] : notesOf(row, shortcuts, keymap, host, allow));
-
   let mode = $state<'replace' | 'add' | null>(null);
-  let taken = $state<{ readonly chord: HostChord; readonly global: boolean; readonly mode: 'replace' | 'add'; readonly by: string } | null>(
-    null,
-  );
-  let kept = $state<HostChord | null>(null);
+  let taken = $state<Taken | null>(null);
+
+  function grant(chord: HostChord, global: boolean): void {
+    taken = shortcuts.ask({ action, chord, global, mode: 'grant' });
+  }
+
+  const notes = $derived(row === undefined ? [] : notesOf(row, shortcuts, keymap, host, grant, allow));
 
   $effect(() => {
     if (capturing) mode = 'replace';
@@ -51,30 +53,9 @@
     return keymap.capture((chord) => {
       mode = null;
       if (chord === null) return;
-      const global = capture === 'replace' && first?.global === true;
-      const holder = shortcuts.holder(action, chord, global);
-      kept = holder?.kind === 'shell' ? chord : null;
-      if (holder?.kind === 'shell') return;
-      if (holder === null) void shortcuts.take(action, chord, global, capture);
-      else taken = { chord, global, mode: capture, by: shortcuts.titleOf(holder.action) };
+      taken = shortcuts.ask({ action, chord, global: capture === 'replace' && first?.global === true, mode: capture });
     });
   });
-
-  function useHere(): void {
-    const move = taken;
-    taken = null;
-    if (move !== null) void shortcuts.take(action, move.chord, move.global, move.mode);
-  }
-
-  function grant(chord: HostChord, global: boolean): void {
-    const holder = global ? shortcuts.holder(action, chord, true) : null;
-    if (holder?.kind === 'shell') {
-      kept = chord;
-      return;
-    }
-    if (holder !== null) taken = { chord, global: true, mode: 'add', by: shortcuts.titleOf(holder.action) };
-    else void shortcuts.everywhere(action, chord, global);
-  }
 </script>
 
 {#if row !== undefined}
@@ -120,17 +101,7 @@
       </DropdownMenu.Root>
     </div>
     {#if taken !== null}
-      <div class="flex min-w-0 items-center gap-2 text-small text-muted-foreground" data-taken>
-        <span class="flex-1"><Kbd chord={keymap.spellChord(taken.chord)} size="sm" /> runs {taken.by}.</span>
-        <Button variant="outline" size="sm" onclick={useHere}>Use here</Button>
-        <Button variant="ghost" size="sm" onclick={() => (taken = null)}>Cancel</Button>
-      </div>
-    {/if}
-    {#if kept !== null}
-      <p class="text-small text-muted-foreground" data-kept>
-        {host.isDesktop ? 'Tagma keeps' : 'Your browser keeps'}
-        <Kbd chord={keymap.spellChord(kept)} size="sm" /> for itself; press another chord.
-      </p>
+      <TakenLine {taken} onclose={() => (taken = null)} />
     {/if}
     {#each notes as note (note.key)}
       <p class="flex min-w-0 flex-wrap items-center gap-1.5 text-small text-muted-foreground" data-note={note.kind}>

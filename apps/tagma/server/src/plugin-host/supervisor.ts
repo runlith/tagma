@@ -64,6 +64,7 @@ const STABLE_MS = 30_000;
 type Standing = {
   readonly ref: PluginRef;
   readonly revision: string;
+  readonly processRevision: string | null;
   readonly process: PluginProcess | null;
   readonly environment: LaunchEnvironment;
   readonly tools: ToolEntries;
@@ -389,6 +390,35 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
           const process = standing.process;
           return yield* moved(slot, launched(slot, { ...standing, process }));
         }
+        const tools = checkedOf(checked, TOOLS) ?? [];
+        if (
+          standing !== null &&
+          !slot.rejected &&
+          standing.environment.fingerprint === environment.fingerprint &&
+          standing.processRevision === plugin.processRevision &&
+          JSON.stringify(standing.process) === JSON.stringify(plugin.process) &&
+          JSON.stringify(standing.tools) === JSON.stringify(tools)
+        ) {
+          return yield* moved(
+            slot,
+            Effect.gen(function* () {
+              slot.title = plugin.title;
+              standing.withdraw();
+              slot.standing = null;
+              const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
+              const published = yield* Effect.result(points.publish(ref, checked, { call }));
+              if (Result.isFailure(published)) {
+                yield* FiberMap.remove(quiets, slot.id);
+                yield* closed(slot);
+                slot.state = 'failed';
+                slot.failure = published.failure.message;
+                offers.broken(slot.id, true);
+                return;
+              }
+              slot.standing = { ...standing, ref, revision: plugin.revision, withdraw: published.success };
+            }),
+          );
+        }
         yield* moved(
           slot,
           Effect.gen(function* () {
@@ -411,9 +441,10 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             const next: Standing = {
               ref,
               revision: plugin.revision,
+              processRevision: plugin.processRevision,
               process: plugin.process,
               environment,
-              tools: checkedOf(checked, TOOLS) ?? [],
+              tools,
               withdraw: published.success,
             };
             slot.standing = next;
@@ -467,8 +498,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       };
     },
     standing: (id: string): boolean => slots.get(id)?.standing != null,
-    titles: (): ReadonlyMap<string, string> =>
-      new Map([...slots.values()].flatMap((slot) => (slot.title === null ? [] : [[slot.id, slot.title] as const]))),
     hosting: (): readonly string[] => [...slots.keys()],
     hosts: (id: string): boolean => slots.has(id),
     title: (id: string): string | null => slots.get(id)?.title ?? null,
