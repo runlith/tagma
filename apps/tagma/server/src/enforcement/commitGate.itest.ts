@@ -91,6 +91,23 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
     }),
   );
 
+  it.effect('the gate judges a commit made from a private index outside the git directory', () =>
+    Effect.gen(function* () {
+      const gate = yield* commitCase;
+      const scratch = { GIT_INDEX_FILE: `${yield* gate.world.directory('private-index')}/index` };
+      const before = yield* gate.head();
+      yield* gate.ran(gate.repo, ['read-tree', 'HEAD'], scratch);
+      yield* gate.put('p.ts', FORWARD);
+      yield* gate.ran(gate.repo, ['add', 'p.ts'], scratch);
+      const check = yield* gate.world.tagma(['check', '--gate'], { cwd: gate.repo, env: { ...OPERATOR, ...scratch } });
+      expect(check.code).toBe(1);
+      const committed = yield* gate.ran(gate.repo, ['commit', '-qm', 'forward from a private index'], { ...SESSION, ...scratch });
+      expect(committed.code).not.toBe(0);
+      expect(yield* gate.head()).toBe(before);
+      yield* gate.ran(gate.repo, ['reset', '-q']);
+    }),
+  );
+
   it.effect(
     "a foreign project's live thread is judged by this checkout, its refused git commit is attributed to it, and commit_checkout refuses the same violation",
     () =>

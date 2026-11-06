@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { copyFile, readFile, rm } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { Git } from '@runlith/git/Git';
 import { Effect, Result } from 'effect';
 import { generatedAmong } from '../../platform/git/generated.js';
@@ -61,11 +61,6 @@ export const pathsOf = Effect.fn('enforcement.pathsOf')(function* (tree: Omit<Ju
   return { ...tree, paths: yield* changed(yield* Git, tree.root, tree.base, tree.built) } satisfies JudgedTree;
 });
 
-const within = (path: string, dir: string): boolean => {
-  const at = relative(dir, path);
-  return at !== '' && at !== '..' && !at.startsWith(`..${sep}`) && !isAbsolute(at);
-};
-
 export const stagedTree = Effect.fn('enforcement.stagedTree')(function* (projectId: number, root: string, index: string | undefined) {
   const git = yield* Git;
   const places = [
@@ -73,7 +68,6 @@ export const stagedTree = Effect.fn('enforcement.stagedTree')(function* (project
     root,
     'rev-parse',
     '--show-toplevel',
-    '--absolute-git-dir',
     '--git-common-dir',
     '--git-path',
     'index',
@@ -86,16 +80,9 @@ export const stagedTree = Effect.fn('enforcement.stagedTree')(function* (project
     Effect.map(runGit(git, 'staged-places', [...places, 'HEAD', '--symbolic-full-name', 'HEAD']), (out) => out.split('\n')),
     (failure) => (failure.ran ? Effect.succeed(null) : Effect.fail(failure)),
   );
-  const [top = '', dir = '', common = '', own = '', spare = '', merging = '', sha = '', ref = ''] =
+  const [top = '', common = '', own = '', spare = '', merging = '', sha = '', ref = ''] =
     born ?? (yield* runGit(git, 'staged-places', places)).split('\n');
   const named = index === undefined ? placed(root, own) : resolve(root, index);
-  if (!within(named, dir) && !within(named, resolve(root, common))) {
-    return yield* new OwnGitFailed({
-      op: 'staged-index',
-      message: `${named} is not an index of this checkout's git directory`,
-      ran: false,
-    });
-  }
   const copy = placed(root, spare);
   const head = born === null ? yield* headOf(git, top) : sha;
   const branch = born === null ? undefined : branchOf(ref);
