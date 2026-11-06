@@ -756,20 +756,22 @@ layer(fixture)("a command's deadline", (it) => {
           origin: 'default',
           executionMs: 60_000,
         });
-        expect(
-          (yield* open.hostCommands.revise(open.claim, {
-            operation: keyOf('release-foreground'),
-            execution: { installation: open.registration.installation, execution, incarnation: 0 },
-            expected: 0,
-            change: { _tag: 'Total', executionMs: 60_000 },
-            actor: 'agent-1',
-            cause: 'background handoff',
-            wait: 'background',
-          }))._tag,
-        ).toBe('Revised');
+        const handoff = {
+          operation: keyOf('release-foreground'),
+          execution: { installation: open.registration.installation, execution, incarnation: 0 },
+          expected: 0,
+          change: { _tag: 'Total', executionMs: 60_000 },
+          actor: 'agent-1',
+          cause: 'background handoff',
+          wait: 'background',
+        } as const;
+        expect((yield* open.hostCommands.revise(open.claim, handoff))._tag).toBe('Revised');
         const released = (yield* open.hostCommands.command(execution))?.deadline;
         expect(released).toMatchObject({ origin: 'default', executionMs: 60_000, revision: 1 });
         expect(released?.foregroundMs).toBeUndefined();
+        const filed = yield* open.hostCommands.revise(open.claim, handoff);
+        expect(filed).toMatchObject({ _tag: 'Revised', deadline: { origin: 'default', executionMs: 60_000, revision: 1 } });
+        expect(filed._tag === 'Revised' ? filed.deadline.foregroundMs : 'no deadline').toBeUndefined();
         yield* end(open, 'stop-foreground', execution);
       }),
     ),

@@ -1164,6 +1164,8 @@ const open = Effect.fn('ExecutionStore.open')(function* (registration: Registrat
               fingerprint: accepted.fingerprint,
               executionMs: accepted.executionMs,
               ceilingMs: accepted.ceilingMs ?? null,
+              origin: accepted.origin,
+              foregroundMs: accepted.foregroundMs ?? null,
               actor: accepted.actor,
               cause: accepted.cause,
               exceptionActor: accepted.exception?.actor ?? null,

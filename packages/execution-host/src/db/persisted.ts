@@ -39,6 +39,8 @@ export const AcceptedRevisionRequest = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   executionMs: Schema.Int.check(Schema.isGreaterThan(0)),
   ceilingMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  origin: LimitProvenance,
+  foregroundMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   actor: Schema.NonEmptyString,
   cause: Schema.NonEmptyString,
   exception: Schema.optional(Schema.Struct({ actor: Schema.NonEmptyString, cause: Schema.NonEmptyString })),

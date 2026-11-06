@@ -209,11 +209,10 @@ export const makeCallLifetimes = Effect.gen(function* () {
           if (held.revision !== expected) return { _tag: 'Stale', deadline: deadlineOf(held, now) } as const;
           const elapsedMs = held.acquiredAt === undefined ? undefined : Number((now - held.acquiredAt) / 1_000_000n);
           const ceilingMs = exception?.ceilingMs ?? held.ceilingMs;
-          const asked = revisedTotal(change, {
-            ceilingMs,
-            elapsedMs,
-            foregroundMs: request.wait === 'background' ? undefined : held.foregroundMs,
-          });
+          const released = request.wait === 'background';
+          const leftOrigin = released ? held.origin : origin;
+          const foregroundMs = released ? undefined : held.foregroundMs;
+          const asked = revisedTotal(change, { ceilingMs, elapsedMs, foregroundMs });
           if (asked._tag === 'Refused') return asked;
           const revision = held.revision + 1;
           const execution = held.execution;
@@ -227,8 +226,8 @@ export const makeCallLifetimes = Effect.gen(function* () {
                     ...standing,
                     revision,
                     ceilingMs,
-                    origin: request.wait === 'background' ? standing.origin : origin,
-                    foregroundMs: request.wait === 'background' ? undefined : standing.foregroundMs,
+                    origin: leftOrigin,
+                    foregroundMs,
                     budget: { ...standing.budget, timeoutMs: asked.executionMs },
                     armed: expiresAt !== undefined,
                     expiresAt,
@@ -262,6 +261,8 @@ export const makeCallLifetimes = Effect.gen(function* () {
                   revision,
                   executionMs: asked.executionMs,
                   ceilingMs,
+                  origin: leftOrigin,
+                  foregroundMs,
                   actor,
                   cause,
                   exception: exception === undefined ? undefined : { actor: exception.actor, cause: exception.cause },

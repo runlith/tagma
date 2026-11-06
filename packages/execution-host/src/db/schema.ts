@@ -281,6 +281,8 @@ export const commandRevision = sqliteTable(
     fingerprint: text('fingerprint').notNull(),
     executionMs: integer('execution_ms').notNull(),
     ceilingMs: integer('ceiling_ms'),
+    origin: text('origin').notNull().default('caller'),
+    foregroundMs: integer('foreground_ms'),
     actor: text('actor').notNull(),
     cause: text('cause').notNull(),
     exceptionActor: text('exception_actor'),

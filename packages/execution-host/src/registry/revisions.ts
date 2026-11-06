@@ -86,11 +86,10 @@ const reviseQueued = (
         } satisfies CommandRevisionAnswer;
       }
       const ceilingMs = request.exception?.ceilingMs ?? standing.ceilingMs;
-      const asked = revisedTotal(request.change, {
-        ceilingMs,
-        elapsedMs: undefined,
-        foregroundMs: request.wait === 'background' ? undefined : standing.foregroundMs,
-      });
+      const released = request.wait === 'background';
+      const origin = released ? standing.origin : 'caller';
+      const foregroundMs = released ? undefined : standing.foregroundMs;
+      const asked = revisedTotal(request.change, { ceilingMs, elapsedMs: undefined, foregroundMs });
       if (asked._tag === 'Refused') return refusedRevision(request, asked.reason, asked.detail);
       const revision = standing.revision + 1;
       return yield* Effect.uninterruptible(
@@ -103,6 +102,8 @@ const reviseQueued = (
               revision,
               executionMs: asked.executionMs,
               ceilingMs: ceilingMs,
+              origin,
+              foregroundMs,
               actor: request.actor,
               cause: request.cause,
               exception: request.exception === undefined ? undefined : { actor: request.exception.actor, cause: request.exception.cause },
@@ -127,14 +128,7 @@ const reviseQueued = (
             });
           }
           if (resolved.success.outcome !== 'applied') return undefined;
-          const released = request.wait === 'background';
-          const revised: Allowance = {
-            executionMs: asked.executionMs,
-            ceilingMs,
-            origin: released ? standing.origin : 'caller',
-            foregroundMs: released ? undefined : standing.foregroundMs,
-            revision,
-          };
+          const revised: Allowance = { executionMs: asked.executionMs, ceilingMs, origin, foregroundMs, revision };
           yield* Ref.set(waiting.allowance, revised);
           return {
             _tag: 'Revised',
@@ -183,7 +177,8 @@ const filedDeadline = (row: CommandRevisionRecord): CommandDeadline => ({
   revision: row.revision,
   executionMs: row.executionMs,
   ceilingMs: row.ceilingMs,
-  origin: 'caller',
+  origin: row.origin,
+  foregroundMs: row.foregroundMs,
 });
 
 const endedRevision = Effect.fnUntraced(function* (

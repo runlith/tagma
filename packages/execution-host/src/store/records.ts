@@ -199,6 +199,8 @@ export const revisionFrom = (row: typeof commandRevisionTable.$inferSelect | und
         revision: row.revision,
         executionMs: row.executionMs,
         ceilingMs: row.ceilingMs ?? undefined,
+        origin: row.origin,
+        foregroundMs: row.foregroundMs ?? undefined,
         actor: row.actor,
         cause: row.cause,
         outcome: row.outcome,
