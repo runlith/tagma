@@ -7,6 +7,7 @@ import type { Told } from '$lib/wire/told.js';
 import { Refusal, toldOf } from '$lib/wire/refusal.js';
 import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
+import { UserSettings } from '$lib/features/settings/UserSettings.svelte.js';
 
 export type SettingEntry = ServedEntry & {
   readonly rejection?: { readonly scope: string; readonly reason: string };
@@ -46,7 +47,13 @@ export type SettingsCatalogOptions = { projectId: number };
 
 export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOptions>()('SettingsCatalog') {
   static override *make(options: SettingsCatalogOptions) {
-    return new SettingsCatalog(yield* SettingsRepo, yield* SectionRegistry, yield* Scope, options);
+    const catalog = new SettingsCatalog(yield* SettingsRepo, yield* SectionRegistry, yield* Scope, options);
+    catalog.scope.defer(
+      (yield* UserSettings).moved((key) => {
+        if (catalog.served.some((entry) => entry.id === key)) void catalog.load();
+      }),
+    );
+    return catalog;
   }
 
   sections = $state<readonly SettingSection[]>([]);

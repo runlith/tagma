@@ -3,12 +3,13 @@ import type { Caller } from '../platform/contract/wire/caller.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { pairsOf, routed, routesOf } from '../platform/contract/service/routed.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { SETTINGS_OPERATIONS as OPS, type SettingWriteAnswer, type WriteScope } from './contract/wire/operations.js';
+import type { ProjectCaller } from '../projects/contract/wire/project.js';
+import type { SettableScope } from '../platform/contract/wire/setting.js';
+import { SETTINGS_OPERATIONS as OPS, type LayerWriteAnswer, type SettingWriteAnswer, type WriteScope } from './contract/wire/operations.js';
 import type { Raised } from '@runlith/agent/permissions';
 import { Settings } from './contract/service/values.js';
 import { DeclaredSettings, SettingDeclarations } from './contract/service/declarations.js';
 import { priced } from '../platform/contract/service/start.js';
-import type { StartPrice } from '../platform/contract/wire/start.js';
 
 const catalog = Effect.fn('read_settings.catalog')(function* (project: { readonly id: number; readonly name: string }, section?: string) {
   const view = yield* (yield* SettingDeclarations).read(project.id);
@@ -31,7 +32,18 @@ const catalog = Effect.fn('read_settings.catalog')(function* (project: { readonl
 
 type CatalogAnswer = Effect.Success<ReturnType<typeof catalog>>;
 
-type WrittenAnswer = CatalogAnswer & { readonly start: StartPrice | undefined };
+const layerProject = (scope: SettableScope) =>
+  Effect.flatMap(CurrentProject, (current) =>
+    scope === 'project'
+      ? Effect.map(current, (call): ProjectCaller['project'] | undefined => call.project)
+      : current.pipe(
+          Effect.map((call): ProjectCaller['project'] | undefined => call.project),
+          Effect.catchIf(
+            (refusal) => refusal.code === 'project-required',
+            () => Effect.succeed(undefined),
+          ),
+        ),
+  );
 
 const pricedWrite = Effect.fnUntraced(function* <A, E, R>(projectId: number, key: string, write: Effect.Effect<A, E, R>) {
   const moves = (yield* DeclaredSettings).keys.find((one) => one.id === key)?.shapesStart;
@@ -90,7 +102,7 @@ const SETTINGS_ROUTED = {
 
   write_setting_layer: routed(OPS.write_setting_layer, {
     prepare: Effect.fnUntraced(function* (input, caller: Caller) {
-      const call = yield* yield* CurrentProject;
+      const project = yield* layerProject(input.scope);
       const consents: readonly Raised[] =
         caller.actor.kind === 'thread'
           ? [
@@ -100,24 +112,25 @@ const SETTINGS_ROUTED = {
               },
             ]
           : [];
-      return { project: call.project.name, machine: input.scope === 'user', consents } satisfies WriteScope;
+      return { project: project?.name ?? null, machine: input.scope === 'user', consents } satisfies WriteScope;
     }),
     execute: Effect.fnUntraced(function* (input) {
-      const call = yield* yield* CurrentProject;
-      const written = yield* pricedWrite(
-        call.project.id,
-        input.key,
-        (yield* Settings).write({
-          scope: input.scope,
-          projectId: call.project.id,
-          key: input.key,
-          value: input.value,
-          declined: input.declined,
-        }),
-      );
-      return { ...(yield* catalog(call.project)), start: written.start };
+      const project = yield* layerProject(input.scope);
+      const write = (yield* Settings).write({
+        scope: input.scope,
+        projectId: project?.id,
+        key: input.key,
+        value: input.value,
+        declined: input.declined,
+      });
+      if (project === undefined) {
+        yield* write;
+        return { status: 'written' as const };
+      }
+      const written = yield* pricedWrite(project.id, input.key, write);
+      return { ...(yield* catalog(project)), start: written.start };
     }),
-    answer: (raw: WrittenAnswer) => raw,
+    answer: (raw: LayerWriteAnswer) => raw,
   }),
 };
 

@@ -250,7 +250,7 @@ async function keyboard() {
         write: { data: undefined },
       } as never,
       { contextProject: { id: 1 } } as never,
-      { mode: 'dark', look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal } },
+      { look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal } },
     );
     const graph = new Graph(
       Layer.mergeAll(

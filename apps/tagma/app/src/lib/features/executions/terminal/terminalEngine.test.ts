@@ -97,11 +97,12 @@ test('the chosen family stands in front of the fallback chain, and the chain is 
   expect(terminalFontFamily(undefined).startsWith('"SF Mono"')).toBe(true);
 });
 
-test('the contrast floor follows the background luminance, not the app mode', () => {
-  expect(terminalMinimumContrastRatio('#ffffff', 'dark')).toBe(4.5);
-  expect(terminalMinimumContrastRatio('#000000', 'light')).toBe(3);
-  expect(terminalMinimumContrastRatio('rgba(0, 0, 0, 0.05)', 'light')).toBe(4.5);
-  expect(terminalMinimumContrastRatio('rgb(24 24 27 / 90%)', 'light')).toBe(3);
+test('the contrast floor follows the background as it stands over the theme’s ground, not the app mode', () => {
+  expect(terminalMinimumContrastRatio('#ffffff', '#0a0a0a')).toBe(4.5);
+  expect(terminalMinimumContrastRatio('#000000', '#ffffff')).toBe(3);
+  expect(terminalMinimumContrastRatio('rgba(0, 0, 0, 0.05)', '#ffffff')).toBe(4.5);
+  expect(terminalMinimumContrastRatio('rgba(0, 0, 0, 0.05)', '#2e3440')).toBe(3);
+  expect(terminalMinimumContrastRatio('rgb(24 24 27 / 90%)', '#ffffff')).toBe(3);
 });
 
 test('a family that ships ligatures gets them without a setting, and an explicit setting wins', () => {

@@ -18,11 +18,13 @@ const WRITTEN = arms({
     start: Schema.optional(startPriceSchema),
   },
 });
-const LAYER_WRITTEN = arms({ ok: { ...CATALOG_FIELDS, start: Schema.optional(startPriceSchema) } });
+const LAYER_WRITTEN = arms({ ok: { ...CATALOG_FIELDS, start: Schema.optional(startPriceSchema) }, written: {} });
 
 export type SettingWriteAnswer = DeclaredAnswer<typeof WRITTEN>;
 
-export type WriteScope = { readonly project: string; readonly machine: boolean; readonly consents: readonly Raised[] };
+export type LayerWriteAnswer = DeclaredAnswer<typeof LAYER_WRITTEN>;
+
+export type WriteScope = { readonly project: string | null; readonly machine: boolean; readonly consents: readonly Raised[] };
 
 export const OPERATOR_CHOICE: Condition = { id: 'operator-choice', label: "The operator's choice", asksFrom: 'review', timeout: 'none' };
 
@@ -132,7 +134,7 @@ export const SETTINGS_OPERATIONS = {
     answer: LAYER_WRITTEN,
     meaning: 'Set, clear or decline one setting at an explicit operator configuration layer.',
     grammar:
-      'This is the operator-layer act used by the settings surface. `user` applies across projects; `project` writes this project’s layer. `declined` records that a project refuses a weaker list value.',
+      'This is the operator-layer act used by the settings surface. `user` applies across projects and needs no project: a call naming none answers `written` without a catalog. `project` writes this project’s layer. `declined` records that a project refuses a weaker list value.',
     input: Schema.Struct({
       scope: Schema.Literals(SETTABLE_SCOPES),
       key: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -155,6 +157,7 @@ export const SETTINGS_OPERATIONS = {
       'unknown-catalog',
       'field-invalid',
       'unknown-project',
+      'project-required',
       'git-refused',
       'git-unreadable',
       'git-incomplete',

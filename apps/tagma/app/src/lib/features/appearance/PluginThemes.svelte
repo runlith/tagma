@@ -17,7 +17,7 @@
   const themes = $derived(
     (components.find((component) => component.kind === 'contribution' && component.name === THEMES_POINT)?.entries ?? []).map((entry) => {
       const id = themeIdOf(plugin, entry.name);
-      return { id, title: entry.title, offered: appearance.offered.find((offered) => offered.id === id) };
+      return { id, title: entry.title, offered: appearance.themes.find((one) => one.id === id) };
     }),
   );
 

@@ -30,7 +30,7 @@ export const TerminalsLayer = Layer.mergeAll(
   ExecutionsRepo,
   SettingsRepo,
   TerminalAppearance,
-  ChoiceSets.contribute('executions', { of: 'terminal-theme', source: TerminalAppearance }),
+  ChoiceSets.contribute('executions', { of: 'terminal-theme', entries: (app) => app.resolve(TerminalAppearance).entries }),
   TerminalKeymap,
   TerminalOutput,
   TerminalRenderPolicy,

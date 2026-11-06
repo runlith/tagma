@@ -7,8 +7,10 @@ import { SectionContributions, SettingSections } from './section.js';
 import { SectionRegistry } from './SectionRegistry.js';
 import { SettingsColumn } from './SettingsColumn.svelte.js';
 import { SettingsRepo } from './SettingsRepo.js';
+import { UserSettings } from './UserSettings.svelte.js';
 
 export const SettingsLayer = Layer.mergeAll(
+  UserSettings,
   SettingSections,
   SectionContributions,
   SectionRegistry,

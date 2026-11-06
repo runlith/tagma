@@ -8,8 +8,7 @@
   import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
   import { backgroundShare, percent, totalMemory, totalShare } from '$lib/features/executions/load/rows.js';
   import { View } from '$lib/features/executions/load/View.svelte.js';
-  import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
-  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import { UserSettings } from '$lib/features/settings/UserSettings.svelte.js';
   import LoadGlance from './LoadGlance.svelte';
   import LoadPanel from './LoadPanel.svelte';
   import LoadPlot from './LoadPlot.svelte';
@@ -19,17 +18,11 @@
 
   const readings = Readings.use();
   const view = View.use();
-  const workspace = Workspace.use();
-  const settings = SettingsRepo.use();
+  const wanted = UserSettings.use().of(loadInStatusBar);
 
   $effect(() => readings.hold());
 
-  const shown = $derived.by(() => {
-    const projectId = workspace.contextProject?.id;
-    if (projectId === undefined) return true;
-    const catalog = writtenCatalog(settings, projectId) ?? settings.catalog.key(projectId).data;
-    return catalog?.entries.find((entry) => entry.id === loadInStatusBar.id)?.value !== false;
-  });
+  const shown = $derived(wanted.value);
 
   let glancing = $state(false);
   let mode = $state<'glance' | 'panel'>('glance');

@@ -39,8 +39,10 @@ export const SettingsRepo = Repo.define(
         door,
       ) => {
         const { projectId, ...payload } = input;
-        const { settings } = await door.perform('write_setting_layer', payload, { project: String(projectId) }, { signal });
-        return { projectId, settings };
+        const answer = await door.perform('write_setting_layer', payload, { project: String(projectId) }, { signal });
+        if (answer.status !== 'ok')
+          throw new Error(`write_setting_layer answered ${answer.status} for project ${projectId}, not its catalog`);
+        return { projectId, settings: answer.settings };
       },
     }),
 

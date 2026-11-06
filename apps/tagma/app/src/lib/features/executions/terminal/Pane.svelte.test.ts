@@ -372,11 +372,9 @@ async function paneOver(
   let appearance!: TerminalAppearance;
   const settingsStub = opts.settings ?? settings;
   stop = $effect.root(() => {
-    appearance = new TerminalAppearance(
-      settingsStub as never,
-      { contextProject: { id: ground.projectId } } as never,
-      { mode: 'dark', look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal } },
-    );
+    appearance = new TerminalAppearance(settingsStub as never, { contextProject: { id: ground.projectId } } as never, {
+      look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal },
+    });
     policy = new TerminalRenderPolicy(
       platform,
       () => ({ webgl2: false, renderer: null, vendor: null, displayServer: null }),

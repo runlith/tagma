@@ -15,7 +15,7 @@ export interface EngineOptions {
   readonly macOptionIsMeta?: boolean;
   readonly wordSeparator?: string;
   readonly theme?: ITheme;
-  readonly surface?: 'dark' | 'light';
+  readonly ground?: string;
   readonly ligatures?: 'auto' | 'on' | 'off';
   readonly kittyKeyboard?: boolean;
   readonly onLinkClick?: (event: MouseEvent, uri: string) => void;
@@ -63,8 +63,8 @@ export function terminalFontFamily(fontFamily: string | undefined): string {
 const LIGHT_BACKGROUND_CONTRAST = 4.5;
 const DARK_BACKGROUND_CONTRAST = 3;
 
-export function terminalMinimumContrastRatio(background: string | undefined, surface: 'dark' | 'light'): number {
-  return readsLight(background, surface) ? LIGHT_BACKGROUND_CONTRAST : DARK_BACKGROUND_CONTRAST;
+export function terminalMinimumContrastRatio(background: string | undefined, ground: string | undefined): number {
+  return readsLight(background, ground) ? LIGHT_BACKGROUND_CONTRAST : DARK_BACKGROUND_CONTRAST;
 }
 
 const LIGATURE_FONTS = [

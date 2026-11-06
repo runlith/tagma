@@ -3,7 +3,6 @@ import { Schema } from 'effect';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import {
   SETTABLE_SCOPES,
-  SETTING_CHOICE_SETS,
   SETTING_MERGES,
   SETTING_SCOPES,
   SETTING_UNITS,
@@ -110,7 +109,7 @@ const controlSchema = Schema.Union([
     step: Schema.Number,
     unit: Schema.Literals(SETTING_UNITS),
   }),
-  Schema.Struct({ kind: Schema.Literal('catalog'), of: Schema.Literals(SETTING_CHOICE_SETS) }),
+  Schema.Struct({ kind: Schema.Literal('catalog'), of: Schema.String.check(Schema.isMinLength(1)) }),
   Schema.Struct({ kind: Schema.Literal('ask'), of: Schema.Literals(ASK_KINDS) }),
   Schema.Struct({ kind: Schema.Literal('colors'), groups: Schema.Array(colorGroupSchema) }),
   Schema.Struct({

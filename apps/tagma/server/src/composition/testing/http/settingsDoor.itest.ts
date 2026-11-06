@@ -56,4 +56,20 @@ layer(doorFixture(), { excludeTestServices: true })('settings door', (it) => {
       expect(entry(reopened.body, layoutKey)).toMatchObject({ value: terminal, from: 'project' });
     }),
   );
+
+  it.effect('the user layer is written with no project named, and a project layer still needs one', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const written = yield* world.op('write_setting_layer', { scope: 'user', key: 'appearance.mode', value: 'light' });
+      expect(written).toMatchObject({ status: 200, body: { status: 'written' } });
+      const refused = yield* world.op('write_setting_layer', { scope: 'project', key: 'agent.contextFiles.names', value: ['AGENTS.md'] });
+      expect(refused.body).toMatchObject({ code: 'project-required' });
+
+      const root = yield* world.directory('user-layer');
+      const project = yield* world.stealthProject(root);
+      yield* projectLeaving(world, project);
+      const read = yield* world.op('read_settings', {}, `cwd=${encodeURIComponent(root)}`);
+      expect(entry(read.body, 'appearance.mode')).toMatchObject({ value: 'light', from: 'user' });
+    }),
+  );
 });

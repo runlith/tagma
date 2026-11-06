@@ -1,15 +1,14 @@
+import type { ThemeMode } from '@tagma/server/appearance/contract/wire/format';
+import type { TerminalPalette } from '@tagma/server/appearance/contract/wire/resolve';
 import { Service } from '@runlith/layer/key';
-
-type ThemeMode = 'light' | 'dark';
 
 export type Look = {
   readonly id: string;
   readonly mode: ThemeMode;
-  readonly terminal: Readonly<Record<string, string>>;
+  readonly terminal: TerminalPalette;
 };
 
 export interface ThemePort {
-  readonly mode: ThemeMode;
   readonly look: Look;
 }
 

@@ -11,8 +11,16 @@ export const APPEARANCE_SETTING_SECTIONS = [
   },
 ] as const;
 
-const APPEARANCE_MODES = ['system', 'light', 'dark'] as const;
+export const APPEARANCE_MODES = ['system', 'light', 'dark'] as const;
 export type AppearanceMode = (typeof APPEARANCE_MODES)[number];
+
+export const MODE_LABELS: { readonly [M in AppearanceMode]: string } = { system: 'Same as the system', light: 'Light', dark: 'Dark' };
+
+const MODE_HINTS: { readonly [M in AppearanceMode]: string } = {
+  system: 'Each device follows its own light or dark setting.',
+  light: 'Light on every device.',
+  dark: 'Dark on every device.',
+};
 
 export const appearanceTheme = settingKey({
   id: 'appearance.theme',
@@ -35,11 +43,7 @@ export const appearanceMode = settingKey<AppearanceMode, 'appearance.mode'>({
   schema: Schema.Literals(APPEARANCE_MODES),
   control: {
     kind: 'choice',
-    choices: [
-      { value: 'system', label: 'Same as the system', hint: 'Each device follows its own light or dark setting.' },
-      { value: 'light', label: 'Light', hint: 'Light on every device.' },
-      { value: 'dark', label: 'Dark', hint: 'Dark on every device.' },
-    ],
+    choices: APPEARANCE_MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode], hint: MODE_HINTS[mode] })),
   },
   fallback: 'system',
   scopes: ['user'],

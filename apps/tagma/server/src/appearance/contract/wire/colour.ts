@@ -50,21 +50,19 @@ export const hexOf = (value: string, alpha?: number): string => {
 export const contrastOf = (one: string, other: string): number =>
   wcagContrast(toRgb(intoSrgb(parsed(one))), toRgb(intoSrgb(parsed(other))));
 
-const opaqueOver = (colour: string | undefined, ground: string): string | null => {
+const opaqueOver = (colour: string | undefined, ground: string | undefined): string | null => {
   const read = colour === undefined ? undefined : parse(colour.trim());
   if (read === undefined) return null;
   const top = toRgb(read);
-  const under = toRgb(parsed(ground));
+  const under = ground === undefined ? top : toRgb(parsed(ground));
   const alpha = Math.min(1, Math.max(0, top.alpha ?? 1));
   const blend = (above: number, below: number): number => above * alpha + below * (1 - alpha);
   return formatHex(intoSrgb({ mode: 'rgb', r: blend(top.r, under.r), g: blend(top.g, under.g), b: blend(top.b, under.b) }));
 };
 
-const PLAIN_GROUND = { dark: '#0a0a0a', light: '#ffffff' } as const;
-
-export const readsLight = (colour: string | undefined, over: keyof typeof PLAIN_GROUND): boolean => {
-  const ground = opaqueOver(colour, PLAIN_GROUND[over]);
-  return ground !== null && contrastOf('#000000', ground) >= contrastOf('#ffffff', ground);
+export const readsLight = (colour: string | undefined, ground: string | undefined): boolean => {
+  const seen = opaqueOver(colour, ground);
+  return seen !== null && contrastOf('#000000', seen) >= contrastOf('#ffffff', seen);
 };
 
 const rounded = (value: number): string => String(Math.round(value * 10_000) / 10_000);

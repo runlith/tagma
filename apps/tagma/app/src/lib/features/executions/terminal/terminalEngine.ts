@@ -118,7 +118,7 @@ function engineOptions(options: EngineOptions, platform: Host): ITerminalOptions
     fontWeight: options.fontWeight ?? 500,
     fontWeightBold: options.fontWeightBold ?? 700,
     lineHeight: options.lineHeight ?? 1,
-    minimumContrastRatio: terminalMinimumContrastRatio(options.theme?.background, options.surface ?? 'dark'),
+    minimumContrastRatio: terminalMinimumContrastRatio(options.theme?.background, options.ground),
     scrollback: options.scrollback ?? 5000,
     scrollSensitivity: options.scrollSensitivity ?? 1.15,
     scrollbar: { width: 7 },

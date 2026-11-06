@@ -1,21 +1,27 @@
 import type { OfferedTheme } from '@tagma/server/appearance/contract/wire/feeds';
-import { modeOf, TAGMA_THEME, THEME_MODES, type Theme as ThemeData, type ThemeMode } from '@tagma/server/appearance/contract/wire/format';
-import { declarationsOf, resolve } from '@tagma/server/appearance/contract/wire/resolve';
+import {
+  modeOf,
+  TAGMA_THEME,
+  TAGMA_TITLE,
+  THEME_MODES,
+  type Theme as ThemeData,
+  type ThemeMode,
+} from '@tagma/server/appearance/contract/wire/format';
+import { declarationsOf, paletteOf, resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import { type AppearanceMode, appearanceMode, appearanceTheme } from '@tagma/server/appearance/contract/wire/settings';
-import type { WatchedSettings } from '@tagma/server/settings/contract/wire/feeds';
 import type { DesktopAppearance as Bridge } from '@tagma/desktop/bridge';
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { Result, Schema } from 'effect';
 import { MediaQuery } from 'svelte/reactivity';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
-import { DesktopAppearance } from '$lib/shared/desktop/DesktopAppearance.js';
 import type { CatalogEntry } from '$lib/features/settings/controls/catalogs.js';
-import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { type UserSetting, UserSettings } from '$lib/features/settings/UserSettings.svelte.js';
+import { Actions } from '$lib/features/workspace/action.js';
+import { DesktopAppearance } from '$lib/shared/desktop/DesktopAppearance.js';
 import type { Look, ThemePort } from '$lib/shared/Theme.js';
-import { Door } from '$lib/wire/Door.js';
-import { Live } from '$lib/wire/Live.js';
+import { Live, type LiveFailure } from '$lib/wire/Live.js';
+import { actionsOf } from './actions.js';
 import { type Painting, paintWith, sheetOf } from './paint.js';
 
 const PAINT_KEY = 'appearance.paint';
@@ -25,62 +31,74 @@ type BootPaint = {
   readonly variants: { readonly [M in ThemeMode]?: { readonly declarations: string; readonly chrome: string } };
 };
 
-const decodeTheme = Schema.decodeUnknownResult(appearanceTheme.schema);
-const decodeMode = Schema.decodeUnknownResult(appearanceMode.schema);
+export type ThemeEntry = { readonly id: string; readonly title: string; readonly group: string; readonly theme: ThemeData | undefined };
 
-const TAGMA_TITLE = 'Tagma';
-
-export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app' }) implements ThemePort {
+export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app', eager: true }) implements ThemePort {
   static *make() {
     const appearance = new Appearance(
-      yield* Door,
-      yield* Workspace,
+      yield* UserSettings,
       yield* Notices,
       (yield* Platform).storage.local,
       yield* DesktopAppearance.optional(),
     );
-    const live = yield* Live;
-    const settings = live.hold(
-      (client) => client['settings.watch']({ keys: [appearanceTheme.id, appearanceMode.id] }),
-      (event) => appearance.heardSettings(event),
-      () => undefined,
-    );
-    const themes = live.hold(
+    const scope = yield* Scope;
+    const themes = (yield* Live).hold(
       (client) => client['appearance.subscribe']({}),
       (event) => appearance.heardThemes(event.themes),
-      () => undefined,
+      (failure) => appearance.failedThemes(failure),
     );
-    (yield* Scope).defer(() => {
-      settings.unsubscribe();
-      themes.unsubscribe();
-    });
+    scope.defer(() => themes.unsubscribe());
+    scope.defer((yield* Actions).register('appearance', { id: 'appearance', area: 'Window', actions: () => actionsOf(appearance) }));
     return appearance;
   }
 
-  chosen = $state<string>(TAGMA_THEME);
-  choice = $state<AppearanceMode>('system');
   offered = $state<readonly OfferedTheme[]>([]);
   look = $state<Look>({ id: TAGMA_THEME, mode: 'dark', terminal: resolve(undefined, 'dark').terminal });
-  private settingsKnown = $state(false);
+  private themesProblem = $state<string | null>(null);
   private themesKnown = $state(false);
+  private readonly themeChoice: UserSetting<string>;
+  private readonly modeChoice: UserSetting<AppearanceMode>;
   private readonly light = new MediaQuery('prefers-color-scheme: light');
   private painted: string | null = null;
   private sheet: CSSStyleSheet | null = null;
 
+  readonly themes = $derived.by((): readonly ThemeEntry[] => [
+    { id: TAGMA_THEME, title: TAGMA_TITLE, group: 'Themes', theme: undefined },
+    ...this.offered.map((offered) => ({ id: offered.id, title: offered.theme.title, group: offered.pluginTitle, theme: offered.theme })),
+  ]);
+
+  readonly entries = $derived.by((): readonly CatalogEntry[] =>
+    this.themes.map((entry) => ({ value: entry.id, label: entry.title, group: entry.group, swatches: this.coloursOf(entry.theme) })),
+  );
+
   constructor(
-    private readonly door: Door,
-    private readonly workspace: Workspace,
+    settings: UserSettings,
     private readonly notices: Notices,
     private readonly storage: PlatformStorage,
     private readonly desktop: Bridge | undefined,
   ) {
     super();
+    this.themeChoice = settings.of(appearanceTheme);
+    this.modeChoice = settings.of(appearanceMode);
     this.look = { ...this.look, mode: this.mode };
+    $effect(() => this.follow());
     $effect(() => this.paint());
   }
 
+  get chosen(): string {
+    return this.themeChoice.value;
+  }
+
+  get choice(): AppearanceMode {
+    return this.modeChoice.value;
+  }
+
+  get problem(): string | null {
+    return this.themesProblem ?? this.themeChoice.problem ?? this.modeChoice.problem;
+  }
+
   get theme(): ThemeData | undefined {
-    return this.chosen === TAGMA_THEME ? undefined : this.offered.find((offered) => offered.id === this.chosen)?.theme;
+    return this.themes.find((entry) => entry.id === this.chosen)?.theme;
   }
 
   get missing(): boolean {
@@ -89,11 +107,6 @@ export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app
 
   get shown(): string {
     return this.theme === undefined ? TAGMA_THEME : this.chosen;
-  }
-
-  get wanted(): ThemeMode {
-    if (this.choice !== 'system') return this.choice;
-    return this.light.current ? 'light' : 'dark';
   }
 
   get mode(): ThemeMode {
@@ -108,43 +121,41 @@ export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app
   }
 
   get title(): string {
-    return (
-      this.offered.find((offered) => offered.id === this.chosen)?.theme.title ?? (this.chosen === TAGMA_THEME ? TAGMA_TITLE : this.chosen)
-    );
-  }
-
-  get entries(): readonly CatalogEntry[] {
-    return [
-      { value: TAGMA_THEME, label: TAGMA_TITLE, group: 'Themes', swatches: this.coloursOf(undefined) },
-      ...this.offered.map((offered) => ({
-        value: offered.id,
-        label: offered.theme.title,
-        group: offered.pluginTitle,
-        swatches: this.coloursOf(offered.theme),
-      })),
-    ];
+    return this.themes.find((entry) => entry.id === this.chosen)?.title ?? this.chosen;
   }
 
   coloursOf(theme: ThemeData | undefined): readonly string[] {
     const mode = modeOf(theme, this.wanted);
-    const { surfaces, text, signals } = resolve(theme?.[mode], mode).palette;
+    const { surfaces, text, signals } = paletteOf(theme?.[mode], mode);
     return [surfaces.background, text.foreground, signals.here, signals.failure, signals.work, signals.done, signals.waiting];
   }
 
   chooseTheme(id: string): void {
-    const before = this.chosen;
-    this.chosen = id;
-    void this.write(appearanceTheme.id, id, () => (this.chosen = before));
+    void this.themeChoice.write(id);
   }
 
   chooseMode(mode: AppearanceMode): void {
-    const before = this.choice;
-    this.choice = mode;
-    void this.write(appearanceMode.id, mode, () => (this.choice = before));
+    void this.modeChoice.write(mode);
   }
 
-  paint(): void {
-    if (!this.settingsKnown || !this.themesKnown) return;
+  private get wanted(): ThemeMode {
+    if (this.choice !== 'system') return this.choice;
+    return this.light.current ? 'light' : 'dark';
+  }
+
+  private get known(): boolean {
+    return this.themeChoice.known && this.modeChoice.known && this.themesKnown;
+  }
+
+  private follow(): void {
+    if (!this.known) return;
+    const theme = this.theme;
+    const choice = this.choice;
+    this.desktop?.follow(choice === 'system' ? (this.onlyLook ?? 'system') : modeOf(theme, choice));
+  }
+
+  private paint(): void {
+    if (!this.known) return;
     const theme = this.theme;
     const mode = this.mode;
     const id = this.shown;
@@ -157,48 +168,31 @@ export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app
     const painting: Painting = { mode, css: theme === undefined ? '' : `:root{${declarationsOf(shown.tokens)}}`, chrome: shown.chrome };
     this.sheet ??= sheetOf(document);
     paintWith(document, this.sheet, painting, still);
-    this.desktop?.follow(choice === 'system' && this.onlyLook === null ? 'system' : mode);
-    this.storage.setItem(PAINT_KEY, JSON.stringify(this.bootOf(theme, choice)));
+    this.storage.setItem(PAINT_KEY, JSON.stringify(this.bootOf(theme, choice, shown)));
     this.look = { id, mode, terminal: shown.terminal };
   }
 
-  private bootOf(theme: ThemeData | undefined, choice: AppearanceMode): BootPaint {
+  private bootOf(theme: ThemeData | undefined, choice: AppearanceMode, shown: ReturnType<typeof resolve>): BootPaint {
     const variants = Object.fromEntries(
       THEME_MODES.filter((mode) => theme === undefined || theme[mode] !== undefined).map((mode) => {
-        const resolved = resolve(theme?.[mode], mode);
+        const resolved = mode === shown.mode ? shown : resolve(theme?.[mode], mode);
         return [mode, { declarations: theme === undefined ? '' : declarationsOf(resolved.tokens), chrome: resolved.chrome }];
       }),
     );
     return { choice, variants };
   }
 
-  private heardSettings(event: WatchedSettings): void {
-    const theme = event.values[appearanceTheme.id];
-    const mode = event.values[appearanceMode.id];
-    if (theme !== undefined) {
-      const decoded = decodeTheme(theme);
-      if (Result.isSuccess(decoded)) this.chosen = decoded.success;
-    }
-    if (mode !== undefined) {
-      const decoded = decodeMode(mode);
-      if (Result.isSuccess(decoded)) this.choice = decoded.success;
-    }
-    this.settingsKnown = true;
-  }
-
   private heardThemes(themes: readonly OfferedTheme[]): void {
     this.offered = themes;
     this.themesKnown = true;
+    this.themesProblem = null;
   }
 
-  private async write(key: string, value: string, undo: () => void): Promise<void> {
-    const project = this.workspace.contextProject ?? this.workspace.projects[0];
-    if (project === undefined) return;
-    try {
-      await this.door.perform('write_setting_layer', { scope: 'user', key, value }, { project: String(project.id) });
-    } catch (error) {
-      undo();
-      this.notices.refusal(error);
-    }
+  private failedThemes(failure: LiveFailure): void {
+    this.themesProblem = failure.message;
+    this.notices.fault(
+      failure.kind === 'subscription' && failure.code !== undefined ? failure.code : 'appearance.subscribe',
+      failure.message,
+    );
   }
 }

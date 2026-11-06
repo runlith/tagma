@@ -3,7 +3,8 @@ import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
-import { type Look, Theme, type ThemePort } from '$lib/shared/Theme.js';
+import { resolve } from '@tagma/server/appearance/contract/wire/resolve';
+import { type Look, Theme } from '$lib/shared/Theme.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import ViewFrame from './ViewFrame.svelte';
 
@@ -19,7 +20,8 @@ afterEach(async () => {
 });
 
 test('a framed view hears the new theme colours when the theme changes in the same mode', async () => {
-  const theme = $state<{ mode: ThemePort['mode']; look: Look }>({ mode: 'dark', look: { id: 'tagma', mode: 'dark', terminal: {} } });
+  const terminal = resolve(undefined, 'dark').terminal;
+  const theme = $state<{ look: Look }>({ look: { id: 'tagma', mode: 'dark', terminal } });
   const shell = mountShell(Layer.mergeAll(), Layer.of(Theme, theme));
   apps.push(shell);
   shell.get(ServerOrigin).sandbox = SANDBOX;
@@ -46,7 +48,7 @@ test('a framed view hears the new theme colours when the theme changes in the sa
   expect(changes()).toHaveLength(1);
 
   document.documentElement.style.setProperty('--background', '#15171c');
-  theme.look = { id: 'nord.nord', mode: 'dark', terminal: {} };
+  theme.look = { id: 'nord.nord', mode: 'dark', terminal };
   flushSync();
   await frame();
 

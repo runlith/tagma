@@ -48,7 +48,7 @@ import {
   terminalWordSeparator,
 } from '@tagma/server/executions/contract/wire/terminalBehavior';
 import type { SettingEntry as ServedEntry } from '@tagma/server/settings/contract/wire/catalog';
-import type { CatalogEntry, ChoiceSource } from '$lib/features/settings/controls/catalogs.js';
+import type { CatalogEntry } from '$lib/features/settings/controls/catalogs.js';
 import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { catalogTheme, TERMINAL_THEME_CATALOG } from '$lib/shared/terminalThemes.js';
@@ -96,7 +96,7 @@ const HEX_COLOR = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const SWATCH_SLOTS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'] as const;
 const GROUND_FILL = 'var(--color-background)';
 
-export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalAppearance', { tier: 'app' }) implements ChoiceSource {
+export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalAppearance', { tier: 'app' }) {
   static *make() {
     return new TerminalAppearance(yield* SettingsRepo, yield* Workspace, yield* Theme);
   }
@@ -184,7 +184,7 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
       fastScrollSensitivity: this.read(terminalFastScrollSensitivity.id, terminalFastScrollSensitivity.fallback),
       macOptionIsMeta: this.read(terminalMacOptionAsAlt.id, terminalMacOptionAsAlt.fallback) === 'true',
       theme: this.theme(),
-      surface: this.surface,
+      ground: this.look.terminal.background,
       ligatures: this.read(terminalLigatures.id, terminalLigatures.fallback),
       wordSeparator,
     };
@@ -192,7 +192,7 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
 
   get entries(): readonly CatalogEntry[] {
     return [
-      { value: SAME_AS_THEME, label: 'Same as the theme', group: 'Theme', swatches: SWATCH_SLOTS.map((slot) => this.look.terminal[slot] ?? '') },
+      { value: SAME_AS_THEME, label: 'Same as the theme', group: 'Theme', swatches: SWATCH_SLOTS.map((slot) => this.look.terminal[slot]) },
       ...TERMINAL_THEME_CATALOG.map((entry) => ({
         value: entry.name,
         label: entry.name,
@@ -269,7 +269,7 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
       fontWeightBold: clampWeight(options.fontWeightBold),
       lineHeight: clampLineHeight(options.lineHeight),
     };
-    const minimumContrastRatio = terminalMinimumContrastRatio(theme.background, this.surface);
+    const minimumContrastRatio = terminalMinimumContrastRatio(theme.background, this.look.terminal.background);
     const next: ITerminalOptions = {
       scrollback: this.read(terminalScrollbackRows.id, terminalScrollbackRows.fallback),
       scrollSensitivity: options.scrollSensitivity,
@@ -350,7 +350,7 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
       this.slot() === 'light'
         ? String(this.read(terminalDividerColorLight.id, terminalDividerColorLight.fallback) || DEFAULT_DIVIDER_LIGHT)
         : String(this.read(terminalDividerColorDark.id, terminalDividerColorDark.fallback) || DEFAULT_DIVIDER_DARK);
-    this.titleTone = terminalMinimumContrastRatio(theme.background, this.surface) === 4.5 ? 'light' : 'dark';
+    this.titleTone = terminalMinimumContrastRatio(theme.background, this.look.terminal.background) === 4.5 ? 'light' : 'dark';
   }
 
   private applyAll(): void {

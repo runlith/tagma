@@ -1,5 +1,4 @@
-import type { SettingChoiceSet } from '@tagma/server/platform/contract/wire/setting';
-import type { KeyClass } from '@runlith/layer/key';
+import type { Resolver } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
 
 export type CatalogEntry = {
@@ -9,11 +8,7 @@ export type CatalogEntry = {
   readonly swatches: readonly string[];
 };
 
-export interface ChoiceSource {
-  readonly entries: readonly CatalogEntry[];
-}
-
-type ChoiceSet = { readonly of: SettingChoiceSet; readonly source: KeyClass<string, ChoiceSource> };
+type ChoiceSet = { readonly of: string; readonly entries: (app: Resolver) => readonly CatalogEntry[] };
 
 export const ChoiceSets = Point.define<ChoiceSet>()('ChoiceSets', { tier: 'app', key: (set) => set.of });
 

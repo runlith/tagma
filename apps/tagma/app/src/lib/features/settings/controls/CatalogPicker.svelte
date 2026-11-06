@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { SettingChoiceSet } from '@tagma/server/platform/contract/wire/setting';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import { catalogGroups, ChoiceSets } from '$lib/features/settings/controls/catalogs.js';
   import { App } from '@runlith/layer/svelte/App.svelte';
@@ -22,7 +21,7 @@
     onwrite,
   }: {
     label: string;
-    of: SettingChoiceSet;
+    of: string;
     value: unknown;
     fallback?: unknown;
     disabled?: boolean;
@@ -33,8 +32,8 @@
   let query = $state('');
 
   const set = ChoiceSets.use().find(untrack(() => of));
-  const source = set === undefined ? undefined : App.current().resolve(set.source);
-  const entries = $derived(source?.entries ?? []);
+  const app = App.current();
+  const entries = $derived(set === undefined ? [] : set.entries(app));
   const ranked = $derived(rank(entries, query, (entry) => ({ name: entry.label, names: [entry.value] })));
   const groups = $derived(catalogGroups(ranked.map(({ item }) => item)));
   const marked = $derived(new Map(ranked.map(({ item, hit }) => [item.value, hit.positions])));

@@ -198,7 +198,7 @@ test('options() answers the engine input for the pane', async () => {
   close.push(stop);
   const input = owner.options('pane-1');
   expect(input.fontSize).toBe(16);
-  expect(input.surface).toBe('dark');
+  expect(input.ground).toBe(lookOf('dark').terminal.background);
   expect(input.theme?.background).toBe(owner.theme().background);
 });
 

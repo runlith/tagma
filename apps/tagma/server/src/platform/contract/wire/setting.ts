@@ -40,9 +40,6 @@ export type SettingColorSlot = { readonly key: string; readonly label: string; r
 
 export type SettingColorGroup = { readonly label: string; readonly slots: readonly SettingColorSlot[] };
 
-export const SETTING_CHOICE_SETS = ['theme', 'terminal-theme', 'image-model'] as const;
-export type SettingChoiceSet = (typeof SETTING_CHOICE_SETS)[number];
-
 export const AskChoice = Schema.Struct({
   provider: Schema.String.check(Schema.isMinLength(1)),
   model: Schema.String.check(Schema.isMinLength(1)),
@@ -90,7 +87,7 @@ export type SettingControl =
       readonly step: number;
       readonly unit: SettingUnit;
     }
-  | { readonly kind: 'catalog'; readonly of: SettingChoiceSet }
+  | { readonly kind: 'catalog'; readonly of: string }
   | AskControl
   | { readonly kind: 'colors'; readonly groups: readonly SettingColorGroup[] }
   | { readonly kind: 'machine' }

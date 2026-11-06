@@ -151,6 +151,8 @@ export type Palette = {
 
 export const TAGMA_THEME = 'tagma';
 
+export const TAGMA_TITLE = 'Tagma';
+
 export const themeIdOf = (plugin: string, theme: string): string => `${plugin}.${theme}`;
 
 export const modeOf = (theme: Theme | undefined, wanted: ThemeMode): ThemeMode =>

@@ -53,7 +53,7 @@
 
   const contextOf = (target: HTMLIFrameElement) => () => ({
     ...host.context(),
-    theme: theme.mode,
+    theme: theme.look.mode,
     styles: hostStyles(),
     displayMode: 'inline',
     availableDisplayModes: ['inline'],
