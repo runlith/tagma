@@ -407,11 +407,15 @@ const facadeTypes = (program: ts.Program) => {
   return { exportsOf, imports };
 };
 
-export const uiText = (): string => {
-  const { exportsOf, imports } = facadeTypes(uiProgram());
+export const uiFacade = (): { readonly text: string; readonly files: readonly string[] } => {
+  const program = uiProgram();
+  const { exportsOf, imports } = facadeTypes(program);
   const body = exportsOf();
   const heads = [...imports]
     .sort(([left], [right]) => (left < right ? -1 : 1))
     .map(([module, names]) => `import type { ${[...names].sort().join(', ')} } from ${JSON.stringify(module)};`);
-  return ['/// <reference lib="dom" />', ...heads, '', body.join('\n\n'), ''].join('\n');
+  return {
+    text: ['/// <reference lib="dom" />', ...heads, '', body.join('\n\n'), ''].join('\n'),
+    files: program.getSourceFiles().map((file) => file.fileName),
+  };
 };

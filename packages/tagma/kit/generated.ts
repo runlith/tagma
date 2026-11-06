@@ -1,11 +1,18 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { signatureOf } from '@tagma/inspection/signature';
 import { Schema } from 'effect';
 import ts from 'typescript';
-import { FACADE, uiText } from './ui.js';
+import { FACADE, uiFacade } from './ui.js';
 
 const root = resolve(import.meta.dir, '../../..');
+const POINT_MARK = 'new ContributionPoint<';
+const cache = (): string => join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'tagma-kit');
+const KEPT = 8;
+const RESOLUTION_FILES = ['package.json', 'tsconfig.json', 'bunfig.toml'];
 const server = join(root, 'apps/tagma/server/src');
 const plugin = join(root, 'packages/tagma/src/plugin');
 const ENVELOPE = { file: join(server, 'plugin-formats/tagma/contract/wire/manifest.ts'), binding: 'Envelope' };
@@ -118,7 +125,7 @@ const declaredFaces = async (): Promise<readonly Face[]> => {
   const located: Located[] = [];
   for (const file of await sources('**/*.ts')) {
     const text = await readFile(file, 'utf8');
-    if (text.includes('new ContributionPoint<')) located.push(...facesIn(file, text));
+    if (text.includes(POINT_MARK)) located.push(...facesIn(file, text));
   }
   const faces = await Promise.all(
     located.map(async ({ file, binding }) => ({
@@ -191,8 +198,15 @@ const checksEntry = (faces: readonly Face[]): string =>
     '',
   ].join('\n');
 
-const checksText = async (faces: readonly Face[]): Promise<string> => {
+const inputsOf = (metafile: unknown): readonly string[] =>
+  Object.keys((metafile as { readonly inputs?: Readonly<Record<string, unknown>> } | undefined)?.inputs ?? {})
+    .map((key) => (isAbsolute(key) ? key : resolve(key)))
+    .filter((file) => file.startsWith(`${root}/`) && !file.includes('/node_modules/') && existsSync(file))
+    .map((file) => relative(root, file));
+
+const checksText = async (faces: readonly Face[]): Promise<{ readonly text: string; readonly inputs: readonly string[] }> => {
   const result = await Bun.build({
+    metafile: true,
     entrypoints: [CHECKS_ENTRY],
     plugins: [
       {
@@ -212,10 +226,13 @@ const checksText = async (faces: readonly Face[]): Promise<string> => {
     external: ['effect', 'effect/*'],
     minify: { whitespace: true, syntax: true },
     throw: false,
-  });
+  } as Parameters<typeof Bun.build>[0]);
   const [output] = result.outputs;
   if (!result.success || output === undefined) throw new Error(`the plugin checks did not bundle: ${result.logs.map(String).join('\n')}`);
-  return `${(await output.text()).replace(/^\/\/ @bun\n/u, '').trim()}\n`;
+  return {
+    text: `${(await output.text()).replace(/^\/\/ @bun\n/u, '').trim()}\n`,
+    inputs: inputsOf((result as { readonly metafile?: unknown }).metafile),
+  };
 };
 
 const CHECKS_TYPES = [
@@ -287,29 +304,129 @@ const canonicalTs = (text: string): string => {
 
 const sameGenerated = (written: string, expected: string): boolean => canonicalTs(written) === canonicalTs(expected);
 
-export const syncGenerated = async ({ write }: { readonly write: boolean }): Promise<readonly string[]> => {
+type Manifest = { readonly files: readonly string[]; readonly digest: string };
+
+const GENERATOR = [import.meta.path, join(import.meta.dir, 'ui.ts'), join(root, 'packages/tagma/src/plugin/svelteProgram.ts')];
+
+const absent = (error: NodeJS.ErrnoException): null => {
+  if (error.code === 'ENOENT') return null;
+  throw error;
+};
+
+const digestOf = async (files: readonly string[]): Promise<string> => {
+  const sorted = [...files].sort();
+  const contents = await Promise.all(sorted.map((file) => readFile(join(root, file)).catch(absent)));
+  const hash = createHash('sha256');
+  for (const [at, file] of sorted.entries())
+    hash
+      .update(`${file}\0`)
+      .update(contents[at] ?? '\0absent')
+      .update('\0');
+  return hash.digest('hex');
+};
+
+const manifestAt = async (): Promise<string> =>
+  join(cache(), `${await digestOf(Object.values(GENERATED).map((file) => relative(root, file)))}.json`);
+
+const manifestRead = async (path: string): Promise<Manifest | null> => {
+  const text = await readFile(path, 'utf8').catch(absent);
+  if (text === null) return null;
+  const value = JSON.parse(text) as Partial<Manifest>;
+  return Array.isArray(value.files) && typeof value.digest === 'string' ? { files: value.files, digest: value.digest } : null;
+};
+
+const recordedCurrent = async (): Promise<boolean> => {
+  const path = await manifestAt();
+  const manifest = await manifestRead(path);
+  if (manifest === null) return false;
+  const listed = new Set(manifest.files);
+  for (const file of await sources('**/*.ts')) {
+    if (listed.has(relative(root, file))) continue;
+    if (file.endsWith('/contract/wire/module.ts') || (await readFile(file, 'utf8')).includes(POINT_MARK)) return false;
+  }
+  if ((await digestOf(manifest.files)) !== manifest.digest) return false;
+  const now = new Date();
+  await utimes(path, now, now).catch(absent);
+  return true;
+};
+
+const resolutionOf = (files: readonly string[]): readonly string[] => {
+  const found: string[] = [];
+  const walked = new Set<string>();
+  for (const file of files)
+    for (let directory = dirname(file); !walked.has(directory); directory = dirname(directory)) {
+      walked.add(directory);
+      for (const name of RESOLUTION_FILES) if (existsSync(join(root, directory, name))) found.push(join(directory, name));
+      if (directory === '.') break;
+    }
+  return found;
+};
+
+const pruned = async (directory: string): Promise<void> => {
+  const names = (await readdir(directory)).filter((name) => name.endsWith('.json'));
+  const aged = await Promise.all(
+    names.map(async (name) => ({ name, at: (await stat(join(directory, name)).catch(absent))?.mtimeMs ?? 0 })),
+  );
+  for (const { name } of aged.sort((left, right) => right.at - left.at).slice(KEPT)) await rm(join(directory, name), { force: true });
+};
+
+const manifestWritten = async (ui: readonly string[], checks: readonly string[]): Promise<void> => {
+  const modules = await sources('**/contract/wire/module.ts');
+  const points: string[] = [];
+  for (const file of await sources('**/*.ts')) if ((await readFile(file, 'utf8')).includes(POINT_MARK)) points.push(file);
+  const imported = Object.keys(require.cache).filter((file) => file.startsWith(`${root}/`) && existsSync(file));
+  const read = [
+    ...new Set([
+      ...checks,
+      ...[...imported, ...ui, ...points, ...modules, ...GENERATOR]
+        .filter((file) => !file.includes('/node_modules/'))
+        .map((file) => relative(root, file)),
+      'bun.lock',
+    ]),
+  ].filter((file) => !file.startsWith('..'));
+  const files = [...new Set([...read, ...resolutionOf(read)])];
+  const path = await manifestAt();
+  await mkdir(dirname(path), { recursive: true });
+  const written = `${path}.${process.pid}.${Date.now()}`;
+  await writeFile(written, JSON.stringify({ files, digest: await digestOf(files) } satisfies Manifest));
+  await rename(written, path);
+  await pruned(dirname(path));
+};
+
+export const syncGenerated = async ({
+  write,
+}: {
+  readonly write: boolean;
+}): Promise<{ readonly changed: readonly string[]; readonly recorded: boolean }> => {
+  if (write && (await recordedCurrent())) return { changed: [], recorded: true };
   const faces = await declaredFaces();
+  const checks = await checksText(faces);
+  const ui = uiFacade();
   const texts: readonly [string, string][] = [
     [GENERATED.points, await pointsText(faces)],
-    [GENERATED.checks, await checksText(faces)],
+    [GENERATED.checks, checks.text],
     [GENERATED.checksTypes, CHECKS_TYPES],
     [GENERATED.operations, await operationsText()],
-    [GENERATED.ui, uiText()],
+    [GENERATED.ui, ui.text],
   ];
   const changed: string[] = [];
   for (const [path, text] of texts) {
-    const standing = await readFile(path, 'utf8').catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    });
+    const standing = await readFile(path, 'utf8').catch(absent);
     if (standing !== null && sameGenerated(standing, text)) continue;
     if (write) await writeFile(path, text);
     changed.push(relative(root, path));
   }
-  return changed;
+  if (write || changed.length === 0) await manifestWritten(ui.files, checks.inputs);
+  return { changed, recorded: false };
 };
 
 if (import.meta.main) {
-  const changed = await syncGenerated({ write: true });
-  console.log(changed.length === 0 ? 'The plugin SDK’s generated files are current.' : `Wrote ${changed.join(', ')}.`);
+  const { changed, recorded } = await syncGenerated({ write: true });
+  console.log(
+    recorded
+      ? 'The plugin SDK’s generated files are current: no file the last generation read has changed.'
+      : changed.length === 0
+        ? 'The plugin SDK’s generated files are current.'
+        : `Wrote ${changed.join(', ')}.`,
+  );
 }
