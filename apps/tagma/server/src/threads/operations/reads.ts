@@ -50,6 +50,7 @@ function selectionTerms(input: ThreadSelectorInput): ThreadSelectionQuery {
   put('set', input.set);
   put('state', input.state);
   put('ids', joined(input.ids));
+  put('plugin', input.plugin);
   put('title', input.title);
   put('of', input.of);
   put('reach', input.reach);

@@ -18,6 +18,7 @@ export const threadSelectionQuerySchema = Schema.Struct({
   set: Schema.optional(Schema.String),
   state: Schema.optional(Schema.String),
   ids: Schema.optional(Schema.String),
+  plugin: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   of: Schema.optional(Schema.String),
   reach: Schema.optional(Schema.String),
@@ -81,6 +82,7 @@ export function sweepFacts(input: Record<string, unknown>) {
 
 export type ThreadSelectorInput = {
   readonly ids?: readonly string[];
+  readonly plugin?: string;
   readonly title?: string;
   readonly of?: string;
   readonly reach?: string;
@@ -108,6 +110,10 @@ export const THREAD_INSTANT = Schema.String.check(Schema.isMinLength(1)).annotat
 
 export const THREAD_SELECTOR = {
   ids: Schema.optional(Schema.Array(ThreadId)).annotate({ description: 'Exactly these threads.' }),
+  plugin: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+    description:
+      'The threads whose bindings name this plugin. Without `plugin` or `ids`, the general list leaves out the threads of every plugin that does not list its threads (`contributes.threads.listed`).',
+  }),
   title: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
     description: "Part of the thread's title or of its agent's team name — either half of the list's `title (name)`.",
   }),

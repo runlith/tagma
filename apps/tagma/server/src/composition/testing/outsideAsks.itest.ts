@@ -84,11 +84,11 @@ it.live('a plugin reads the model menu and asks a model once, and its card reads
     expect((yield* ask({ prompt: 'Say hello again.' })).body).toEqual({ status: 'text', text: 'Hallo' });
     expect(asked.at(-1)).toMatchObject({ model: MODEL.model, prompt: 'Say hello again.' });
 
-    const poker = yield* world.op('read_ask_usage', { caller: 'plugin:poker' });
+    const poker = yield* world.op('read_ask_usage', { plugin: 'poker' });
     expect(poker.body).toMatchObject({ status: 'read', hours: 24, asks: 3, unanswered: 0, inputTokens: 120, outputTokens: 60 });
-    const other = yield* world.op('read_ask_usage', { caller: 'plugin:other' });
+    const other = yield* world.op('read_ask_usage', { plugin: 'other' });
     expect(other.body).toMatchObject({ status: 'read', asks: 0, unanswered: 0, inputTokens: 0, outputTokens: 0 });
     expect((yield* ask({ prompt: 'Hi.' }, OTHER)).body).toEqual({ status: 'text', text: 'Hallo' });
-    expect((yield* world.op('read_ask_usage', { caller: 'plugin:other' })).body).toMatchObject({ asks: 1, inputTokens: 40 });
+    expect((yield* world.op('read_ask_usage', { plugin: 'other' })).body).toMatchObject({ asks: 1, inputTokens: 40 });
   }).pipe(Effect.provide(fixture)),
 );

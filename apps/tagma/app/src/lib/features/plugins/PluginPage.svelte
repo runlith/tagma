@@ -17,7 +17,9 @@
   import { SecretsRepo } from '$lib/features/secrets/Repo.js';
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
+  import Asked from '$lib/features/plugins/Asked.svelte';
   import Gives from '$lib/features/plugins/Gives.svelte';
+  import Threads from '$lib/features/plugins/Threads.svelte';
   import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
@@ -49,6 +51,8 @@
   const secrets = SecretsRepo.use();
 
   const row = $derived(item.row);
+  const asks = $derived(repo.asks.key({ projectId: project.id, id: row.id }));
+  const threads = $derived(repo.threads.key({ projectId: project.id, id: row.id }));
   const owned = $derived(secrets.sets.key({ projectId: project.id, owner: SECRET_OWNER }));
   const secretSet = $derived(owned.data?.find((set) => set.id === row.id));
   const optionsEntry = $derived(catalog?.entriesOf('plugins').find((entry) => entry.id === OPTIONS));
@@ -205,6 +209,11 @@
           {/if}
         </div>
       </section>
+    {/if}
+
+    {#if row.enabled}
+      {#if asks.data !== undefined}<Asked {...asks.data} />{/if}
+      {#if threads.data !== undefined}<Threads threads={threads.data.threads} total={threads.data.total} home={project.name} />{/if}
     {/if}
 
     <Gives components={row.components} ignored={row.ignored} options={[]} />

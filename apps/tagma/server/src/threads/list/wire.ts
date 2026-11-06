@@ -119,6 +119,7 @@ export function threadSelectionOf(query: ThreadSelectionQuery): Effect.Effect<Th
       view,
       state,
       ids,
+      plugin: query.plugin,
       title: query.title,
       of,
       ran,

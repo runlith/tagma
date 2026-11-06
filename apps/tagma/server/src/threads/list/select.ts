@@ -38,6 +38,7 @@ export type ThreadSelection = {
   readonly view: ThreadListView;
   readonly state?: ThreadStateTerm;
   readonly ids?: readonly string[];
+  readonly plugin?: string;
   readonly title?: string;
   readonly of?: { readonly thread: string; readonly reach: ThreadReachTerm };
   readonly ran?: ThreadRunMatch;
@@ -78,11 +79,29 @@ const homesSql = (homes: readonly number[]): SQL =>
 
 const unasked: SQL = sql`${readableField(recordFacts.bornOf, '$.ask')} is null`;
 
-export const selected = (ownerId: string, homes: readonly number[], selection: ThreadSelection): SQL | undefined =>
+const boundPlugin: SQL = sql`(select json_extract(m.bindings, '$.plugin') from thread_mandate m where m.id = ${recordFacts.id})`;
+
+const generalList = (selection: ThreadSelection, listed: ReadonlySet<string>): SQL | undefined => {
+  if (selection.plugin !== undefined) return sql`${boundPlugin} = ${selection.plugin}`;
+  if (selection.ids !== undefined) return undefined;
+  const members = sql.join(
+    [...listed].map((id) => sql`${id}`),
+    sql`, `,
+  );
+  return listed.size === 0 ? sql`${boundPlugin} is null` : sql`(${boundPlugin} is null or ${boundPlugin} in (${members}))`;
+};
+
+export const selected = (
+  ownerId: string,
+  homes: readonly number[],
+  selection: ThreadSelection,
+  listed: ReadonlySet<string>,
+): SQL | undefined =>
   and(
     eq(recordFacts.principalId, ownerId),
     inArray(recordFacts.projectId, [...homes]),
     unasked,
+    generalList(selection, listed),
     archivedView(selection.view),
     stateOf(selection.state),
     selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),

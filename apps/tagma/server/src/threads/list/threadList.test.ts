@@ -27,6 +27,7 @@ const summary = {
   archivedAt: null,
   parentThreadId: null,
   ownerId: 'operator',
+  bindings: {},
   activeRun: null,
   outcome: null,
 } as unknown as ThreadSummary;

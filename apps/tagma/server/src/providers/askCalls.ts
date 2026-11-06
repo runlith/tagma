@@ -5,6 +5,7 @@ import { Clock, Effect } from 'effect';
 import { activityKeepHours } from '../activity/contract/wire/settings.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { AskChoice } from '../platform/contract/wire/setting.js';
+import { pluginCaller } from '../plugins/contract/wire/names.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { askGate, ModelAsks, type AskRefused } from './contract/service/asks.js';
 import { askModel as askModelSetting } from './contract/wire/settings.js';
@@ -39,7 +40,7 @@ export const askModel = Effect.fn('ModelAsks.outside')(function* (input: Outside
 const INPUT = 'usage.inputTokens';
 const OUTPUT = 'usage.outputTokens';
 
-export const askUsage = Effect.fn('ModelAsks.usage')(function* (caller: string) {
+export const askUsage = Effect.fn('ModelAsks.usage')(function* (plugin: string) {
   const record = yield* ActivityRecord;
   const hours = yield* (yield* Settings).value(activityKeepHours);
   const now = yield* Clock.currentTimeMillis;
@@ -49,7 +50,7 @@ export const askUsage = Effect.fn('ModelAsks.usage')(function* (caller: string) 
       since: now - hours * HOUR,
       where: [
         { path: 'kind', op: 'eq', value: 'ask' },
-        { path: 'attrs.caller', op: 'eq', value: caller },
+        { path: 'attrs.caller', op: 'eq', value: pluginCaller(plugin) },
       ],
       group: ['outcome'],
       count: true,

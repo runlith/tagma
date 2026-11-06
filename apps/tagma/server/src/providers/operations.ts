@@ -396,7 +396,7 @@ export const PROVIDER_PAIRS = {
     OPS.read_ask_usage,
     body(OPS.read_ask_usage, {
       execute: (input) =>
-        declared(OPS.read_ask_usage)(Effect.map(askUsage(input.caller), (usage) => ({ status: 'read' as const, ...usage }))),
+        declared(OPS.read_ask_usage)(Effect.map(askUsage(input.plugin), (usage) => ({ status: 'read' as const, ...usage }))),
     }),
   ),
 } satisfies { readonly [K in ProviderOperationId]: OperationPair<(typeof OPS)[K]> };

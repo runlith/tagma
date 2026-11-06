@@ -28,6 +28,7 @@ import { ThreadInputRefused } from '../contract/service/failure.js';
 import type { ArchiveWork } from '../contract/service/list.js';
 import { standingDriven, standingOf } from '../events/standing.js';
 import { OwnWork } from '../contract/service/ownWork.js';
+import { ThreadListing } from '../contract/service/listing.js';
 import { endSubscriptions, threadSubscription } from '../store/subscriptions.js';
 import { moveOf, summaryOf, type SummaryRow, type ThreadSummary } from './summary.js';
 import {
@@ -73,8 +74,13 @@ export type ThreadGate = {
   readonly evictedAt: Date | null;
 };
 
-const matchedWhere = (ownerId: string, homes: readonly number[], selection: ThreadSelection, spared: string | null) =>
-  and(selected(ownerId, homes, selection), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
+const matchedWhere = (
+  ownerId: string,
+  homes: readonly number[],
+  selection: ThreadSelection,
+  spared: string | null,
+  listed: ReadonlySet<string>,
+) => and(selected(ownerId, homes, selection, listed), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
 
 export type ThreadListReads = ThreadLookup['Service'] &
   ThreadWindows['Service'] &
@@ -90,6 +96,7 @@ export const makeThreadListReads = Effect.gen(function* () {
   const records = yield* ThreadRecords;
   const kinds = yield* ThreadEntryKinds;
   const own = yield* OwnWork;
+  const listing = yield* ThreadListing;
   const selections = yield* makeThreadSelections;
 
   const summarized = Effect.fnUntraced(function* (call: string, rows: readonly SummaryRow[]) {
@@ -150,7 +157,7 @@ export const makeThreadListReads = Effect.gen(function* () {
     page: { readonly limit: number; readonly before?: Date },
     owing: ReadonlySet<string>,
   ) {
-    const roots = and(selected(ownerId, homes, { view: 'live' }), liveRoot(ownerId, homes));
+    const roots = and(selected(ownerId, homes, { view: 'live' }, listing.listed()), liveRoot(ownerId, homes));
     const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
     const working = yield* unit.run(
       db
@@ -268,7 +275,7 @@ export const makeThreadListReads = Effect.gen(function* () {
         );
       }
       const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
-      const counting = selected(ownerId, homes.projects, selection);
+      const counting = selected(ownerId, homes.projects, selection, listing.listed());
       const where = and(counting, pastCursor(clock, selection.before));
       const page = units.read((unit) =>
         Effect.gen(function* () {
@@ -427,7 +434,7 @@ export const makeThreadListReads = Effect.gen(function* () {
             .from(recordFacts)
             .leftJoin(thread, eq(thread.id, recordFacts.id))
             .innerJoin(sql`${heldUp} held`, sql`held.id = ${recordFacts.id}`)
-            .where(matchedWhere(ownerId, homes, selection, spared)),
+            .where(matchedWhere(ownerId, homes, selection, spared, listing.listed())),
         ),
       ),
 
@@ -441,7 +448,7 @@ export const makeThreadListReads = Effect.gen(function* () {
               .leftJoin(thread, eq(thread.id, recordFacts.id))
               .where(
                 and(
-                  selected(ownerId, homes, selection),
+                  selected(ownerId, homes, selection, listing.listed()),
                   sql`${recordFacts.id} not in ${lineageOf(callerId)}`,
                   sql`${recordFacts.id} not in ${subtreeOf(callerId)}`,
                 ),
@@ -461,7 +468,7 @@ export const makeThreadListReads = Effect.gen(function* () {
       spared: string | null,
       before?: ArchiveWork,
     ) {
-      const matched = matchedWhere(ownerId, homes, selection, spared);
+      const matched = matchedWhere(ownerId, homes, selection, spared, listing.listed());
       const chosen = (rootsWithin?: readonly string[]) =>
         units.read((unit) =>
           Effect.gen(function* () {

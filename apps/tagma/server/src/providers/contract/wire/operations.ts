@@ -544,8 +544,8 @@ export const PROVIDER_OPERATIONS = {
     approval: ASKS_NEVER,
     ...operatorOnly,
     meaning:
-      'Read what the ask_model calls of one outside caller, named as it calls (`plugin:<id>` for a plugin), spent over the activity record’s window, `activity.keepHours`: how many asks, how many failed or were refused, and the tokens they read and wrote.',
-    input: Schema.Struct({ caller: Schema.String.check(Schema.isMinLength(1)) }),
+      'Read what one plugin’s ask_model calls spent over the activity record’s window, `activity.keepHours`: how many asks, how many failed or were refused, and the tokens they read and wrote.',
+    input: Schema.Struct({ plugin: Schema.String.check(Schema.isMinLength(1)) }),
     answer: arms({
       read: {
         hours: Schema.Int,
@@ -559,7 +559,7 @@ export const PROVIDER_OPERATIONS = {
     effect: 'read',
     identity: 'none',
     subjects: nobody,
-    confirmation: (input) => ({ summary: `Read the asks of ${input.caller}?` }),
+    confirmation: (input) => ({ summary: `Read the asks of ${input.plugin}?` }),
     confirmLabel: 'Read asks',
     presentation: { running: 'Reading the asks', done: 'Read the asks' },
   }),

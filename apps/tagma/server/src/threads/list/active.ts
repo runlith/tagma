@@ -8,6 +8,7 @@ import { MachineUnits, type Unit } from '../../platform/contract/service/units.j
 import { recordFacts } from '../../thread-record/facts.js';
 import { thread } from '../store/kernel.js';
 import { ThreadInputRefused } from '../contract/service/failure.js';
+import { ThreadListing } from '../contract/service/listing.js';
 import { type ListHomes, selected, type ThreadSelection } from './select.js';
 
 const HELD = 256;
@@ -20,6 +21,7 @@ export const makeThreadSelections = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const activity = yield* ActivityRecord;
+  const listing = yield* ThreadListing;
   yield* units.write('ThreadWindows.prepare', (unit) =>
     Effect.gen(function* () {
       yield* unit.run(
@@ -71,7 +73,7 @@ export const makeThreadSelections = Effect.gen(function* () {
             db.run(sql`insert into temp.thread_selection_member (reading, thread, order_at)
           select ${reading}, ${recordFacts.id}, ${clock} from ${recordFacts}
           left join ${thread} on ${thread.id} = ${recordFacts.id}
-          where ${and(selected(owner, homes.projects, selection), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
+          where ${and(selected(owner, homes.projects, selection, listing.listed()), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
           );
         }),
       );

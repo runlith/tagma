@@ -37,6 +37,8 @@ import type { ThreadFolder } from '../../thread-record/contract/wire/folder.js';
 import { ProjectGroups } from '../../projects/contract/service/registry.js';
 import type { ProjectGroup } from '../../projects/contract/wire/project.js';
 import { HeldPathCounts } from '../contract/service/parts.js';
+import { ThreadListing } from '../contract/service/listing.js';
+import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
 import type { ThreadHeld } from '../../change-record/contract/wire/holdings.js';
 
 const NONE_HELD: ThreadHeld = { paths: 0, unproven: 0 };
@@ -77,6 +79,7 @@ export const makeThreadList = Effect.gen(function* () {
   const groups = yield* ProjectGroups;
   const folders = yield* ThreadFolders;
   const facts = yield* ThreadRows;
+  const listing = yield* ThreadListing;
   let membership = membershipOf(yield* groups.list());
   const homesOf = (listId: number): readonly number[] => membership.members.get(listId) ?? [listId];
   const listsOf = (home: number): readonly number[] => {
@@ -196,6 +199,10 @@ export const makeThreadList = Effect.gen(function* () {
       lives.delete(id);
     }
   };
+  const unlisted = (row: ThreadSummary): boolean => {
+    const plugin = row.bindings[PLUGIN_BINDING];
+    return plugin !== undefined && !listing.listed().has(plugin);
+  };
   const followed = (row: ThreadSummary): boolean => listened(row.projectId) || audience.has(row.id);
   const standing = new Set<string>();
   const shown = (row: ThreadSummary): boolean =>
@@ -298,7 +305,8 @@ export const makeThreadList = Effect.gen(function* () {
     if (row.archivedAt === null) lives.set(row.id, row.life);
     else lives.delete(row.id);
     const projected = listRow(row);
-    const event: ThreadsEvent = row.archivedAt === null ? { kind: 'row', row: projected } : { kind: 'removed', threadId: row.id };
+    const event: ThreadsEvent =
+      row.archivedAt === null && !unlisted(row) ? { kind: 'row', row: projected } : { kind: 'removed', threadId: row.id };
     const own = listsOf(row.projectId);
     fan(row.projectId, event, observed);
     const prior = [...audience.projects(row.id)];
@@ -516,8 +524,10 @@ export const makeThreadList = Effect.gen(function* () {
     const row = facts.current(change.threadId);
     if (row !== undefined && shown(row)) announce(row);
   });
+  const detachListing = listing.changed(() => resync());
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
+      detachListing();
       detachRows();
       detachRetainer();
       detachRegroups();

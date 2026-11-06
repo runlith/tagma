@@ -9,6 +9,8 @@ const lens = (projectId: number): Lens => ({ project: String(projectId) });
 
 const PAGE = 8;
 
+const THREADS_SHOWN = 8;
+
 export type PluginTarget = { readonly projectId: number; readonly id: string };
 
 export type PluginReach = { readonly enabled: boolean; readonly scope: SettableScope };
@@ -40,6 +42,23 @@ export const PluginsRepo = Repo.define(
           cursor = page.next ?? undefined;
         } while (cursor !== undefined);
         return rows;
+      },
+    }),
+
+    asks: keyed({
+      loader: ({ key, signal }: KeyedLoaderContext<PluginTarget>, door) =>
+        door.perform('read_ask_usage', { plugin: key.id }, lens(key.projectId), { signal }),
+    }),
+
+    threads: keyed({
+      loader: async ({ key, signal }: KeyedLoaderContext<PluginTarget>, door) => {
+        const answer = await door.perform(
+          'list_threads',
+          { plugin: key.id, set: 'live', shape: 'facts', limit: THREADS_SHOWN },
+          lens(key.projectId),
+          { signal },
+        );
+        return 'threads' in answer ? { threads: answer.threads, total: answer.total } : { threads: [], total: 0 };
       },
     }),
 
