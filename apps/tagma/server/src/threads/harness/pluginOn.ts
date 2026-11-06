@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { ContributionPoint } from '../../platform/contract/service/contribution.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
 import { type PluginContribution, PluginPoints } from '../../plugins/contract/service/points.js';
-import { ENDED_REASON, ON_FACE, PLUGIN_BINDING, type ThreadOn } from '../contract/wire/pluginEndings.js';
+import { ENDED_REASON, ON_FACE, PLUGIN_BINDING, type ThreadOn } from '../contract/wire/on.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 

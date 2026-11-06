@@ -26,7 +26,7 @@ import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { among } from '../platform/store/rows.js';
 import { approves as approvesKey } from './contract/wire/settings.js';
 import type { PluginQuestions } from './harness/pluginQuestions.js';
-import { PLUGIN_BINDING } from './contract/wire/pluginEndings.js';
+import { PLUGIN_BINDING } from './contract/wire/on.js';
 import type { ThreadMetadata } from './list/store.js';
 
 type ApproversPort = NonNullable<ThreadHost['approvers']>;

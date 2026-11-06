@@ -12,7 +12,7 @@ import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { openQuestions } from '../approvers.js';
 import type { ThreadHarness } from '../contract/service/engine.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
-import { ASKED_REASON, PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import { ASKED_REASON, PLUGIN_BINDING } from '../contract/wire/on.js';
 import { threadMandate } from '../store/mandate.js';
 import type { PluginOn } from './pluginOn.js';
 

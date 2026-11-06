@@ -34,7 +34,7 @@ import { GraphRecoveries } from '../../graph/contract/service/recovery.js';
 import { ThreadTurns } from '../turns/acts.js';
 import { admitCallerOf } from '../turns/caller.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
-import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import { PLUGIN_BINDING } from '../contract/wire/on.js';
 
 const workTask = (name: string, title: string, taken: boolean) =>
   taken

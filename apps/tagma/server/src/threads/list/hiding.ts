@@ -1,5 +1,5 @@
 import type { PluginListing } from '../contract/service/listing.js';
-import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import { PLUGIN_BINDING } from '../contract/wire/on.js';
 import type { ThreadSummary } from './summary.js';
 
 export const hiddenRows =

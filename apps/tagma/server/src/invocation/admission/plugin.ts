@@ -6,7 +6,7 @@ import { CallPlace } from '../../platform/contract/service/place.js';
 import { EnabledPlugins } from '../../plugins/contract/service/plugins.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
 import { ThreadLookup } from '../../threads/contract/service/reads.js';
-import { PLUGIN_BINDING } from '../../threads/contract/wire/pluginEndings.js';
+import { PLUGIN_BINDING } from '../../threads/contract/wire/on.js';
 import type { OperationCatalog } from '../contract/service/catalog.js';
 import { addressedThread } from './place.js';
 
