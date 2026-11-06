@@ -46,6 +46,8 @@ edges:
   - kind: imports
     to: 01a174f2-3d42-7971-98e6-d64d57643bc7
   - kind: imports
+    to: 01a174f2-3d51-75fa-8183-c8b41c9696ea
+  - kind: imports
     to: 01a174f2-3d52-7cb0-8660-a40d39910e41
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
@@ -55,8 +57,6 @@ edges:
     to: 01a0fd8b-bf07-7e08-a660-42bdab05dfec
   - kind: imports-tests
     to: 01a174f2-3d4c-7763-bb7b-749e7b63e87f
-  - kind: imports-tests
-    to: 01a174f2-3d51-75fa-8183-c8b41c9696ea
   - kind: imports-tests
     to: 01a174f2-3d55-75b3-a0ce-6ad72dc811be
   - kind: imports-tests

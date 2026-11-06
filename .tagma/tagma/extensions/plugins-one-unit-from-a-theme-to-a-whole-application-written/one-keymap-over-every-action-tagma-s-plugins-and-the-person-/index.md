@@ -81,7 +81,7 @@ Every key that does something a person can name runs an action by its id; no key
 
 The effective table comes from one pure function, `resolveKeys`, over four layers, highest first:
 1. **The shell.** These are chords the host keeps for itself, and nobody binds them.
-   - On desktop: the menu roles the page never sees (quit, hide, edit, zoom, fullscreen) and the shell's own new window and devtools chords.
+   - On desktop: the menu roles the page never sees (quit, hide, hide others, minimize, fullscreen) and the shell's own new window and devtools chords.
    - In a browser tab: the chords the browser keeps (⌘T, ⌘W, ⌘N, ⌘Q…).
 
    The layer is a port, `ShellKeys`, that `app-keys` declares and composition fills per host (rule 6f758080). The desktop's list is declared by main, beside the menu it builds, and read through the bridge.
@@ -303,7 +303,7 @@ Performer checks, each through the door its real caller uses.
   - a region binding shadows a window binding, and no conflict is reported;
   - a capture that takes a held chord returns the person's layer with the move recorded;
   - a plugin's chord asked for every app resolves as a window chord, and as a global once the person's entry allows it.
-- **No double hold.** No two of Tagma's own defaults hold one chord, on any host — macOS, Linux and Windows desktop, and a browser tab — measured against each host's shell list. The test runs over the composed `Actions` point, and it settles ⌘R on macOS desktop, held today by the terminal's rename and the menu's reload.
+- **No double hold.** No two of Tagma's own defaults hold one chord, on any host — macOS, Linux and Windows desktop, and a browser tab — measured against each host's shell list. The test runs over the composed `Actions` point. The desktop's shell list keeps quit, hide, minimize and fullscreen; the menu's reload, zoom and edit roles stay outside it, so the check does not reach ⌘R (the terminal's rename against the menu's reload), the terminal's zoom chords or ⌘C and ⌘V. Which of the two acts on those chords is in **Not established**.
 - **One matcher.** The terminal's layout cases (`terminal/Keymap.test.ts`) pass against the platform matcher. The desktop's interception judges the same presses the same way, in a unit test over Electron `Input`.
 
 **The person's keys:**
@@ -333,7 +333,7 @@ Performer checks, each through the door its real caller uses.
 ## Not established
 
 - Whether Electron's `globalShortcut.register` refuses a chord macOS itself uses (⌘Space, ⌘⇧4) or takes it over, and how it behaves on Linux under Wayland.
-- Whether a menu accelerator fires when the page handles the same chord; today's ⌘R double hold on macOS rests on this.
+- Whether a menu accelerator fires when the page handles the same chord. Region chords are never published to main, so nothing cancels the menu for them: ⌘R (terminal rename against reload), ⌘=, ⌘- and ⌘0 (terminal zoom against the window's zoom) and ⌘C and ⌘V on macOS desktop rest on this.
 - That the logical-first matcher reads ⌘ chords on non-Latin layouts correctly in Chromium and WebKit; the terminal's tests cover its own cases only.
 - Delivering a global press when no window is open — opening one and running the action once it loads. This is reasoned, not run.
 
