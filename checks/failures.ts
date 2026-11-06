@@ -9,6 +9,13 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: "Sweeping a plugin's older view builds is best-effort cleanup: the build just made stands either way, the failure is logged, and the plugin's next compile sweeps again.",
   },
   {
+    path: 'apps/tagma/server/src/views/modules/builds.ts',
+    symbol: 'makeBuilds',
+    form: 'catch',
+    site: 'c54bc31e',
+    why: 'Removing the view builds of plugins no longer published is best-effort cleanup after start: nothing serves them, the failure is logged, and the next server start sweeps again.',
+  },
+  {
     path: 'apps/tagma/server/src/mcp/waits.ts',
     symbol: 'quietly',
     form: 'catch',

@@ -23,7 +23,7 @@ export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home:
 
 export class PluginDigests extends Context.Service<
   PluginDigests,
-  { views(root: string, paths: readonly string[]): Effect.Effect<string | null, PluginUnreadable> }
+  { digest(root: string, paths: readonly string[]): Effect.Effect<string | null, PluginUnreadable> }
 >()('tagma/plugins/PluginDigests') {}
 
 export class PluginFaults extends Context.Service<

@@ -87,7 +87,7 @@ it.live('a plugin row says a view uses the camera and microphone only when a vie
         { id: 'room', entry: 'ui/Room.svelte', media: true },
         { id: 'list', entry: 'ui/List.svelte' },
       ]),
-    ).toBe('Uses camera and microphone');
+    ).toBe('Frames sites that may ask for the camera and microphone');
     expect(yield* detailOf('plain', [{ id: 'list', entry: 'ui/List.svelte' }])).toBeUndefined();
   }),
 );

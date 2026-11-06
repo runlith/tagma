@@ -158,7 +158,7 @@ export const VIEWS_FACE: PluginFace<ViewEntries> = {
   name: 'views',
   title: 'Pages inside Tagma',
   schema: ViewEntries,
-  uses: (views) => (views.some((view) => view.media === true) ? 'Uses camera and microphone' : null),
+  uses: (views) => (views.some((view) => view.media === true) ? 'Frames sites that may ask for the camera and microphone' : null),
 };
 
 export const undeclaredViews = (sibling: PointHeld['sibling'], named: readonly string[]): string | null => {

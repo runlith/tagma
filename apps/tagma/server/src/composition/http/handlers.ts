@@ -24,7 +24,7 @@ import type { RestartRecords } from '../../installation/contract/service/restart
 import type { InstalledChannel } from '../../installation/contract/service/channel.js';
 import type { ConsoleKeyRollback, DowngradeSteps } from '../../installation/contract/service/steps.js';
 import type { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
-import type { ViewFiles } from '../../views/contract/service/places.js';
+import type { ViewCandidates, ViewFiles } from '../../views/contract/service/places.js';
 import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import type { JudgingServices } from '../../enforcement/serving.js';
 import type { OperationChecks } from '../../invocation/contract/service/operationChecks.js';
@@ -112,6 +112,7 @@ export type RuntimeDoor =
   | SignIns
   | ArtifactStore
   | ViewFiles
+  | ViewCandidates
   | WorkspaceInputs
   | PreparedChanges
   | ScratchAreas

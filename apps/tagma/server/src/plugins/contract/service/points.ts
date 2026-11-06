@@ -61,6 +61,11 @@ export class PluginPoints extends Context.Service<
     hold<W>(point: PluginFaced<W>): Effect.Effect<HeldContributions<W>, never, Scope.Scope>;
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
     shown(name: string, value: unknown): ContributionShown;
-    publish(plugin: PluginRef, checked: PluginChecked, caller: PluginCaller): Effect.Effect<() => void, PluginPointRefused>;
+    publish(
+      plugin: PluginRef,
+      checked: PluginChecked,
+      caller: PluginCaller,
+      replaced?: () => void,
+    ): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}

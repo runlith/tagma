@@ -9,6 +9,9 @@ export class ViewFiles extends Context.Service<
   {
     module(plugin: string, key: string, file: string): string;
     sheet(file: string): string;
-    candidates(): readonly string[];
   }
 >()('tagma/views/ViewFiles') {}
+
+export class ViewCandidates extends Context.Service<ViewCandidates, { readonly listed: () => readonly string[] }>()(
+  'tagma/views/ViewCandidates',
+) {}

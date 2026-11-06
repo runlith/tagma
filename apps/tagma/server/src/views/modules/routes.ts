@@ -2,7 +2,7 @@ import { extname } from 'node:path';
 import { Context, Effect } from 'effect';
 import { HttpServerResponse } from 'effect/http';
 import { route } from '../../platform/contract/service/route.js';
-import { ViewFiles } from '../contract/service/places.js';
+import { ViewCandidates, ViewFiles } from '../contract/service/places.js';
 import { MODULES_PATH, SHEET_PATH } from '../contract/wire/modules.js';
 import { CANDIDATES_PATH, type Candidates } from '../contract/wire/utilities.js';
 
@@ -53,13 +53,13 @@ export const VIEW_ROUTES = [
       };
     },
   }),
-  route<ViewFiles>({
+  route<ViewCandidates>({
     path: CANDIDATES_PATH,
     handler: (door) => {
-      const files = Context.get(door, ViewFiles);
+      const candidates = Context.get(door, ViewCandidates);
       return () =>
         Effect.succeed(
-          HttpServerResponse.jsonUnsafe({ candidates: files.candidates() } satisfies Candidates, {
+          HttpServerResponse.jsonUnsafe({ candidates: candidates.listed() } satisfies Candidates, {
             headers: { 'cache-control': 'no-store' },
           }),
         );

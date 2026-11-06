@@ -112,9 +112,9 @@ export const pluginsLayer: Layer.Layer<
       Context.add(
         PluginDigests,
         PluginDigests.of({
-          views: (root, paths) =>
+          digest: (root, paths) =>
             digests
-              .digest(root, paths, 'views')
+              .digest(root, paths, 'asked')
               .pipe(Effect.mapError((failure) => new PluginUnreadable({ path: root, reason: failure.reason }))),
         }),
       ),

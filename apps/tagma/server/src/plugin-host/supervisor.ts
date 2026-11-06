@@ -408,10 +408,9 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             slot,
             Effect.gen(function* () {
               slot.title = plugin.title;
-              standing.withdraw();
               slot.standing = null;
               const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
-              const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }));
+              const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }, standing.withdraw));
               if (Result.isFailure(published)) {
                 yield* FiberMap.remove(quiets, slot.id);
                 yield* closed(slot);
@@ -430,11 +429,11 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             slot.title = plugin.title;
             yield* FiberMap.remove(quiets, slot.id);
             yield* closed(slot);
-            slot.standing?.withdraw();
+            const replaced = slot.standing?.withdraw;
             slot.standing = null;
             slot.rejected = false;
             const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
-            const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }));
+            const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }, replaced));
             slot.failures = 0;
             slot.gate = 0;
             if (Result.isFailure(published)) {

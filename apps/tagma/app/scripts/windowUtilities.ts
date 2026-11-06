@@ -3,7 +3,13 @@ import { delimiter, dirname, posix, relative, resolve, sep } from 'node:path';
 import { Scanner } from '@tailwindcss/oxide';
 import { ResolverFactory } from 'enhanced-resolve';
 import { compile } from 'tailwindcss';
-import { stylesheetKey, utilitiesSource, type Stylesheet, type WindowUtilities } from '@tagma/server/views/contract/wire/utilities';
+import {
+  replayingLoader,
+  stylesheetKey,
+  utilitiesSource,
+  type Stylesheet,
+  type WindowUtilities,
+} from '@tagma/server/views/contract/wire/utilities';
 
 type Loaded = { readonly path: string; readonly base: string; readonly content: string };
 
@@ -45,14 +51,6 @@ const recordingLoader = (root: string, stylesheets: Record<string, Stylesheet>) 
     return recorded;
   };
 };
-
-const replayingLoader =
-  (stylesheets: Readonly<Record<string, Stylesheet>>) =>
-  async (id: string, base: string): Promise<Stylesheet> => {
-    const recorded = stylesheets[stylesheetKey(id, base)];
-    if (recorded === undefined) throw new Error(`The recorded stylesheets hold no '${id}' from '${base}'`);
-    return recorded;
-  };
 
 const scanned = async (stylesheet: string, extraSources: readonly string[], root: string): Promise<string[]> => {
   const css = `${readFileSync(stylesheet, 'utf8')}\n${sourceLines(stylesheet, extraSources).join('\n')}\n`;

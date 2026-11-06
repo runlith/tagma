@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { filesHasher } from './contract/service/digest.js';
 import type { DigestAnswer, DigestAsk } from './digests.js';
 
 declare const self: Worker;
@@ -18,14 +18,13 @@ const answered = async (ask: DigestAsk): Promise<DigestAnswer> => {
   const stamp = ask.paths.map((path, at) => `${path}\u0000${measures[at]}`).join('\n');
   if (ask.known !== null && ask.known.stamp === stamp) return { id: ask.id, stamp, digest: ask.known.digest };
   if (measures.includes(MISSING)) return { id: ask.id, stamp, digest: null };
-  const hash = createHash('sha256');
+  const hasher = filesHasher();
   for (const path of ask.paths) {
     const bytes = await readFile(join(ask.root, path)).catch(() => null);
     if (bytes === null) return { id: ask.id, stamp: '', digest: null };
-    hash.update(`${path}\u0000${bytes.byteLength}\u0000`);
-    hash.update(bytes);
+    hasher.add(path, bytes);
   }
-  return { id: ask.id, stamp, digest: hash.digest('hex') };
+  return { id: ask.id, stamp, digest: hasher.digest() };
 };
 
 self.onmessage = (event: MessageEvent<DigestAsk>) => {

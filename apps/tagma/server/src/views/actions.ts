@@ -4,66 +4,53 @@ import { Effect, PubSub, Stream } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { EnabledPlugins, HostedPlugins, Plugins } from '../plugins/contract/service/plugins.js';
-import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
+import { type HeldContributions, PluginPoints, type PluginRef } from '../plugins/contract/service/points.js';
 import { PluginActions } from './contract/service/actions.js';
 import { ACTIONS, COMMANDS, SHORTCUTS } from './contract/service/points.js';
 import type { PluginActionRow, PluginActionSet, PluginActionState } from './contract/wire/actions.js';
-import type { ActionEntries, CommandEntries, ShortcutEntries } from './contract/wire/points.js';
+import type { SectionEntries } from './contract/wire/points.js';
 import { callRefusal, READ_PLUGINS, refusal, unreadable } from './refusals.js';
-import type { Sections } from './sections.js';
-
-type Held<W> = { readonly plugin: PluginRef; readonly value: W };
 
 export const makeActions = Effect.fnUntraced(function* (input: {
   readonly moves: PubSub.PubSub<number | null>;
   readonly changed: () => void;
   readonly viewed: () => ReadonlyMap<string, PluginRef>;
-  readonly surfaces: Sections;
-  readonly panes: Sections;
+  readonly surfaces: HeldContributions<SectionEntries>;
+  readonly panes: HeldContributions<SectionEntries>;
 }) {
   const { moves, changed, viewed, surfaces, panes } = input;
   const enabled = yield* EnabledPlugins;
   const hosted = yield* HostedPlugins;
   const plugins = yield* Plugins;
   const host = yield* PluginHost;
-  const actions = new Map<string, Held<ActionEntries>>();
-  const shortcuts = new Map<string, Held<ShortcutEntries>>();
-  const commands = new Map<string, Held<CommandEntries>>();
-
-  const holding =
-    <W extends readonly unknown[]>(held: Map<string, Held<W>>) =>
-    ({ plugin, value }: PluginContribution<W>) =>
-      Effect.sync(() => {
-        if (value.length === 0) return () => undefined;
-        const standing: Held<W> = { plugin, value };
-        held.set(plugin.id, standing);
-        changed();
-        return () => {
-          if (held.get(plugin.id) !== standing) return;
-          held.delete(plugin.id);
-          changed();
-        };
-      });
+  const points = yield* PluginPoints;
+  const actions = yield* points.hold(ACTIONS);
+  const shortcuts = yield* points.hold(SHORTCUTS);
+  const commands = yield* points.hold(COMMANDS);
+  yield* Effect.acquireRelease(
+    Effect.sync(() => [actions.changed(changed), shortcuts.changed(changed), commands.changed(changed)]),
+    (unheard) => Effect.sync(() => unheard.forEach((leave) => leave())),
+  );
 
   const rowsOf = (plugin: string): readonly PluginActionRow[] => {
-    const asked = shortcuts.get(plugin)?.value ?? [];
+    const asked = shortcuts.of(plugin)?.value ?? [];
     const keysOf = (name: string) =>
       asked.filter((shortcut) => shortcut.action === name).map((s) => ({ keys: s.keys, global: s.global === true }));
     return [
-      ...(actions.get(plugin)?.value ?? []).map((entry): PluginActionRow => ({
+      ...(actions.of(plugin)?.value ?? []).map((entry): PluginActionRow => ({
         id: entry.id,
         kind: 'action',
         title: entry.title,
         keys: keysOf(entry.id),
       })),
-      ...surfaces.of(plugin).map((entry): PluginActionRow => ({
+      ...(surfaces.of(plugin)?.value ?? []).map((entry): PluginActionRow => ({
         id: `section:${entry.view}`,
         kind: 'section',
         view: entry.view,
         title: entry.title,
         keys: keysOf(`section:${entry.view}`),
       })),
-      ...panes.of(plugin).map((entry): PluginActionRow => ({
+      ...(panes.of(plugin)?.value ?? []).map((entry): PluginActionRow => ({
         id: `pane:${entry.view}`,
         kind: 'pane',
         view: entry.view,
@@ -80,10 +67,10 @@ export const makeActions = Effect.fnUntraced(function* (input: {
     for (const [rank, install] of (yield* plugins.installs()).entries()) {
       const there = roots.get(install.id);
       const ref =
-        actions.get(install.id)?.plugin ?? shortcuts.get(install.id)?.plugin ?? commands.get(install.id)?.plugin ?? known.get(install.id);
+        actions.of(install.id)?.plugin ?? shortcuts.of(install.id)?.plugin ?? commands.of(install.id)?.plugin ?? known.get(install.id);
       if (there === undefined || ref === undefined) continue;
       const rows = rowsOf(install.id);
-      const typed = commands.get(install.id)?.value ?? [];
+      const typed = commands.of(install.id)?.value ?? [];
       if (rows.length > 0 || typed.length > 0)
         listed.push({ plugin: install.id, title: ref.title, rank, projects: there.projects, actions: rows, commands: typed });
     }
@@ -107,11 +94,6 @@ export const makeActions = Effect.fnUntraced(function* (input: {
       : Effect.succeed(sentence(result));
 
   return {
-    contributions: {
-      actions: { point: ACTIONS, register: holding(actions) },
-      shortcuts: { point: SHORTCUTS, register: holding(shortcuts) },
-      commands: { point: COMMANDS, register: holding(commands) },
-    },
     service: PluginActions.of({
       sets: Stream.unwrap(
         Effect.map(PubSub.subscribe(moves), (subscription) =>
@@ -122,11 +104,11 @@ export const makeActions = Effect.fnUntraced(function* (input: {
         ),
       ),
       run: Effect.fn('PluginActions.run')(function* (projectId, plugin, action, threadId, input) {
-        const declared = actions.get(plugin)?.value.find((entry) => entry.id === action);
+        const declared = actions.of(plugin)?.value.find((entry) => entry.id === action);
         if (declared === undefined) return yield* unknown(plugin, action);
         const admit = Effect.gen(function* () {
           const running = (yield* enabled.held(projectId).pipe(Effect.mapError(unreadable)))();
-          const still = actions.get(plugin)?.value.find((entry) => entry.id === action);
+          const still = actions.of(plugin)?.value.find((entry) => entry.id === action);
           if (!running.includes(plugin) || still?.tool !== declared.tool) return yield* unknown(plugin, action);
         });
         const caller: McpCaller = {

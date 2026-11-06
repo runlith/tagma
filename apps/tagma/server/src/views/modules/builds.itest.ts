@@ -1,9 +1,9 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Context, Effect, Queue, Stream } from 'effect';
+import { Context, Effect, Queue, Schedule, Stream } from 'effect';
 import { makeDoorWorld } from '../../composition/testing/doorFixture.js';
 import { writePlugin } from '../../plugin-formats/tagma/testing/folder.js';
 import type { PluginRow } from '../../plugins/contract/wire/rows.js';
@@ -64,11 +64,11 @@ const setup = Effect.fnUntraced(function* (component: string, surfacePath?: stri
   yield* shipped(root, component, 'a'.repeat(64));
   const states = yield* Queue.unbounded<PluginViewState>();
   yield* Effect.forkScoped(Stream.runForEach(world.runtime.views.sets(projectId), (state) => Queue.offer(states, state)));
-  const module = Effect.fnUntraced(function* (holds: (view: ViewModule) => boolean) {
+  const module = Effect.fnUntraced(function* (holds: (view: ViewModule) => boolean, id = 'board') {
     for (;;) {
       const state = yield* Queue.take(states);
       const shown = state.plugins.find((set) => set.plugin === 'board');
-      const view = shown?.views.find((candidate) => candidate.id === 'board');
+      const view = shown?.views.find((candidate) => candidate.id === id);
       if (view !== undefined && holds(view.module)) return { module: view.module, set: shown! };
     }
   });
@@ -142,12 +142,103 @@ it.live(
     }),
 );
 
+const keyIn = (address: string): string => address.split('/')[5]!;
+
+it.live('a view whose entry another view already imports gets a module of its own once it is published', () =>
+  Effect.gen(function* () {
+    const { world, root, module } = yield* setup('<p>board</p>');
+    const views = (ids: readonly string[]) =>
+      Effect.promise(async () => {
+        await writeFile(join(root, 'dist/ui/ui/Board.svelte'), `<script>import Detail from './Detail.svelte';</script><Detail />`);
+        await writeFile(join(root, 'dist/ui/ui/Detail.svelte'), '<p>detail</p>');
+        await writeFile(
+          join(root, 'dist/ui/graph.json'),
+          JSON.stringify({
+            files: { 'ui/Board.svelte': { imports: { './Detail.svelte': 'ui/Detail.svelte' } }, 'ui/Detail.svelte': { imports: {} } },
+            candidates: [],
+          }),
+        );
+        const shown = ids.map((id) => ({ id, entry: id === 'board' ? 'ui/Board.svelte' : 'ui/Detail.svelte' }));
+        await writePlugin(root, {
+          id: 'board',
+          title: 'Board',
+          program: SERVER,
+          contributes: { ...contributes, views: shown },
+          build: { hash: (ids.length === 1 ? 'e' : 'f').repeat(64), sources: [] },
+        });
+      });
+    yield* views(['board']);
+    yield* module((state) => state.state === 'ready' && state.address.includes('/Board-'));
+    yield* views(['board', 'detail']);
+    const { module: detail } = yield* module((state) => state.state !== 'preparing', 'detail');
+    expect(detail.state).toBe('ready');
+    const address = detail.state === 'ready' ? detail.address : '';
+    expect(address).toMatch(/\/Detail-[a-z0-9]+\.js$/u);
+    expect((yield* world.call(address)).status).toBe(200);
+  }),
+);
+
+it.live('an unfinished build standing under a key is replaced, not answered as the build', () =>
+  Effect.gen(function* () {
+    const { world, scope, ready } = yield* setup('<p>board</p>');
+    const first = yield* ready();
+    const files = Context.get(world.runtime.door, ViewFiles);
+    const key = keyIn(first.address);
+    yield* Effect.promise(async () => {
+      await rm(files.module('board', key, 'index.json'));
+      await rm(files.module('board', key, first.address.split('/').at(-1)!));
+    });
+    yield* world.op('enable_plugin', { id: 'board', enabled: false }, scope);
+    yield* world.op('enable_plugin', { id: 'board', enabled: true }, scope);
+    const again = yield* ready();
+    expect(again.address).toBe(first.address);
+    expect((yield* world.call(again.address)).status).toBe(200);
+  }),
+);
+
+it.live('the build an older window may still load survives a rollback followed by a new build', () =>
+  Effect.gen(function* () {
+    const { world, root, ready } = yield* setup('<p>a</p>');
+    const files = Context.get(world.runtime.door, ViewFiles);
+    const a = yield* ready();
+    yield* shipped(root, '<p>b</p>', 'b'.repeat(64));
+    const b = yield* ready(a.address);
+    yield* shipped(root, '<p>a</p>', 'c'.repeat(64));
+    expect((yield* ready(b.address)).address).toBe(a.address);
+    yield* shipped(root, '<p>c</p>', 'd'.repeat(64));
+    yield* ready(a.address);
+    const standing = (address: string) =>
+      Effect.promise(() =>
+        stat(files.module('board', keyIn(address), 'index.json')).then(
+          () => true,
+          () => false,
+        ),
+      );
+    const swept = yield* Effect.repeat(Effect.all([standing(a.address), standing(b.address)]), {
+      until: ([left, right]) => !left || !right,
+      schedule: Schedule.spaced('50 millis'),
+    });
+    expect(swept).toEqual([true, false]);
+  }),
+);
+
+it.live('a republish keeps the ready build in the feed until its new build is ready', () =>
+  Effect.gen(function* () {
+    const { root, ready, module } = yield* setup('<p>board</p>');
+    const first = yield* ready();
+    yield* shipped(root, '<p>board</p>', 'b'.repeat(64));
+    yield* shipped(root, '<p>board, rebuilt</p>', 'c'.repeat(64));
+    const seen = yield* module((state) => state.state !== 'ready' || state.address !== first.address);
+    expect(seen.module.state).toBe('ready');
+  }),
+);
+
 it.live('publishing the same views again compiles nothing', () =>
   Effect.gen(function* () {
     const { world, scope, ready } = yield* setup('<p>board</p>');
     const first = yield* ready();
     const files = Context.get(world.runtime.door, ViewFiles);
-    const built = Effect.promise(() => stat(files.module('board', first.address.split('/')[5]!, 'index.json')));
+    const built = Effect.promise(() => stat(files.module('board', keyIn(first.address), 'index.json')));
     const compiled = (yield* built).mtimeMs;
     yield* world.op('enable_plugin', { id: 'board', enabled: false }, scope);
     yield* world.op('enable_plugin', { id: 'board', enabled: true }, scope);

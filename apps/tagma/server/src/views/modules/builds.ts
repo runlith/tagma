@@ -1,161 +1,145 @@
-import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { degraded } from '@runlith/activity/Activity';
-import { workerLink } from '@runlith/utils/worker';
-import { Data, Effect, FiberMap, FileSystem, Option, Queue, Schema } from 'effect';
-import svelte from 'svelte/package.json' with { type: 'json' };
+import { Clock, Effect, FiberMap, FileSystem, Option, Schema } from 'effect';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
 import { PluginDigests, PluginFaults } from '../../plugins/contract/service/plugins.js';
-import type { PluginRef } from '../../plugins/contract/service/points.js';
-import { ViewFiles, ViewPlaces, WindowStyles } from '../contract/service/places.js';
-import { compileSignature } from '../contract/wire/compile.js';
-import { GRAPH_FILE, VIEW_GRAPH, ViewGraph } from '../contract/wire/graph.js';
-import { moduleAddress, sheetAddress, type ViewModule } from '../contract/wire/modules.js';
+import { type PluginContribution, PluginPoints, type PluginRef } from '../../plugins/contract/service/points.js';
+import { ViewCandidates, ViewFiles, ViewPlaces } from '../contract/service/places.js';
+import { VIEWS } from '../contract/service/points.js';
+import { GRAPH_FILE, GraphListing, VIEW_GRAPH } from '../contract/wire/graph.js';
+import { moduleAddress, type ViewModule } from '../contract/wire/modules.js';
 import type { ViewEntries } from '../contract/wire/points.js';
-import { WindowUtilities } from '../contract/wire/utilities.js';
-import { type CompileAnswer, type CompileAsk, CompiledIndex, INDEX_FILE } from './compile.js';
+import { CompiledIndex, entriesOf, GONE, INDEX_FILE, keyOf, SOURCE, STAGED, stagerOf } from './compile.js';
+import { makeCompiler, unprepared, ViewsUnprepared } from './compiler.js';
+import { makeSheet } from './sheet.js';
+
+type Ready = { readonly key: string; readonly index: CompiledIndex };
 
 type Prepared =
   | { readonly _tag: 'preparing' }
-  | { readonly _tag: 'ready'; readonly key: string; readonly index: CompiledIndex }
+  | ({ readonly _tag: 'ready' } & Ready)
   | { readonly _tag: 'failed'; readonly message: string; readonly file: string | null };
 
 type Shown = {
+  readonly contribution: PluginContribution<ViewEntries>;
   readonly plugin: PluginRef;
   readonly views: ViewEntries;
   prepared: Prepared;
+  readonly last: Ready | null;
   candidates: readonly string[];
 };
 
-const PICTURE = /\.(?:svg|png|webp|gif|jpg)$/u;
-
-class ViewsUnprepared extends Data.TaggedError('ViewsUnprepared')<{ readonly reason: string; readonly file: string | null }> {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
 const POINT = 'views';
 
-const IDLE = '5 minutes';
+const MODULES = 'modules';
 
-const decodeGraph = Schema.decodeUnknownEffect(Schema.fromJsonString(ViewGraph));
+const NOT_COMPILED = 'A view of this plugin does not compile';
+
+const decodeListing = Schema.decodeUnknownEffect(Schema.fromJsonString(GraphListing));
 
 const decodeIndex = Schema.decodeUnknownEffect(Schema.fromJsonString(CompiledIndex));
 
-const decodeUtilities = Schema.decodeUnknownEffect(Schema.fromJsonString(WindowUtilities));
-
 const graphPath = (path: string): string => `${VIEW_GRAPH}/${path}`;
 
-const hashed = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 24);
-
-const keyOf = (digest: string): string => hashed(`${digest}\0${svelte.version}\0${compileSignature()}`);
-
-const SHEETS = 'sheet';
-
-const NOT_COMPILED = 'A view of this plugin does not compile';
+const shownOf = (before: Shown | undefined): Ready | null => {
+  if (before === undefined) return null;
+  return before.prepared._tag === 'ready' ? before.prepared : before.prepared._tag === 'preparing' ? before.last : null;
+};
 
 export const makeBuilds = Effect.fnUntraced(function* (input: { readonly changed: () => void }) {
   const { changed } = input;
   const { home } = yield* ViewPlaces;
-  const styles = yield* WindowStyles;
   const host = yield* PluginHost;
   const digests = yield* PluginDigests;
   const faults = yield* PluginFaults;
   const files = yield* FileSystem.FileSystem;
-  const sheets = yield* Queue.sliding<void>(1);
+  const compiler = yield* makeCompiler;
+  const held = yield* (yield* PluginPoints).hold(VIEWS);
   const preparing = yield* FiberMap.make<string>();
-  const resting = yield* FiberMap.make<'idle'>();
-  const link = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      workerLink<CompileAsk, CompileAnswer>(
-        'view compile worker',
-        () => new Worker(new URL('./compile.worker.ts', import.meta.url), { type: 'module' }),
-      ),
-    ),
-    (standing) => standing.shutdown('the plugin views closed'),
-  );
+  const fork = yield* FiberMap.runtime(preparing)<never>();
   const shown = new Map<string, Shown>();
-  let sheet: string | null = null;
-  let asking = 0;
+  const modules = join(home, MODULES);
+  const sheet = yield* makeSheet({
+    compiler,
+    standing: () => [...shown.values()].map((one) => ({ preparing: one.prepared._tag === 'preparing', candidates: one.candidates })),
+    changed,
+  });
 
-  const placeOf = (plugin: string, key: string): string => join(home, 'modules', plugin, key);
-
-  const unprepared = (reason: string, file: string | null = null) => Effect.fail(new ViewsUnprepared({ reason, file }));
+  const placeOf = (plugin: string): string => join(modules, plugin);
 
   const indexOf = (out: string) => files.readFileString(join(out, INDEX_FILE)).pipe(Effect.flatMap(decodeIndex), Effect.option);
 
-  const compiled = Effect.fn('PluginViews.compile')(function* (ask: (id: number) => CompileAsk) {
-    asking += 1;
-    yield* FiberMap.remove(resting, 'idle');
-    const answer = yield* link.ask(ask).pipe(
-      Effect.ensuring(
-        Effect.suspend(() => {
-          asking -= 1;
-          return asking > 0
-            ? Effect.void
-            : FiberMap.run(resting, 'idle', Effect.sleep(IDLE).pipe(Effect.andThen(Effect.sync(() => link.close('it rested')))));
-        }),
-      ),
-      Effect.catchTag('WorkerUnavailable', (gone) => unprepared(gone.message)),
-    );
-    return answer.ok ? answer : yield* unprepared(answer.message, answer.file);
+  const retired = Effect.fnUntraced(function* (place: string, name: string) {
+    const gone = join(place, `${name}.${process.pid}${GONE}`);
+    yield* files.rename(join(place, name), gone);
+    yield* files.remove(gone, { recursive: true });
   });
 
   const sweep = Effect.fn('PluginViews.sweep')(function* (place: string, current: string) {
-    const names = yield* files.readDirectory(place);
-    const dated = yield* Effect.forEach(
-      names.filter((name) => name !== current),
-      (name) =>
-        Effect.map(files.stat(join(place, name)), (info) => ({ name, at: Option.getOrElse(info.mtime, () => new Date(0)).getTime() })),
-    );
-    const [kept, ...stale] = dated.sort((left, right) => right.at - left.at);
-    const removed = kept?.name.endsWith('.partial') === true ? [kept, ...stale] : stale;
-    yield* Effect.forEach(removed, ({ name }) => files.remove(join(place, name), { recursive: true }), { discard: true });
+    const kept: { readonly name: string; readonly at: number }[] = [];
+    for (const name of yield* files.readDirectory(place)) {
+      if (name === current || name === SOURCE) continue;
+      if (name.endsWith(GONE) || (name.endsWith(STAGED) && stagerOf(name) !== process.pid))
+        yield* files.remove(join(place, name), { recursive: true, force: true });
+      else if (!name.endsWith(STAGED)) {
+        const info = yield* files.stat(join(place, name));
+        kept.push({ name, at: Option.getOrElse(info.mtime, () => new Date(0)).getTime() });
+      }
+    }
+    const [, ...stale] = kept.sort((left, right) => right.at - left.at);
+    yield* Effect.forEach(stale, ({ name }) => retired(place, name), { discard: true });
   });
 
-  const prepare = Effect.fnUntraced(function* (standing: Shown) {
-    const { plugin, views } = standing;
+  const listingOf = Effect.fnUntraced(function* (root: string) {
     const read = yield* files
-      .readFileString(join(plugin.root, VIEW_GRAPH, GRAPH_FILE))
+      .readFileString(join(root, VIEW_GRAPH, GRAPH_FILE))
       .pipe(
         Effect.catchTag('PlatformError', () =>
           unprepared(`${graphPath(GRAPH_FILE)} is missing: build the plugin again with tagma-plugin build`),
         ),
       );
-    const graph = yield* decodeGraph(read).pipe(
+    return yield* decodeListing(read).pipe(
       Effect.mapError(
-        (failure) => new ViewsUnprepared({ reason: `${graphPath(GRAPH_FILE)} does not read: ${failure.message}`, file: GRAPH_FILE }),
+        (failure) =>
+          new ViewsUnprepared({ reason: `${graphPath(GRAPH_FILE)} does not read: ${failure.message}`, file: GRAPH_FILE, moved: false }),
       ),
     );
-    standing.candidates = graph.candidates;
-    const absent = views.find((view) => graph.files[view.entry] === undefined);
-    if (absent !== undefined)
-      return yield* unprepared(`the view ${absent.id} names ${absent.entry}, which ${graphPath(GRAPH_FILE)} does not ship`, absent.entry);
-    const shipped = Object.keys(graph.files);
-    const digest = yield* digests
-      .views(plugin.root, [graphPath(GRAPH_FILE), ...shipped.map(graphPath)])
-      .pipe(Effect.mapError((failure) => new ViewsUnprepared({ reason: failure.message, file: null })));
-    if (digest === null)
-      return yield* unprepared(`a file ${graphPath(GRAPH_FILE)} names is missing: build the plugin again with tagma-plugin build`);
-    const key = keyOf(digest);
-    const out = placeOf(plugin.id, key);
-    const standingIndex = yield* indexOf(out);
-    if (Option.isSome(standingIndex)) return { key, index: standingIndex.value };
-    const root = yield* files
-      .realPath(join(plugin.root, VIEW_GRAPH))
-      .pipe(Effect.mapError((failure) => new ViewsUnprepared({ reason: failure.message, file: null })));
-    const answer = yield* compiled((id) => ({
-      id,
-      kind: 'views',
-      root,
-      graph,
-      entries: [...new Set(views.map((view) => view.entry))],
-      icons: shipped.filter((path) => PICTURE.test(path) && graph.files[path]?.dependency !== true),
-      out,
-      publicPath: moduleAddress(plugin.id, key, ''),
-    }));
-    return answer.kind === 'views' ? { key, index: answer.index } : yield* unprepared('the compile worker answered a sheet for views');
+  });
+
+  const prepare = Effect.fnUntraced(function* (standing: Shown) {
+    const { plugin, views } = standing;
+    const entries = entriesOf(views);
+    for (;;) {
+      const listing = yield* listingOf(plugin.root);
+      standing.candidates = listing.candidates;
+      const absent = views.find((view) => listing.files[view.entry] === undefined);
+      if (absent !== undefined)
+        return yield* unprepared(`the view ${absent.id} names ${absent.entry}, which ${graphPath(GRAPH_FILE)} does not ship`, absent.entry);
+      const shipped = Object.keys(listing.files).sort();
+      const digest = yield* digests
+        .digest(plugin.root, [graphPath(GRAPH_FILE), ...shipped.map(graphPath)])
+        .pipe(Effect.mapError((failure) => new ViewsUnprepared({ reason: failure.message, file: null, moved: false })));
+      if (digest === null)
+        return yield* unprepared(`a file ${graphPath(GRAPH_FILE)} names is missing: build the plugin again with tagma-plugin build`);
+      const key = keyOf(digest, entries);
+      const standingIndex = yield* indexOf(join(placeOf(plugin.id), key));
+      if (Option.isSome(standingIndex)) return { key, index: standingIndex.value };
+      const root = yield* files
+        .realPath(join(plugin.root, VIEW_GRAPH))
+        .pipe(Effect.mapError((failure) => new ViewsUnprepared({ reason: failure.message, file: null, moved: false })));
+      const answer = yield* compiler
+        .compiled((id) => ({ id, kind: 'views', plugin: plugin.id, root, entries, place: placeOf(plugin.id) }))
+        .pipe(
+          Effect.map(Option.some),
+          Effect.catchIf(
+            (failure) => failure.moved,
+            () => Effect.succeedNone,
+          ),
+        );
+      if (Option.isNone(answer)) continue;
+      return answer.value.kind === 'views'
+        ? { key: answer.value.key, index: answer.value.index }
+        : yield* unprepared('the compile worker answered a sheet for views');
+    }
   });
 
   const settle = (standing: Shown, prepared: Prepared): void => {
@@ -167,60 +151,15 @@ export const makeBuilds = Effect.fnUntraced(function* (input: { readonly changed
         detail: prepared.file === null ? prepared.message : `${prepared.file}: ${prepared.message}`,
       });
     else faults.clear(standing.plugin.id, POINT);
-    Queue.offerUnsafe(sheets, undefined);
+    sheet.refresh();
     changed();
   };
 
-  const windowStyles = yield* Effect.cached(
-    Effect.gen(function* () {
-      if (styles.utilities === null || !(yield* files.exists(styles.utilities))) return null;
-      const text = yield* files.readFileString(styles.utilities);
-      return { hash: hashed(text), utilities: yield* decodeUtilities(text) };
-    }),
-  );
-
-  const sheetMade = Effect.fn('PluginViews.sheet')(function* () {
-    const standing = [...shown.values()];
-    if (standing.some((one) => one.prepared._tag === 'preparing')) return;
-    const window = yield* windowStyles;
-    const own = new Set(window?.utilities.candidates ?? []);
-    const added = [...new Set(standing.flatMap((one) => one.candidates))].filter((candidate) => !own.has(candidate)).sort();
-    if (window === null || added.length === 0) {
-      if (sheet !== null) {
-        sheet = null;
-        changed();
-      }
-      return;
-    }
-    const file = `${hashed(`${window.hash}\0${added.join('\n')}`)}.css`;
-    const out = join(home, SHEETS, file);
-    if (!(yield* files.exists(out))) yield* compiled((id) => ({ id, kind: 'sheet', utilities: window.utilities, candidates: added, out }));
-    const address = sheetAddress(file);
-    if (sheet !== address) {
-      sheet = address;
-      changed();
-    }
-    yield* sweep(join(home, SHEETS), file);
+  const published = Effect.fnUntraced(function* (plugin: string, key: string) {
+    const now = new Date(yield* Clock.currentTimeMillis);
+    yield* files.utimes(join(placeOf(plugin), key), now, now);
+    yield* sweep(placeOf(plugin), key);
   });
-
-  yield* Effect.forkScoped(
-    host.started.pipe(
-      Effect.andThen(
-        Effect.forever(
-          Queue.take(sheets).pipe(
-            Effect.andThen(
-              degraded(
-                'views sheet',
-                'the window keeps the previous utilities sheet, so plugin classes it lacks stay unstyled until the published views change again',
-                Effect.orDie(sheetMade()),
-                () => undefined,
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 
   const run = (standing: Shown) =>
     prepare(standing).pipe(
@@ -229,57 +168,102 @@ export const makeBuilds = Effect.fnUntraced(function* (input: { readonly changed
         onSuccess: ({ key, index }) =>
           Effect.andThen(
             Effect.sync(() => settle(standing, { _tag: 'ready', key, index })),
-            sweep(join(home, 'modules', standing.plugin.id), key).pipe(
+            published(standing.plugin.id, key).pipe(
               Effect.catch((failure) => Effect.logWarning('stale plugin view builds stay on disk', failure.message)),
             ),
           ),
       }),
     );
 
+  yield* Effect.forkScoped(
+    host.started.pipe(
+      Effect.andThen(files.exists(modules)),
+      Effect.flatMap((exists) => (exists ? files.readDirectory(modules) : Effect.succeed([]))),
+      Effect.flatMap((names) =>
+        Effect.forEach(
+          names.filter((name) => !shown.has(name)),
+          (name) =>
+            name.endsWith(GONE)
+              ? files.remove(join(modules, name), { recursive: true, force: true })
+              : FiberMap.run(preparing, name, retired(modules, name), { onlyIfMissing: true }),
+          { discard: true },
+        ),
+      ),
+      Effect.catch((failure) => Effect.logWarning('builds of plugins no longer published stay on disk', failure.message)),
+    ),
+  );
+
+  const builtOf = (standing: Shown): Ready | null => (standing.prepared._tag === 'ready' ? standing.prepared : standing.last);
+
   const moduleOf = (plugin: string, view: string): ViewModule | undefined => {
     const standing = shown.get(plugin);
     const entry = standing?.views.find((candidate) => candidate.id === view)?.entry;
     if (standing === undefined || entry === undefined) return undefined;
     const { prepared } = standing;
-    if (prepared._tag === 'preparing') return { state: 'preparing' };
     if (prepared._tag === 'failed') return { state: 'failed', message: prepared.message, file: prepared.file };
-    const file = prepared.index.modules[entry];
-    return file === undefined
-      ? { state: 'failed', message: `the build made no module for ${entry}`, file: entry }
-      : { state: 'ready', address: moduleAddress(plugin, prepared.key, file) };
+    const built = builtOf(standing);
+    const file = built?.index.modules[entry];
+    if (built !== null && file !== undefined) return { state: 'ready', address: moduleAddress(plugin, built.key, file) };
+    return prepared._tag === 'preparing'
+      ? { state: 'preparing' }
+      : { state: 'failed', message: `the build made no module for ${entry}`, file: entry };
   };
 
   const iconOf = (plugin: string, path: string): string | null => {
-    const prepared = shown.get(plugin)?.prepared;
-    const file = prepared?._tag === 'ready' ? prepared.index.icons[path] : undefined;
-    return prepared?._tag === 'ready' && file !== undefined ? moduleAddress(plugin, prepared.key, file) : null;
+    const standing = shown.get(plugin);
+    const built = standing === undefined || standing.prepared._tag === 'failed' ? null : builtOf(standing);
+    const file = built?.index.icons[path];
+    return built === null || file === undefined ? null : moduleAddress(plugin, built.key, file);
   };
 
-  const publish = Effect.fnUntraced(function* (plugin: PluginRef, views: ViewEntries) {
-    const standing: Shown = { plugin, views, prepared: { _tag: 'preparing' }, candidates: [] };
-    shown.set(plugin.id, standing);
+  const dropped = (plugin: string): void => {
+    if (!shown.delete(plugin)) return;
+    const fiber = FiberMap.getUnsafe(preparing, plugin);
+    if (Option.isSome(fiber)) fiber.value.interruptUnsafe();
+    faults.clear(plugin, POINT);
+    sheet.refresh();
     changed();
-    yield* FiberMap.run(preparing, plugin.id, run(standing));
-    return () => {
-      if (shown.get(plugin.id) !== standing) return;
-      shown.delete(plugin.id);
-      const fiber = FiberMap.getUnsafe(preparing, plugin.id);
-      if (Option.isSome(fiber)) fiber.value.interruptUnsafe();
-      faults.clear(plugin.id, POINT);
-      Queue.offerUnsafe(sheets, undefined);
-      changed();
+  };
+
+  const moved = (plugin: string): void => {
+    const contribution = held.of(plugin);
+    const before = shown.get(plugin);
+    if (contribution === undefined || contribution.value.length === 0) return dropped(plugin);
+    if (before?.contribution === contribution) return;
+    const standing: Shown = {
+      contribution,
+      plugin: contribution.plugin,
+      views: contribution.value,
+      prepared: { _tag: 'preparing' },
+      last: shownOf(before),
+      candidates: before?.candidates ?? [],
     };
-  });
+    shown.set(plugin, standing);
+    changed();
+    fork(plugin, run(standing));
+  };
+
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const unheard = held.changed(moved);
+      for (const plugin of held.all().keys()) moved(plugin);
+      return unheard;
+    }),
+    (unheard) => Effect.sync(unheard),
+  );
 
   return {
-    publish,
     moduleOf,
     iconOf,
-    sheet: (): string | null => sheet,
+    sheet: sheet.address,
+    viewsOf: (plugin: string): { readonly plugin: PluginRef; readonly views: ViewEntries } | undefined => shown.get(plugin),
+    viewed: (): ReadonlyMap<string, PluginRef> => new Map([...shown].map(([id, standing]) => [id, standing.plugin])),
     files: ViewFiles.of({
-      module: (plugin, key, file) => join(placeOf(plugin, key), file),
-      sheet: (file) => join(home, SHEETS, file),
-      candidates: () => [...new Set([...shown.values()].flatMap((standing) => standing.candidates))].sort(),
+      module: (plugin, key, file) => join(placeOf(plugin), key, file),
+      sheet: sheet.file,
+    }),
+    candidates: ViewCandidates.of({
+      listed: () => [...new Set([...shown.values()].flatMap((standing) => standing.candidates))].sort(),
     }),
   };
 });

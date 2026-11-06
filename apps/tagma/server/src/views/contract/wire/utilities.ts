@@ -25,5 +25,13 @@ export type Candidates = typeof Candidates.Type;
 
 export const stylesheetKey = (id: string, base: string): string => `${base}\u0000${id}`;
 
+export const replayingLoader =
+  (stylesheets: Readonly<Record<string, Stylesheet>>) =>
+  async (id: string, base: string): Promise<Stylesheet> => {
+    const recorded = stylesheets[stylesheetKey(id, base)];
+    if (recorded === undefined) throw new Error(`the window's recorded stylesheets hold no ${id} from ${base}`);
+    return recorded;
+  };
+
 export const utilitiesSource = (entry: string): string =>
   `@reference ${JSON.stringify(entry)};\n@import 'tailwindcss/utilities.css' layer(utilities);\n`;

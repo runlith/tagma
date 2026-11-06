@@ -102,7 +102,7 @@ A view is a Svelte 5 component of the folder, as `ui/Board.svelte`, mounted insi
 - Import from `@runlith/tagma/ui`: `useTagma`, `TagmaRefused`, the `ToolFace` and `ComposerFace` types, `Frame`, `Thread`, and Tagma's own `Button`, `Input`, `Textarea`, `Tooltip`, `Kbd`, `FadeText`, `PathText`, `Glyph`, `TileMeter`, `DropdownMenu` and `Dialog`. `svelte` and its client modules are the window's own; any other library is bundled into the view.
 - Import a large library by its deep paths, as `@lucide/svelte/icons/check`, never through its index: the view carries every file its imports load, and one barrel import of an icon set loads all of it.
 - Style with Tailwind classes and a component's `<style>`; the theme's tokens (`bg-background`, `text-muted-foreground`, `border-border`) follow the person's theme. A stylesheet import fails the build.
-- `<Frame src title height? fill? media?>` embeds someone else's site in a sandboxed frame on its own origin, which reaches no Tagma API. `media` lets that site ask for camera and microphone: the person allows it per origin where the view is shown, and the plugin's card says it uses camera and microphone.
+- `<Frame src title height? fill? media?>` embeds someone else's site in a sandboxed frame on its own origin, which reaches no Tagma API. `media` lets that site ask for camera and microphone: the person allows it per origin where the view is shown, and the plugin's card says it frames sites that may ask for them.
 
 `const tagma = useTagma<typeof plugin>()`, called in the component's script, answers the view's handle:
 <!-- view-capabilities -->

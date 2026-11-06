@@ -3,12 +3,14 @@ import type { PluginFaced } from '../platform/contract/service/contribution.js';
 import type { PluginFace } from '../platform/contract/wire/contribution.js';
 import {
   type HeldContributions,
+  type PluginCaller,
   type PluginContribution,
   PluginPointRefused,
   PluginPoints,
+  type PluginRef,
   type PluginRegister,
 } from './contract/service/points.js';
-import { contributionOf, contributionsRefusal } from './contract/wire/contributions.js';
+import { contributionOf, contributionsRefusal, type PluginChecked } from './contract/wire/contributions.js';
 
 type Declared = {
   readonly point: PluginFaced<any>;
@@ -19,6 +21,13 @@ export const makePoints = () => {
   const points = new Map<string, Declared>();
   const faces = new Map<string, PluginFace<any>>();
   const claimed = new Map<string, Map<string, string>>();
+  const replacing = new Map<string, (() => void)[]>();
+
+  const settled = (plugin: string, act: () => void): void => {
+    const open = replacing.get(plugin);
+    if (open === undefined) act();
+    else open.push(act);
+  };
 
   const taken = ({ point }: Declared, value: unknown, plugin: string): string | null => {
     for (const key of point.plugin.claims?.(value) ?? []) {
@@ -56,6 +65,29 @@ export const makePoints = () => {
     };
   });
 
+  const published = Effect.fnUntraced(function* (plugin: PluginRef, checked: PluginChecked, caller: PluginCaller) {
+    const entries = Object.entries(checked).flatMap(([name, value]) => {
+      const declared = points.get(name);
+      return declared === undefined ? [] : [{ declared, value }];
+    });
+    const releases: (() => void)[] = [];
+    const withdraw = (): void => {
+      for (const release of releases.splice(0).reverse()) release();
+    };
+    for (const { declared, value } of entries) {
+      const held = taken(declared, value, plugin.id);
+      if (held !== null) {
+        withdraw();
+        return yield* new PluginPointRefused({ point: declared.point.plugin.name, reason: held });
+      }
+      releases.push(claim(declared, value, plugin.id));
+    }
+    for (const { declared, value } of entries) {
+      releases.push(yield* declared.register({ plugin, value, caller }).pipe(Effect.tapError(() => Effect.sync(withdraw))));
+    }
+    return withdraw;
+  });
+
   return PluginPoints.of({
     declare,
     hold: Effect.fnUntraced(function* <W>(point: PluginFaced<W>) {
@@ -68,12 +100,13 @@ export const makePoints = () => {
         Effect.sync(() => {
           const { id } = contribution.plugin;
           held.set(id, contribution);
-          told(id);
-          return () => {
-            if (held.get(id) !== contribution) return;
-            held.delete(id);
-            told(id);
-          };
+          settled(id, () => told(id));
+          return () =>
+            settled(id, () => {
+              if (held.get(id) !== contribution) return;
+              held.delete(id);
+              told(id);
+            });
         });
       yield* Effect.acquireRelease(declare(point, register), (withdraw) => Effect.sync(withdraw));
       return {
@@ -105,27 +138,21 @@ export const makePoints = () => {
         uses: read === undefined ? null : (face?.uses?.(read) ?? null),
       };
     },
-    publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
-      const entries = Object.entries(checked).flatMap(([name, value]) => {
-        const declared = points.get(name);
-        return declared === undefined ? [] : [{ declared, value }];
-      });
-      const releases: (() => void)[] = [];
-      const withdraw = (): void => {
-        for (const release of releases.splice(0).reverse()) release();
-      };
-      for (const { declared, value } of entries) {
-        const held = taken(declared, value, plugin.id);
-        if (held !== null) {
-          withdraw();
-          return yield* new PluginPointRefused({ point: declared.point.plugin.name, reason: held });
-        }
-        releases.push(claim(declared, value, plugin.id));
-      }
-      for (const { declared, value } of entries) {
-        releases.push(yield* declared.register({ plugin, value, caller }).pipe(Effect.tapError(() => Effect.sync(withdraw))));
-      }
-      return withdraw;
+    publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller, replaced) {
+      if (replaced === undefined) return yield* published(plugin, checked, caller);
+      const open: (() => void)[] = [];
+      replacing.set(plugin.id, open);
+      return yield* Effect.suspend(() => {
+        replaced();
+        return published(plugin, checked, caller);
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            replacing.delete(plugin.id);
+            for (const act of open) act();
+          }),
+        ),
+      );
     }),
   });
 };
