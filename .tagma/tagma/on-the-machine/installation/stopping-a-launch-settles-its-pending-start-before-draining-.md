@@ -10,9 +10,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/process/launch.ts
-  - kind: file
     ref: apps/tagma/server/src/installation/process/launch.itest.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/launch.ts
   - kind: file
     ref: apps/tagma/server/src/installation/testing/launchServer.ts
 ---

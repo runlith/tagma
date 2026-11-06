@@ -8,13 +8,13 @@ edges:
     to: 01a128f3-2660-7b02-bb52-7f08834c93bc
 sources:
   - kind: file
-    ref: packages/execution-host/native/holder/src/posix/backend.rs
-  - kind: file
     ref: packages/execution-host/native/holder/src/linux/mod.rs
   - kind: file
     ref: packages/execution-host/native/holder/src/linux/spawner.rs
   - kind: file
     ref: packages/execution-host/native/holder/src/macos/mod.rs
+  - kind: file
+    ref: packages/execution-host/native/holder/src/posix/backend.rs
   - kind: file
     ref: packages/execution-host/native/holder/src/posix/spawn.rs
   - kind: file

@@ -3,6 +3,7 @@ import { dirname, join, posix } from 'node:path';
 import { blobsAt, treeEntriesAt } from '@runlith/git/entries';
 import { Git } from '@runlith/git/Git';
 import { Effect, FileSystem, Option } from 'effect';
+import { generatedAmong } from '../../platform/git/generated.js';
 import { actingGit } from '../../platform/git/ownGit.js';
 import { InspectionFailed } from '../workers/inspectionLanes.js';
 
@@ -10,12 +11,13 @@ export type LaidFile = { readonly path: string; readonly text: string };
 
 const BLOB_MODES: ReadonlySet<string> = new Set(['100644', '100755']);
 
-export const reachFiles = Effect.fn('enforcement.program.layout.reach')(function* (
+const laid = Effect.fnUntraced(function* (
   root: string,
   tree: string,
   places: readonly string[],
   keep: (path: string) => boolean,
   failed: (reason: string) => InspectionFailed,
+  subjects: boolean,
 ) {
   const service = yield* Effect.serviceOption(Git);
   if (Option.isNone(service))
@@ -27,7 +29,21 @@ export const reachFiles = Effect.fn('enforcement.program.layout.reach')(function
       cause: 'git',
       reason: `the reach at ${tree} could not be listed: ${[...listed.unread.values()][0]}`,
     });
-  const reached = [...listed.entries].filter(([path]) => keep(path));
+  const kept = [...listed.entries].filter(([path]) => keep(path));
+  const generated = subjects
+    ? yield* generatedAmong(
+        git,
+        root,
+        kept.map(([path]) => path),
+        tree,
+      ).pipe(
+        Effect.mapError(
+          (failure) =>
+            new InspectionFailed({ cause: 'git', reason: `which files at ${tree} are generated could not be read: ${failure.message}` }),
+        ),
+      )
+    : new Set<string>();
+  const reached = kept.filter(([path]) => !generated.has(path));
   const unread = reached.find(([, entry]) => !BLOB_MODES.has(entry.mode));
   if (unread !== undefined) return yield* failed(`${unread[0]} at ${tree} is not a regular file (mode ${unread[1].mode})`);
   const paths = reached.map(([path]) => path).sort();
@@ -48,6 +64,26 @@ export const reachFiles = Effect.fn('enforcement.program.layout.reach')(function
     files.push({ path, text: read.text });
   }
   return files;
+});
+
+export const reachFiles = Effect.fn('enforcement.program.layout.reach')(function* (
+  root: string,
+  tree: string,
+  places: readonly string[],
+  keep: (path: string) => boolean,
+  failed: (reason: string) => InspectionFailed,
+) {
+  return yield* laid(root, tree, places, keep, failed, false);
+});
+
+export const reachSubjects = Effect.fn('enforcement.program.layout.subjects')(function* (
+  root: string,
+  tree: string,
+  places: readonly string[],
+  keep: (path: string) => boolean,
+  failed: (reason: string) => InspectionFailed,
+) {
+  return yield* laid(root, tree, places, keep, failed, true);
 });
 
 export const treeFile = Effect.fn('enforcement.program.layout.file')(function* (

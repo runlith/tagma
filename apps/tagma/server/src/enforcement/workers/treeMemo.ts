@@ -3,6 +3,7 @@ import { ChunkedListing, diffTreeAt, listedTreeAt, pointedTreeAt, treeIdAt, type
 import type { Git } from '@runlith/git/Git';
 import { totalmem } from 'node:os';
 import { Effect, Result } from 'effect';
+import { generatedAmong } from '../../platform/git/generated.js';
 
 type Job = { readonly frontiers: Map<string, Map<string, MemoValue>>; readonly snapshots: Map<string, unknown> };
 
@@ -89,6 +90,26 @@ export const listingAt = Effect.fn('inspecting.listing')(function* (
     ));
   held(key, { listing, bytes, entry, root, tree, parts: parts.join('\0') });
   return listing;
+});
+
+const GENERATED_KEPT = 4;
+const generatedKnown = new Map<string, Map<string, boolean>>();
+
+export const generatedAt = Effect.fn('inspecting.generated')(function* (
+  git: Git['Service'],
+  root: string,
+  tree: string,
+  paths: readonly string[],
+) {
+  const key = `${root}\0${tree}`;
+  const known = generatedKnown.get(key) ?? new Map<string, boolean>();
+  generatedKnown.delete(key);
+  generatedKnown.set(key, known);
+  if (generatedKnown.size > GENERATED_KEPT) generatedKnown.delete(generatedKnown.keys().next().value as string);
+  const asked = paths.filter((path) => !known.has(path));
+  const marked = yield* generatedAmong(git, root, asked, tree);
+  for (const path of asked) known.set(path, marked.has(path));
+  return (path: string): boolean => known.get(path) === true;
 });
 
 const held = (key: string, listed: Listed): void => {

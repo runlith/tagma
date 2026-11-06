@@ -34,4 +34,4 @@ sources:
 - After publication, the steps' delta is applied to working files by three-way merge; a file it didn't land in stays as it was and is named. An agent's edit over such a file's stale text names the commit that rewrote it.
 - Applies to `submit_work` and `commit_checkout`; a merge commit isn't formed by steps. The config is read from the commit's own version and changes with the branch.
 
-**Limits.** A command doesn't get deleted and binary files, symlinks, files under a filter attribute, or the graph store. An uncommitted or git-ignored `tagma.config.ts` doesn't apply. Skipping steps is only on the operator's word, for one commit. Windows is unverified: steps run through `/bin/sh`.
+**Limits.** A command doesn't get deleted and binary files, symlinks, files under a filter attribute, files the repository marks `linguist-generated` (a plugin's committed build output), or the graph store. An uncommitted or git-ignored `tagma.config.ts` doesn't apply. Skipping steps is only on the operator's word, for one commit. Windows is unverified: steps run through `/bin/sh`.

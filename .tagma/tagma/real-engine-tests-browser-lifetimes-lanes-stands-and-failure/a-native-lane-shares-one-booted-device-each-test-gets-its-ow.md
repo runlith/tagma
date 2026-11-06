@@ -8,11 +8,11 @@ edges:
     to: 01a19963-d6a1-7ab9-8064-62050d667f3f
 sources:
   - kind: file
-    ref: packages/e2e/src/lanes/simulator.ts
+    ref: packages/e2e/src/lanes/ios-contract.e2e.ts
   - kind: file
     ref: packages/e2e/src/lanes/ios.ts
   - kind: file
-    ref: packages/e2e/src/lanes/ios-contract.e2e.ts
+    ref: packages/e2e/src/lanes/simulator.ts
 ---
 On the macOS CI runner, cloning and cold-booting a device, then launching Safari and waiting for it to go quiet, measured 90–155 s before the first accessibility read or navigation (run 41927449628). Against the 180 s hang bound every phase shares, provisioning a device per test could not pass reliably. Boot completion still leaves the device's first app launch carrying the settling cost: it measured 3–110 s on a cold clone, and 110 s in run 41934199447 alone exceeded a phase's bound. So the cold device work leaves the tests. In CI, a workflow step before the tests clones and boots the lane device, launches Safari once through the companion PID receipt, quiescence and native geometry, terminates it, and names the device in `E2E_IOS_DEVICE`. Each lane process adopts that device in its guarded lane hook and never removes it; the machine-wide lane lock still lets only one lane process use it at a time. Without that variable, as in local runs, the lane clones and boots its own device in a guarded hook, removes it when the lane ends, and runs the first launch in a second guarded phase. Each test's guarded setup starts its own input driver, launches a fresh Safari process through the companion's PID receipt, waits for quiescence and opens its page; teardown navigates that page to about:blank and then terminates the Safari process.
 

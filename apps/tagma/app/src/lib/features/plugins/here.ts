@@ -1,8 +1,10 @@
 import type { EntryRow } from '@tagma/server/marketplaces/contract/wire/rows';
 import type { McpServerRow } from '@tagma/server/mcp/contract/wire/servers';
-import type { PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+import type { PluginProcessRow, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
 
 export type HereState = 'waits' | 'fails' | 'connecting' | 'update' | 'ok' | 'off';
+
+export type StepTone = 'busy' | 'waits' | 'fails' | 'done' | 'idle';
 
 export type Here =
   | {
@@ -38,6 +40,27 @@ export function serverState(row: McpServerRow): HereState {
 
 export const waitsOnSignIn = (row: McpServerRow): boolean => row.status === 'needs-sign-in' || row.signIn?.pending === true;
 
+export function serverTone(row: McpServerRow): StepTone {
+  const state = serverState(row);
+  if (state === 'connecting' || row.signIn?.pending) return 'busy';
+  if (state === 'waits') return 'waits';
+  if (state === 'fails') return 'fails';
+  return row.status === 'connected' ? 'done' : 'idle';
+}
+
+function processState(process: PluginProcessRow): HereState {
+  switch (process.state) {
+    case 'failed':
+      return 'fails';
+    case 'starting':
+      return 'connecting';
+    case 'running':
+    case 'idle':
+    case 'stopped':
+      return 'ok';
+  }
+}
+
 export function newerOf(row: PluginRow, entries: readonly EntryRow[]): string | null {
   const origin = row.origin;
   if (origin === undefined) return null;
@@ -48,10 +71,17 @@ export function newerOf(row: PluginRow, entries: readonly EntryRow[]): string | 
 export const broughtBy = (servers: readonly McpServerRow[], id: string): readonly McpServerRow[] =>
   servers.filter((row) => row.scope === 'contributed' && row.contributor === id);
 
+export const stillWorking = (row: PluginRow): boolean => row.process?.state === 'running' || row.process?.state === 'idle';
+
+export const processShown = (row: PluginRow): PluginProcessRow | undefined =>
+  row.process !== undefined && (row.process.state === 'failed' || row.components.some((component) => component.kind === 'process'))
+    ? row.process
+    : undefined;
+
 export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
-  if (row.refused !== undefined) return 'fails';
+  if (row.refused !== undefined && !stillWorking(row)) return 'fails';
   if (!row.enabled) return 'off';
-  const states = servers.map(serverState);
+  const states = [...servers.map(serverState), ...(row.process === undefined ? [] : [processState(row.process)])];
   if (states.includes('waits') || row.options.some((option) => option.required && !option.set)) return 'waits';
   if (states.includes('fails')) return 'fails';
   if (states.includes('connecting')) return 'connecting';

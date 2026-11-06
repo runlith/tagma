@@ -15,8 +15,8 @@ edges:
     to: 01a1ad42-04ef-744c-89dc-278436fdc3f7
 sources:
   - kind: file
-    ref: packages/agent/src/thread/record.ts
-  - kind: file
     ref: packages/agent/src/thread/persisted.ts
+  - kind: file
+    ref: packages/agent/src/thread/record.ts
 ---
 The safe stand-ins for a stored fact that does not read (`UNREAD_BINDING`, `UNREAD_CAPABILITIES`, authority as review) were indistinguishable from real values: `set_thread_transport` read an unread binding as terminal and answered `unchanged`, released through `orDie` and died, `harnessTransportOf` reported acp, `TransportCannot` claimed the transport declares no capability, and the launch refusal named the stand-in adapter. The reading now sets a typed `unread` mark beside the values on the row, the harness road and the binding read, and every reader acts on it: the transport registry refuses typed, `set_thread_transport` writes the asked road and refuses a held process, the CLI row names no road, `TransportCannot` says the capabilities did not read, and the snapshot carries the mark.

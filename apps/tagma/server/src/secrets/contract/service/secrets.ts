@@ -32,6 +32,11 @@ export type SignInRefresh<Grant, E, R> = {
 
 export type Handouts = (key: string) => Handout;
 
+export const maskedForms = (value: string): readonly string[] => {
+  const escaped = JSON.stringify(value).slice(1, -1);
+  return escaped === value ? [value] : [value, escaped];
+};
+
 export class SecretOwnerFailed extends Data.TaggedError('SecretOwnerFailed')<{ readonly reason: string; readonly unblock: Unblock }> {
   override get message(): string {
     return this.reason;

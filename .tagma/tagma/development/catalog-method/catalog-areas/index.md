@@ -76,7 +76,7 @@ A built-in browser for operator and agents, and what agents search and read the 
 
 ### A10 · Extensions: skills, instruction files, MCP, apps, views, pages
 What extends the agent and the window beyond the built-in: project skills and instruction files, MCP servers and their App views, Tagma apps with views, pins, secrets, and schedules, pages agents publish.
-- **Owns:** `mcp` (7), `tagma-apps` (5), `views` (4), `secrets` (3), `artifacts` (CLI `artifacts`), `schedule`, `pin_view`, `unpin_view`, `read_agent_skills`, `read_workspace_sources`, `reload_workspace_sources`; `skills.*`, `agent.contextFiles.*`, `mcp.servers`, `apps.*`; the `load_skill` tool; `features/mcp`, `tagma-apps`, `views`, `secrets`, `pages`, routes `/p/[app]/[view]` and `/_desktop/view/…`, view windows on desktop, the skill catalog in the composer, SkillsSection.
+- **Owns:** `mcp` (7), `plugins` (4), `views` (4), `secrets` (3), `artifacts` (CLI `artifacts`), `schedule`, `pin_view`, `unpin_view`, `read_agent_skills`, `read_workspace_sources`, `reload_workspace_sources`; `skills.*`, `agent.contextFiles.*`, `mcp.servers`, `plugins.*`; the `load_skill` tool; `features/mcp`, `plugin-views`, `views`, `secrets`, `pages`, routes `/p/[...path]` and `/_desktop/view/…`, view windows on desktop, the skill catalog in the composer, SkillsSection.
 - **Leaves:** agents and workflows brought by apps — A1; bridge notifications — A2.
 
 ### A11 · Tagma on the machine: access, install, updates, window
@@ -95,7 +95,7 @@ The frame everything else works in: the settings screen and layers, navigation a
 - **Every edit's authorship** — agent tools, operator editor, commands — A5.
 - **Settings as a mechanism** (screen, scopes, layers, agent rights) — A12; a key's meaning — its area by the table.
 - **Operation doors and answer shape** (HTTP, live socket, `tagma op`, refusal with code/reason/unblock, `project` and act place) — A12; doors for foreign CLIs (`mcp-serve`, `hook`, `session_start`) — A1 and A4.
-- **Tool cards in the feed** — the tool's area: bash — A6, browser — A9, graph — A3, MCP App and Tagma app views — A10, quota — A7, dictation in the composer — A8, compaction and model — A1; the feed itself — A2.
+- **Tool cards in the feed** — the tool's area: bash — A6, browser — A9, graph — A3, MCP App and plugin views — A10, quota — A7, dictation in the composer — A8, compaction and model — A1; the feed itself — A2.
 - **"Attention"** — the list, its rows, and notifications — A2; why a thread waits (question, refusal, run end) — A1.
 - **Worktree and thread:** creation, merge, `update_worktree` — A5; `move_thread` and worktrees for children — A1.
 - **Sandbox and thread:** sandbox — A6; thread birth in it — A1.
@@ -109,7 +109,7 @@ The frame everything else works in: the settings screen and layers, navigation a
 
 ## Method and measurements
 All counted 2026-10-17 on the `/opt/workspaces/runlith` working tree.
-- **Operations:** `tagma op` lists 382; `operation('…')` declarations in `apps/tagma/server/src` outside tests are also 382, and the lists match. Split by module: graph 67, threads 64, executions 34, native-harness 25, speech 22, providers 22, browser 21, external-harnesses 14, worktrees 12, workspace 10, checkout-files 10, installation 8, sandbox 7, mcp 7, landing 7, performance 6, enforcement 6, tagma-apps 5, change-record 5, views 4, remote 4, access 4, settings 3, push 3, secrets 3, notify 3, reflections 2, schedule 1, invocation 1, commit-steps 1, artifacts 1.
+- **Operations:** `tagma op` listed 382 when the table was made; the app operations it counted are now the four plugin operations, so the table holds 381. Split by module: graph 67, threads 64, executions 34, native-harness 25, speech 22, providers 22, browser 21, external-harnesses 14, worktrees 12, workspace 10, checkout-files 10, installation 8, sandbox 7, mcp 7, landing 7, performance 6, enforcement 6, plugins 4, change-record 5, views 4, remote 4, access 4, settings 3, push 3, secrets 3, notify 3, reflections 2, schedule 1, invocation 1, commit-steps 1, artifacts 1.
 - **Settings:** `read_settings` for runlith — 133 keys in 23 sections; plus `release.feed` (declared only in the release build) and `terminal.lastGrid` (written by the terminal itself) — 135 total. Keys declared only in tests were not counted.
 - **CLI:** 45 top-level verbs in developer-build `tagma --help` plus `release` and `install-from` in the release build — 47; with subcommands — 85 `Command.make`.
 - **Agent tools:** the `tagma` agent catalog — 221 tools, 210 of them operations; outside the operation catalog 11 (`bash`, `read`, `write`, `edit`, `glob`, `grep`, `ls`, `delete`, `rename`, `tool_search`, `ask_user`) plus 10 more arriving at thread birth from collaboration, skills, fork, output, web, and resources sources (`compact_agent`, `rewind_agent`, `set_agent_model`, `read_models`, `fork_thread`, `load_skill`, `read_tool_output`, `held_resources`, `webfetch`, `websearch`) — 21.

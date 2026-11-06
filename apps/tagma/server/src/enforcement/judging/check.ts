@@ -1,5 +1,6 @@
 import { type Unjudged } from '@tagma/inspection/verdict';
 import { Effect, Result, Semaphore } from 'effect';
+import { withoutGenerated } from './trees.js';
 import type { BlockRecord, BlockRow } from '../../graph/contract/service/acts.js';
 import { measuredRoot } from '../../graph/contract/service/serving.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -220,7 +221,19 @@ export const checkHead = Effect.fn('enforcement.checkHead')(function* (
   return settled(head, collected, targets);
 });
 
-export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: RuleCheckInput, { targets }: Targets, change: TreeSubject) {
+export const checkChange = Effect.fn('enforcement.checkChange')(function* (
+  ask: RuleCheckInput,
+  { targets }: Targets,
+  subject: TreeSubject,
+) {
+  const change = yield* withoutGenerated(subject).pipe(
+    Effect.mapError(
+      (failure) =>
+        new GateRefusal('git-unavailable', `which changed files are generated could not be read: ${failure.message}`, [
+          'read what git said and clear it, then check again',
+        ]),
+    ),
+  );
   const inspections = yield* Inspections;
   const collected = collecting();
   const evidence = evidenceOf(change.root, change.base, change.built);

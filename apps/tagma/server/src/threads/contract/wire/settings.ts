@@ -100,7 +100,7 @@ export const agentsOffered = settingListKey({
   order: 90,
   title: 'Who is offered a type',
   description:
-    'Each entry names a type — an agent in code or one declared in a file — and who may start it: `operator` for the operator alone, `agents` for agents too, as in `{"type": "reviewer", "to": "agents"}`. Absent, an agent in code and a file of your personal agents are offered to agents, and a file of a project or an app to you alone. A later entry wins, so a project answers over the standing one.',
+    'Each entry names a type — an agent in code or one declared in a file — and who may start it: `operator` for the operator alone, `agents` for agents too, as in `{"type": "reviewer", "to": "agents"}`. Absent, an agent in code and a file of your personal agents are offered to agents, and a file of a project or a plugin to you alone. A later entry wins, so a project answers over the standing one.',
   member: OfferEntry,
   fallback: [] as readonly OfferEntry[],
   scopes: SETTABLE_SCOPES,

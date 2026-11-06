@@ -16,19 +16,19 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/SurfaceLoader.ts
   - kind: file
+    ref: apps/tagma/server/src/checkout-builds/runner.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/returning.ts
+  - kind: file
     ref: apps/tagma/server/src/cut/build.ts
   - kind: file
     ref: apps/tagma/server/src/installation/operations/downgrade.ts
   - kind: file
+    ref: apps/tagma/server/src/installation/process/returning.ts
+  - kind: file
     ref: apps/tagma/server/src/release-channel/offers.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/runner.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/returning.ts
-  - kind: file
-    ref: apps/tagma/server/src/installation/process/returning.ts
-  - kind: file
-    ref: apps/tagma/server/src/checkout-builds/runner.ts
   - kind: file
     ref: packages/sqlite-process/src/chainReturn.ts
 ---

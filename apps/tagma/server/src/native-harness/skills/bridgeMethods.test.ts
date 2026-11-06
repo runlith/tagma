@@ -5,10 +5,10 @@ import { Effect } from 'effect';
 import { bridgeMethod, HOST_BRIDGE } from '../../views/contract/wire/bridge.js';
 import { withBridgeMethods } from './bridgeMethods.js';
 
-const apps: AgentSkill<unknown> = {
-  id: 'apps',
-  description: 'Apps.',
-  references: [{ name: 'example', description: 'An app' }],
+const plugins: AgentSkill<unknown> = {
+  id: 'plugins',
+  description: 'Plugins.',
+  references: [{ name: 'example', description: 'A plugin' }],
   instructions: () => 'Before.\n<!-- bridge-methods -->\nAfter.',
   reference: (name) => Effect.succeed(`disk ${name}`),
 };
@@ -23,9 +23,9 @@ const echo = bridgeMethod({
   reference: { title: 'Echo in a view', text: 'Echo details.' },
 });
 
-it.effect('the apps skill lists every declared method with its signature, notifications and reference', () =>
+it.effect('the plugins skill lists every declared method with its signature, notifications and reference', () =>
   Effect.gen(function* () {
-    const [skill] = withBridgeMethods([apps], [...HOST_BRIDGE, echo]);
+    const [skill] = withBridgeMethods([plugins], [...HOST_BRIDGE, echo]);
     const text = skill!.instructions(undefined) as string;
     expect(text).toContain('- `tagma/open {threadId, beside?} | {section: <view>} | {pane: <view>}`');
     expect(text).toContain('Notifies `tagma/notifications/thread`.');
@@ -37,13 +37,13 @@ it.effect('the apps skill lists every declared method with its signature, notifi
 
 it.effect('a root without a method does not mention it, and the skill reads declared references beside its own', () =>
   Effect.gen(function* () {
-    const bare = withBridgeMethods([apps], HOST_BRIDGE)[0]!;
+    const bare = withBridgeMethods([plugins], HOST_BRIDGE)[0]!;
     expect(bare.instructions(undefined)).not.toContain('tagma/echo');
     expect(bare.references?.map(({ name }) => name)).toEqual(['example']);
 
-    const composed = withBridgeMethods([apps], [...HOST_BRIDGE, echo])[0]!;
+    const composed = withBridgeMethods([plugins], [...HOST_BRIDGE, echo])[0]!;
     expect(composed.references).toEqual([
-      { name: 'example', description: 'An app' },
+      { name: 'example', description: 'A plugin' },
       { name: 'echo', description: 'Echo in a view' },
     ]);
     expect(yield* composed.reference!('echo')).toBe('# Echo in a view\n\nEcho details.');
@@ -51,7 +51,7 @@ it.effect('a root without a method does not mention it, and the skill reads decl
   }),
 );
 
-it.effect('only the apps skill is rendered', () =>
+it.effect('only the plugins skill is rendered', () =>
   Effect.sync(() => {
     expect(withBridgeMethods([other], HOST_BRIDGE)[0]).toBe(other);
   }),

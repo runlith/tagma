@@ -229,6 +229,7 @@ const built = Effect.fnUntraced(
       Layer.empty,
       processes,
     );
+    yield* Effect.orDie(runtime.pluginHost.start());
     if (options.logins === undefined) {
       const registry = Context.get(runtime.owners as Context.Context<ProviderRegistry>, ProviderRegistry);
       const { sections, wires } = registry.current();

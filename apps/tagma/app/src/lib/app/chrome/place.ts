@@ -1,14 +1,9 @@
 import type { Component } from 'svelte';
 import type { SurfaceMark } from '$lib/features/workspace/surface.js';
 
-const LAUNCH = 'app.';
+const LAUNCH = 'plugin.';
 
-const FORMER_LAUNCH = 'plugin.';
-
-export const launchPlaceId = (tagmaApp: string, view: string): string => `${LAUNCH}${tagmaApp}.${view}`;
-
-export const launchNamed = (stored: string): string =>
-  stored.startsWith(FORMER_LAUNCH) ? `${LAUNCH}${stored.slice(FORMER_LAUNCH.length)}` : stored;
+export const launchPlaceId = (plugin: string, view: string): string => `${LAUNCH}${plugin}.${view}`;
 
 export type PlaceReach = { readonly href: string } | { readonly open: () => void };
 

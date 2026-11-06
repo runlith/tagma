@@ -11,7 +11,7 @@ import type { Named } from './work.js';
 const machine = { _tag: 'Local', machine: 'fixture' } as const;
 const ref = (execution: string) => Schema.decodeUnknownSync(ExecutionRef)({ installation: 'i', execution, incarnation: 1 });
 const thread = Schema.decodeUnknownSync(ThreadId)('01a13616-e64d-7243-bac2-4d8b0e28c96e');
-const noParts: PartNames = { row: () => undefined, apps: () => [] };
+const noParts: PartNames = { row: () => undefined, plugins: () => [] };
 
 const process = (pid: number, cores: number, extra: Partial<LoadGroup['processes'][number]> = {}): LoadGroup['processes'][number] => ({
   identity: { pid, birth: `${pid}:0` },
@@ -77,7 +77,7 @@ const named: Named = {
     ],
   ]),
   threads: new Map([[thread, { title: 'release-publish', archived: false }]]),
-  apps: new Map(),
+  plugins: new Map(),
   unread: undefined,
 };
 
@@ -239,14 +239,14 @@ test("an unread population answers no Tagma figures, a partly read one counts wh
 test('window parts land in Interface, Graphics and one row per renderer titled by its documents and closing its pages; the server and the terminal host split by role; an unresolved part is named', () => {
   const page = Schema.decodeUnknownSync(PageId)('page-1');
   const parts: PartNames = {
-    apps: () => [],
+    plugins: () => [],
     row: (key) =>
       key === 'main'
         ? { _tag: 'Interface' }
         : key === 'gpu'
           ? { _tag: 'Graphics' }
           : key === 'pages'
-            ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'App — board'], close: [{ page, projectId: 5 }] }
+            ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'Plugin — board'], close: [{ page, projectId: 5 }] }
             : undefined,
   };
   const { view } = new LoadList().compose(
@@ -289,11 +289,15 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
   expect(row('renderer')).toMatchObject({ gpu: 0, gpuUnread: 1 });
   expect(row('renderer')?.processes[0]).toMatchObject({ gpu: undefined, gpuUnread: 'not measured' });
   expect(view.gpu).toEqual({ _tag: 'Measured' });
-  expect(row('renderer')).toMatchObject({ title: 'Page — Docs (example.com), App — board', close: [{ page, projectId: 5 }], share: 0.3 });
+  expect(row('renderer')).toMatchObject({
+    title: 'Page — Docs (example.com), Plugin — board',
+    close: [{ page, projectId: 5 }],
+    share: 0.3,
+  });
   expect(row('renderer')?.processes[0]?.killable).toBe(false);
   expect(view.totals.own.count).toBe(5);
   expect(view.totals.own.share).toBeCloseTo(0.68, 9);
-  expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), App — board', pid: 99, reason: 'different' }]);
+  expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), Plugin — board', pid: 99, reason: 'different' }]);
 });
 
 test('installation groups retain their role when their processes do not fit the reading', () => {

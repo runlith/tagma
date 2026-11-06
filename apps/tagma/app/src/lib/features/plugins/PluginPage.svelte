@@ -18,9 +18,10 @@
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import Gives from '$lib/features/plugins/Gives.svelte';
-  import type { Here } from '$lib/features/plugins/here.js';
+  import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
+  import ProcessStep from '$lib/features/plugins/ProcessStep.svelte';
   import { PluginsRepo } from '$lib/features/plugins/Repo.js';
   import ServerSteps from '$lib/features/plugins/ServerSteps.svelte';
   import Tile from '$lib/features/plugins/Tile.svelte';
@@ -58,6 +59,8 @@
   );
   const plain = $derived(row.options.filter((option) => !option.sensitive));
   const skill = $derived(row.components.find((component) => component.kind === 'skill')?.name ?? null);
+  const refusal = $derived(row.refused ?? row.process?.refused);
+  const process = $derived(processShown(row));
 
   let busy = $state<string | null>(null);
   let failed = $state<Told | undefined>(undefined);
@@ -158,14 +161,26 @@
 
     {#if row.description !== null && row.description !== ''}<p class="max-w-prose text-body">{row.description}</p>{/if}
 
-    {#if row.refused !== undefined}
-      <Callout tone="error" title="Tagma cannot read this plugin, so agents get nothing from it" note={row.refused} />
+    {#if refusal !== undefined}
+      <Callout
+        tone="error"
+        title={row.process?.refused !== undefined || stillWorking(row)
+          ? 'Tagma does not accept the plugin’s files as they are now, and keeps the version it last accepted'
+          : 'Tagma cannot read this plugin, so agents get nothing from it'}
+        note={refusal}
+      />
+    {/if}
+    {#if row.outdated}
+      <Callout tone="plain" title="This plugin was changed after it was last built, so it still runs the earlier version" />
+    {:else if row.outdated === null}
+      <Callout tone="plain" title="Tagma could not tell whether this plugin was changed after it was last built" />
     {/if}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
-    {#if row.enabled && item.servers.length > 0}
+    {#if process !== undefined || (row.enabled && item.servers.length > 0)}
       <section class="grid rounded-lg border bg-raised px-4 py-1" aria-label="Its services">
-        <ServerSteps projectId={project.id} servers={item.servers} />
+        {#if process !== undefined}<ProcessStep {process} here={row.enabled} />{/if}
+        {#if row.enabled}<ServerSteps projectId={project.id} servers={item.servers} />{/if}
       </section>
     {/if}
 

@@ -52,7 +52,7 @@ sources:
 ---
 **Value.** The agent walks a scenario in a real browser — sign-in, form, SPA, file upload — on the same pages a human sees, with no separate Playwright or Chrome DevTools MCP.
 
-**How.** The `open_page`, `navigate_page`, `act_on_page`, `wait_for_page`, `answer_page_dialog`, `close_page`, `list_pages`, and `read_page_downloads` operations; agent tools in the `browser` capability, the HTTP, MCP, and `tagma op` doors, admitting an external caller — app processes.
+**How.** The `open_page`, `navigate_page`, `act_on_page`, `wait_for_page`, `answer_page_dialog`, `close_page`, `list_pages`, and `read_page_downloads` operations; agent tools in the `browser` capability, the HTTP, MCP, and `tagma op` doors, admitting an external caller — plugin processes.
 
 **Behaviour.**
 - Searching for `open_page` reveals `snapshot_page` and `capture_page` with it; the opening answer prints ready calls for the page it opened. Action tools are revealed separately.

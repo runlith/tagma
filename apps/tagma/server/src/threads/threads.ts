@@ -19,7 +19,6 @@ import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 import { stance } from './notes/stance.js';
 import { recordMetaForm } from './steps/recordMeta.js';
 import { questionEndorsedForm } from './steps/questionEndorsed.js';
-import { appBindingForm } from './steps/appBinding.js';
 import { askPartialForm } from './steps/askPartial.js';
 import { messageIndexFill } from './store/messageIndex.js';
 
@@ -39,7 +38,7 @@ export const threads = manifest({
   capabilities: THREAD_CAPABILITIES,
   verbs: threadsVerbs,
   entryKinds: THREADS_ENTRY_KINDS,
-  formSteps: [recordMetaForm, questionEndorsedForm, appBindingForm, askPartialForm],
+  formSteps: [recordMetaForm, questionEndorsedForm, askPartialForm],
   indexFills: [messageIndexFill],
   sections: Object.values(SECTIONS),
   contributions: [

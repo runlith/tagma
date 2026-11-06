@@ -38,7 +38,7 @@ it.effect(
           } satisfies LoadSubscription),
         );
       }, windows);
-      const feed = yield* makeMachineLoad(host, names, background, { row: () => undefined, apps: () => [] });
+      const feed = yield* makeMachineLoad(host, names, background, { row: () => undefined, plugins: () => [] });
 
       yield* windows.declare('window', 1, { precisionMs: 5, processes: [renderer(10)] });
       const reader = Effect.gen(function* () {

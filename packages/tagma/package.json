@@ -4,7 +4,8 @@
   "private": true,
   "description": "The public contract of Tagma: rules a repository declares in tagma.config.ts and the adapter a model provider is written against.",
   "bin": {
-    "create": "./kit/create.ts"
+    "create": "./kit/create.ts",
+    "tagma-plugin": "./src/plugin/cli.ts"
   },
   "type": "module",
   "exports": {
@@ -86,6 +87,32 @@
       "types": "./src/adapter/hostModules.ts",
       "bun": "./src/adapter/hostModules.ts",
       "default": null
+    },
+    "./plugin": {
+      "types": "./src/plugin/plugin.ts",
+      "default": "./src/plugin/plugin.ts"
+    },
+    "./plugin/process": {
+      "types": "./src/plugin/process.ts",
+      "bun": "./src/plugin/process.ts",
+      "default": null
+    },
+    "./plugin/protocol": {
+      "types": "./src/plugin/protocol.ts",
+      "default": "./src/plugin/protocol.ts"
+    },
+    "./plugin/points": {
+      "types": "./src/plugin/points.generated.ts",
+      "default": "./src/plugin/points.generated.ts"
+    },
+    "./plugin/template": {
+      "types": "./src/plugin/template.ts",
+      "default": "./src/plugin/template.ts"
+    },
+    "./testing": {
+      "types": "./src/plugin/testing.ts",
+      "bun": "./src/plugin/testing.ts",
+      "default": null
     }
   },
   "scripts": {
@@ -95,9 +122,11 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
     "@runlith/adapter-anthropic": "workspace:*",
     "@runlith/adapter-deepseek": "workspace:*",
     "@runlith/adapter-devin": "workspace:*",
+    "@runlith/adapter-google": "workspace:*",
     "@runlith/adapter-muse": "workspace:*",
     "@runlith/adapter-openai": "workspace:*",
     "@runlith/adapter-opencode-go": "workspace:*",
@@ -106,14 +135,17 @@
     "@runlith/agent": "workspace:*",
     "@runlith/held": "workspace:*",
     "@runlith/llm": "workspace:*",
-    "@runlith/utils": "workspace:*"
+    "@runlith/mcp": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "@standard-schema/spec": "^1.1.0",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@runlith/tsconfig": "workspace:*",
     "@tagma/inspection": "workspace:*",
     "@types/bun": "catalog:",
     "effect": "catalog:",
-    "typescript": "catalog:"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "effect": "^4.0.1"

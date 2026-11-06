@@ -122,7 +122,7 @@ Tagma's format is the superset that translation into it needs. Each part is a po
 - `resources`;
 - `providers`.
 
-The manifest's JSON Schema stays generated from the declared points. Every point's schema sits in its owner's `contract/wire` and is listed in its owner's manifest.
+The SDK's field types and its build check stay generated from the declared points. Every point's face — its schema and its checks against the other points — sits in its owner's `contract/wire` and is listed in its owner's manifest.
 
 **Where each part runs.**
 
@@ -263,7 +263,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 ## Removing apps
 
 By rule [[0528876d]], nothing old is carried over or read beside the new.
-- **The app mechanism is removed:** `install_app`, `enable_app`, `uninstall_app`, `read_apps` and `read_app_schema`; `tagma-app.json`, `.tagma-apps` and the personal `apps/`; the `apps.installed` and `apps.enabled` records; the `tagma-apps` secret owner; and the start step `tagma-apps/steps/data.ts`. The journal's form steps stay, because the operator's old threads are read through them. The existing apps stop. Any worth keeping is rebuilt as a plugin on the SDK.
+- **The app mechanism is removed:** `install_app`, `enable_app`, `uninstall_app`, `read_apps` and `read_app_schema`; `tagma-app.json`, `.tagma-apps` and the personal `apps/`; the `apps.installed` and `apps.enabled` records; the `tagma-apps` secret owner; the start step `tagma-apps/steps/data.ts`; and the three journal form steps that renamed plugins to apps, since they run on every read and would turn the current names back into app names. The existing apps stop. Any worth keeping is rebuilt as a plugin on the SDK.
 - **`install_adapter` and its records are removed.** Adapters that were installed are installed again as plugins.
 - **Names change in place,** in code, agent definitions and settings: tool names become `plugin__<id>__<tool>`, the binding becomes `bindings.plugin`, and the capabilities become `plugins` and `plugin:<id>`. `agent.approves` entries naming app tools go with the apps. Thread records are not rewritten: tool names in old threads stay as they were written.
 - **Agents.** Agents in Tagma's format are named `<plugin>.<agent>`, and agents in the Claude Code and Codex formats `<plugin>-<agent>`. Each format keeps its own birth mode (explanations 871ec3c6, fe6dbfb8).

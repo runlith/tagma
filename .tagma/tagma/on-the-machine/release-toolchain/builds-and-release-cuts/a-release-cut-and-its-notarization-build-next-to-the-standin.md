@@ -8,9 +8,9 @@ edges:
     to: 01a1411a-c7a8-7e4d-8d8a-93fd24871a8d
 sources:
   - kind: file
-    ref: apps/tagma/server/src/mac-release/notarize.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/stage.ts
+  - kind: file
+    ref: apps/tagma/server/src/mac-release/notarize.ts
 ---
 A cut takes minutes, notarization takes more minutes of waiting on Apple, and a command life limit, a signal, or a machine failure may cut the command off. So the release directory (`release`, or `--out`) is a link to the standing cut's directory next to it, `<directory>-<version>-<12 commit chars>`, with a `-notarized` suffix on the notarized one. The new becomes standing only by link swap: the new `<directory>.next` link is renamed over the previous one, and that is atomic.
 

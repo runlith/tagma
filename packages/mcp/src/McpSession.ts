@@ -51,6 +51,7 @@ export type McpToolDescriptor = {
 
 export type McpCallOptions = {
   readonly caller?: McpCaller;
+  readonly meta?: Readonly<Record<string, unknown>>;
   readonly roots?: readonly string[];
 };
 
@@ -177,6 +178,7 @@ const makeMcpSession = (input: SessionInput) => {
   const under = (options: McpCallOptions): McpRequestOptions => ({
     timeout: timeoutMs,
     caller: options.caller,
+    meta: options.meta,
     redact,
   });
 

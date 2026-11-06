@@ -114,7 +114,7 @@ The window pays per repetition a `Map` increment and a few place-field reads, pe
 ## Limits
 - A renderer crash loses everything the window did not deliver: with a live server — repetitions since the last batch and the in-flight batch, with no link — everything accumulated. The `desktop` line names the crash itself, not the lost count.
 - A window reload while the server answers nothing loses what the window accumulated.
-- The execution host and app processes do not write into this record; the CLI and the MCP bridge yield their failures to their own caller.
+- The execution host and plugin processes do not write into this record; the CLI and the MCP bridge yield their failures to their own caller.
 - Messages and routes may carry paths and project names; the record stays on the user's machine.
 
 ## Acceptance

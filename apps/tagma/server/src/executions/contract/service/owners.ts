@@ -11,9 +11,9 @@ export class LoadOwnerFacts extends Context.Service<
   }
 >()('tagma/executions/LoadOwnerFacts') {}
 
-export class LoadAppTitles extends Context.Service<
-  LoadAppTitles,
+export class LoadPluginTitles extends Context.Service<
+  LoadPluginTitles,
   {
     readonly read: (projectId: number) => Effect.Effect<ReadonlyMap<string, string>, OwnerFactsUnread>;
   }
->()('tagma/executions/LoadAppTitles') {}
+>()('tagma/executions/LoadPluginTitles') {}

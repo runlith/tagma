@@ -7,7 +7,7 @@ import type { TerminalActor } from '../../executions/contract/wire/terminals.js'
 import type { JudgeLane } from '../workers/asks.js';
 import { InspectionFailed } from '../workers/inspectionLanes.js';
 import type { Checker } from './checker.js';
-import { reachFiles, scratchDir, treeFile, writeInto } from './layout.js';
+import { reachSubjects, scratchDir, treeFile, writeInto } from './layout.js';
 
 export type FilesLaunch = {
   readonly projectId: number;
@@ -70,7 +70,7 @@ export const filesAnswer = Effect.fn('enforcement.program.filesRunner')(function
       const tree = side.side === 'tree' ? input.tree : input.base;
       if (tree === null) return yield* failed('a base was requested without a base tree');
       const places = [...new Set(input.keys.flatMap((key) => key.reach.places))];
-      sides.push({ side: side.side, whole: true, files: yield* reachFiles(launch.root, tree, places, inReach, failed) });
+      sides.push({ side: side.side, whole: true, files: yield* reachSubjects(launch.root, tree, places, inReach, failed) });
     }
   }
   const argv = yield* adapter.argv(checker);

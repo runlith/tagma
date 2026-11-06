@@ -52,6 +52,9 @@ const readLegacy = Effect.fnUntraced(function* (root: string, raw: Readonly<Reco
     servers: yield* serversOf(root, legacy.mcpServers, ignored),
     hooks: yield* hooksOf(root, { name, id: pluginIdOf(name) }, settings.hooks, ignored),
     options: [],
+    process: null,
+    build: null,
+    contributes: {},
     ignored,
   } satisfies PluginPackage;
 });

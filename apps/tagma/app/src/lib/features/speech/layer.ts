@@ -1,7 +1,7 @@
 import { SPEECH_BRIDGE } from '@tagma/server/speech/contract/wire/view';
 import { Layer } from '@runlith/layer/Layer';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { TagmaMethods } from '$lib/features/tagma-apps/methods.js';
+import { TagmaMethods } from '$lib/features/plugin-views/methods.js';
 import { Captures } from './Captures.svelte.js';
 import { Check } from './Check.svelte.js';
 import { Dictation } from './dictation/Dictation.svelte.js';

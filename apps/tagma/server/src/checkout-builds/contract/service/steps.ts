@@ -1,16 +1,13 @@
 import { Context, Data, Effect } from 'effect';
 import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
-import { BeforeBuild, type StepAsk, type StepVerdict } from '../wire/steps.js';
+import { type BeforeBuild, BEFORE_BUILD_FACE, type StepAsk, type StepVerdict } from '../wire/steps.js';
 
-export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-builds/before-build', {
-  name: 'beforeBuild',
-  schema: BeforeBuild,
-});
+export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-builds/before-build', BEFORE_BUILD_FACE);
 
 export class BuildStepFailed extends Data.TaggedError('BuildStepFailed')<{ readonly message: string }> {}
 
 export type BeforeStep = {
-  readonly app: string;
+  readonly plugin: string;
   readonly title: string;
   readonly projectId: number;
   readonly ask: (input: StepAsk) => Effect.Effect<StepVerdict, BuildStepFailed>;

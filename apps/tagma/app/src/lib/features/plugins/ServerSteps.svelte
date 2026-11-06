@@ -1,14 +1,14 @@
 <script lang="ts">
   import { type McpServerRow, mcpServerShown } from '@tagma/server/mcp/contract/wire/servers';
   import Callout from '@runlith/chat-ui/Callout.svelte';
-  import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
   import { toldOf } from '$lib/wire/refusal.js';
   import OwnClient from '$lib/features/mcp/OwnClient.svelte';
   import { McpRepo, type McpSignIn } from '$lib/features/mcp/Repo.js';
-  import { serverState, waitsOnSignIn } from '$lib/features/plugins/here.js';
+  import { serverState, serverTone, waitsOnSignIn } from '$lib/features/plugins/here.js';
+  import StepMark from '$lib/features/plugins/StepMark.svelte';
 
   let { projectId, servers }: { projectId: number; servers: readonly McpServerRow[] } = $props();
 
@@ -35,21 +35,7 @@
 {#each servers as row (row.scope + row.name)}
   {@const state = serverState(row)}
   <div class="grid grid-cols-[auto_1fr_auto] items-start gap-3 py-2" data-server={row.name}>
-    <span class="grid h-5 place-items-center">
-      {#if state === 'connecting' || row.signIn?.pending}
-        <Waiting class="size-3" />
-      {:else}
-        <span
-          class={[
-            'size-2',
-            state === 'waits' && 'bg-status-open',
-            state === 'fails' && 'bg-destructive',
-            row.status === 'connected' && 'bg-status-done',
-            (state === 'off' || row.status === 'pending') && 'border border-dashed border-muted-foreground',
-          ]}
-        ></span>
-      {/if}
-    </span>
+    <StepMark tone={serverTone(row)} />
     <span class="grid min-w-0 gap-0.5">
       {#if row.status === 'connected'}
         <span class="text-ui font-medium">Connected to {mcpServerShown(row)}</span>

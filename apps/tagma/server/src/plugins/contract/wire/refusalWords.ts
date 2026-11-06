@@ -2,6 +2,8 @@ import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
 
 export const REFUSAL_WORDS = {
   'plugin-clone-failed': 'Plugin not cloned',
+  'plugin-folder-taken': 'Plugin folder taken',
+  'plugin-folder-unwritable': 'Plugin folder not written',
   'plugin-id-taken': 'Plugin name taken',
   'plugin-names-collide': 'Plugin names collide',
   'plugin-not-installed': 'Plugin not installed',

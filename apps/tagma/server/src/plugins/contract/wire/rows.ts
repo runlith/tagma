@@ -6,7 +6,7 @@ export type PluginHookPoint = (typeof PLUGIN_HOOK_POINTS)[number];
 export const PLUGIN_OPTION_TYPES = ['string', 'number', 'boolean', 'directory', 'file'] as const;
 export type PluginOptionType = (typeof PLUGIN_OPTION_TYPES)[number];
 
-export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook'] as const;
+export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution'] as const;
 export type PluginComponentKind = (typeof PLUGIN_COMPONENT_KINDS)[number];
 
 const Named = Schema.String.check(Schema.isMinLength(1));
@@ -47,9 +47,15 @@ export type PluginDeclared = typeof PluginDeclared.Type;
 
 export const pluginComponentSchema = Schema.Struct({
   kind: Schema.Literals(PLUGIN_COMPONENT_KINDS),
-  name: Schema.String.annotate({ description: 'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event.' }),
+  name: Schema.String.annotate({
+    description:
+      'The name Tagma offers it under, `<plugin>-<name>`; a hook names its event, a process the module it runs, a contribution its point.',
+  }),
   detail: Schema.optional(Schema.String).annotate({
     description: 'What it runs or reaches, or for an agent the tools it named that Tagma has no equivalent of.',
+  }),
+  title: Schema.optional(Schema.String).annotate({
+    description: 'For a contribution, what its point gives a person, in the words of the point’s owner.',
   }),
 });
 export type PluginComponent = typeof pluginComponentSchema.Type;
@@ -74,6 +80,25 @@ export const pluginOptionSchema = Schema.Struct({
 });
 export type PluginOptionRow = typeof pluginOptionSchema.Type;
 
+const PLUGIN_PROCESS_STATES = ['stopped', 'idle', 'starting', 'running', 'failed'] as const;
+export type PluginProcessState = (typeof PLUGIN_PROCESS_STATES)[number];
+
+const pluginProcessSchema = Schema.Struct({
+  state: Schema.Literals(PLUGIN_PROCESS_STATES).annotate({
+    description:
+      'idle: its contributions stand and its process is not running; the next call, tick, ending, notification, build step or view subscription starts it. failed: its process could not start or serve, so agents are offered none of its tools until it does.',
+  }),
+  tools: Schema.Finite.annotate({ description: 'Tools it offers agents and its views.' }),
+  restarts: Schema.Finite,
+  failure: Schema.optional(Schema.String).annotate({
+    description: 'Why it is failed, or why its last process ended, with the tail of what that process wrote.',
+  }),
+  refused: Schema.optional(Schema.String).annotate({
+    description: 'Why its directory as it stands now is refused; what was working keeps the declaration it started with.',
+  }),
+});
+export type PluginProcessRow = typeof pluginProcessSchema.Type;
+
 export const pluginRowSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.NullOr(Schema.String),
@@ -92,6 +117,14 @@ export const pluginRowSchema = Schema.Struct({
   components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma took from it.' }),
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),
+  process: Schema.optional(pluginProcessSchema).annotate({
+    description: 'Its process on this machine, for a plugin that runs one or contributes to Tagma; it runs while any project enables it.',
+  }),
+  outdated: Schema.NullOr(Schema.Boolean).annotate({
+    description:
+      'Whether a source its build lists changed or went missing after that build, so what runs is the earlier build; null when its sources could not be hashed just now.',
+  }),
+  unhashed: Schema.optional(Schema.String).annotate({ description: 'Why its sources could not be hashed, when `outdated` is null.' }),
   refused: Schema.optional(Schema.String).annotate({
     description: 'Why its directory as it stands now cannot be read; a refused plugin contributes nothing.',
   }),
@@ -118,7 +151,9 @@ export const pluginPreviewSchema = Schema.Struct({
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),
   consent: Schema.Struct({
-    runs: Schema.Array(Schema.String).annotate({ description: 'What it runs as the operator: stdio MCP servers and hook commands.' }),
+    runs: Schema.Array(Schema.String).annotate({
+      description: 'What it runs as the operator: its own process, stdio MCP servers and hook commands.',
+    }),
     reaches: Schema.Array(Schema.String).annotate({ description: 'The remote MCP servers it reaches.' }),
     raises: Schema.Array(Schema.String).annotate({ description: 'The further facts installing it asks consent for.' }),
   }).annotate({ description: 'What installing it asks consent for wherever it runs.' }),

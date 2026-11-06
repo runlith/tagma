@@ -3,7 +3,7 @@ import { PERMISSION_KINDS } from '@runlith/agent/permissions';
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Effect, FileSystem, Option } from 'effect';
 import { ChildProcessSpawner } from 'effect/process';
-import { SecretOwners } from '../secrets/contract/service/secrets.js';
+import { maskedForms, SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import {
   type PluginIgnored,
@@ -84,12 +84,15 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
         ))(id)
       : { values: {}, redact: [] };
     const options: Record<string, string> = {};
+    const redact = [...secret.redact];
     for (const option of read.options) {
       const value = option.sensitive ? secret.values[option.key] : set[option.key];
       const chosen = value === undefined || value === '' ? option.fallback : value;
-      if (chosen !== null) options[option.key] = chosen;
+      if (chosen === null) continue;
+      options[option.key] = chosen;
+      if (option.sensitive && chosen === option.fallback && chosen !== '') redact.push(...maskedForms(chosen));
     }
-    return { options, redact: secret.redact };
+    return { options, redact };
   });
 
   const placeOf = (id: string, root: string, project: string, options: Readonly<Record<string, string>>): PluginPlace => ({
@@ -178,6 +181,8 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
         matches: hook.matches,
         run: (call, session) => Effect.provideService(hook.run(call, session, place), ChildProcessSpawner.ChildProcessSpawner, spawner),
       })),
+      process: pkg.process,
+      contributes: pkg.contributes,
     };
     return { loaded, options, skipped } satisfies Bound;
   });
@@ -189,7 +194,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
     );
   });
 
-  return { read, look, bind, forget: (root: string) => cache.delete(root) };
+  return { read, look, bind, values, data: (id: string) => dataRoot(input.home, id), forget: (root: string) => cache.delete(root) };
 });
 
 export type Shelf = Effect.Success<ReturnType<typeof makeShelf>>;

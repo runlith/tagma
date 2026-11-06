@@ -381,9 +381,9 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       const titles = listed.value.map((one) => one.title);
       for (const [at, one] of listed.value.entries()) {
         yield* stepped('before', { before: { titles, at } });
-        yield* say(`\n--- ${one.title}: ${one.app} before the build (in ${checkout}) ---`);
+        yield* say(`\n--- ${one.title}: ${one.plugin} before the build (in ${checkout}) ---`);
         for (;;) {
-          const asked = yield* answer(one.ask({ offer, checkout }), `${one.app} ended its step without an answer`);
+          const asked = yield* answer(one.ask({ offer, checkout }), `${one.plugin} ended its step without an answer`);
           if (!asked.answered) return refusedBy('build-step-failed', asked.reason);
           const verdict = asked.value;
           yield* say(`${one.title}: ${verdict.verdict}${verdict.verdict === 'stop' ? ` — ${verdict.reason}` : ''}`);

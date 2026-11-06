@@ -12,7 +12,7 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/secrets
   - kind: dir
-    ref: apps/tagma/server/src/tagma-apps
+    ref: apps/tagma/server/src/plugin-host
   - kind: dir
     ref: apps/tagma/server/src/views
 ---

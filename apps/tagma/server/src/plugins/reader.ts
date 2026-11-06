@@ -18,6 +18,8 @@ export class NamesCollide extends Data.TaggedError('NamesCollide')<{ readonly re
 
 export type Read = { readonly id: string; readonly format: string; readonly package: PluginPackage };
 
+export const hosted = (pkg: PluginPackage): boolean => pkg.process !== null || Object.keys(pkg.contributes).length > 0;
+
 export type Named = { readonly kind: string; readonly name: string; readonly from: string };
 
 export const namesOf = (id: string, read: PluginPackage): readonly Named[] => [
@@ -38,21 +40,30 @@ export const collision = (named: readonly Named[]): string | null => {
   return null;
 };
 
-const claimOf = Effect.fnUntraced(function* (formats: readonly PluginFormat[], root: string, manifest: PluginManifest | undefined) {
+type Claimed = { readonly format: PluginFormat; readonly claim: PluginClaim; readonly declared: boolean };
+
+const claimOf = Effect.fnUntraced(function* (
+  formats: readonly PluginFormat[],
+  root: string,
+  manifest: PluginManifest | undefined,
+): Effect.fn.Return<Claimed | null, PluginRefused | PluginUnreadable, FileSystem.FileSystem> {
   if (manifest !== undefined) {
+    for (const format of formats) {
+      if (format.prevails === true && (yield* format.claim(root)) === 'manifest') return { format, claim: 'manifest', declared: false };
+    }
     const format = formats.find((candidate) => candidate.id === manifest.format);
     if (format === undefined) {
       return yield* new PluginRefused({
         reason: `its marketplace entry declares a ${manifest.format} manifest, a format Tagma does not read`,
       });
     }
-    return { format, claim: (yield* format.claim(root)) ?? ('layout' as const) };
+    return { format, claim: (yield* format.claim(root)) ?? 'layout', declared: true };
   }
-  let layout: { readonly format: PluginFormat; readonly claim: PluginClaim } | null = null;
+  let layout: Claimed | null = null;
   for (const format of formats) {
     const claim = yield* format.claim(root);
-    if (claim === 'manifest') return { format, claim };
-    if (claim === 'layout' && layout === null) layout = { format, claim };
+    if (claim === 'manifest') return { format, claim, declared: false };
+    if (claim === 'layout' && layout === null) layout = { format, claim, declared: false };
   }
   return layout;
 });
@@ -66,7 +77,7 @@ export const readPlugin = Effect.fn('plugins.read')(function* (
   if (claimed === null) {
     return yield* new PluginRefused({ reason: `${root} holds no plugin manifest and none of the plugin layout's components` });
   }
-  const entry = declared === null ? null : { name: declared.name, fields: declared.manifest?.fields ?? null };
+  const entry = declared === null ? null : { name: declared.name, fields: claimed.declared ? (declared.manifest?.fields ?? null) : null };
   const read = yield* claimed.format.read(root, claimed.claim, entry);
   const id = pluginIdOf(read.name);
   if (!PLUGIN_ID_PATTERN.test(id) || id.length > 64) {

@@ -35,7 +35,7 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
           Effect.andThen(
             tool(world.root, 'fmt.sh', `${FORMATTER}exit 1\n`),
             Effect.sync(() => {
-              writeFileSync(join(world.root, '.gitattributes'), '*.lfs filter=lfs\n');
+              writeFileSync(join(world.root, '.gitattributes'), '*.lfs filter=lfs\nsrc/built.ts linguist-generated=true\n');
               writeFileSync(join(world.root, 'src', 'gone.ts'), 'const gone = 1;\n');
             }),
           ),
@@ -55,10 +55,12 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
         yield* world.record(MINE, '', 'pointer   \n', { path: 'src/pointer.lfs', origin: 'write' });
         writeFileSync(join(world.root, 'src', 'blob.ts'), 'a\0b   \n');
         yield* world.record(MINE, '', 'a\0b   \n', { path: 'src/blob.ts', origin: 'write' });
+        writeFileSync(join(world.root, 'src', 'built.ts'), 'const built = 1;   \n');
+        yield* world.record(MINE, '', 'const built = 1;   \n', { path: 'src/built.ts', origin: 'write' });
         const answer = yield* world.submit(MINE, { shape: stepped.shape, checks });
         expect(answer).toMatchObject({
           status: 'landed',
-          committed: ['src/a.ts', 'src/blob.ts', 'src/gone.ts', 'src/link.ts', 'src/pointer.lfs'],
+          committed: ['src/a.ts', 'src/blob.ts', 'src/built.ts', 'src/gone.ts', 'src/link.ts', 'src/pointer.lfs'],
           edited: ['src/a.ts'],
         });
         const formatted = [...FILE.slice(0, 4), 'const five = 5; // mine'];
@@ -66,13 +68,14 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
         expect(bytes(world)).toBe(`${formatted.join('\n')}\n`);
         expect(yield* world.run(['status', '--porcelain'])).toBe('');
         const landed = yield* world.run(['rev-parse', 'HEAD']);
-        expect((yield* world.rows()).map((row) => row.commit)).toEqual([landed, landed, landed, landed, landed]);
+        expect((yield* world.rows()).map((row) => row.commit)).toEqual([landed, landed, landed, landed, landed, landed]);
         const tree = yield* world.run(['rev-parse', 'HEAD^{tree}']);
         expect(judged).toEqual([tree]);
         expect(yield* world.run(['show', `${tree}:src/a.ts`])).toBe(formatted.join('\n'));
         expect(yield* world.run(['show', 'HEAD:src/blob.ts'])).toBe('a\0b   ');
         expect(yield* world.run(['ls-tree', 'HEAD', '--', 'src/link.ts'])).toContain('120000 blob');
         expect(yield* world.run(['show', 'HEAD:src/pointer.lfs'])).toBe('pointer   ');
+        expect(yield* world.run(['show', 'HEAD:src/built.ts'])).toBe('const built = 1;   ');
         expect(yield* world.run(['ls-tree', '--name-only', 'HEAD', '--', 'src/a.ts.beside', 'src/gone.ts'])).toBe('');
       })(),
     ),

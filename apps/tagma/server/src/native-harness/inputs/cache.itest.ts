@@ -130,6 +130,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             revision: 'first',
             title: 'Demo',
             place: { root: pluginRoot, data: pluginRoot, options: {}, project: demo.demoRoot },
+            process: null,
+            contributes: {},
             redact: [],
             skills: [
               { name: 'demo-review', directory: review, file: join(review, 'SKILL.md'), root: pluginRoot, render },

@@ -48,8 +48,10 @@ edges:
     to: 01a12c56-9127-7a6c-ac2f-3e1937fe1c9a
   - kind: imports
     to: 01a12c56-9129-7fb3-aa86-19579bcbb761
+  - kind: imports
+    to: 01a18e1d-2841-72f0-b3c5-26c3d4a5b244
 sources:
   - kind: dir
     ref: packages/tagma/kit
 ---
-An external adapter's author tests their package the way Tagma will accept it, before installation: the kit parses the declaration through the registry's validation, drives login and model calls against a stub, and demands `LLMError` errors; the template scaffolds a new adapter that passes this kit. The kit lives apart from the contract because it substitutes host modules, including the built-in adapters, which are themselves written against the contract; assembling the whole package's distribution — with `/rules` types expanded from the builtins' schemas — lives here too.
+An external adapter's author tests their package the way Tagma will accept it, before installation: the kit parses the declaration through the registry's validation, drives login and model calls against a stub, and demands `LLMError` errors; the template scaffolds a new adapter that passes this kit. The kit lives apart from the contract because it substitutes host modules, including the built-in adapters, which are themselves written against the contract. Assembling the whole package's distribution lives here too: `/rules` types expanded from the builtins' schemas, the adapter and plugin doors with their declarations and the `tagma-plugin` bin, and the plugin SDK's point types, its build check bundled from the owners' own code, and external operation types, generated from the server into committed files.

@@ -1,8 +1,12 @@
 import type { ProgramMode, ProgramRemeasure, ProgramSide } from '@tagma/inspection/program';
 import type { Footprint } from '@tagma/inspection/node/reading';
 import type { Unjudged } from '@tagma/inspection/verdict';
+import { Git } from '@runlith/git/Git';
 import { Clock, Effect, Result } from 'effect';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
+import { generatedAmong } from '../../platform/git/generated.js';
+import { actingGit } from '../../platform/git/ownGit.js';
+import { InspectionFailed } from '../workers/inspectionLanes.js';
 import type { CountedDebt, Programmed } from '../contract/wire/document.js';
 import type { InspectionCoverage, RuleViolation } from '../contract/wire/enforcement.js';
 import type { JudgeLane } from '../workers/asks.js';
@@ -44,6 +48,16 @@ export type BoundReading = {
   readonly found: readonly string[];
 };
 
+const subjectsAt = Effect.fnUntraced(function* (root: string, tree: string, paths: readonly string[]) {
+  const generated = yield* generatedAmong(actingGit(yield* Git, 'inspection-files'), root, paths, tree).pipe(
+    Effect.mapError(
+      (failure) =>
+        new InspectionFailed({ cause: 'git', reason: `which files at ${tree} are generated could not be read: ${failure.message}` }),
+    ),
+  );
+  return paths.filter((path) => !generated.has(path));
+});
+
 export const judgeBindings = Effect.fn('enforcement.bindings.judge')(function* (subject: BindingSubject, rules: readonly BoundRule[]) {
   const answers = new Map<string, ProgramRun<BoundReading>>();
   if (rules.length === 0) return answers;
@@ -57,9 +71,10 @@ export const judgeBindings = Effect.fn('enforcement.bindings.judge')(function* (
     checker: checkerFor(at, rule.inspection),
   }));
   const reaches = programs.map((program) => reachOf(program));
-  const paths = subject.paths?.filter((path) => reaches.some((reach) => inProgramReach(reach, path))) ?? null;
+  const reached = subject.paths?.filter((path) => reaches.some((reach) => inProgramReach(reach, path))) ?? null;
   const sides = yield* Effect.result(
     Effect.gen(function* () {
+      const paths = reached === null || subject.mode !== 'measure' ? reached : yield* subjectsAt(subject.root, subject.built, reached);
       const tree: ProgramSide =
         paths === null ? { side: 'tree', paths: null, files: null } : yield* sideAt(subject.root, subject.built, paths, 'tree');
       if (subject.base === null) return [tree] as const;

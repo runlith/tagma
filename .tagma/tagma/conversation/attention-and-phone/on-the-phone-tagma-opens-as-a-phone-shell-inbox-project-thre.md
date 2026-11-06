@@ -34,4 +34,4 @@ sources:
 - Thread full-screen with composer, camera attachments, model and mode choice.
 - Offline the shell shows the last loaded and the cause, and on a cold start opens from cache.
 
-**Limits.** Graph, checkout, rules, calls, and app views do not open on the phone — the shell refers to the machine. A terminal-CLI thread is not run on the phone. The Mac app always stays in desktop layout.
+**Limits.** Graph, checkout, rules, calls, and plugin views do not open on the phone — the shell refers to the machine. A terminal-CLI thread is not run on the phone. The Mac app always stays in desktop layout.

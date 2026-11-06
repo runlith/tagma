@@ -164,7 +164,7 @@ export const serverNames: Builtin<'names', NamesParams> = {
       S5: {
         heads: ['Data', 'Info', 'Helper', 'Manager', 'Service'],
         allows: [
-          { head: 'Data', in: ['installation/contract/wire/layout.ts', 'plugins/sources.ts', 'tagma-apps/discovery.ts'] },
+          { head: 'Data', in: ['installation/contract/wire/layout.ts', 'plugins/sources.ts'] },
           { head: 'Helper', in: ['installation/contract/wire/layout.ts'] },
         ],
         exempt: [],
@@ -234,6 +234,10 @@ export const platforms: Builtin<'platforms', PlatformsParams> = {
       {
         at: 'packages/tagma/src/adapter/loader.ts',
         why: 'imports adapters installed outside the tree at runtime; no start of the tree reaches them',
+      },
+      {
+        at: 'packages/tagma/src/plugin/build.ts',
+        why: "imports the plugin.ts of the folder it builds, an author's code outside the tree",
       },
     ],
     packages: {

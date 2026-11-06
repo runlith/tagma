@@ -22,6 +22,7 @@ import { diffTreeAt, pointedTreeAt, type TreeListing } from '@runlith/git/trees'
 import {
   changesBetween,
   frontiersOf,
+  generatedAt,
   jobOf,
   keepNearSnapshot,
   listingAt,
@@ -279,7 +280,12 @@ const reach = Effect.fn('inspecting.reach')(function* (git: Git['Service'], ask:
           headTree: head.tree,
           headEntries: yield* diffEntriesOf(git, ask.root, head.tree, tree),
         };
-  const paths = [...listed.objects.keys()].filter((path) => covered(path) && selects(ask.inspection, path));
+  const reached = [...listed.objects.keys()].filter(covered);
+  const generated = yield* generatedAt(git, ask.root, tree, reached).pipe(
+    Effect.mapError((failure) => new Unread({ cause: 'git', reason: `which files are generated could not be read: ${failure.message}` })),
+  );
+  const judged = (path: string) => covered(path) && !generated(path);
+  const paths = reached.filter((path) => !generated(path) && selects(ask.inspection, path));
   let selected: readonly string[] = paths;
   const result = yield* settled(
     git,
@@ -291,7 +297,7 @@ const reach = Effect.fn('inspecting.reach')(function* (git: Git['Service'], ask:
         ask.previous === undefined
           ? undefined
           : remapped(ask.inspection, ask.previous.inspection, tree as Tree, ask.previous.fingerprints, budget, ADAPTERS, memo);
-      selected = (mapped?.paths ?? paths).filter(covered);
+      selected = (mapped?.paths ?? paths).filter(judged);
       return {
         verdict: inspect(ask.inspection, tree as Tree, selected, budget, ADAPTERS, memo, ask.paths === undefined ? 'reach' : 'change'),
         footprint: mapped?.footprint,

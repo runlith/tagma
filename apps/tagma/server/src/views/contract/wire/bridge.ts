@@ -20,13 +20,14 @@ export const HOST_BRIDGE = [
     id: 'open',
     notifications: [],
     signature: '{threadId, beside?} | {section: <view>} | {pane: <view>}',
-    description: 'Opens a thread, or a section or pane the app contributes; only during a click inside the view.',
+    description: 'Opens a thread, or a section or pane the plugin contributes; only during a click inside the view.',
   }),
   bridgeMethod({
     id: 'storage/get',
     notifications: [],
     signature: '{key}',
-    description: 'Answers `{stored, value?}`. The values stand in the app’s data directory, shared by all its views, projects and devices.',
+    description:
+      'Answers `{stored, value?}`. The values stand in the plugin’s data directory, shared by all its views, projects and devices.',
   }),
   bridgeMethod({
     id: 'storage/set',

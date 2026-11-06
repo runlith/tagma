@@ -38,7 +38,7 @@ export const pluginsEnabled = settingListKey({
   order: 771,
   title: 'Enabled',
   description:
-    'The installed plugins whose skills, commands, MCP servers, agents and hooks run: your own layer runs them in every project, a project’s layer in that project.',
+    'The installed plugins whose tools, views, skills, commands, MCP servers, agents and hooks run: your own layer runs them in every project, a project’s layer in that project.',
   control: { kind: 'managed', by: 'enable_plugin' },
   member: PluginId,
   fallback: [] as readonly string[],
@@ -77,6 +77,6 @@ export const PLUGIN_SETTING_SECTIONS = [
     id: 'plugins',
     order: 63,
     title: 'Plugins',
-    description: 'Agent plugins installed on this machine, the marketplaces they come from, and where each one runs.',
+    description: 'Plugins installed on this machine, the marketplaces they come from, and where each one runs.',
   },
 ] as const;

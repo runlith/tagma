@@ -8,6 +8,8 @@
     "patches/**",
     "**/drizzle/**",
     "**/*.generated.ts",
+    "**/*.generated.js",
+    "**/*.generated.d.ts",
     "**/*_pb.ts",
     ".agents/**",
     ".claude/**",

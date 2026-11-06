@@ -13,11 +13,11 @@ edges:
     to: 01a14c14-a11c-7ce8-9d84-632c6aeb5d45
 sources:
   - kind: file
+    ref: apps/tagma/server/src/native-harness/capabilities/availability.ts
+  - kind: file
     ref: apps/tagma/server/src/native-harness/turns/delegationRule.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/turns/teamRule.ts
-  - kind: file
-    ref: apps/tagma/server/src/native-harness/capabilities/availability.ts
 ---
 Instruction-change notices name their actor from the graph journal since `2e466f266e`. The other runtime notices about changed state still name none, or guess one:
 

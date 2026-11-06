@@ -9,6 +9,7 @@ import type { sweepProse, SweptFile } from '@runlith/agent-tools/sweepProse';
 import { held, workspaceChange } from '../store/tables.js';
 import type { MachineStore, StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { generatedAmong } from '../../platform/git/generated.js';
 
 import type { CommentSweep, StripCommentsFailure } from '../contract/service/sweep.js';
 
@@ -84,7 +85,16 @@ const sweptPaths = Effect.fn('stripComments.paths')(function* (
     if (segments[0] === graphDirectory || segments.includes('node_modules')) continue;
     kept.add(entry);
   }
-  return [...kept].sort();
+  const generated = yield* Effect.result(generatedAmong(git, root, [...kept], null));
+  if (generated._tag !== 'Success') {
+    yield* Effect.logWarning('the comment sweep reads no paths: git could not tell which files under the place are generated', {
+      root,
+      place,
+      reason: generated.failure.message,
+    });
+    return null;
+  }
+  return [...kept].filter((path) => !generated.success.has(path)).sort();
 });
 
 const holdersOfPaths = Effect.fn('stripComments.holders')(function* (

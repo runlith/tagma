@@ -23,7 +23,7 @@
   const link = $derived(row.link !== null && opening.knows(row.link) ? row.link : null);
   const reply = $derived(attention.noticeReplyOf(row));
   const busy = $derived(reply?.state === 'sending');
-  const sender = $derived(row.sender.replace(/^app:/, ''));
+  const sender = $derived(row.sender.replace(/^plugin:/, ''));
   const floating = $derived(!touch && question === null);
 
   const choice = $derived(cn('rounded-full font-medium disabled:opacity-60', touch ? 'min-h-9 px-4 text-ui' : 'h-6 px-2 text-small'));

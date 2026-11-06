@@ -9,12 +9,12 @@ import type { Capability, CapabilityBehaviour } from './contract.js';
 import { files } from './files.js';
 import { graph } from './graph.js';
 import { mcp } from './mcp.js';
+import { plugins } from './plugins.js';
 import { shell } from './shell.js';
 import { skills } from './skills.js';
-import { tagmaApps } from './tagmaApps.js';
 import { web } from './web.js';
 
-const BEHAVIOURS: Readonly<Record<string, CapabilityBehaviour>> = { files, shell, web, mcp, apps: tagmaApps, skills, graph };
+const BEHAVIOURS: Readonly<Record<string, CapabilityBehaviour>> = { files, shell, web, mcp, plugins, skills, graph };
 
 export type CapabilityDefinitions = AgentDefinitions<ThreadContext, Capability>;
 

@@ -57,7 +57,7 @@ import { ProductRecords } from './records.js';
 import rewindComposer from './rewind.composer.svelte';
 import skillsComposer from './skills.composer.svelte';
 import * as startKinds from './start.kinds.svelte';
-import tagmaAppViewsFeed from './tagmaAppViews.feed.svelte';
+import pluginViewsFeed from './pluginViews.feed.svelte';
 import teamComposer from './team.composer.svelte';
 import * as threadTools from './threadTools.tools.js';
 
@@ -121,7 +121,7 @@ export const ThreadContributions = Layer.mergeAll(
     feed('plugins', pluginsFeed),
     feed('quota', quotaFeed),
     feed('recap', recapFeed),
-    feed('tagmaAppViews', tagmaAppViewsFeed),
+    feed('pluginViews', pluginViewsFeed),
   ),
   FeedParts.contribute('birth', feed('connect', connectFeed)),
   FeedParts.contribute('worktrees', feed('worktrees', worktreesFeed)),

@@ -1,13 +1,13 @@
 import { makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
 import { testSurfaces } from '$lib/app/testing.js';
-import { draftHolder, type Holder, sectionHolder, threadHolder as held } from '$lib/shared/panes/holder.js';
-import { panes as tagmaAppKinds } from '$lib/features/tagma-apps/panes.js';
+import { draftHolder, type Holder, threadHolder as held } from '$lib/shared/panes/holder.js';
+import { panes as pluginPaneKinds } from '$lib/features/plugin-views/panes.js';
 import { panes as threadKinds } from '$lib/features/threads/panes.js';
 import { KEPT_DAYS, KEPT_HOLDERS, TabLayouts } from './TabLayouts.svelte.js';
 import { testKind, testPanes } from './testing.js';
 
-const KINDS = testPanes(...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser'), {
+const KINDS = testPanes(...threadKinds, ...pluginPaneKinds, testKind('file'), testKind('browser'), {
   ...testKind('sealed'),
   right: 'warmth',
 });
@@ -117,26 +117,6 @@ test('the start sweep drops layouts unused past the age limit and the oldest pas
   expect(ids(swept, held('t0'))).toEqual([]);
   expect(ids(swept, held('t1'))).toEqual(['file:x']);
   expect(storage.keys('tagma.tabs:1:')).toHaveLength(KEPT_HOLDERS);
-});
-
-test('tabs saved under the former plugin kind and section reload as app tabs of the app section, stored under its new key', () => {
-  const storage = makeStorage();
-  const tabs = [
-    { key: 'k1', kind: 'plugin', id: 'crm/board' },
-    { key: 'k2', kind: 'file', id: 'one.ts' },
-  ];
-  storage.setItem(
-    'tagma.tabs:1:section:plugin/crm/deals',
-    JSON.stringify({ tabs, active: 'k1', open: true, recent: [], at: 1_000 * DAY_MS }),
-  );
-  storage.setItem('tagma.tabs:1:a', JSON.stringify({ tabs: [tabs[0]], active: 'k1', open: true, recent: [], at: 1_000 * DAY_MS }));
-
-  const layouts = layoutsOn(storage);
-
-  expect(ids(layouts, sectionHolder('app/crm/deals'))).toEqual(['app:crm/board', 'file:one.ts']);
-  expect(layouts.layout(sectionHolder('app/crm/deals')).active).toBe('k1');
-  expect(ids(layouts, A)).toEqual(['app:crm/board']);
-  expect(storage.keys('tagma.tabs:1:').toSorted()).toEqual(['tagma.tabs:1:a', 'tagma.tabs:1:section:app/crm/deals']);
 });
 
 test('a restored layout keeps a tab of a kind under a right, and sweeps a tab of a kind this build does not declare', () => {

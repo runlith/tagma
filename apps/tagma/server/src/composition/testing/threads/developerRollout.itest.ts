@@ -44,8 +44,6 @@ const CAPABILITIES = [
   'reflections',
 ];
 
-const FORMED = CAPABILITIES.map((capability) => (capability === 'plugins' ? 'apps' : capability));
-
 const machine = unitsLayer(MachineUnits, MachineStore).pipe(
   Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
   Layer.provideMerge(BunFileSystem.layer),
@@ -98,7 +96,7 @@ layer(machine)('retired agent rollout recovery', (it) => {
         );
         expect(native?.profile).toMatchObject({
           id: hosted ? 'scout' : 'tagma',
-          overlay: { id: hosted ? 'scout' : 'tagma', baseAgentId: 'tagma', capabilities: hosted ? ['files'] : FORMED },
+          overlay: { id: hosted ? 'scout' : 'tagma', baseAgentId: 'tagma', capabilities: hosted ? ['files'] : CAPABILITIES },
         });
         const [header, ...tail] = (yield* files.readFileString(path))
           .split('\n')

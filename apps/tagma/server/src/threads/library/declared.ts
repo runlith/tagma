@@ -12,7 +12,6 @@ import {
   ThreadTypesUnavailable,
   type ThreadTypeWithheld,
 } from '@runlith/agent/collaboration/types';
-import { trust } from '@runlith/agent/modes/builtin';
 import { Effect } from 'effect';
 import { NativeAgents } from '../contract/service/engine.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -169,7 +168,9 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
     const packaged = yield* packagedNamed(projectId, typeId);
     if (packaged !== undefined && validate(packaged) === undefined) {
       return yield* offerTo(caller, projectId, typeId, STANDINGS[packaged.origin], () =>
-        packaged.origin === 'app' ? { ...offerOf(files.profileOf(packaged)), approvalMode: trust.id } : offerOf(files.profileOf(packaged)),
+        packaged.approvalMode === undefined
+          ? offerOf(files.profileOf(packaged))
+          : { ...offerOf(files.profileOf(packaged)), approvalMode: packaged.approvalMode },
       );
     }
     const file = (yield* filesOf(projectId)).agents.find((held) => held.id === typeId);
@@ -235,7 +236,6 @@ const STANDINGS: Record<AgentFile['origin'], Standing> = {
   builtin: { to: 'agents', what: 'a built-in agent of this server' },
   personal: { to: 'agents', what: "a file of the operator's personal agents" },
   project: { to: 'operator', what: "a file of this project's agents" },
-  app: { to: 'operator', what: "an app's agent" },
   plugin: { to: 'operator', what: "a plugin's agent" },
 };
 

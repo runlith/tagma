@@ -21,10 +21,9 @@ const place = (surface: string, rail: number): SurfaceDeclaration => ({
 const daily = (surface: string, rail: number): SurfaceDeclaration => ({ ...place(surface, rail), pinned: true });
 
 const POINT = makeReactivePoint(Surfaces, daily('chat', 1), daily('checkout', 2), daily('outline', 3), place('rules', 4), {
-  surface: 'app',
-  formerly: 'plugin',
+  surface: 'plugin-section',
   route: 'p',
-  label: 'App',
+  label: 'Plugin',
   icon: (() => undefined) as unknown as SurfaceDeclaration['icon'],
   stands: 'project',
   remembers: false,
@@ -71,19 +70,6 @@ test('a daily place the operator unpinned stays off after a reload, and one a co
   flushSync();
   expect(pins.ids).toEqual(['checkout', 'outline', 'notes']);
   leave();
-});
-
-test('an app section and launcher pinned under their former plugin ids stand on the rail, and the next write keeps only the new ids', () => {
-  const storage = makeStorage();
-  storage.setItem('tagma.rail', JSON.stringify({ pinned: ['plugin/crm/deals', 'chat', 'plugin.crm.board'], unpinned: ['plugin/crm/old'] }));
-  const pins = rail(storage);
-
-  expect(pins.ids).toEqual(['app/crm/deals', 'chat', 'app.crm.board', 'checkout', 'outline']);
-  pins.unpin('outline');
-  expect(JSON.parse(storage.getItem('tagma.rail') ?? 'null')).toEqual({
-    pinned: ['app/crm/deals', 'chat', 'app.crm.board', 'checkout'],
-    unpinned: ['app/crm/old', 'outline'],
-  });
 });
 
 test('what another window pins shows in this one at once', () => {

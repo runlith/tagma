@@ -8,11 +8,11 @@ edges:
     to: 01a1318c-8979-71d8-afe3-2a452086e7fd
 sources:
   - kind: symbol
-    ref: apps/tagma/server/src/workspace/roots/coverage.ts
-    symbol: makeCoverageLedger
-  - kind: symbol
     ref: apps/tagma/server/src/workspace/checkouts/paths.ts
     symbol: makeCheckoutPathService
+  - kind: symbol
+    ref: apps/tagma/server/src/workspace/roots/coverage.ts
+    symbol: makeCoverageLedger
 ---
 A project's coverage learns its linked worktrees only when something retakes it — the worktree list while a client watches it, a thread's birth, a terminal's target. A worktree made by a plain `git worktree add` outside Tagma stayed unknown until then, so a path in it missed every root: the commit gate's `tagma check --gate` there answered `not-found` (a person's commit went through unjudged, an app landing a move refused it as unjudged), and file writes there were placed outside every checkout.
 

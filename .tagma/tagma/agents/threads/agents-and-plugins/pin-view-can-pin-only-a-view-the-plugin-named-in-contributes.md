@@ -1,0 +1,17 @@
+---
+id: 01a123c2-ecfa-7a66-921d-e30843cdada4
+title: pin_view can pin only a view the plugin named in contributes.pins
+ord: 3
+tags: ["explanation"]
+edges:
+  - kind: discovered-from
+    to: 01a123b0-f0b8-7505-af77-37f088151d7d
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/threads/operations/pins.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/pinOffers.ts
+---
+`pin_view` pins only a view the plugin named in `contributes.pins`: threads declares the point because a pin is a thread fact, while `plugin-host` and `views` know nothing of pinning. A view unnamed in `pins`, and a plugin that pins nothing, refuse `view-not-pinnable` with a hint where to register it. A manifest where `pins` names a view with no `views` record refuses the install, as with `results`: the `pins` face's check runs with the others before anything installs.
+
+Pinning asks only whether the plugin's registered `pins` name the view, not whether the plugin is enabled in the thread's project. A pin survives the plugin being switched off and shows again once it is back.

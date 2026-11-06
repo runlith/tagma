@@ -15,7 +15,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/executions/terminal/Panel.svelte.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/Sections.svelte.ts
+    ref: apps/tagma/app/src/lib/features/plugin-views/Sections.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/worktrees/BoardState.svelte.ts
   - kind: file

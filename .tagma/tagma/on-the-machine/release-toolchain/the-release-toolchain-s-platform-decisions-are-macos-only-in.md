@@ -15,17 +15,17 @@ edges:
     to: 01a19ec6-f467-787a-a87e-89cb77c57d56
 sources:
   - kind: file
-    ref: apps/tagma/server/src/mac-release/dmg.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/engine.ts
-  - kind: file
-    ref: apps/tagma/server/src/mac-release/notarize.ts
   - kind: file
     ref: apps/tagma/server/src/cut/release.ts
   - kind: file
-    ref: apps/tagma/server/src/mac-release/signing.ts
-  - kind: file
     ref: apps/tagma/server/src/cut/target.ts
+  - kind: file
+    ref: apps/tagma/server/src/mac-release/dmg.ts
+  - kind: file
+    ref: apps/tagma/server/src/mac-release/notarize.ts
+  - kind: file
+    ref: apps/tagma/server/src/mac-release/signing.ts
   - kind: file
     ref: apps/tagma/server/src/mac-release/transition.ts
   - kind: file

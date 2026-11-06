@@ -361,7 +361,7 @@ The same \`operationKey\` with the same move answers what that move reached; the
     answer: arms({ archived: threadAt, unarchived: threadAt }),
     meaning:
       "Put one thread away, or bring it back: it leaves the project's thread list with everything spawned under it, and nothing is destroyed — its transcript, its runs and every read of it stay as they were.",
-    grammar: `Every run and CLI still working under it is stopped and the thread put away in one act; putting away a thread of the agent's own subtree, working or not, asks nobody under trust; one that would stop work outside that subtree, or put away its own thread or an ancestor, asks the operator first — the calling run itself goes on to its end. An external caller app:<id> may archive or restore a thread whose bindings.app names that id; the same subtree semantics apply. ${ARCHIVE_GRAMMAR}`,
+    grammar: `Every run and CLI still working under it is stopped and the thread put away in one act; putting away a thread of the agent's own subtree, working or not, asks nobody under trust; one that would stop work outside that subtree, or put away its own thread or an ancestor, asks the operator first — the calling run itself goes on to its end. An external caller plugin:<id> may archive or restore a thread whose bindings.plugin names that id; the same subtree semantics apply. ${ARCHIVE_GRAMMAR}`,
     input: Schema.Struct({
       threadId: ThreadId,
       archived: Schema.optional(Schema.Boolean).annotate({
@@ -373,7 +373,7 @@ The same \`operationKey\` with the same move answers what that move reached; the
       'foreign-project',
       'thread-gone',
       'external-refused',
-      'app-thread-mismatch',
+      'plugin-thread-mismatch',
       ...ENDING_REFUSALS,
       'rollout-io',
       'rollout-meta-missing',

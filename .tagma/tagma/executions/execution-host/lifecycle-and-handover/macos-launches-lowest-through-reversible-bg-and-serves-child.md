@@ -5,11 +5,11 @@ ord: 2
 tags: ["explanation"]
 sources:
   - kind: symbol
-    ref: packages/execution-host/native/holder/src/posix/spawn.rs
-    symbol: child
-  - kind: symbol
     ref: packages/execution-host/native/holder/src/macos/sys.rs
     symbol: tempo
+  - kind: symbol
+    ref: packages/execution-host/native/holder/src/posix/spawn.rs
+    symbol: child
   - kind: symbol
     ref: packages/execution-host/src/Pacing.ts
     symbol: makePacing

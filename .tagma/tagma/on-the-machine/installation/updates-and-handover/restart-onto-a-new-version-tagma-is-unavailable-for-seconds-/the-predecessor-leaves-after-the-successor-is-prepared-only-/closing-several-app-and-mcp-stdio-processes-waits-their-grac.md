@@ -13,7 +13,7 @@ edges:
     to: 01a12699-1673-714b-a6a5-79e89b246531
 sources:
   - kind: file
-    ref: apps/tagma/server/src/tagma-apps/supervisor.ts
+    ref: apps/tagma/server/src/plugin-host/supervisor.ts
   - kind: file
     ref: packages/mcp/src/McpPool.ts
 ---

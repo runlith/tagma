@@ -1,7 +1,7 @@
 import { type McpAppCsp, viewCsp } from '@runlith/mcp/apps';
 import { Effect } from 'effect';
 import { HttpServerResponse } from 'effect/http';
-import type { TagmaAppViews } from './contract/service/views.js';
+import type { PluginViews } from './contract/service/views.js';
 
 const listed = (own: readonly string[], declared: readonly string[] | undefined) => [...own, ...(declared ?? [])].join(' ');
 
@@ -38,15 +38,15 @@ const ESCAPE = /%(?![0-7][0-9a-f])/iu;
 
 const safeDecode = (path: string): string | null => (ESCAPE.test(path) ? null : decodeURIComponent(path));
 
-const missing = () => HttpServerResponse.text('No such file of an app view.', { status: 404 });
+const missing = () => HttpServerResponse.text('No such file of a plugin view.', { status: 404 });
 
-export const siteFile = (views: TagmaAppViews['Service']) =>
-  Effect.fn('views.siteFile')(function* (app: string, pathname: string, framers: string) {
+export const siteFile = (views: PluginViews['Service']) =>
+  Effect.fn('views.siteFile')(function* (plugin: string, pathname: string, framers: string) {
     const path = safeDecode(pathname.slice(1));
     if (path === null) return missing();
-    const file = yield* views.file(app, path);
+    const file = yield* views.file(plugin, path);
     if (file === null) return missing();
-    const csp = yield* views.csp(app, path);
+    const csp = yield* views.csp(plugin, path);
     const response = yield* HttpServerResponse.file(file, { contentType: Bun.file(file).type });
     return HttpServerResponse.setHeaders(response, { ...SHARED, 'content-security-policy': policyOf(csp, framers) });
   });

@@ -24,7 +24,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/seats/ThreadSeats.svelte.ts
 ---
-**Value.** The operator keeps another thread, file, graph block, commit with its files and diff, diff, Changes, the thread's work in the graph (Work), its own terminal, a browser page, a call transcript or an app view at hand, and returns to the thread with the same tabs left.
+**Value.** The operator keeps another thread, file, graph block, commit with its files and diff, diff, Changes, the thread's work in the graph (Work), its own terminal, a browser page, a call transcript or a plugin view at hand, and returns to the thread with the same tabs left.
 
 **How.** A click on a link to a file, block, commit, thread or site anywhere in the window; the "+" menu above the area and in the window row, ⌥-click on a thread in the column, ⌘I "ask", "Split right" in the palette; the `ShellOps.openPane`/`openThread(…, 'beside')` shell operation. The area header carries an "Open in …" icon for the active tab when its view declares a full place: file — in Files, block — in Knowledge, commit and thread Changes — in Git, browser page — in the system browser, thread — in Agents at the main slot (its tab closes). A thread beside has no header of its own: CLI-thread switches are thread-menu items. The icon is the place sign, words — in the tooltip: this leaves room for tabs in the bar; at the area's minimum width, a text button left room for only one tab.
 

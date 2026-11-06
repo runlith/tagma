@@ -1,6 +1,6 @@
 ---
 id: 01a14bc0-7696-71f4-8eeb-ff1e8a780ecb
-title: "\"Attention\" gathers everything waiting on the operator across all projects in one list: agent questions, crashed and finished runs, app notices"
+title: "\"Attention\" gathers everything waiting on the operator across all projects in one list: agent questions, crashed and finished runs, plugin notices"
 ord: 1
 tags: ["feature"]
 fields:
@@ -33,13 +33,13 @@ sources:
     ref: apps/tagma/server/src/threads/events/standing.ts
     symbol: standingOf
 ---
-**Value.** An operator with several projects and dozens of agents does not walk threads one by one: everything waiting on him — questions, crashed and finished runs, app notices — sits in one list.
+**Value.** An operator with several projects and dozens of agents does not walk threads one by one: everything waiting on him — questions, crashed and finished runs, plugin notices — sits in one list.
 
 **How.** A bell in the top bar with the waiting count; on the phone — the Inbox tab. The `read_attention` and `mark_thread_seen` operations. `read_attention` is also read by an agent — as a deferred tool of a native agent or through a CLI thread's MCP operation — with the same answer; an agent's reading does not mark threads seen, `mark_thread_seen` belongs to the operator alone.
 
 **Behaviour.**
 - A thread enters the list when it waits on the operator's answer (including approval), when its run crashed or was cut and is unseen — a child's too — or when a root thread finished. A child's question that a parent agent answers by routing does not land here; it appears when it passes to the operator: on interception, child detachment, grant change, or when the parent goes to archive while the child stays. A child's end reaches the parent as a report and does not land here.
-- The list groups waiting, crashed, and finished, with app notices above them; all projects or the current one can be watched. A click opens the thread.
+- The list groups waiting, crashed, and finished, with plugin notices above them; all projects or the current one can be watched. A click opens the thread.
 - A thread open on screen marks itself seen; "mark all" clears crashed and finished ones and dismisses the notices that ask nothing, the ones the bell's green dot counts beside finished threads; a notice with a question stays until answered.
 
 **Limits.** On desktop a question cannot be answered from the list — only by going to the thread; short options are answered right in the phone's Inbox. Archived threads never enter the list.
