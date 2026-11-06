@@ -8,6 +8,7 @@ import type { PluginConsented } from '../wire/consent.js';
 import type {
   PluginComponentKind,
   PluginDeclared,
+  PluginFault,
   PluginHookPoint,
   PluginOrigin,
   PluginPreview,
@@ -37,7 +38,7 @@ export class PluginDigests extends Context.Service<
 export class PluginFaults extends Context.Service<
   PluginFaults,
   {
-    put(plugin: string, point: string, reason: string): void;
+    put(plugin: string, point: string, fault: Omit<PluginFault, 'point'>): void;
     clear(plugin: string, point: string): void;
   }
 >()('tagma/plugins/PluginFaults') {}

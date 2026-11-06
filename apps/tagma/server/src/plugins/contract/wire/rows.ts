@@ -106,7 +106,8 @@ export type PluginProcessRow = typeof pluginProcessSchema.Type;
 
 const pluginFaultSchema = Schema.Struct({
   point: Schema.String.annotate({ description: 'The contribution point whose owner found it, such as views.' }),
-  reason: Schema.String,
+  title: Schema.String.annotate({ description: 'One sentence a person reads on the plugin’s card.' }),
+  detail: Schema.String.annotate({ description: 'What an agent fixing it needs: the file and the message.' }),
 });
 export type PluginFault = typeof pluginFaultSchema.Type;
 

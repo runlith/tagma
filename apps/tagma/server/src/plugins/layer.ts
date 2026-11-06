@@ -16,6 +16,7 @@ import {
   Plugins,
 } from './contract/service/plugins.js';
 import { PluginPoints } from './contract/service/points.js';
+import type { PluginFault } from './contract/wire/rows.js';
 import { pluginsOptions } from './contract/wire/settings.js';
 import { makeDigests } from './digests.js';
 import { makeEnabled } from './enabled.js';
@@ -65,12 +66,13 @@ export const pluginsLayer: Layer.Layer<
     });
     const shelf = yield* makeShelf({ home });
     const digests = yield* makeDigests;
-    const found = new Map<string, Map<string, string>>();
+    const found = new Map<string, Map<string, PluginFault>>();
     const faults = PluginFaults.of({
-      put: (plugin, point, reason) => {
-        const held = found.get(plugin) ?? new Map<string, string>();
-        if (held.get(point) === reason) return;
-        found.set(plugin, held.set(point, reason));
+      put: (plugin, point, fault) => {
+        const held = found.get(plugin) ?? new Map<string, PluginFault>();
+        const standing = held.get(point);
+        if (standing?.title === fault.title && standing.detail === fault.detail) return;
+        found.set(plugin, held.set(point, { point, ...fault }));
         PubSub.publishUnsafe(pulses, null);
       },
       clear: (plugin, point) => {
@@ -79,7 +81,7 @@ export const pluginsLayer: Layer.Layer<
         PubSub.publishUnsafe(pulses, null);
       },
     });
-    const faultsOf = (id: string) => [...(found.get(id) ?? [])].map(([point, reason]) => ({ point, reason }));
+    const faultsOf = (id: string) => [...(found.get(id)?.values() ?? [])];
     const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched, faults: faultsOf });
     const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));

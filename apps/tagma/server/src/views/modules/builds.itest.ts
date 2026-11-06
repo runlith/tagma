@@ -117,7 +117,7 @@ it.live('a view the compiler refuses reads failed with the file, faults the plug
     expect(failed.module).toMatchObject({ state: 'failed', file: 'ui/Board.svelte' });
     const rows = (yield* world.op('read_plugins', {}, scope)).body as { readonly plugins: readonly PluginRow[] };
     expect(rows.plugins.find((row) => row.id === 'board')?.faults).toEqual([
-      { point: 'views', reason: expect.stringContaining('A view of this plugin does not compile: ui/Board.svelte') },
+      { point: 'views', title: 'A view of this plugin does not compile', detail: expect.stringMatching(/^ui\/Board\.svelte: /u) },
     ]);
     const caller = { kind: 'operator' as const, projectId, view: 'board' };
     expect(revisionOf(yield* world.runtime.views.call(mount, 'refresh', {}, caller))).toBe(1);

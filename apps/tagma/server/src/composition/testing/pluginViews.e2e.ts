@@ -38,6 +38,18 @@ const BOARD = `<script lang="ts">
 <Button onclick={async () => { count = (await tagma.tools.bump({})).count; }}>Bump</Button>
 `;
 
+const IMPORTED = "Object.keys(JSON.parse(document.querySelector('script[type=importmap]')?.textContent ?? '{}').imports ?? {})";
+
+const TRACKED = `(() => {
+  const counted = [...document.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Counted'));
+  return counted !== undefined && getComputedStyle(counted).letterSpacing !== 'normal';
+})()`;
+
+const PADDED = `(() => {
+  const bump = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Bump');
+  return bump === undefined ? 0 : Number.parseFloat(getComputedStyle(bump).paddingLeft);
+})()`;
+
 const authored = (folder: string) =>
   Effect.promise(async () => {
     await rm(join(folder, 'plugin.test.ts'));
@@ -68,18 +80,13 @@ e2e.effect(
       yield* tenant.perform('install_plugin', { source: folder });
       yield* Effect.promise(async () => {
         await page.goto(`${served.origin}/${encodeURIComponent(tenant.projectName)}/p/counter/board`);
-        const imports = await page.evaluate(
-          () => (JSON.parse(document.querySelector('script[type=importmap]')?.textContent ?? '{}') as { imports?: object }).imports ?? {},
-        );
-        expect(Object.keys(imports)).toEqual(expect.arrayContaining(['svelte', 'svelte/internal/client', '@runlith/tagma/ui']));
+        const imports = await page.evaluate(IMPORTED);
+        expect(imports).toEqual(expect.arrayContaining(['svelte', 'svelte/internal/client', '@runlith/tagma/ui']));
         const bump = page.getByRole('button', { name: 'Bump', exact: true });
         await bump.click();
         await page.getByText(`Counted 1 in project ${tenant.projectId}`).waitFor();
-        await page.waitForFunction(() => {
-          const counted = [...document.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Counted'));
-          return counted !== undefined && getComputedStyle(counted).letterSpacing !== 'normal';
-        });
-        expect(await bump.evaluate((button) => Number.parseFloat(getComputedStyle(button).paddingLeft))).toBeGreaterThan(0);
+        await page.waitForFunction(TRACKED);
+        expect(await page.evaluate(PADDED)).toBeGreaterThan(0);
       }).pipe(Effect.ensuring(Effect.ignore(tenant.perform('uninstall_plugin', { id: 'counter' }))));
     }),
 );

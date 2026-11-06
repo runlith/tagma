@@ -162,7 +162,10 @@ export const makeBuilds = Effect.fnUntraced(function* (input: { readonly changed
     if (shown.get(standing.plugin.id) !== standing) return;
     standing.prepared = prepared;
     if (prepared._tag === 'failed')
-      faults.put(standing.plugin.id, POINT, `${NOT_COMPILED}: ${prepared.file === null ? '' : `${prepared.file}: `}${prepared.message}`);
+      faults.put(standing.plugin.id, POINT, {
+        title: NOT_COMPILED,
+        detail: prepared.file === null ? prepared.message : `${prepared.file}: ${prepared.message}`,
+      });
     else faults.clear(standing.plugin.id, POINT);
     Queue.offerUnsafe(sheets, undefined);
     changed();

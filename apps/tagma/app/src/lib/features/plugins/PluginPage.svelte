@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
+  import type { PluginFault } from '@tagma/server/plugins/contract/wire/rows';
   import type { PluginOptionValues } from '@tagma/server/plugins/contract/wire/settings';
   import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
@@ -16,6 +17,7 @@
   import { toldOf } from '$lib/wire/refusal.js';
   import type { Told } from '$lib/wire/told.js';
   import { SecretsRepo } from '$lib/features/secrets/Repo.js';
+  import { Asking } from '$lib/features/threads/Asking.js';
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import Asked from '$lib/features/plugins/Asked.svelte';
@@ -53,6 +55,10 @@
   const repo = PluginsRepo.use();
   const secrets = SecretsRepo.use();
   const parts = CardParts.use();
+  const asking = Asking.use();
+
+  const repairOf = (fault: PluginFault): string =>
+    `The plugin ${row.id} has a fault in Tagma: ${fault.title}.\n\n${fault.detail}\n\nFix it in the plugin's sources, build it again with tagma-plugin build, and check with read_plugins that the fault is gone.`;
 
   const row = $derived(item.row);
   const asks = $derived(repo.asks.key({ projectId: project.id, id: row.id }));
@@ -184,6 +190,15 @@
     {:else if row.outdated === null}
       <Callout tone="plain" title="Tagma could not tell whether this plugin was changed after it was last built" />
     {/if}
+    {#each row.faults as fault (fault.point)}
+      <Callout tone="error" title={fault.title}>
+        {#snippet actions()}
+          <Button size="sm" variant="outline" onclick={() => void asking.ask({ projectId: project.id }, repairOf(fault))}>
+            Fix with an agent
+          </Button>
+        {/snippet}
+      </Callout>
+    {/each}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
     {#if process !== undefined || (row.enabled && item.servers.length > 0)}
