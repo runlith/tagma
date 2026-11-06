@@ -40,7 +40,7 @@ export const diskImage = Effect.fn('installation.diskImage')(
       at,
     );
     yield* Effect.acquireUseRelease(
-      ran('/usr/bin/hdiutil', ['attach', writable, '-nobrowse', '-noverify', '-noautoopen', '-mountpoint', mounted], at),
+      ran('/usr/bin/hdiutil', ['attach', writable, '-nobrowse', '-noverify', '-noautofsck', '-noautoopen', '-mountpoint', mounted], at),
       () => ran('/usr/bin/xattr', ['-wx', 'com.apple.FinderInfo', HAS_CUSTOM_ICON, mounted], at),
       () => Effect.orDie(ran('/usr/bin/hdiutil', ['detach', mounted, '-force'], at)),
     );
