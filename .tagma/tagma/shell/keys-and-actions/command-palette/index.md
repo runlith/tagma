@@ -1,7 +1,7 @@
 ---
 id: 01a174f2-3d95-7a65-a9be-c433de4f491f
 title: Command palette
-ord: 52
+ord: 3
 tags: ["module"]
 fields:
   {
