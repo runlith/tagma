@@ -291,6 +291,7 @@ export type ExternalOperations = {
       readonly adapter: string;
       readonly document?: unknown;
       readonly console?: 'auto' | 'always' | 'never';
+      readonly input?: 'human' | 'fast';
     };
     readonly answer: {
       readonly profile: {
@@ -298,6 +299,7 @@ export type ExternalOperations = {
         readonly name: string;
         readonly adapter: string;
         readonly console: 'auto' | 'always' | 'never';
+        readonly input: 'human' | 'fast';
         readonly connected: boolean;
         readonly removal: 'delete' | 'clear' | null;
         readonly createdAt: string;
@@ -1988,6 +1990,7 @@ export type ExternalOperations = {
         readonly name: string;
         readonly adapter: string;
         readonly console: 'auto' | 'always' | 'never';
+        readonly input: 'human' | 'fast';
         readonly connected: boolean;
         readonly removal: 'delete' | 'clear' | null;
         readonly createdAt: string;
@@ -2068,6 +2071,7 @@ export type ExternalOperations = {
         readonly name: string;
         readonly adapter: string;
         readonly console: 'auto' | 'always' | 'never';
+        readonly input: 'human' | 'fast';
         readonly connected: boolean;
         readonly removal: 'delete' | 'clear' | null;
         readonly createdAt: string;
@@ -2431,14 +2435,28 @@ export type ExternalOperations = {
   readonly read_model_menu: {
     readonly input: {};
     readonly answer: {
-      readonly providers: readonly {
+      readonly providers: readonly ({
         readonly id: string;
-        readonly models: readonly {
+        readonly models: readonly ({
           readonly id: string;
           readonly reasoning: readonly string[];
           readonly operatorOnly: boolean;
-        }[];
-      }[];
+          readonly lowered: readonly ({
+            readonly rung: string;
+            readonly to: string | null;
+          })[];
+          readonly switches: readonly ({
+            readonly id: string;
+            readonly label: string;
+            readonly description: string;
+            readonly values: readonly {
+              readonly id: string;
+              readonly label: string;
+            }[];
+            readonly default: string | null;
+          })[];
+        })[];
+      })[];
       readonly status: 'read';
     };
   };
@@ -5190,6 +5208,7 @@ export type ExternalOperations = {
       readonly profile: string;
       readonly name?: string;
       readonly console?: 'auto' | 'always' | 'never';
+      readonly input?: 'human' | 'fast';
     };
     readonly answer: {
       readonly profile: {
@@ -5197,6 +5216,7 @@ export type ExternalOperations = {
         readonly name: string;
         readonly adapter: string;
         readonly console: 'auto' | 'always' | 'never';
+        readonly input: 'human' | 'fast';
         readonly connected: boolean;
         readonly removal: 'delete' | 'clear' | null;
         readonly createdAt: string;

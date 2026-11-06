@@ -67,7 +67,24 @@ it.live('a plugin reads the model menu and asks a model once, and its card reads
     expect(menu.body).toMatchObject({
       status: 'read',
       providers: expect.arrayContaining([
-        expect.objectContaining({ id: MODEL.provider, models: expect.arrayContaining([expect.objectContaining({ id: MODEL.model })]) }),
+        expect.objectContaining({
+          id: MODEL.provider,
+          models: expect.arrayContaining([
+            expect.objectContaining({ id: MODEL.model, lowered: expect.any(Array), switches: expect.any(Array) }),
+          ]),
+        }),
+        expect.objectContaining({
+          models: expect.arrayContaining([
+            expect.objectContaining({
+              switches: expect.arrayContaining([
+                expect.objectContaining({
+                  id: 'reasoningDisplay',
+                  values: expect.arrayContaining([{ id: 'summarized', label: 'Summary shown' }]),
+                }),
+              ]),
+            }),
+          ]),
+        }),
       ]),
     });
 

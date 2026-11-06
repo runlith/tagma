@@ -1,3 +1,4 @@
+import { textMenu } from '@runlith/llm/models/catalog';
 import type { TokenStoreFault } from '@runlith/llm/oauth/storeFailure';
 import { Effect } from 'effect';
 import { body, type OperationPair, pair } from '../platform/contract/service/body.js';
@@ -372,15 +373,7 @@ export const PROVIDER_PAIRS = {
     OPS.read_model_menu,
     body(OPS.read_model_menu, {
       execute: Effect.fnUntraced(function* () {
-        const offered = (yield* ProviderRegistry).current().menu.modelsByCapability('text');
-        const providers = [...Map.groupBy(offered, (option) => option.provider)].map(([id, models]) => ({
-          id,
-          models: models.map((option) => ({
-            id: option.id,
-            reasoning: option.reasoningOptions.map((rung) => rung.id),
-            operatorOnly: option.operatorOnly,
-          })),
-        }));
+        const providers = textMenu((yield* ProviderRegistry).current().menu);
         return { status: 'read' as const, providers };
       }),
     }),

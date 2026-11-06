@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Context, Effect, Layer, Schema } from 'effect';
 import { readPartialJsonState } from '@runlith/utils/json';
-import { OPERATOR_ONLY_REASONING, modelCatalog, type ModelOption } from '@runlith/llm/models/catalog';
+import { modelCatalog, textMenu, type ModelOption } from '@runlith/llm/models/catalog';
 import { DEFAULT_PROVIDER_DESCRIPTIONS } from '@runlith/builtin-catalog/descriptions';
 import { mintCursor, readCursor } from '@runlith/paging';
 import { callerInThread, unthreadedCaller } from '../agent/testing/caller';
@@ -70,7 +70,9 @@ function unusedSync(): never {
 }
 const directory: ThreadDirectoryAccess = { list: () => Effect.succeed({ rows: [], total: 0, cursor: null }) };
 const shipped = modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS);
-const operatorOnlyRung = [...OPERATOR_ONLY_REASONING][0]!;
+const operatorOnlyRung = textMenu(shipped)
+  .flatMap((provider) => provider.models)
+  .flatMap((model) => model.lowered)[0]!.rung;
 const operatorOnlyModel = shipped.options.find((option) => option.operatorOnly)!;
 const inheritedModel = shipped.spawnInherits(operatorOnlyModel.provider, operatorOnlyModel.id);
 const inheritedRung = inheritedModel.defaultReasoning!;
@@ -1069,11 +1071,9 @@ it.effect(
         !model.operatorOnly &&
         model.defaultReasoning !== null &&
         model.id !== shipped.defaultTextModelId(model.provider) &&
-        model.reasoningOptions.some((rung) => rung.id !== model.defaultReasoning && !OPERATOR_ONLY_REASONING.has(rung.id)),
+        model.reasoningOptions.some((rung) => rung.id !== model.defaultReasoning && rung.id !== operatorOnlyRung),
     )!;
-    const reasoning = option.reasoningOptions.find(
-      (rung) => rung.id !== option.defaultReasoning && !OPERATOR_ONLY_REASONING.has(rung.id),
-    )!.id;
+    const reasoning = option.reasoningOptions.find((rung) => rung.id !== option.defaultReasoning && rung.id !== operatorOnlyRung)!.id;
     const world = yield* movePlane(spawnParent(option, option.defaultReasoning!));
     const child = yield* world.access.spawn({
       requestId: 'reasoning-only',

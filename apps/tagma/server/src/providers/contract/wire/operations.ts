@@ -63,10 +63,19 @@ const outside = {
 } as const;
 const nobody = () => [];
 
+const menuSwitchSchema = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  description: Schema.String,
+  values: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })),
+  default: Schema.NullOr(Schema.String),
+});
 const menuModelSchema = Schema.Struct({
   id: Schema.String,
   reasoning: Schema.Array(Schema.String),
   operatorOnly: Schema.Boolean,
+  lowered: Schema.Array(Schema.Struct({ rung: Schema.String, to: Schema.NullOr(Schema.String) })),
+  switches: Schema.Array(menuSwitchSchema),
 });
 const menuProviderSchema = Schema.Struct({ id: Schema.String, models: Schema.Array(menuModelSchema) });
 
@@ -529,7 +538,7 @@ export const PROVIDER_OPERATIONS = {
     approval: ASKS_NEVER,
     ...outside,
     meaning:
-      'Read the models the installed providers offer for text, by provider: each model’s reasoning rungs and whether it is operator-only — the menu agents read through read_models. A model is named by its provider and id.',
+      'Read the models the installed providers offer for text, by provider: each model’s reasoning rungs, whether it is operator-only and to which rung each operator-only rung lowers, and its switches with their values — the menu agents read through read_models, and what set_thread_model takes. A model is named by its provider and id.',
     input: Schema.Struct({}),
     answer: arms({ read: { providers: Schema.Array(menuProviderSchema) } }),
     refusals: [],

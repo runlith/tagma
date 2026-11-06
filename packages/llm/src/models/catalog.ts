@@ -10,7 +10,7 @@ import {
 import type { ToolChoiceMode } from '../llm/schema/options';
 import { ReasoningEfforts } from '../llm/schema/ids';
 
-export const OPERATOR_ONLY_REASONING: ReadonlySet<string> = new Set(['max']);
+const OPERATOR_ONLY_REASONING: ReadonlySet<string> = new Set(['max']);
 
 export type ReasoningOption = {
   id: string;
@@ -204,6 +204,41 @@ export function modelCatalog<R extends ProviderDescription>(providers: readonly 
       return ids as [string, ...string[]];
     },
   };
+}
+
+type MenuSwitch = Omit<ModelSwitch, 'icon'>;
+
+export type MenuModel = {
+  readonly id: string;
+  readonly reasoning: readonly string[];
+  readonly operatorOnly: boolean;
+  readonly lowered: readonly { readonly rung: string; readonly to: string | null }[];
+  readonly switches: readonly MenuSwitch[];
+};
+
+export type MenuProvider = { readonly id: string; readonly models: readonly MenuModel[] };
+
+export function textMenu(offered: ModelCatalog): readonly MenuProvider[] {
+  return [...Map.groupBy(offered.modelsByCapability('text'), (option) => option.provider)].map(([id, options]) => ({
+    id,
+    models: options.map((option) => ({
+      id: option.id,
+      reasoning: option.reasoningOptions.map((rung) => rung.id),
+      operatorOnly: option.operatorOnly,
+      lowered: option.operatorOnly
+        ? option.reasoningOptions
+            .filter((rung) => OPERATOR_ONLY_REASONING.has(rung.id))
+            .map((rung) => ({ rung: rung.id, to: offered.spawnReasoning(option, rung.id, true) }))
+        : [],
+      switches: option.switches.map((declared) => ({
+        id: declared.id,
+        label: declared.label,
+        description: declared.description,
+        values: declared.values,
+        default: declared.default,
+      })),
+    })),
+  }));
 }
 
 export function reasoningForModel(preferred: string | null | undefined, model: ModelOption | null | undefined): string {
