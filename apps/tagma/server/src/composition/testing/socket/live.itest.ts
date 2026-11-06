@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { suiteGit } from '../suiteGit.js';
 import type { ThreadChangesFrame } from '../../../change-record/contract/wire/threadChanges.js';
 import { liveDoorLayer } from '../socketDoor.js';
+import { writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
 
@@ -287,6 +288,30 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
       expect(scoped).toMatchObject({ code: 'setting-scope' });
       const unknown = yield* Effect.flip(Stream.runCollect(client['settings.watch']({ keys: ['appearance.nothing'] })));
       expect(unknown).toMatchObject({ code: 'unknown-setting' });
+    }),
+  );
+
+  it.effect('appearance.subscribe offers the theme of a plugin installed from a folder, and withdraws it when the plugin goes', () =>
+    Effect.gen(function* () {
+      const { client, door } = yield* World;
+      const at = `project=${yield* door.stealthProject()}`;
+      const frames = yield* Queue.make<{ readonly themes: readonly { readonly id: string; readonly plugin: string }[] }>();
+      yield* Effect.forkScoped(Stream.runForEach(client['appearance.subscribe']({}), (frame) => Queue.offer(frames, frame)));
+      const offered = Effect.fnUntraced(function* (wanted: boolean) {
+        for (;;) {
+          const { themes } = yield* Queue.take(frames);
+          const nord = themes.find((theme) => theme.id === 'nord.nord');
+          if ((nord !== undefined) === wanted) return nord;
+        }
+      });
+      yield* offered(false);
+      const root = yield* door.directory('nord');
+      const themes = { nord: { title: 'Nord', dark: { surfaces: { background: 'oklch(0.16 0.015 250)' } } } };
+      yield* Effect.promise(() => writePlugin(root, { id: 'nord', contributes: { themes } }));
+      expect((yield* door.op('install_plugin', { source: root }, at)).status).toBe(200);
+      expect(yield* offered(true)).toMatchObject({ plugin: 'nord', theme: themes.nord });
+      expect((yield* door.op('uninstall_plugin', { id: 'nord' }, at)).status).toBe(200);
+      yield* offered(false);
     }),
   );
 
