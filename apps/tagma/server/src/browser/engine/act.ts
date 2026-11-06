@@ -5,10 +5,11 @@ import { Effect } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Action, Aim } from '../contract/service/automation.js';
 import { erase, fade, mark } from './cursor.js';
+import { inputMode } from './refusal.js';
 import type { Attached, Paged } from './drive.js';
 import { actionFailed, type Box, boxOf, call, coverOf, describe, locate, locateAt, type Located, pointOf, world } from './target.js';
 
-type Refused = GateRefusal<'stale-ref' | 'element-obscured' | 'action-failed' | 'action-shape'>;
+type Refused = GateRefusal<'stale-ref' | 'element-obscured' | 'action-failed' | 'action-shape' | 'input-mode'>;
 
 const shape = (reason: string) => new GateRefusal('action-shape', reason, ['send the fields this action takes']);
 
@@ -58,6 +59,37 @@ const markFocused = Effect.fnUntraced(function* (state: Paged, attached: Attache
   yield* focused === null ? erase(attached) : mark(state, attached, { kind: 'box', box: focused });
 });
 
+const reveal = Effect.fn('browser.reveal')(function* (attached: Attached, located: Located) {
+  if (attached.input === 'fast') return yield* boxOf(attached, located);
+  let box = yield* boxOf(attached, located, false);
+  const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics', undefined, located.child);
+  for (;;) {
+    const local = box.localCenter;
+    const width = box.width;
+    const height = box.height;
+    if (
+      local.x + width / 2 > 0 &&
+      local.x - width / 2 < view.clientWidth &&
+      local.y + height / 2 > 0 &&
+      local.y - height / 2 < view.clientHeight
+    )
+      return box;
+    const offset = { x: box.center.x - local.x, y: box.center.y - local.y };
+    yield* attached.human.wheel(
+      { x: Math.max(1, offset.x + view.clientWidth / 2), y: Math.max(1, offset.y + view.clientHeight / 2) },
+      {
+        x: local.x < 0 || local.x > view.clientWidth ? local.x - view.clientWidth / 2 : 0,
+        y: local.y < 0 || local.y > view.clientHeight ? local.y - view.clientHeight / 2 : 0,
+      },
+    );
+    yield* attached.pictures.paint;
+    const next = yield* boxOf(attached, located, false);
+    if (next.center.x === box.center.x && next.center.y === box.center.y)
+      return yield* actionFailed(`${located.ref} cannot be reached by scrolling its viewport`);
+    box = next;
+  }
+});
+
 const aimAt = Effect.fnUntraced(function* (
   state: Paged,
   attached: Attached,
@@ -69,14 +101,36 @@ const aimAt = Effect.fnUntraced(function* (
     return { point: { x: aim.x, y: aim.y }, local: { x: aim.x, y: aim.y }, located: null };
   }
   const located = yield* locate(state, attached, aim.ref);
-  const box = yield* boxOf(attached, located);
+  const box = yield* reveal(attached, located);
   yield* mark(state, attached, { kind: 'box', box });
-  const point = box.center;
+  let point = box.center;
+  if (attached.input === 'human') {
+    const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics');
+    const { cssVisualViewport: local } =
+      located.child === undefined
+        ? { cssVisualViewport: view }
+        : yield* attached.session.send('Page.getLayoutMetrics', undefined, located.child);
+    const offset = { x: box.center.x - box.localCenter.x, y: box.center.y - box.localCenter.y };
+    const left = Math.max(0, box.x, offset.x);
+    const top = Math.max(0, box.y, offset.y);
+    const right = Math.min(view.clientWidth, box.x + box.width, offset.x + local.clientWidth);
+    const bottom = Math.min(view.clientHeight, box.y + box.height, offset.y + local.clientHeight);
+    if (right <= left || bottom <= top) return yield* actionFailed(`${aim.ref} is outside the visible viewport`);
+    const across = (Math.random() < 0.5 ? 0.2 : 0.6) + Math.random() * 0.2;
+    point = { x: left + (right - left) * across, y: top + (bottom - top) * (0.2 + Math.random() * 0.6) };
+  }
   if (clear) {
     const cover = yield* coverOf(state, attached, located, point);
     if (cover !== null) return yield* obscured(aim.ref, cover);
   }
-  return { point, local: box.localCenter, located };
+  return {
+    point,
+    local:
+      attached.input === 'fast'
+        ? box.localCenter
+        : { x: box.localCenter.x + point.x - box.center.x, y: box.localCenter.y + point.y - box.center.y },
+    located,
+  };
 });
 
 const focusOn = Effect.fnUntraced(function* (
@@ -85,6 +139,13 @@ const focusOn = Effect.fnUntraced(function* (
   aim: Aim | null,
 ): Effect.fn.Return<void, CommandFailure | Refused> {
   if (aim === null) return yield* markFocused(state, attached);
+  if (attached.input === 'human') {
+    const aimed = yield* aimAt(state, attached, aim, true);
+    return yield* attached.human.click(aimed.local, {}, aimed.located?.child, {
+      x: aimed.point.x - aimed.local.x,
+      y: aimed.point.y - aimed.local.y,
+    });
+  }
   if (!('ref' in aim)) {
     yield* pointAt(state, attached, aim);
     const located = yield* locateAt(state, attached, aim);
@@ -109,6 +170,15 @@ const FOCUS = `function () {
   }
   return false;
 }`;
+
+const EDITABLE = `(function (doc) {
+  let element = doc.activeElement;
+  while (element && (element.localName === 'iframe' || element.localName === 'frame' || element.shadowRoot)) {
+    if (element.shadowRoot) { element = element.shadowRoot.activeElement || element; break; }
+    try { element = element.contentDocument && element.contentDocument.activeElement; } catch { return false; }
+  }
+  return !!element && (element.isContentEditable || ((!element.disabled && !element.readOnly) && (element.localName === 'textarea' || (element.localName === 'input' && ['text', 'search', 'tel', 'url', 'email', 'password', 'number'].includes(element.type)))));
+})`;
 
 const SELECT_ALL = `function () {
   const element = this.nodeType === 1 ? this : this.parentElement;
@@ -172,6 +242,33 @@ const fill = Effect.fnUntraced(function* (
   aim: Aim | null,
   text: string,
 ): Effect.fn.Return<void, CommandFailure | Refused> {
+  if (attached.input === 'human') {
+    yield* focusOn(state, attached, aim);
+    const context = yield* world(attached, attached.main);
+    const editable =
+      aim === null
+        ? (yield* attached.session.send('Runtime.evaluate', {
+            expression: `${EDITABLE}(document)`,
+            contextId: context,
+            returnByValue: true,
+          })).result.value === true
+        : yield* call<boolean>(
+            attached,
+            'ref' in aim ? yield* locate(state, attached, aim.ref) : yield* locateAt(state, attached, aim),
+            `function () { return ${EDITABLE}(this.ownerDocument); }`,
+          );
+    if (!editable) return yield* actionFailed('no editable field holds the focus of the page; fill names a visible editable field by ref');
+    const platform = yield* attached.session.send('Runtime.evaluate', {
+      expression: 'navigator.platform',
+      contextId: context,
+      returnByValue: true,
+    });
+    const all = chordOf(`${String(platform.result.value).startsWith('Mac') ? 'Meta' : 'Control'}+A`);
+    const clear = chordOf('Delete');
+    if ('key' in all) yield* attached.human.press(all);
+    if ('key' in clear) yield* attached.human.press(clear);
+    return yield* attached.human.type(text);
+  }
   if (aim !== null) {
     const located = 'ref' in aim ? yield* locate(state, attached, aim.ref) : yield* locateAt(state, attached, aim);
     yield* 'ref' in aim ? markElement(state, attached, located) : pointAt(state, attached, aim);
@@ -212,8 +309,11 @@ const setChecked = Effect.fnUntraced(function* (
   if (before === wanted) return;
   if ('ref' in aim) {
     const aimed = yield* aimAt(state, attached, aim, true);
-    yield* click(attached.session, aimed.local, {}, located.child);
-  } else yield* click(attached.session, aim);
+    if (attached.input === 'human')
+      yield* attached.human.click(aimed.local, {}, located.child, { x: aimed.point.x - aimed.local.x, y: aimed.point.y - aimed.local.y });
+    else yield* click(attached.session, aimed.local, {}, located.child);
+  } else if (attached.input === 'human') yield* attached.human.click(aim);
+  else yield* click(attached.session, aim);
   const after = yield* call<boolean | null>(attached, 'ref' in aim ? yield* locate(state, attached, aim.ref) : located, CHECKED);
   if (after !== wanted) return yield* actionFailed(`clicking ${named} left it ${after === true ? 'checked' : 'unchecked'}`);
 });
@@ -231,11 +331,26 @@ const performed = Effect.fnUntraced(function* (
     case 'click':
     case 'double-click': {
       const aimed = yield* aimAt(state, attached, action.aim, true);
-      return yield* click(session, aimed.local, { count: action.kind === 'click' ? 1 : 2 }, aimed.located?.child);
+      const options = { count: action.kind === 'click' ? 1 : 2 };
+      if (attached.input === 'human')
+        return yield* attached.human.click(aimed.local, options, aimed.located?.child, {
+          x: aimed.point.x - aimed.local.x,
+          y: aimed.point.y - aimed.local.y,
+        });
+      yield* click(session, aimed.local, options, aimed.located?.child);
+      state.pointer.at = aimed.point;
+      return;
     }
     case 'hover': {
       const aimed = yield* aimAt(state, attached, action.aim, false);
-      return yield* move(session, aimed.local, 0, aimed.located?.child);
+      if (attached.input === 'human')
+        return yield* attached.human.move(aimed.local, 0, aimed.located?.child, {
+          x: aimed.point.x - aimed.local.x,
+          y: aimed.point.y - aimed.local.y,
+        });
+      yield* move(session, aimed.local, 0, aimed.located?.child);
+      state.pointer.at = aimed.point;
+      return;
     }
     case 'focus':
       return yield* focusOn(state, attached, action.aim);
@@ -243,18 +358,20 @@ const performed = Effect.fnUntraced(function* (
       return yield* fill(state, attached, action.aim, action.text);
     case 'type':
       yield* focusOn(state, attached, action.aim);
-      return yield* insertText(session, action.text);
+      return yield* attached.input === 'human' ? attached.human.type(action.text) : insertText(session, action.text);
     case 'press': {
       const chord = chordOf(action.key);
       if (!('key' in chord))
         return yield* shape(`${JSON.stringify(chord.unknown)} is not a key of the US layout, like Enter, Tab, ArrowDown, a or Control+A`);
       yield* focusOn(state, attached, action.aim);
-      return yield* press(session, chord);
+      return yield* attached.input === 'human' ? attached.human.press(chord) : press(session, chord);
     }
     case 'select': {
       if (!('ref' in action.aim)) return yield* shape('select aims at a <select> by its ref');
       const located = yield* locate(state, attached, action.aim.ref);
       yield* markElement(state, attached, located);
+      if (attached.input === 'human')
+        return yield* inputMode(attached.profile, 'programmatic option selection; use keyboard input to select at the screen');
       const chosen = yield* call<{ readonly refused?: string }>(attached, located, SELECT, [action.values]);
       if (chosen.refused !== undefined) return yield* actionFailed(`${action.aim.ref}: ${chosen.refused}`);
       return;
@@ -265,18 +382,24 @@ const performed = Effect.fnUntraced(function* (
     case 'scroll': {
       if (action.aim !== null && 'ref' in action.aim && action.dx === 0 && action.dy === 0) {
         const located = yield* locate(state, attached, action.aim.ref);
-        return yield* mark(state, attached, { kind: 'box', box: yield* boxOf(attached, located) });
+        return yield* mark(state, attached, { kind: 'box', box: yield* reveal(attached, located) });
       }
       const at = action.aim === null ? yield* viewportCenter(attached) : (yield* aimAt(state, attached, action.aim, false)).point;
       if (action.aim === null) yield* pointAt(state, attached, at);
-      return yield* wheel(session, at, { x: action.dx, y: action.dy });
+      return yield* attached.input === 'human'
+        ? attached.human.wheel(at, { x: action.dx, y: action.dy })
+        : wheel(session, at, { x: action.dx, y: action.dy });
     }
     case 'drag': {
       const from = yield* aimAt(state, attached, action.aim, true);
       const to = yield* aimAt(state, attached, action.to, false);
-      return yield* drag(session, from.point, to.point);
+      if (attached.input === 'human') return yield* attached.human.drag(from.point, to.point);
+      yield* drag(session, from.point, to.point);
+      state.pointer.at = to.point;
+      return;
     }
     case 'upload': {
+      if (attached.input === 'human') return yield* inputMode(attached.profile, 'programmatic file assignment; choose files at the screen');
       if (!('ref' in action.aim)) return yield* shape('upload aims at an <input type="file"> by its ref');
       const located = yield* locate(state, attached, action.aim.ref);
       yield* markElement(state, attached, located);

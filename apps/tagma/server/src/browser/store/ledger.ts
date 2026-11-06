@@ -26,7 +26,10 @@ export class Ledger extends Context.Service<
     profile(id: ProfileId): Effect.Effect<ProfileRow | undefined, StoreFailure>;
     seed(rows: readonly ProfileRow[]): Effect.Effect<void, StoreFailure>;
     putProfile(row: ProfileRow): Effect.Effect<void, StoreFailure>;
-    changeProfile(id: ProfileId, patch: Partial<Pick<ProfileRow, 'name' | 'console'>>): Effect.Effect<ProfileRow | undefined, StoreFailure>;
+    changeProfile(
+      id: ProfileId,
+      patch: Partial<Pick<ProfileRow, 'name' | 'console' | 'input'>>,
+    ): Effect.Effect<ProfileRow | undefined, StoreFailure>;
     markProfile(id: ProfileId, removal: Removal | null): Effect.Effect<void, StoreFailure>;
     dropProfile(id: ProfileId): Effect.Effect<void, StoreFailure>;
     readonly openPages: Effect.Effect<readonly PageRow[], StoreFailure>;

@@ -151,7 +151,21 @@ const elementPicture = Effect.fnUntraced(function* (attached: Attached, box: Box
   const region = { ...box, width: Math.max(1, Math.min(box.width, ceiling)), height: Math.max(1, Math.min(box.height, ceiling)) };
   const visible = { ...region, x: region.x - viewport.x, y: region.y - viewport.y };
   if (visible.x >= 0 && visible.y >= 0 && visible.x + visible.width <= viewport.width && visible.y + visible.height <= viewport.height) {
-    return yield* crop(yield* captured(attached, { format: 'png' }), visible, viewport.scale);
+    return yield* crop(
+      yield* captured(attached, { format: 'png', captureBeyondViewport: attached.input === 'human' ? false : undefined }),
+      visible,
+      viewport.scale,
+    );
+  }
+  if (attached.input === 'human') {
+    const clipped = {
+      x: Math.max(0, visible.x),
+      y: Math.max(0, visible.y),
+      width: Math.min(viewport.width, visible.x + visible.width) - Math.max(0, visible.x),
+      height: Math.min(viewport.height, visible.y + visible.height) - Math.max(0, visible.y),
+    };
+    if (clipped.width <= 0 || clipped.height <= 0) return yield* actionFailed('the element is outside the visible viewport');
+    return yield* crop(yield* captured(attached, { format: 'png', captureBeyondViewport: false }), clipped, viewport.scale);
   }
   return yield* captured(attached, {
     format: 'png',
@@ -165,7 +179,10 @@ export const screenshot = Effect.fnUntraced(function* (
   kind: 'viewport' | 'full' | 'element',
   ref: string | undefined,
 ) {
-  let params: Protocol.Page.CaptureScreenshotRequest = { format: 'png' };
+  let params: Protocol.Page.CaptureScreenshotRequest = {
+    format: 'png',
+    captureBeyondViewport: attached.input === 'human' ? false : undefined,
+  };
   let element: Box | null = null;
   if (kind === 'full') {
     const metrics = yield* attached.session.send('Page.getLayoutMetrics');

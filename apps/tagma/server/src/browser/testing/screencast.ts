@@ -382,6 +382,7 @@ export const screencastScenarios = (input: CastHost): void => {
           adapter: source.adapter,
           document: source.document,
           console: source.console,
+          input: source.input,
         });
         yield* Effect.addFinalizer(() => profiles.remove(profile.id).pipe(Effect.orDie));
         const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/still'), profile: profile.id }, undefined, agent));

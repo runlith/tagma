@@ -2,7 +2,7 @@ import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { project } from '../../projects/store/table.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { Download, History } from '../contract/wire/page.js';
-import { CONSOLE_CAPTURES, REMOVALS } from '../contract/wire/profile.js';
+import { CONSOLE_CAPTURES, INPUT_MODES, REMOVALS } from '../contract/wire/profile.js';
 
 export const browserProfile = sqliteTable('browser_profile', {
   id: text('id').$type<ProfileId>().primaryKey(),
@@ -10,6 +10,7 @@ export const browserProfile = sqliteTable('browser_profile', {
   adapter: text('adapter').notNull(),
   document: text('document', { mode: 'json' }).$type<unknown>().notNull(),
   console: text('console', { enum: CONSOLE_CAPTURES }).notNull(),
+  input: text('input', { enum: INPUT_MODES }).notNull().default('human'),
   removal: text('removal', { enum: REMOVALS }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });

@@ -15,7 +15,7 @@ import {
   webContents,
   webFrameMain,
 } from 'electron';
-import type { Driven } from './driven.js';
+import { type Driven, probeFrame } from './driven.js';
 import { firefoxAgent, isGoogleSignIn } from './identity.js';
 import { type Placed, VIEWPORT } from './placement.js';
 import { partitionOf } from './profiles.js';
@@ -268,7 +268,7 @@ export class HeldPage {
       this.allowLeave = true;
       retry();
     };
-    this.contents.mainFrame.executeJavaScript('0').then(leave, leave);
+    probeFrame(this.contents).then(leave, leave);
   }
 
   close(ask: boolean): Promise<boolean> {
@@ -459,7 +459,7 @@ export class HeldPage {
       const frame = this.contents.mainFrame;
       const process = frame.processId;
       const pid = this.contents.getOSProcessId();
-      void frame.executeJavaScript('0').then(
+      void probeFrame(this.contents).then(
         () => {
           if (this.probe !== probe) return;
           this.clearProbe();

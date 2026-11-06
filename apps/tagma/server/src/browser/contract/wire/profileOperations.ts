@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { ProfileId } from './ids.js';
-import { ConsoleCapture, Profile, ProfileName } from './profile.js';
+import { ConsoleCapture, InputMode, Profile, ProfileName } from './profile.js';
 import { MACHINE_ACTING, MACHINE_READING } from './shape.js';
 
 const profile = ProfileId.annotate({ description: 'The profile id list_profiles answered.' });
@@ -9,7 +9,8 @@ const profile = ProfileId.annotate({ description: 'The profile id list_profiles 
 export const PROFILE_OPERATIONS = {
   list_profiles: operation('list_profiles', {
     ...MACHINE_READING,
-    meaning: 'List the browser profiles of this machine: name, host adapter, console capture, and whether its host is connected now.',
+    meaning:
+      'List the browser profiles of this machine: name, host adapter, input mode, console capture, and whether its host is connected now.',
     grammar:
       'A profile keeps its own cookies, storage and identity and stays bound to the host adapter it was made for. `removal` names a delete or clear waiting for its host to connect.',
     input: Schema.Struct({}),
@@ -23,12 +24,13 @@ export const PROFILE_OPERATIONS = {
     ...MACHINE_ACTING,
     meaning: 'Make a browser profile on one host adapter.',
     grammar:
-      '`adapter` is one list_profiles shows, or one of this server; `document` is what that adapter keeps about the profile and it checks it. `console` defaults to `auto`.',
+      '`adapter` is one list_profiles shows, or one of this server; `document` is what that adapter keeps about the profile and it checks it. `console` defaults to `auto`. `input` defaults to `human`: paced pointer and keyboard input with page scripting and diagnostics refused; `fast` allows direct input and diagnostics.',
     input: Schema.Struct({
       name: ProfileName,
       adapter: Schema.String.check(Schema.isMinLength(1)),
       document: Schema.optional(Schema.Unknown),
       console: Schema.optional(ConsoleCapture),
+      input: Schema.optional(InputMode),
     }),
     answer: arms({ created: { profile: Profile } }),
     refusals: ['adapter-unknown', 'document-invalid'],
@@ -38,8 +40,13 @@ export const PROFILE_OPERATIONS = {
   }),
   update_profile: operation('update_profile', {
     ...MACHINE_ACTING,
-    meaning: 'Rename a browser profile or change its console capture.',
-    input: Schema.Struct({ profile, name: Schema.optional(ProfileName), console: Schema.optional(ConsoleCapture) }),
+    meaning: 'Rename a browser profile or change its input mode or console capture.',
+    input: Schema.Struct({
+      profile,
+      name: Schema.optional(ProfileName),
+      console: Schema.optional(ConsoleCapture),
+      input: Schema.optional(InputMode),
+    }),
     answer: arms({ updated: { profile: Profile } }),
     refusals: ['profile-unknown'],
     confirmation: () => ({ summary: 'Change the profile?' }),

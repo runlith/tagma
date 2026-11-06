@@ -9,6 +9,6 @@ export const managedAdapter: HostAdapter = {
   title: 'Managed Chromium',
   document: ManagedDocument,
   fallback: { build: 'chrome-for-testing' },
-  seeds: [{ id: MANAGED_AGENT, name: 'Agent (managed Chromium)', document: { build: 'chrome-for-testing' } }],
+  seeds: [{ id: MANAGED_AGENT, name: 'Agent (managed Chromium)', document: { build: 'chrome-for-testing' }, input: 'fast' }],
   away: 'the managed Chromium runs inside this server; make the call again',
 };

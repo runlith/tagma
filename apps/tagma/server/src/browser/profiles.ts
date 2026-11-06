@@ -28,6 +28,7 @@ export const makeProfiles = Effect.gen(function* () {
           adapter: adapter.id,
           document: seed.document,
           console: 'auto',
+          input: seed.input,
           removal: null,
           createdAt: now,
         })),
@@ -40,6 +41,7 @@ export const makeProfiles = Effect.gen(function* () {
     name: row.name,
     adapter: row.adapter,
     console: row.console,
+    input: row.input,
     connected: hosts.connected(row.adapter) !== undefined,
     removal: row.removal,
     createdAt: row.createdAt.toISOString(),
@@ -113,6 +115,7 @@ export const makeProfiles = Effect.gen(function* () {
         adapter: adapter.id,
         document,
         console: draft.console ?? 'auto',
+        input: draft.input ?? 'human',
         removal: null,
         createdAt: new Date(yield* Clock.currentTimeMillis),
       };
@@ -121,10 +124,10 @@ export const makeProfiles = Effect.gen(function* () {
     }),
     update: Effect.fn('Profiles.update')(function* (id, change) {
       yield* standing(id);
-      const unchanged = change.name === undefined && change.console === undefined;
-      const row = unchanged ? yield* ledger.profile(id) : yield* ledger.changeProfile(id, { name: change.name, console: change.console });
+      const unchanged = change.name === undefined && change.console === undefined && change.input === undefined;
+      const row = unchanged ? yield* ledger.profile(id) : yield* ledger.changeProfile(id, change);
       if (row === undefined) return yield* unknown(id);
-      if (change.console !== undefined) yield* PubSub.publish(changed, id);
+      if (change.console !== undefined || change.input !== undefined) yield* PubSub.publish(changed, id);
       return wire(row);
     }),
     remove: Effect.fn('Profiles.remove')(function* (id) {

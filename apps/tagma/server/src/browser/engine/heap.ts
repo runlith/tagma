@@ -29,6 +29,7 @@ export const makeHeap = Effect.fnUntraced(function* (input: { readonly drive: Dr
   const place = yield* BrowserPlace;
 
   return Effect.fn('Automation.heap')(function* (page: PageId, limit: number, thread: string | null) {
+    yield* drive.fast(page, 'heap capture');
     return yield* drive
       .drive(
         page,

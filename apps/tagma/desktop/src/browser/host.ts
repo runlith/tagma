@@ -48,8 +48,10 @@ const OPERATING = new Set([
   'touchEnd',
 ]);
 const HELD_BUTTONS = new Set(['leftbuttondown', 'middlebuttondown', 'rightbuttondown']);
+const FROM_DEBUGGER = 1 << 23;
+type NativeInput = InputEvent & { readonly _modifiers?: number };
 
-const operating = (input: InputEvent): boolean =>
+const operating = (input: NativeInput): boolean =>
   OPERATING.has(input.type) || (input.type === 'mouseMove' && (input.modifiers ?? []).some((held) => HELD_BUTTONS.has(held)));
 
 export const liveLimit = (): number => Math.max(4, Math.floor(totalmem() / 2 ** 30));
@@ -553,7 +555,10 @@ export class BrowserHost implements Executor {
     const opens: number[] = [];
     contents.on('input-event', (_event, input) => {
       if (ACTIVATING.has(input.type)) gesture = Date.now();
-      if (operating(input) && page.driven?.injects(input.type) !== true) this.operated(page);
+      const native: NativeInput = input;
+      const injected =
+        native._modifiers === undefined ? page.driven?.injects(input.type) === true : (native._modifiers & FROM_DEBUGGER) !== 0;
+      if (operating(input) && !injected) this.operated(page);
     });
     const clicked = () => {
       const at = gesture;

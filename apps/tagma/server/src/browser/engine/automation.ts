@@ -169,6 +169,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
                 step = completed + 1;
                 if (action instanceof GateRefusal) return yield* action;
                 if (agent) yield* operatorQuiet(pages, page);
+                if (completed > 0 && attached.input === 'human') yield* attached.human.pause();
                 yield* perform(state, attached, action);
                 if (pages.live(page)?.dialog != null) return answer(step);
                 completed += 1;
@@ -192,6 +193,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         );
     }),
     emulate: Effect.fn('Automation.emulate')(function* (page, change, thread) {
+      yield* drive.fast(page, 'device emulation');
       return yield* drive.drive(page, thread, (state, attached) =>
         Effect.gen(function* () {
           if (thread !== null) yield* operatorQuiet(pages, page);
@@ -233,6 +235,11 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       );
     }),
     capture: Effect.fn('Automation.capture')(function* (page, kind, ref, thread) {
+      if (kind === 'full')
+        yield* drive.fast(
+          page,
+          'full-page capture that resizes the rendering surface; use a viewport or visible-element screenshot in human mode',
+        );
       if (kind === 'pdf') {
         const host = yield* pages.hold(page);
         const bytes = yield* drive.run(page, thread, false, () =>
@@ -265,6 +272,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     }),
     picture: (file) => Effect.orDie(files.readFile(file)),
     evaluate: Effect.fn('Automation.evaluate')(function* (page, expression, thread, agent = thread !== null) {
+      yield* drive.fast(page, 'running page script');
       return yield* drive.drive(
         page,
         thread,
@@ -336,6 +344,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return { page: pages.glance(page, false), waitedMs: (yield* Clock.currentTimeMillis) - started };
     }),
     console: Effect.fn('Automation.console')(function* (page, query: ConsoleQuery, thread) {
+      yield* drive.fast(page, 'console capture and reading');
       const profile = pages.profileOf(page);
       if (profile === undefined) return yield* unknownPage(page);
       const record = yield* profiles.record(profile).pipe(Effect.catchTag('GateRefusal', () => Effect.fail(unknownPage(page))));
@@ -374,6 +383,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       );
     }),
     network: Effect.fn('Automation.network')(function* (page, query: NetworkQuery) {
+      yield* drive.fast(page, 'network reading');
       if (pages.live(page) === undefined) return yield* unknownPage(page);
       const state = yield* drive.paged(page);
       const match = query.match;
@@ -387,6 +397,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return { entries: read.entries.map(({ seq, entry }) => ({ ...entry, seq })), total: read.total, dropped: read.dropped };
     }),
     body: Effect.fn('Automation.body')(function* (page, request, thread) {
+      yield* drive.fast(page, 'network response reading');
       const unavailable = (why: string) =>
         new GateRefusal('body-unavailable', `the page no longer holds the body of request ${request}: ${why}`, [
           'load the page again and read the body before it navigates away',
@@ -425,6 +436,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return pages.glance(page, false);
     }),
     pick: Effect.fn('Automation.pick')(function* (page, projectId) {
+      yield* drive.fast(page, 'framework source inspection');
       const attached = yield* drive.drive(page, null, (_state, held) => Effect.succeed(held));
       const subscription = yield* PubSub.subscribe(attached.picks);
       const scope = yield* Effect.scope;

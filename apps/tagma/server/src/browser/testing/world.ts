@@ -112,7 +112,7 @@ export const absentAdapter = (adapter: HostAdapter): HostAdapter => ({
   ...adapter,
   id: 'absent',
   title: 'A host that never connects',
-  seeds: [{ id: ProfileId.make('absent-agent'), name: 'Absent agent', document: adapter.fallback }],
+  seeds: [{ id: ProfileId.make('absent-agent'), name: 'Absent agent', document: adapter.fallback, input: 'fast' }],
 });
 
 export type WorldInput = {

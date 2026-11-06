@@ -30,6 +30,8 @@ const injectedTypes = (command: Command): readonly string[] => {
   return [];
 };
 
+export const probeFrame = (contents: WebContents): Promise<unknown> => contents.executeJavaScriptInIsolatedWorld(1000, [{ code: '0' }]);
+
 export type Probed = {
   readonly share: () => number;
   readonly report: (responsive: boolean) => void;
@@ -179,7 +181,7 @@ export class Driven {
       this.silent = false;
       probed.report(true);
     };
-    this.contents.debugger.sendCommand('Runtime.evaluate', { expression: '0', returnByValue: true }).then(answered, (error: unknown) => {
+    probeFrame(this.contents).then(answered, (error: unknown) => {
       this.asking = false;
       if (!this.ended) console.debug(`[tagma-desktop] a renderer probe was not answered: ${String(error)}`);
     });

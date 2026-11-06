@@ -5,8 +5,13 @@ import type { DriveRefusal } from '../contract/service/automation.js';
 import type { DomainBlock } from '../contract/wire/domains.js';
 import { hostRefusal, outcomeUnknown } from '../contract/service/pages.js';
 import type { HostFailure, NavigationBlocked } from '../contract/service/hosts.js';
-import type { PageId } from '../contract/wire/ids.js';
+import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { Page } from '../contract/wire/page.js';
+
+export const inputMode = (profile: ProfileId, action: string) =>
+  new GateRefusal('input-mode', `profile ${profile} uses human input; ${action} requires fast input`, [
+    `update_profile with profile: ${profile}, input: fast, then try again`,
+  ]);
 
 export const navigationBlocked = (block: DomainBlock) =>
   new GateRefusal('domain-blocked', `${block.domain} was not loaded: ${block.setting} blocked agent navigation to this domain`, [

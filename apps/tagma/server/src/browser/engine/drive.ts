@@ -1,3 +1,4 @@
+import { humanInput, type HumanInput, type Pointer } from '@runlith/cdp/input';
 import { type Domains, shareDomains } from '@runlith/cdp/domains';
 import type { Ring } from '@runlith/cdp/ring';
 import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, SessionEnded } from '@runlith/cdp/session';
@@ -11,6 +12,7 @@ import type { Profiles } from '../contract/service/profiles.js';
 import type { ThreadRuns } from '../contract/service/runs.js';
 import { NO_EMULATION, type Emulation, type Viewport } from '../contract/wire/emulation.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
+import type { InputMode } from '../contract/wire/profile.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
 import { adoptPicking, type Mark } from './cursor.js';
@@ -29,7 +31,7 @@ import { isLocal } from './local.js';
 import { Refs } from './refs.js';
 import { makePictures, type Pictures } from './pictures.js';
 import { operatorQuiet } from './operator.js';
-import { crashed, devtoolsOpen, ended, frameUnresponsive, navigationBlocked, unknownPage, unresponsive } from './refusal.js';
+import { crashed, devtoolsOpen, ended, frameUnresponsive, inputMode, navigationBlocked, unknownPage, unresponsive } from './refusal.js';
 import { drive } from '../../platform/contract/service/drives.js';
 
 const IDLE_MS = 30_000;
@@ -38,8 +40,11 @@ const SWEEP = '10 seconds';
 export type Picking = { readonly node: number; readonly child: string | undefined };
 
 export type Attached = {
+  readonly profile: ProfileId;
   readonly page: PageId;
   readonly session: Session;
+  readonly input: InputMode;
+  readonly human: HumanInput;
   readonly domains: Domains;
   readonly pictures: Pictures;
   readonly scope: Scope.Closeable;
@@ -67,12 +72,14 @@ export type Attached = {
 };
 
 export type Paged = {
+  readonly pointer: Pointer;
   readonly page: PageId;
   readonly queue: Semaphore.Semaphore;
   readonly console: Ring<ConsoleEntry>;
   readonly network: Ring<NetworkEntry>;
   readonly requests: Map<string, Request>;
   readonly refs: Refs;
+  input: InputMode | null;
   asked: boolean;
   emulation: Emulation;
   layout: Viewport | null;
@@ -110,12 +117,14 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       if (known !== undefined) return Effect.succeed(known);
       return Effect.map(Semaphore.make(1), (queue) => {
         const fresh: Paged = {
+          pointer: { at: { x: 0, y: 0 } },
           page,
           queue,
           console: consoleRing(),
           network: networkRing(),
           requests: new Map(),
           refs: new Refs(),
+          input: null,
           asked: false,
           emulation: NO_EMULATION,
           layout: null,
@@ -138,6 +147,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     if (profile === undefined) return false;
     const record = yield* Effect.orDie(profiles.record(profile).pipe(Effect.catchTag('GateRefusal', () => Effect.succeed(null))));
     if (record === null) return false;
+    if (attached.input === 'human') return false;
     if (record.console === 'always') return true;
     if (record.console === 'never') return false;
     return state.asked || isLocal(attached.frames.get(attached.main)?.url ?? pages.urlOf(state.page));
@@ -162,8 +172,11 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
 
   const adoptChild = Effect.fnUntraced(function* (state: Paged, attached: Attached, child: string, adopted: Scope.Closeable) {
     yield* attached.emulating.withPermits(1)(Effect.suspend(() => applyConditions(attached.session, state.emulation, undefined, child)));
-    for (const domain of ['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const)
-      yield* Scope.provide(attached.domains.enable(domain, child), adopted);
+    const domains =
+      attached.input === 'human'
+        ? (['Page', 'DOM', 'Accessibility'] as const)
+        : (['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const);
+    for (const domain of domains) yield* Scope.provide(attached.domains.enable(domain, child), adopted);
     if (attached.runtime !== null) yield* Scope.provide(attached.domains.enable('Runtime', child), attached.runtime);
     yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true }, child);
     yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, child);
@@ -310,13 +323,16 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
 
   const setup = Effect.fnUntraced(function* (state: Paged, attached: Attached) {
     yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
-    for (const domain of ['Page', 'Network', 'DOM', 'Accessibility', 'Log'] as const)
-      yield* Scope.provide(attached.domains.enable(domain), attached.scope);
+    const domains =
+      attached.input === 'human'
+        ? (['Page', 'DOM', 'Accessibility'] as const)
+        : (['Page', 'Network', 'DOM', 'Accessibility', 'Log'] as const);
+    for (const domain of domains) yield* Scope.provide(attached.domains.enable(domain), attached.scope);
     yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     yield* readTree(attached, undefined);
     state.refs.keep(new Set([...attached.frames.values()].map((frame) => frame.loader)));
     yield* nativeMetrics(attached);
-    yield* applyEmulation(attached, effectiveOf(state.emulation, state.layout));
+    if (attached.input === 'fast') yield* applyEmulation(attached, effectiveOf(state.emulation, state.layout));
     yield* syncMetrics(attached);
     yield* syncRuntime(state, attached);
   });
@@ -366,10 +382,15 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           ),
         );
       });
-      if (pages.profileOf(state.page) === undefined) return yield* unknownPage(state.page);
+      const profile = pages.profileOf(state.page);
+      if (profile === undefined) return yield* unknownPage(state.page);
+      const record = yield* profiles.record(profile);
       const attached: Attached = {
+        profile,
         page: state.page,
         session,
+        input: record.input,
+        human: humanInput(session, state.pointer),
         domains,
         pictures: yield* Scope.provide(makePictures(session), attachment),
         scope: attachment,
@@ -434,6 +455,15 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   });
 
   const attach = Effect.fnUntraced(function* (state: Paged, thread: string | null): Effect.fn.Return<Attached, Refusal> {
+    const profile = pages.profileOf(state.page);
+    if (profile === undefined) return yield* unknownPage(state.page);
+    const record = yield* profiles.record(profile);
+    if (state.input !== record.input) {
+      yield* detach(state);
+      state.emulation = NO_EMULATION;
+      state.layout = null;
+      state.input = record.input;
+    }
     if (state.attached !== null) return state.attached;
     if (state.attaching !== null) return yield* Deferred.await(state.attaching);
     const attaching = yield* Deferred.make<Attached, Refusal>();
@@ -629,7 +659,15 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       [...held.values()].filter((state) => pages.profileOf(state.page) === profile),
       (state) =>
         state.queue.withPermits(1)(
-          Effect.suspend(() => (state.attached === null ? Effect.void : syncRuntime(state, state.attached))).pipe(
+          Effect.gen(function* () {
+            const record = yield* profiles.record(profile);
+            if (record.input !== state.input) {
+              yield* detach(state);
+              state.emulation = NO_EMULATION;
+              state.layout = null;
+              state.input = record.input;
+            } else if (state.attached !== null) yield* syncRuntime(state, state.attached);
+          }).pipe(
             Effect.catchTags({
               SessionEnded: () => Effect.void,
               CommandRefused: (refused) => Effect.logDebug(`browser: page ${state.page} refused ${refused.method}: ${refused.message}`),
@@ -645,6 +683,12 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   yield* Effect.flatMap(profiles.changes, (changes) => Stream.runForEach(changes, resync)).pipe(Effect.forkScoped);
 
   return {
+    fast: Effect.fn('browser.fast')(function* (page: PageId, action: string) {
+      const profile = pages.profileOf(page);
+      if (profile === undefined) return yield* unknownPage(page);
+      const record = yield* profiles.record(profile);
+      if (record.input === 'human') return yield* inputMode(profile, action);
+    }),
     paged,
     attach,
     detach,

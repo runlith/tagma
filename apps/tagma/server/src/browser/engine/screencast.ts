@@ -107,7 +107,7 @@ const sameParams = (a: Params | null, b: Params): boolean =>
   a !== null && a.quality === b.quality && a.maxWidth === b.maxWidth && a.maxHeight === b.maxHeight && a.everyNthFrame === b.everyNthFrame;
 
 const layoutOf = (cast: Cast | undefined): Viewport | null => {
-  if (cast === undefined || cast.native || cast.attached === null) return null;
+  if (cast === undefined || cast.native || cast.attached === null || cast.attached.input === 'human') return null;
   for (const { budget } of cast.viewers.values()) {
     if (budget.layout === true) return { width: clamp(budget.width), height: clamp(budget.height), scale: 1, mobile: false };
   }
@@ -224,7 +224,11 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       const text = yield* attached.pictures.capture({
         format: 'jpeg',
         quality: params.quality,
-        clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
+        captureBeyondViewport: attached.input === 'human' ? false : undefined,
+        clip:
+          attached.input === 'human'
+            ? undefined
+            : { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
       });
       const sliced = sliceData(text);
       if (sliced === undefined) return yield* Effect.logWarning(`browser: the screenshot of page ${cast.page} carried no picture`);
@@ -506,6 +510,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         case 'mouse': {
           if (frame === undefined) break;
           const at = { x: event.x * frame.width, y: event.y * frame.height, modifiers: event.modifiers };
+          cast.state.pointer.at = { x: at.x, y: at.y };
           const bit = BUTTON_BITS[event.button];
           if (event.type === 'move') {
             yield* session.post('Input.dispatchMouseEvent', {

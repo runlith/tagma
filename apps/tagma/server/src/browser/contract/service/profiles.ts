@@ -2,7 +2,7 @@ import { Context, type Effect, type Scope, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { ProfileId } from '../wire/ids.js';
-import type { ConsoleCapture, Profile } from '../wire/profile.js';
+import type { ConsoleCapture, InputMode, Profile } from '../wire/profile.js';
 import type { ProfileRecord } from './hosts.js';
 
 export type ProfileDraft = {
@@ -10,9 +10,14 @@ export type ProfileDraft = {
   readonly adapter: string;
   readonly document: unknown;
   readonly console: ConsoleCapture | undefined;
+  readonly input: InputMode | undefined;
 };
 
-export type ProfileChange = { readonly name: string | undefined; readonly console: ConsoleCapture | undefined };
+export type ProfileChange = {
+  readonly name: string | undefined;
+  readonly console: ConsoleCapture | undefined;
+  readonly input: InputMode | undefined;
+};
 
 export class Profiles extends Context.Service<
   Profiles,

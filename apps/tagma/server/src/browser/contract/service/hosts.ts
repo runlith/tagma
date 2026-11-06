@@ -5,7 +5,7 @@ import type { Unblock } from '../../../platform/contract/wire/refusal.js';
 import type { HostEvent, LivePage, Navigation, PageChange, Strain } from '../wire/host.js';
 import type { PageId, ProfileId } from '../wire/ids.js';
 import type { History, Live } from '../wire/page.js';
-import type { ConsoleCapture, Removal } from '../wire/profile.js';
+import type { ConsoleCapture, InputMode, Removal } from '../wire/profile.js';
 import type { DomainBlock, DomainPolicy, Restriction, RestrictionState } from '../wire/domains.js';
 
 export type ProfileRecord = {
@@ -14,6 +14,7 @@ export type ProfileRecord = {
   readonly adapter: string;
   readonly document: unknown;
   readonly console: ConsoleCapture;
+  readonly input: InputMode;
   readonly removal: Removal | null;
   readonly createdAt: Date;
 };
@@ -109,7 +110,7 @@ export class Hosts extends Context.Service<
   }
 >()('tagma/browser/Hosts') {}
 
-export type ProfileSeed = { readonly id: ProfileId; readonly name: string; readonly document: unknown };
+export type ProfileSeed = { readonly id: ProfileId; readonly name: string; readonly document: unknown; readonly input: InputMode };
 
 export type HostAdapter = {
   readonly id: string;

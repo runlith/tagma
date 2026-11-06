@@ -438,6 +438,7 @@ export const PROFILE_PAIRS: { readonly [K in ProfileOperationId]: OperationPair<
           adapter: input.adapter,
           document: input.document,
           console: input.console,
+          input: input.input,
         });
         return { status: 'created' as const, profile };
       }),
@@ -449,7 +450,7 @@ export const PROFILE_PAIRS: { readonly [K in ProfileOperationId]: OperationPair<
       execute: Effect.fnUntraced(function* (input) {
         return {
           status: 'updated' as const,
-          profile: yield* (yield* Profiles).update(input.profile, { name: input.name, console: input.console }),
+          profile: yield* (yield* Profiles).update(input.profile, { name: input.name, console: input.console, input: input.input }),
         };
       }),
     }),

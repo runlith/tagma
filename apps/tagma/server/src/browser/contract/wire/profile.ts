@@ -8,6 +8,10 @@ export const ConsoleCapture = Schema.Literals(CONSOLE_CAPTURES).annotate({
 });
 export type ConsoleCapture = typeof ConsoleCapture.Type;
 
+export const INPUT_MODES = ['human', 'fast'] as const;
+export const InputMode = Schema.Literals(INPUT_MODES);
+export type InputMode = typeof InputMode.Type;
+
 export const REMOVALS = ['delete', 'clear'] as const;
 export type Removal = (typeof REMOVALS)[number];
 
@@ -16,6 +20,7 @@ export const Profile = Schema.Struct({
   name: Schema.String,
   adapter: Schema.String,
   console: ConsoleCapture,
+  input: InputMode,
   connected: Schema.Boolean,
   removal: Schema.NullOr(Schema.Literals(REMOVALS)),
   createdAt: Schema.String,

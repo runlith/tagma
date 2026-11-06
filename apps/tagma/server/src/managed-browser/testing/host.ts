@@ -52,9 +52,14 @@ export const testAdapter = {
   ...managedAdapter,
   seeds: [
     ...managedAdapter.seeds,
-    { id: INSTALLED, name: 'Agent (installed Chrome)', document: { build: 'installed-chrome' } },
-    { id: SHOWN, name: 'Agent (installed Chrome, windowed)', document: { build: 'installed-chrome', window: 'shown' } },
-    { id: OTHER, name: 'Other', document: { build: 'chrome-for-testing' } },
+    { id: INSTALLED, name: 'Agent (installed Chrome)', document: { build: 'installed-chrome' }, input: 'fast' as const },
+    {
+      id: SHOWN,
+      name: 'Agent (installed Chrome, windowed)',
+      document: { build: 'installed-chrome', window: 'shown' },
+      input: 'fast' as const,
+    },
+    { id: OTHER, name: 'Other', document: { build: 'chrome-for-testing' }, input: 'fast' as const },
   ],
 };
 

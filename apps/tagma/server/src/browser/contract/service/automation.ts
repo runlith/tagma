@@ -26,7 +26,14 @@ export type Action =
 
 export type PlannedAction = Action | GateRefusal<'action-shape'>;
 
-export type DriveRefusal = PageRefusal | 'page-unresponsive' | 'page-crashed' | 'devtools-open' | 'dialog-open' | 'action-failed';
+export type DriveRefusal =
+  | PageRefusal
+  | 'page-unresponsive'
+  | 'page-crashed'
+  | 'devtools-open'
+  | 'dialog-open'
+  | 'action-failed'
+  | 'input-mode';
 
 export type Drive<Extra extends string = never> = StoreFailure | GateRefusal<DriveRefusal | Extra>;
 
@@ -131,7 +138,10 @@ export class Automation extends Context.Service<
       thread: string | null,
     ): Effect.Effect<{ readonly page: Glance; readonly waitedMs: number }, Drive<'wait-unmet'>>;
     console(page: PageId, query: ConsoleQuery, thread: string | null): Effect.Effect<ConsoleRead, Drive<'console-off'>>;
-    network(page: PageId, query: NetworkQuery): Effect.Effect<NetworkRead, StoreFailure | GateRefusal<'page-unknown'>>;
+    network(
+      page: PageId,
+      query: NetworkQuery,
+    ): Effect.Effect<NetworkRead, StoreFailure | GateRefusal<'page-unknown' | 'profile-unknown' | 'input-mode'>>;
     body(page: PageId, request: string, thread: string | null): Effect.Effect<Body, Drive<'body-unavailable'>>;
     answer(page: PageId, accept: boolean, text: string | undefined, thread: string | null): Effect.Effect<Glance, Drive<'no-dialog'>>;
     pick(page: PageId, projectId: number): Effect.Effect<Stream.Stream<Picked, Drive<'stale-ref'>>, Drive, Scope.Scope>;

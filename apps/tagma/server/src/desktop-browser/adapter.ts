@@ -8,8 +8,8 @@ export const desktopAdapter: HostAdapter = {
   document: DesktopDocument,
   fallback: {},
   seeds: [
-    { id: USER_PROFILE, name: 'You', document: {} },
-    { id: AGENT_PROFILE, name: 'Agents', document: {} },
+    { id: USER_PROFILE, name: 'You', document: {}, input: 'human' },
+    { id: AGENT_PROFILE, name: 'Agents', document: {}, input: 'fast' },
   ],
   away: 'open the Tagma app on this machine: desktop pages live in it',
 };

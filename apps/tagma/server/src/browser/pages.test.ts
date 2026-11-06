@@ -57,6 +57,7 @@ it.effect('operator navigation releases reconciled host policies and ignores an 
       adapter: 'desktop',
       document: {},
       console: 'never',
+      input: 'fast',
       removal: null,
       createdAt: new Date(0),
     };

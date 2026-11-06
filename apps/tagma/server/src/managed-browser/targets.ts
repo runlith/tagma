@@ -63,6 +63,7 @@ const capturing = (build: BuildId): ProfileRecord => ({
   adapter: MANAGED,
   document: { build },
   console: 'auto',
+  input: 'fast',
   removal: null,
   createdAt: new Date(0),
 });

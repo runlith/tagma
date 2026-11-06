@@ -355,6 +355,7 @@ const engine = Effect.fnUntraced(function* (
         adapter: 'test',
         document: {},
         console: 'never' as const,
+        input: 'fast' as const,
         removal: null,
         createdAt: new Date(0),
       }),

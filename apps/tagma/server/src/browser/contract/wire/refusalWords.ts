@@ -17,6 +17,7 @@ export const REFUSAL_WORDS = {
   'host-refused': 'Browser host declined',
   'import-broken': 'Cookie import failed',
   'key-refused': 'Browser key not available',
+  'input-mode': 'Profile input mode refuses this action',
   'navigation-failed': 'Navigation failed',
   'no-dialog': 'No dialog is open',
   'no-recording': 'Page is not recorded',

@@ -357,6 +357,7 @@ export const makeTraces = Effect.fnUntraced(function* (input: { readonly drive: 
 
   return Traces.of({
     start: Effect.fn('Traces.start')(function* (page, screenshots, thread) {
+      yield* drive.fast(page, 'performance tracing');
       const held = yield* drive.drive(page, thread, (state, attached) => begin(state, attached, screenshots, thread));
       return { page: pages.glance(page, false), trace: held.id, path: held.file };
     }),
@@ -368,6 +369,7 @@ export const makeTraces = Effect.fnUntraced(function* (input: { readonly drive: 
       return traced(page, yield* finish(held));
     }),
     load: Effect.fn('Traces.load')(function* (page, load, thread) {
+      yield* drive.fast(page, 'performance tracing');
       const begun: { current: Running | null } = { current: null };
       const held = yield* drive
         .drive(page, thread, (state, attached) =>
