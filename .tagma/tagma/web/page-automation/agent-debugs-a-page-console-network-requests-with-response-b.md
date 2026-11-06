@@ -23,7 +23,7 @@ sources:
 **How.** The `read_page_console`, `read_page_network` (request list or one response body), and `evaluate_in_page` operations; console-capture tuning is the profile's `console` field (`update_profile`, `create_profile`).
 
 **Behaviour.**
-- Console capture needs `Runtime.enable`, which sites read as an automation signal, so capture follows the profile: `auto` turns it on for loopback and private-network addresses, and on any other page from the first console read; `always`; `never` refuses with `console-off`.
+- Diagnostics require the profile's fast input mode: human mode refuses console and network reading and page expressions, and enables neither Runtime nor Network capture. In fast mode, console capture follows the profile: `auto` turns it on for loopback and private-network addresses, and on any other page from the first console read; `always`; `never` refuses with `console-off`.
 - Console text reads as DevTools shows it: objects, arrays, maps and sets from the previews Chromium sends with each live call, a node by its selector, an error by its headline, a function by its signature, format specifiers applied (`%c` dropped); rendering stops once the entry's text is full. Each entry names the console call that wrote it (table, trace, group, assert, count…).
 - Stacks stay out of a default read: asked for, each entry carries the stack of the error it logged, else of the call, cut to a few frames; such a read answers fewer rows. One entry is read alone by its `seq`.
 - Filters: level and above, text or URL substring, continuation after `seq`; `dropped` counts records evicted from the buffer. The network list filters by URL substring and "only failed and 400+ responses".

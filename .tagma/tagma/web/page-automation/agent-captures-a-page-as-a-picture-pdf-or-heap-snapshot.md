@@ -22,6 +22,7 @@ sources:
 **How.** The `capture_page` operation: the visible part, the whole page, one element by snapshot link, PDF, or a V8 heap snapshot.
 
 **Behaviour.**
+- Human profiles keep viewport, visible-element and PDF captures. Heap capture and full-page pictures that resize the rendering surface require fast input. A human element picture is cropped to its visible portion without changing device metrics.
 - The file is saved on the server and named in the answer; a picture up to 5 MiB reaches the agent as an image — for a native agent and an MCP client — while a larger one stays file-only. PDF is a file for reading.
 - Capture waits for a ready frame: an unshown desktop page stands in a hidden window and renders while it is captured. Picture captures request an emulation-free viewport frame before answering. On macOS, both hosts use synchronous in-process native views, so the subsequent copy fences the restored parent surface generation; it does not join descendant widgets' submissions.
 - Heap capture writes a local `.heapsnapshot` that Chrome DevTools opens, with totals, detached native-node count, bounded largest-class rows and positive growth against the previous capture. Each displayed class carries its count and self-size change. The pause hold prevents the snapshot's stopped renderer from being diagnosed as hung; its duration is an upper bound on the renderer pause. Heavy reading and comparison run off the server loop, serialized with trace analysis.

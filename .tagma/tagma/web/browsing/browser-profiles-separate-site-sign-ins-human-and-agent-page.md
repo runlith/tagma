@@ -37,7 +37,7 @@ sources:
 **How.** Settings → Browser: the `browser.userProfile` and `browser.agentProfile` settings (per user and per project), a profile list with rename, clear, and delete, and adding a profile. The `list_profiles`, `create_profile`, `update_profile`, `clear_profile`, and `delete_profile` operations are for any caller.
 
 **Behaviour.**
-- Profiles are machine-scoped, like provider accounts. Seeded with "You" and "Agents" on desktop and "Agent (managed Chromium)"; a profile stays bound to its host adapter forever.
+- Profiles are machine-scoped, like provider accounts. Seeded with "You" and "Agents" on desktop and "Agent (managed Chromium)"; a profile stays bound to its host adapter forever. New profiles and "You" use human input; the two built-in agent profiles use fast input. Any caller can change the profile's input mode through `update_profile`.
 - Clearing closes the profile's pages and wipes cookies, storage, and cache; deleting removes the profile with its pages. When the profile's host is disconnected, wiping waits for it to connect (`pending`).
 - A default profile whose host is disconnected refuses to open a page instead of substituting another: a refusal, not a fallback.
 
