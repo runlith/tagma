@@ -7,7 +7,7 @@ import type { PaneContent, PaneOpening } from '$lib/shared/panes/pane.js';
 import type { Topic } from '$lib/shared/threads/Topics.svelte.js';
 import { threadHolder } from '$lib/shared/panes/holder.js';
 import type { ScreenThreads } from '../OnScreen.svelte.js';
-import type { SlotWriter } from '../SlotSelection.svelte.js';
+import { type SlotWriter, unbornKey } from '../SlotSelection.svelte.js';
 import type { ThreadSlot } from '../ThreadSlot.svelte.js';
 import { type PaneThread, paneThread, threadOf, threadPaneId, THREAD_PANE } from './pane.js';
 
@@ -25,6 +25,10 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
   private readonly seats = new KeyedClaims<string, ThreadSlot>();
 
   private readonly topics = new Map<string, Topic>();
+
+  private placing: readonly ThreadSlot[] = [];
+
+  private placed = $state.raw<readonly ThreadSlot[]>([]);
 
   constructor(private readonly panes: SidePanes) {
     super();
@@ -51,7 +55,31 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
   get shown(): readonly ThreadSlot[] {
     const active = this.panes.layout.active;
     const beside = active === null || !this.panes.showing ? undefined : this.seats.get(active);
-    return [this.page, beside ?? null].filter((host): host is ThreadSlot => host !== null);
+    return [this.page, beside ?? null, ...this.placed].filter((host): host is ThreadSlot => host !== null);
+  }
+
+  seatPlaced(slot: ThreadSlot): () => void {
+    this.placing = [...this.placing, slot];
+    this.placed = this.placing;
+    return () => {
+      this.placing = this.placing.filter((standing) => standing !== slot);
+      this.placed = this.placing;
+    };
+  }
+
+  placedWriter(slot: () => ThreadSlot, projectId: number): SlotWriter {
+    const beside = (threadId: string): void => {
+      if (!this.reveal(threadId)) this.open({ home: null, threadId });
+    };
+    return {
+      navigate: (threadId) => {
+        if (threadId !== null) return beside(threadId);
+        const opening = this.open({ home: null, threadId: null });
+        if (opening.kind === 'opened' || opening.kind === 'revealed') slot().handDraft(unbornKey(projectId, opening.key));
+      },
+      open: beside,
+      rehome: (home) => void this.open({ home, threadId: null }),
+    };
   }
 
   get threads(): readonly string[] {
@@ -130,7 +158,11 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
   }
 
   private onScreen(thread: string): boolean {
-    return this.panes.main?.activeId === thread || this.panes.panes.some((tab) => threadOf(tab) === thread);
+    return (
+      this.panes.main?.activeId === thread ||
+      this.panes.panes.some((tab) => threadOf(tab) === thread) ||
+      this.placed.some((slot) => slot.activeId === thread)
+    );
   }
 
   private openFrom(key: string, thread: string): void {

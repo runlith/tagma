@@ -13,6 +13,7 @@ const SDK = resolve(dirname(ENTRY), '../..');
 const CLI = join(dirname(ENTRY), 'cli.ts');
 const SAID = 'Thank you, desk.';
 const REPLY = 'Gern geschehen.';
+const GREETED = 'Hallo Welt ';
 
 const DEFINITION = `import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -57,7 +58,12 @@ const HELPER = `<script lang="ts">
   let { draft }: ComposerFace = $props();
 </script>
 
-<Button onclick={() => draft.insert('Hallo ')}>Say hallo</Button>
+<Button
+  onclick={() => {
+    draft.insert('Hallo ');
+    draft.insert('Welt ');
+  }}>Say hallo</Button
+>
 `;
 
 const BROKEN = `<script lang="ts">
@@ -83,7 +89,7 @@ const authored = (folder: string) =>
   });
 
 e2e.effect(
-  'a plugin’s section places a whole thread the person sends from, a composer part fills the draft beside one that fails alone, and a command fills it with its action’s answer',
+  'a plugin’s section places a whole thread the person sends from, a composer part inserts at the caret beside one that fails alone, and a command fills the draft with its action’s answer',
   ({ page }) =>
     Effect.gen(function* () {
       const served = yield* makeE2eWorld({ models: scriptedModel(Stream.succeed(REPLY)) });
@@ -106,9 +112,10 @@ e2e.effect(
         await composer.waitFor();
         await page.getByText('This view stopped').waitFor();
         await page.getByRole('button', { name: 'Say hallo', exact: true }).click();
-        await page.waitForFunction(drafted('Hallo '));
+        await page.waitForFunction(`(document.querySelector('textarea.prompt')?.value.length ?? 0) >= ${GREETED.length}`);
+        expect(await composer.inputValue()).toBe(GREETED);
 
-        await composer.fill('/trainer-translate');
+        await composer.fill('/trainer:translate');
         await composer.press('Enter');
         const words = page.getByLabel('Words');
         await words.fill('good morning');

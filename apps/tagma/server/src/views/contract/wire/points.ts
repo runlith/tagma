@@ -55,7 +55,7 @@ export type ResultEntry = typeof ResultEntry.Type;
 export const ResultEntries = Schema.Array(ResultEntry).check(Schema.makeFilter(unique((entry: ResultEntry) => entry.tool, 'tool')));
 export type ResultEntries = typeof ResultEntries.Type;
 
-const ComposerEntry = Schema.Struct({
+export const ComposerEntry = Schema.Struct({
   view: ViewId.annotate({
     description:
       'The view drawn above a thread’s composer in every thread of a project where the plugin runs, one of contributes.views; it receives { thread, draft, send }.',

@@ -1,12 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import Conversation from '$lib/features/threads/native/Conversation.svelte';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { Visits } from '$lib/features/workspace/Visits.svelte.js';
-  import PaneGraph from '$lib/app/panes/PaneGraph.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
   import { followHome } from '../followHome.svelte.js';
+  import SlotConversation from './SlotConversation.svelte';
   import { threadSlot } from './threadSlot.svelte.js';
   import { ThreadSeats } from './ThreadSeats.svelte.js';
 
@@ -50,20 +49,6 @@
     const project = workspace.find(home);
     return project === null ? null : visits.branchOf(project);
   });
-  const branch = $derived.by(() => {
-    const id = host.activeId;
-    if (id === null || !host.places.known) return framed;
-    const row = host.places.placeOf(id);
-    return row === null || row.kind === 'main' ? null : row.branch;
-  });
 </script>
 
-<section class="flex h-full min-h-0 min-w-0 flex-col" aria-label="Thread beside">
-  <div class="min-h-0 min-w-0 flex-1">
-    {#key branch}
-      <PaneGraph aim={{ projectId, branch }}>
-        <Conversation {host} />
-      </PaneGraph>
-    {/key}
-  </div>
-</section>
+<SlotConversation {host} {projectId} fallback={framed} label="Thread beside" />

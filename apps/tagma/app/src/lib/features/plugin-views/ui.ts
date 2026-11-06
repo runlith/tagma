@@ -11,7 +11,8 @@ export type TagmaView<Plugin = unknown> = ClientMembers &
 
 export const useTagma = <Plugin = unknown>(): TagmaView<Plugin> => PluginMount.use().client as unknown as TagmaView<Plugin>;
 
-export { type ComposerFace, TagmaRefused, type ToolFace } from '@runlith/tagma/plugin';
+export { TagmaRefused, type ToolFace } from '@runlith/tagma/plugin';
+export type { ComposerFace } from './composer.js';
 export { default as Thread } from './Thread.svelte';
 export type { Reading, ThreadReading, ViewOpening, ViewStorage } from './client.svelte.js';
 export type { Transcript } from './transcriptReading.svelte.js';

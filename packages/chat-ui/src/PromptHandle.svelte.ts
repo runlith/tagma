@@ -64,6 +64,15 @@ export class PromptHandle {
     this.editor?.caret(offset);
   }
 
+  insert(text: string): boolean {
+    const at = this.editor?.selection() ?? null;
+    if (at === null) return false;
+    const edit: PromptEdit = { from: at.from, to: at.to, text };
+    if (this.editor!.write(edit.from, edit.to, edit.text, 'end') === null) return false;
+    this.edited(edit);
+    return true;
+  }
+
   mark(at: number): PromptMark | null {
     if (this.editor === null) return null;
     const mark = new PromptMark(at, at);

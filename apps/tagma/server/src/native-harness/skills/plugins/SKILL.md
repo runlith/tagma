@@ -111,11 +111,11 @@ A `Reference:` names a section of this skill: ask for it in `references` of `loa
 
 In a result view the component takes the call as props, `{name, input, output, state, threadId}`, `state` one of `running`, `done`, `refused` or `failed`, typed by `ToolFace<typeof plugin, '<tool>'>`. The feed may draw it days after the call: draw from these props, not from a fresh call. A feed entry is capped at a share of the window; sections and panes fill their space.
 
-A composer view takes `{thread, draft, send}`, typed by `ComposerFace`: `thread` is `{id, projectId, status}` (`id` null while the thread is a draft), `draft` is `{text, setText, insert, attach}` — `insert` writes at the caret — and `send()` sends the draft as the person. Each part fails alone.
+A composer view takes `{thread, draft, send}`, typed by `ComposerFace`: `thread` is `{id, projectId, life}` (`id` null while the thread is a draft), `draft` is `{text, setText, insert, attach}` — `insert` writes at the caret, `attach` rejects with `TagmaRefused` when the draft refuses a file — and `send()` sends the draft as the person. A face belongs to the thread it was given for: when the composer moves to another thread, the part gets a new face, and an old one still writes the draft of its own thread, while its `send` answers `false`. Each part fails alone.
 
 `<Thread id={threadId} />` draws the whole thread — its feed, composer, model picker and every part — as the person's own interface: what is sent from it is the person's turn, not the plugin's. Give it a height; it fills it.
 
-A command of `commands` shows in the composer's `/` list as `/<plugin>-<name>`; an `action` command asks for the words after it in a field.
+A command of `commands` shows in the composer's `/` list as `/<plugin>:<name>`; an `action` command asks for the words after it in a field, and its answer replaces the draft of the thread it ran for, or follows the words the person wrote there meanwhile.
 
 A view that does not compile shows the reason where it stands and on the plugin's card, with **Fix with an agent**. A rebuild that changes only views keeps the running process; each open view mounts the new build. Views mount only in a project where the plugin is enabled; elsewhere a result shows as an ordinary tool card.
 

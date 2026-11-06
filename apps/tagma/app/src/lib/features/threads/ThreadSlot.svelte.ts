@@ -93,7 +93,6 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
   private readonly selection: SlotSelection;
   private readonly writer: SlotWriter;
   private readonly opens: ThreadOpenWatch;
-  private pendingType: string | null = null;
 
   static override *make({ app, writer, context, ...options }: SlotArgs) {
     const projectId = (yield* ProjectRung.Current).projectId;
@@ -272,8 +271,16 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
   }
 
   startDraftAs(type: string): void {
-    this.pendingType = type;
+    const unborn = this.selection.draftKey(null);
+    this.shelf.at(unborn, () => this.list.titles()).type = type;
+    this.shelf.keep(unborn);
     this.startDraft();
+  }
+
+  handDraft(to: string): void {
+    const from = this.selection.draftKey(null);
+    const place = this.shelf.at(from).place;
+    void this.shelf.carry(from, to).then(() => this.shelf.place(to, place));
   }
 
   showDraft(): void {
@@ -309,12 +316,6 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
     this.bind(id);
   }
 
-  private applyPendingType(id: string | null): void {
-    const type = this.pendingType;
-    this.pendingType = null;
-    if (id === null && type !== null) this.birth.applyType(type);
-  }
-
   private lease(id: string | null): void {
     if (id !== null && this.thread?.threadId === id) return;
     this.thread?.release();
@@ -325,7 +326,6 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
   private bind(id: string | null): void {
     this.selection.select(id);
     this.draft.useKey(this.selection.draftKey(id));
-    this.applyPendingType(id);
     void this.draft.lostNotice().then((message) => {
       if (message !== null && !this.scope.signal.aborted) this.chat.commands.say({ tone: 'error', message });
     });

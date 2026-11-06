@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { PluginId, PluginLabel } from '../../../plugins/contract/wire/names.js';
 import { ViewModule } from './modules.js';
-import { LauncherEntry, SectionEntry, ViewEntry, ViewId } from './points.js';
+import { ComposerEntry, LauncherEntry, SectionEntry, ViewEntry, ViewId } from './points.js';
 
 const PluginResult = Schema.Struct({
   tool: Schema.String,
@@ -30,7 +30,7 @@ export const PluginViewSet = Schema.Struct({
   title: Schema.String,
   views: Schema.Array(ShownView),
   results: Schema.Array(PluginResult),
-  composer: Schema.Array(Schema.Struct({ view: ViewId })).annotate({ description: 'The views drawn above a thread’s composer.' }),
+  composer: Schema.Array(ComposerEntry).annotate({ description: 'The views drawn above a thread’s composer.' }),
   surfaces: Schema.Array(ShownSection),
   panes: Schema.Array(ShownSection),
   launchers: Schema.Array(LauncherEntry),

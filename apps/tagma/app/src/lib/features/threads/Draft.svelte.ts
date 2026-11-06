@@ -65,6 +65,12 @@ export interface DraftChoices {
   setTeam(value: TeamLayer | null): void;
 }
 
+export interface HeldDraft {
+  readonly current: boolean;
+  readonly text: string;
+  setText(value: string): void;
+}
+
 const SENT_ATTEMPTS = 3;
 const SENT_DEADLINE_MS = 5_000;
 
@@ -232,6 +238,24 @@ export class ThreadDraft implements ChatDraft<Draft> {
   setText(value: string): void {
     this.slot.text = value;
     this.keep();
+  }
+
+  held(): HeldDraft {
+    const key = this.key;
+    const slot = () => this.shelf.at(key, this.taken);
+    const current = () => this.key === key;
+    return {
+      get current() {
+        return current();
+      },
+      get text() {
+        return slot().text;
+      },
+      setText: (value) => {
+        slot().text = value;
+        this.shelf.keep(key);
+      },
+    };
   }
 
   clear(): void {

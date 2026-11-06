@@ -8,6 +8,7 @@ import type { Births } from '../Births.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';
 import type { ThreadDraft } from '../Draft.svelte.js';
 import type { ShownThread } from '../ShownThread.js';
+import { threadDraftKey } from '../SlotSelection.svelte.js';
 import { ThreadFeed } from '../thread/ThreadFeed.svelte.js';
 import type { ThreadWrites } from '../ThreadWrites.js';
 import { ThreadRefused } from '../thread/ThreadRefused.js';
@@ -90,7 +91,7 @@ export class Rewinds implements ChatRewind {
       if (this.shown.id !== threadId) return true;
       if (scope === 'from') {
         const taken = answer.drafts.filter((_, index) => answer.taken[index]?.kind !== 'compaction').map(sent);
-        await this.takeBack(threadId, [...(answer.draft === null ? [] : [sent(answer.draft)]), ...taken]);
+        await this.takeBack(threadId, [...(answer.draft === null ? [] : [sent(answer.draft)]), ...taken], threadDraftKey(threadId));
       }
       if (answer.reverted?.status === 'refused') this.say(threadId, answer.reverted.reason);
       void this.readPoints(threadId);
@@ -142,7 +143,7 @@ export class Rewinds implements ChatRewind {
       .then(async (answer) => {
         if (answer === null) return;
         this.writes.open(answer.threadId);
-        if (answer.draft !== null) await this.takeBack(answer.threadId, [sent(answer.draft)]);
+        if (answer.draft !== null) await this.takeBack(answer.threadId, [sent(answer.draft)], threadDraftKey(answer.threadId));
       })
       .catch((error: unknown) => this.say(threadId, reasonOf(error)))
       .finally(() => {
@@ -177,9 +178,9 @@ export class Rewinds implements ChatRewind {
     throw Cause.squash(exit.cause);
   }
 
-  private async takeBack(threadId: string, words: readonly ChatTakenWords[]): Promise<void> {
+  private async takeBack(threadId: string, words: readonly ChatTakenWords[], key: string): Promise<void> {
     this.chat.forgetReturn(threadId);
-    const put = await this.writes.attempt(this.draft.takeBack(this.draft.key, words));
+    const put = await this.writes.attempt(this.draft.takeBack(key, words));
     if (Exit.isSuccess(put) && put.value !== null) this.say(threadId, put.value.message);
   }
 

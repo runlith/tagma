@@ -20,6 +20,7 @@ export class ViewSets extends Service<ViewSets>()('ViewSets', { tier: 'project' 
   }
 
   sets = $state.raw<readonly PluginViewSet[]>([]);
+  readonly composerParts = $derived(this.sets.flatMap((set) => set.composer.map((part) => ({ plugin: set.plugin, view: part.view }))));
   enabled = $state.raw<readonly string[]>([]);
   known = $state(false);
   problem = $state<string | null>(null);

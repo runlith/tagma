@@ -36,7 +36,7 @@ import { ViewWindows } from '$lib/features/plugin-views/windows/ViewWindows.js';
 import { ThreadTranscripts } from '$lib/features/plugin-views/ThreadTranscripts.js';
 import { ViewThreads } from '$lib/features/plugin-views/ViewThreads.js';
 import { ChatTranscripts } from '$lib/features/threads/ChatTranscripts.js';
-import ThreadSeat from '$lib/features/threads/seats/ThreadSeat.svelte';
+import PlacedThread from '$lib/features/threads/seats/PlacedThread.svelte';
 import { ThreadChats } from '$lib/features/threads/ThreadChats.js';
 import { ProductRecords } from '$lib/features/threads/native/records.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
@@ -236,7 +236,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     Layer.provide(ThreadTranscripts, function* () {
       return new ChatTranscripts(yield* ThreadChats, yield* Door, yield* ProductRecords);
     }),
-    Layer.of(ViewThreads, { Seat: ThreadSeat }),
+    Layer.of(ViewThreads, { Placed: PlacedThread }),
     Layer.when(Host, (host) => host.isDesktop, DesktopLayer),
     //! A dropped file's own path reaches only programs on the same machine, so it stands for a desktop on a loopback server.
     Layer.when(

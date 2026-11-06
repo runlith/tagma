@@ -12,6 +12,8 @@ export function unbornKey(projectId: number, pane: string | null = null): string
   return pane === null ? `new:${projectId}` : `new:${projectId}:${pane}`;
 }
 
+export const threadDraftKey = (threadId: string): string => `thread:${threadId}`;
+
 export class SlotSelection {
   private chosen = $state<string | null>(null);
   private generations = 0;
@@ -43,6 +45,6 @@ export class SlotSelection {
   }
 
   draftKey(threadId: string | null): string {
-    return threadId === null ? this.newKey : `thread:${threadId}`;
+    return threadId === null ? this.newKey : threadDraftKey(threadId);
   }
 }

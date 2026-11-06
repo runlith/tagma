@@ -11,7 +11,9 @@ import { type ActionEnv, Actions } from '$lib/features/workspace/action.js';
 import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
+import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
+import { testDoor } from '$lib/wire/testing.js';
 import { Sections } from './Sections.svelte.js';
 import { sectionDeclarations } from './sections.js';
 import { PluginActions } from './PluginActions.svelte.js';
@@ -62,7 +64,11 @@ function stand(served: { readonly actions?: readonly PluginActionSet[]; readonly
       return { unsubscribe: () => undefined };
     },
   };
-  const boot = Layer.mergeAll(Layer.of(Live, live as never), Layer.of(Workspace, served.workspace ?? soloWorkspace()));
+  const boot = Layer.mergeAll(
+    Layer.of(Live, live as never),
+    Layer.of(Door, testDoor()),
+    Layer.of(Workspace, served.workspace ?? soloWorkspace()),
+  );
   const mounted = mountShell(Layer.mergeAll(Sections, ViewSets, PluginModules, PluginActions, Actions, ProjectFocus, Keymap), boot, {
     at: { projectId: 1, branch: null },
   });
@@ -99,7 +105,7 @@ test('two warm projects with one plugin hand the window its sections in turn: on
 test('a publication another one replaced is gone, and releasing it late leaves the window to the one standing', () => {
   const point = makePoint(Surfaces);
   const surfaces = new SurfaceRegistry(point);
-  const publisher = new PluginActions(point, makePoint(Actions), soloWorkspace());
+  const publisher = new PluginActions(point, makePoint(Actions), soloWorkspace(), testDoor());
   const shown = (projectId: number) => publisher.show(sectionDeclarations([board(projectId)]));
   const stale = shown(1);
   shown(2);

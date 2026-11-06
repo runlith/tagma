@@ -227,11 +227,24 @@ export type TagmaView<Plugin = unknown> = {
 
 export declare const useTagma: <Plugin = unknown>() => TagmaView<Plugin>;
 
-export type { ComposerFace } from "./plugin.js";
-
 export { TagmaRefused } from "./plugin.js";
 
 export type { ToolFace } from "./plugin.js";
+
+export type ComposerFace = {
+  readonly thread: {
+    readonly id: string | null;
+    readonly projectId: number;
+    readonly life: "awaiting" | "idle" | "stalled" | "working" | null;
+  };
+  readonly draft: {
+    readonly text: string;
+    readonly setText: (text: string) => void;
+    readonly insert: (text: string) => void;
+    readonly attach: (files: ReadonlyArray<File>) => Promise<void>;
+  };
+  readonly send: () => Promise<boolean>;
+};
 
 export declare const Thread: Component<{
   id: string;

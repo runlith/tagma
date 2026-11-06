@@ -1,8 +1,15 @@
+import type { Resolver } from '@runlith/layer/key';
+import { makePoint } from '@runlith/layer/testing';
 import { Effect, FiberSet } from 'effect';
 import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
+import { StagedKinds } from '$lib/shared/threads/staged.js';
+import { ThreadDraft } from '../Draft.svelte.js';
 import { ShownThread } from '../ShownThread.js';
 import { Rewinds } from './Rewinds.svelte.js';
+import { StagedItems } from './StagedItems.js';
+import { testShelf } from './testing.js';
+import type { ThreadUploads } from './ThreadUploads.js';
 
 const beyond = {
   files: { total: 1, unavailable: null },
@@ -67,6 +74,43 @@ it.live(
       expect(none.offered).toBe(false);
       expect(none.point('run-1')).toBeUndefined();
     }),
+);
+
+it.live('a branch opened beside takes the words it returns into its own draft, not the draft of the thread it branched from', () =>
+  Effect.gen(function* () {
+    const run = yield* FiberSet.makeRuntimePromise<never>();
+    const draft = new ThreadDraft(testShelf(), {} as ThreadUploads, new StagedItems(makePoint(StagedKinds), {} as Resolver, 1));
+    draft.useKey('thread:thread-1');
+    const shown = new ShownThread(
+      1,
+      () => 'thread-1',
+      () => null,
+      () => null,
+      () => null,
+    );
+    const takenBack = Promise.withResolvers<Promise<unknown>>();
+    let attempts = 0;
+    const writes = {
+      open: () => undefined,
+      attempt: (work: Effect.Effect<unknown, never>) => {
+        const attempt = run(Effect.exit(work));
+        attempts += 1;
+        if (attempts === 2) takenBack.resolve(attempt);
+        return attempt;
+      },
+    };
+    const ops = { branch: () => Effect.succeed({ threadId: 'branch-1', draft: { text: 'words to keep' } }) };
+    const births = { listed: () => null, fork: (_source: unknown, call: () => Promise<unknown>) => call() };
+    const chat = { forgetReturn: () => undefined, session: { activeRunId: null } };
+    const rewinds = new Rewinds(shown, chat as never, draft, writes as never, ops as never, births as never);
+
+    rewinds.branch('run-1');
+    yield* Effect.promise(() => takenBack.promise.then((attempt) => attempt));
+
+    expect(draft.text).toBe('');
+    draft.useKey('thread:branch-1');
+    expect(draft.text).toBe('words to keep');
+  }),
 );
 
 it.live('a points read that finishes after the owner left publishes nothing', () =>

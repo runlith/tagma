@@ -3,7 +3,7 @@
 
   let { id }: { id: string } = $props();
 
-  const { Seat } = ViewThreads.use();
+  const { Placed } = ViewThreads.use();
 </script>
 
-<Seat {id} />
+<Placed {id} />
