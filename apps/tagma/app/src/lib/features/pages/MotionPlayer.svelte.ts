@@ -1,5 +1,5 @@
 import { frameAt, frameCount, frameTime, type Timeline } from '@tagma/server/artifacts/contract/wire/timeline';
-import type { FrameLink } from '../views/Frame.svelte';
+import type { FrameLink } from '$lib/shared/frame/Frame.svelte';
 import { TimelineBridge } from './TimelineBridge.js';
 
 export class MotionPlayer {

@@ -1,6 +1,6 @@
 import { TOOL_VIEW_PX } from '@runlith/chat-ui/rowEstimate';
 import type { Timeline } from '@tagma/server/artifacts/contract/wire/timeline';
-import { tallest } from '../views/Frame.svelte';
+import { tallest } from '$lib/shared/frame/Frame.svelte';
 
 export const motionWidth = (timeline: Timeline): string => `min(100%, ${Math.floor((tallest() * timeline.width) / timeline.height)}px)`;
 

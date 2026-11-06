@@ -7,7 +7,7 @@
   import Transport from '$lib/shared/Transport.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
-  import Frame, { type FrameProtocol } from '../views/Frame.svelte';
+  import Frame, { type FrameProtocol } from '$lib/shared/frame/Frame.svelte';
   import { MotionPlayer } from './MotionPlayer.svelte.js';
   import { PAGE_SANDBOX_FLAGS } from '@tagma/server/artifacts/contract/wire/policy';
   import { motionWidth } from './sizing.js';

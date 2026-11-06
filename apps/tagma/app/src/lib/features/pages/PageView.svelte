@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Timeline } from '@tagma/server/artifacts/contract/wire/timeline';
   import type { Snippet } from 'svelte';
-  import Frame, { type FrameProtocol } from '../views/Frame.svelte';
+  import Frame from '$lib/shared/frame/Frame.svelte';
   import { PAGE_SANDBOX_FLAGS } from '@tagma/server/artifacts/contract/wire/policy';
   import { previewHeight } from './sizing.js';
   import type { MotionPlayer } from './MotionPlayer.svelte.js';
@@ -18,8 +18,6 @@
   };
 
   let { src, title, timeline, fill = false, zoom = 1, open, actions }: Props = $props();
-
-  const still: FrameProtocol = () => ({ receive: () => undefined, dispose: () => undefined });
 </script>
 
 {#if timeline !== null}
@@ -27,10 +25,10 @@
     <MotionView {src} {title} {timeline} {fill} {actions} />
   {/key}
 {:else if fill}
-  <Frame {src} {title} sandbox={PAGE_SANDBOX_FLAGS} protocol={still} fill {zoom} class="border-0 bg-background" />
+  <Frame {src} {title} sandbox={PAGE_SANDBOX_FLAGS} fill {zoom} class="border-0 bg-background" />
 {:else}
   <div class="relative">
-    <Frame {src} {title} sandbox={PAGE_SANDBOX_FLAGS} protocol={still} height={previewHeight()} inert class="border-0 bg-background" />
+    <Frame {src} {title} sandbox={PAGE_SANDBOX_FLAGS} height={previewHeight()} inert class="border-0 bg-background" />
     {#if open !== undefined}
       <button type="button" class="absolute inset-0 cursor-pointer" aria-label={`Open ${title} in the panel`} onclick={open}></button>
     {/if}

@@ -6,7 +6,7 @@
   import { Platform } from '@runlith/layer/Platform';
   import { Theme } from '$lib/shared/Theme.js';
   import { innerHeight, innerWidth } from 'svelte/reactivity/window';
-  import Frame, { type FrameProtocol, tallest } from './Frame.svelte';
+  import Frame, { type FrameProtocol, tallest } from '$lib/shared/frame/Frame.svelte';
   import { hostStyles } from './hostStyles.js';
   import { reaches } from './reach.js';
   import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';

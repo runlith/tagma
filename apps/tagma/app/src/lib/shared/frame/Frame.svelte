@@ -21,13 +21,18 @@
   import type { ClassValue } from 'svelte/elements';
   import { park } from './parking.js';
 
+  const SITE_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups';
+  const SITE_ALLOW = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
+  const MEDIA_ALLOW = 'camera; microphone';
+
   type Props = {
     src: string;
     title: string;
-    sandbox: string;
+    sandbox?: string;
     name?: string;
-    protocol: FrameProtocol;
+    protocol?: FrameProtocol;
     allow?: string;
+    media?: boolean;
     fill?: boolean;
     height?: number | null;
     zoom?: number;
@@ -35,9 +40,23 @@
     class?: ClassValue;
   };
 
-  let { src, title, sandbox, name, protocol, allow, fill = false, height = null, zoom = 1, inert = false, class: style }: Props = $props();
+  let {
+    src,
+    title,
+    sandbox = SITE_SANDBOX,
+    name,
+    protocol,
+    allow = SITE_ALLOW,
+    media = false,
+    fill = false,
+    height = null,
+    zoom = 1,
+    inert = false,
+    class: style,
+  }: Props = $props();
 
   const scaled = $derived(zoom !== 1);
+  const allowed = $derived(media ? `${allow}; ${MEDIA_ALLOW}` : allow);
 
   const CLOSE_MS = 1_000;
 
@@ -62,7 +81,7 @@
   $effect(() => {
     const target = frame;
     const make = protocol;
-    if (target === null) return;
+    if (target === null || make === undefined) return;
     const made = untrack(() => make(target));
     closing = null;
     link = made;
@@ -94,7 +113,7 @@
     {title}
     {name}
     {sandbox}
-    {allow}
+    allow={allowed}
     {inert}
     class={['block', !scaled && 'w-full', fill && !scaled && 'h-full', style]}
     style:width={scaled ? `${100 / zoom}%` : undefined}
