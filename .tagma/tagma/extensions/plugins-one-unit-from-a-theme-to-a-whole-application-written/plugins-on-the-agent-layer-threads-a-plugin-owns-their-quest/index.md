@@ -284,6 +284,8 @@ Each check goes through its real caller's door: the SDK's client over `/api/op` 
 4. **Views.** A framed view lists the trainer's transcript, shows the tutor's reply as it streams and a tool call while it runs, pages back, and follows a rewind's removal.
 5. **Listing.** The trainer's threads stand under its section and not in the general list; with `listed: true` they stand in both.
 
+Steps 6 and 7 are built; their acceptance runs as `composition/testing/pluginChat.e2e.ts` (the window) and `composition/testing/plugins/hooks.itest.ts` (hooks).
+
 **Step 6: depth 2.** A section lists merge requests beside a live `<Thread>`. The person sends from it, and the turn is his.
 
 **Step 7: depth 3.**
@@ -295,9 +297,6 @@ Each check goes through its real caller's door: the SDK's client over `/api/op` 
 The window of four threads on four providers is step 10, and stays in [[d2b5f488]].
 
 ## Not established
-
-Reasoned from the code, not run or read through:
-- that `Conversation` draws correctly in a seat without a pane, reasoned from `ThreadSlot`'s arguments.
 
 Not measured: the latency that a process start adds to a hook on an idle plugin.
 
