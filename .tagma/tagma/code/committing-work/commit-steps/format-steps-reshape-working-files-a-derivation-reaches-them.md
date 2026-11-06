@@ -1,6 +1,6 @@
 ---
 id: 01a113ab-20fb-747e-aa1e-9c77f37610fd
-title: Format steps reshape working files; derivations keep working outputs intact
+title: Format steps reshape working files; a derivation reaches them only when the commit changed its declared inputs
 ord: 1
 tags: ["explanation"]
 sources:
@@ -13,7 +13,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/commit-steps/shape.ts
 ---
-A format step transforms a file into itself, so the commit takes only the hash (with `cleans`, as in `ownBlobs`) of its selected files. Derivations run after formatting over the same private tree, take only declared output paths, and do not deliver a reshape to working outputs or reattribute their remaining lines. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
+A format step transforms a file into itself, so the commit takes only the hash (with `cleans`, as in `ownBlobs`) of its selected files. Derivations run after formatting over the same private tree and take only declared output paths. One without declared inputs delivers no reshape to working outputs and reattributes none of their lines; one whose `from` the commit touched delivers its new output as a format step's delta, unless a working change left out of the commit touches those inputs. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
 
 - **Commands come from the commit version's `Config`** (`Configs.read` over the commit tree, [[8fda30d8]]): an uncommitted or ignored edit to `tagma.config.ts` has no effect on the commit. A config that does not evaluate is a `config-invalid` refusal with a place, not a silent skip.
 - **`ok` is the codes by which the tool says "done"**, not "no violations left": findings after `--fix` are judged by the inspection, which has debt and per-line-holder splitting. Only failures of the command itself refuse the commit: a code outside `ok` (`format-failed`), no program (`format-missing`), blown ceiling (`format-cut`).
