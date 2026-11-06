@@ -55,8 +55,7 @@ export type ViewStorage = {
   set(key: string, value?: unknown): Promise<boolean>;
 };
 
-export type TagmaClient = MountFacts & {
-  readonly tools: Readonly<Record<string, (input?: Readonly<Record<string, unknown>>) => Promise<unknown>>>;
+export type ClientMembers = MountFacts & {
   readonly storage: ViewStorage;
   readonly theme: Look;
   resource(uri: string): Reading<unknown>;
@@ -64,8 +63,11 @@ export type TagmaClient = MountFacts & {
   transcript(threadId: string): Transcript;
   open(opening: ViewOpening): Promise<void>;
   openLink(url: string): void;
-  readonly [capability: string]: unknown;
 };
+
+export type ViewToolCalls = Readonly<Record<string, (input?: Readonly<Record<string, unknown>>) => Promise<unknown>>>;
+
+export type TagmaClient = ClientMembers & { readonly tools: ViewToolCalls; readonly [capability: string]: unknown };
 
 const readingOf = (threadId: string, row: PresenceRow | undefined, missing: PresenceMissingReason | undefined): ThreadReading | null => {
   if (row === undefined) return missing === undefined ? null : { threadId, missing };

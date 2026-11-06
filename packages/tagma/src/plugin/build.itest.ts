@@ -466,7 +466,7 @@ const typedFolder = async () => {
 };
 
 const MISUSES = [
-  { body: '', reason: null },
+  { body: '  void tagma.storage.get(tagma.projectId.toFixed());', reason: null },
   { body: '  void tagma.tools.hello();', reason: "Property 'hello' does not exist" },
 ] as const;
 

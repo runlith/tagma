@@ -1,9 +1,10 @@
 import type { ViewTools } from '@runlith/tagma/plugin';
-import type { TagmaClient } from './client.svelte.js';
+import type { ClientMembers, ViewToolCalls } from './client.svelte.js';
 import { PluginMount } from './PluginMount.svelte.js';
 
-export type TagmaView<Plugin = unknown> = Omit<TagmaClient, 'tools'> & {
-  readonly tools: unknown extends Plugin ? TagmaClient['tools'] : ViewTools<Plugin>;
+export type TagmaView<Plugin = unknown> = ClientMembers & {
+  readonly tools: unknown extends Plugin ? ViewToolCalls : ViewTools<Plugin>;
+  readonly [capability: string]: unknown;
 };
 
 export const useTagma = <Plugin = unknown>(): TagmaView<Plugin> => PluginMount.use().client as unknown as TagmaView<Plugin>;

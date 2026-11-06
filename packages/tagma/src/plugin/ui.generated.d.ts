@@ -3,15 +3,13 @@ import type { ViewTools } from "./plugin.js";
 import type { Component, Snippet } from "svelte";
 import type { HTMLAnchorAttributes, HTMLAttributes, HTMLButtonAttributes, HTMLInputAttributes, HTMLTextareaAttributes } from "svelte/elements";
 
-export type TagmaView<Plugin = unknown> = Omit<{
+export type TagmaView<Plugin = unknown> = {
   readonly projectId: number;
   readonly plugin: string;
   readonly view: string;
   readonly threadId: string | null;
   readonly key: string | null;
 } & {
-  readonly [key: string]: unknown;
-  readonly tools: Readonly<Record<string, (input?: Readonly<Record<string, unknown>>) => Promise<unknown>>>;
   readonly storage: ViewStorage;
   readonly theme: {
     readonly id: string;
@@ -55,7 +53,8 @@ export type TagmaView<Plugin = unknown> = Omit<{
   transcript: (threadId: string) => Transcript;
   open: (opening: ViewOpening) => Promise<void>;
   openLink: (url: string) => void;
-}, "tools"> & {
+} & {
+  readonly [key: string]: unknown;
   readonly tools: unknown extends Plugin ? Readonly<Record<string, (input?: Readonly<Record<string, unknown>>) => Promise<unknown>>> : ViewTools<Plugin>;
 };
 
