@@ -35,7 +35,7 @@ sources:
 - The stealth merge runs in a separate recovery worktree; the served branch changes only after success, and the conflict record survives restart and reads without the graph mirror.
 - The banner shows the first unfinished case and the count of the rest; pressing again opens the same recovery thread, not a new one.
 - Publishing the decision checks block files and the form marker and never overwrites work that appeared in the goal after analysis started.
-- In team storage `resolve_graph_conflict` checks graph files and stages only them, leaving the merge commit to the repository merge owner.
+- In team storage `resolve_graph_conflict` checks graph files and stages only them, leaving the merge commit to the repository merge owner; a team project's stealth blocks recover like stealth storage, and their pending recovery is published first.
 - The recovery case for a branch deleted from the repository clears automatically on the next sync.
 
-**Limits.** Neither side is picked automatically. The banner and recovery thread exist only with stealth storage; in team a graph conflict is an ordinary git-merge conflict.
+**Limits.** Neither side is picked automatically. The banner and recovery thread exist for stealth storage and a team project's stealth blocks; a conflict of a team project's `.tagma` is an ordinary git-merge conflict. A team project's banner follows its stealth blocks' recoveries only where their layer already stood when the window subscribed.

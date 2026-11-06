@@ -6703,11 +6703,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/wire/merge.ts#GraphMerge",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/wire/receipt.ts#SubmitCarry",
           "owner": "5a3bed29"
         },
