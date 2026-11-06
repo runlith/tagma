@@ -31,6 +31,7 @@ export type AgentDirective =
       readonly batchKey?: string;
       readonly covers?: readonly string[];
       readonly retell?: false;
+      readonly withholds?: readonly string[];
     }
   | { readonly type: 'restrict'; readonly tools: readonly string[]; readonly ruleId?: string }
   | { readonly type: 'exclude'; readonly tools: readonly string[]; readonly ruleId?: string }

@@ -62,6 +62,10 @@ await Effect.runPromise(
         journal(`hook ${callerKind(meta)} ${JSON.stringify(args)}`);
         if (existsSync(join(data, 'fail-hook'))) return { text: 'the keeper is down', isError: true };
         if (existsSync(join(data, 'plain-hook'))) return { text: 'fine' };
+        if (args.at === 'beforeStep') {
+          const verdict = String(args.text).includes('codeword') ? { block: 'the keeper withholds a codeword' } : {};
+          return { text: JSON.stringify(verdict), structuredContent: verdict };
+        }
         const answer = { deny: `kept by the fixture: ${String(args.tool)}` };
         return { text: JSON.stringify(answer), structuredContent: answer };
       }

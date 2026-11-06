@@ -75,6 +75,7 @@ export type ThreadEventPayload = {
   readonly measurement?: ThreadCallMeasurement;
   readonly contextChange?: ThreadContextChange;
   readonly withdrawn?: ThreadWithdrawal;
+  readonly withheld?: readonly string[];
   readonly compacted?: ThreadHistoryFold;
   readonly rewound?: ThreadRewound;
   readonly restored?: ThreadRestored;
@@ -444,6 +445,7 @@ export function threadPendingContextChange(entries: readonly ThreadTranscriptEnt
 }
 
 export function threadGuidanceEvent(frame: AgentRuntimeGuidance): ThreadEventBody {
+  const withheld = [...new Set(frame.sources.flatMap((source) => source.withholds ?? []))];
   return {
     kind: 'runtime-guidance',
     payload: {
@@ -451,6 +453,7 @@ export function threadGuidanceEvent(frame: AgentRuntimeGuidance): ThreadEventBod
       messages: frame.texts.map((text, index) =>
         agentRuntimeGuidanceMessage(text, frame.sources[index]?.state, frame.sources[index]?.retell),
       ),
+      withheld: withheld.length > 0 ? withheld : undefined,
     },
   };
 }

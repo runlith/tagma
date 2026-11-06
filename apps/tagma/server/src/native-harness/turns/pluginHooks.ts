@@ -87,14 +87,14 @@ export const makePluginHooks = Effect.gen(function* () {
 
   const firstRun = (ctx: AgentRuleContext<ThreadContext>): boolean => !ctx.thread.history.some((message) => message.role === 'assistant');
 
-  const prompts = (ctx: AgentRuleContext<ThreadContext>, held: Held): readonly string[] => {
+  const prompts = (ctx: AgentRuleContext<ThreadContext>, held: Held): readonly { readonly input: string; readonly text: string }[] => {
     if (ctx.hook !== 'beforeStep') return [];
     const fresh = new Set((ctx.readerInputs ?? []).filter((input) => !held.prompted.has(input)));
     for (const input of fresh) held.prompted.add(input);
     if (fresh.size === 0) return [];
     return ctx.modelMessages.flatMap((message) => {
       const input = agentReaderInput(message);
-      return input !== undefined && fresh.has(input) ? [textOf(message)] : [];
+      return input !== undefined && fresh.has(input) ? [{ input, text: textOf(message) }] : [];
     });
   };
 
@@ -133,8 +133,12 @@ export const makePluginHooks = Effect.gen(function* () {
             for (const answer of yield* ask({ at: 'threadStarted', resumed: false })) directives.push(...said(answer.context));
           }
         }
-        for (const text of prompts(ctx, held)) {
-          for (const answer of yield* ask({ at: 'beforeStep', text })) directives.push(...said(answer.block), ...said(answer.context));
+        for (const prompt of prompts(ctx, held)) {
+          for (const answer of yield* ask({ at: 'beforeStep', text: prompt.text })) {
+            if (answer.block !== undefined && answer.block.length > 0)
+              directives.push({ type: 'guide', text: answer.block, withholds: [prompt.input] });
+            directives.push(...said(answer.context));
+          }
         }
         return directives;
       }

@@ -107,11 +107,24 @@ export const planStep = Effect.fn('planStep')(function* (input: AgentStepPlanInp
   if (directives === null) return null;
   const injected = yield* injection(input, held, directives);
   input.injected.current = injected;
+  const withheld = new Set(injected.guides.flatMap((guide) => guide.withholds ?? []));
   return {
-    callMessages: [...projected, ...injected.signals, ...injected.guides.map(agentGuideMessage)],
+    callMessages: [
+      ...unwithheld(projected, withheld),
+      ...unwithheld(injected.signals, withheld),
+      ...injected.guides.map(agentGuideMessage),
+    ],
     policy: agentStepToolPolicy(directives, input.toolNames, request.toolChoice),
   } satisfies AgentStepPlan;
 });
+
+const unwithheld = (messages: readonly Message[], withheld: ReadonlySet<string>): readonly Message[] =>
+  withheld.size === 0
+    ? messages
+    : messages.filter((message) => {
+        const input = agentReaderInput(message);
+        return input === undefined || !withheld.has(input);
+      });
 
 const injection = Effect.fn(function* (
   input: AgentStepPlanInput,

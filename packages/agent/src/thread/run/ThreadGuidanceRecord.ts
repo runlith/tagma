@@ -47,5 +47,5 @@ export class ThreadGuidanceRecord {
 }
 
 function guidanceKey(frame: AgentRuntimeGuidance): string {
-  return `${frame.stepNumber ?? ''}:${frame.hook}:${frame.texts.join('\n')}`;
+  return `${frame.stepNumber ?? ''}:${frame.hook}:${frame.texts.join('\n')}:${frame.sources.flatMap((source) => source.withholds ?? []).join('\n')}`;
 }

@@ -399,4 +399,19 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       expect(script.asked.at(-1)).toContain('Write of beside.txt noted');
     }),
   );
+
+  it.effect(
+    'a message a beforeStep hook blocks reaches the model in neither its run nor a later one, its reason standing in its place',
+    () =>
+      Effect.gen(function* () {
+        yield* keeper('withholder', [{ at: 'beforeStep', tool: 'hook' }], null);
+        const script = scripted('the keeper withholds a codeword', () => DONE);
+        const { threadId, ended } = yield* born('bypass');
+        yield* ended(yield* turn(threadId, 'Spell the codeword plum.'));
+        yield* ended(yield* turn(threadId, 'Now greet the keeper.'));
+
+        expect(script.asked.at(-1)).toContain('Now greet the keeper.');
+        for (const said of script.asked) expect(said).not.toContain('codeword plum');
+      }),
+  );
 });

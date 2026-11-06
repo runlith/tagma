@@ -10,6 +10,7 @@ export const AgentGuideSource = Schema.Struct({
   batchKey: Schema.optional(Schema.String),
   covers: Schema.optional(Schema.Array(Schema.String)),
   retell: Schema.optional(Schema.Literal(false)),
+  withholds: Schema.optional(Schema.Array(Schema.String)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),
   taskId: Schema.optional(Schema.String),

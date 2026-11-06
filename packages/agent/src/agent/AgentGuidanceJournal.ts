@@ -6,7 +6,9 @@ type AgentRuntimeGuidanceSource = AgentRuntimeGuidance['sources'][number];
 
 export function coalesceGuides(guides: readonly PendingRuntimeGuide[], held: readonly PendingRuntimeGuide[] = []): PendingRuntimeGuide[] {
   const identity = (guide: PendingRuntimeGuide) =>
-    guide.batchKey === undefined ? JSON.stringify(['content', guide.text, guide.state]) : JSON.stringify(['batch', guide.batchKey]);
+    guide.batchKey === undefined
+      ? JSON.stringify(['content', guide.text, guide.state, guide.withholds])
+      : JSON.stringify(['batch', guide.batchKey]);
   const seen = new Set(held.map(identity));
   const covered = new Set([...held, ...guides].flatMap((guide) => guide.covers ?? []));
   return guides.filter((guide) => {
@@ -68,6 +70,7 @@ export function pendingRuntimeGuides(
     batchKey: directive.batchKey,
     covers: directive.covers,
     retell: directive.retell,
+    withholds: directive.withholds,
     toolName: context.toolName,
     toolCallId: context.toolCallId,
     taskId: context.taskId,
@@ -82,6 +85,7 @@ function runtimeGuidanceSource(guide: PendingRuntimeGuide): AgentRuntimeGuidance
     batchKey: guide.batchKey,
     covers: guide.covers,
     retell: guide.retell,
+    withholds: guide.withholds,
     toolName: guide.toolName,
     toolCallId: guide.toolCallId,
     taskId: guide.taskId,

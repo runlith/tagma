@@ -9,7 +9,14 @@ export type ThreadHistoryMove =
   | { readonly kind: 'keep'; readonly count: number }
   | { readonly kind: 'compact'; readonly keepFrom: number; readonly messages: readonly Message[] }
   | { readonly kind: 'append'; readonly messages: readonly Message[] }
+  | { readonly kind: 'withhold'; readonly inputs: readonly string[]; readonly messages: readonly Message[] }
   | { readonly kind: 'splice'; readonly edits: readonly ThreadHistorySplice[] };
+
+const withholding = (history: readonly Message[], inputs: readonly string[]): Message[] =>
+  history.filter((message) => {
+    const input = agentReaderInput(message);
+    return input === undefined || !inputs.includes(input);
+  });
 
 export function moveThreadHistory(event: ThreadEventBody, position?: number): ThreadHistoryMove | null {
   const withdrawn = event.payload.withdrawn;
@@ -22,6 +29,8 @@ export function moveThreadHistory(event: ThreadEventBody, position?: number): Th
   if (restored) {
     return { kind: 'splice', edits: restored.inserts.map((insert) => ({ from: insert.at, to: insert.at, insert: insert.messages })) };
   }
+  const withheld = event.payload.withheld;
+  if (withheld?.length) return { kind: 'withhold', inputs: withheld, messages: event.payload.messages ?? [] };
   const messages = event.payload.messages;
   if (!messages?.length) return null;
   if (position === undefined) return { kind: 'append', messages };
@@ -62,6 +71,8 @@ export function foldThreadHistory(history: ThreadHistory, event: ThreadEventBody
       return [...move.messages, ...history.slice(move.keepFrom)];
     case 'append':
       return [...history, ...move.messages];
+    case 'withhold':
+      return [...withholding(history, move.inputs), ...move.messages];
     case 'splice':
       return spliceThreadHistory(history, move.edits);
   }
@@ -89,6 +100,9 @@ export class HistoryFold {
         return;
       case 'append':
         for (const message of move.messages) this.messages.push(message);
+        return;
+      case 'withhold':
+        this.messages = [...withholding(this.messages, move.inputs), ...move.messages];
         return;
       case 'splice':
         this.messages = spliceThreadHistory(this.messages, move.edits);

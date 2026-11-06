@@ -117,6 +117,7 @@ export const threadEventPayloadSchema = Schema.Struct({
   measurement: facet(threadCallMeasurementSchema),
   contextChange: facet(threadContextChangeSchema),
   withdrawn: facet(Schema.Struct({ runId: Schema.String, keepMessages: historyIndex })),
+  withheld: facet(Schema.Array(Schema.String)),
   compacted: facet(Schema.Struct({ keepFrom: historyIndex, messages: Schema.Array(Message) })),
   rewound: facet(
     Schema.Struct({
