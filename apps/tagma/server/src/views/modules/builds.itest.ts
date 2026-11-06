@@ -146,7 +146,8 @@ const keyIn = (address: string): string => address.split('/')[5]!;
 
 it.live('a view whose entry another view already imports gets a module of its own once it is published', () =>
   Effect.gen(function* () {
-    const { world, root, module } = yield* setup('<p>board</p>');
+    const { world, root, module, ready } = yield* setup('<p>board</p>');
+    const initial = yield* ready();
     const views = (ids: readonly string[]) =>
       Effect.promise(async () => {
         await writeFile(join(root, 'dist/ui/ui/Board.svelte'), `<script>import Detail from './Detail.svelte';</script><Detail />`);
@@ -168,7 +169,7 @@ it.live('a view whose entry another view already imports gets a module of its ow
         });
       });
     yield* views(['board']);
-    yield* module((state) => state.state === 'ready' && state.address.includes('/Board-'));
+    yield* ready(initial.address);
     yield* views(['board', 'detail']);
     const { module: detail } = yield* module((state) => state.state !== 'preparing', 'detail');
     expect(detail.state).toBe('ready');
