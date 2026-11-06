@@ -5,6 +5,7 @@ import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { AGENT_CHILD_UPDATE_SIGNAL_TYPE, THREAD_EVENT_SIGNAL_TYPE } from '@runlith/agent/contracts';
 import { CALL_RESULT_SIGNAL } from '@tagma/server/threads/contract/wire/calls';
 import { COMMAND_RESULT_SIGNAL } from '@tagma/server/executions/contract/wire/commands';
+import { pluginOfCaller } from '@tagma/server/plugins/contract/wire/names';
 import type { ChatRewindWords } from '@runlith/chat-ui/rewind';
 import type { ChatStrings } from '@runlith/chat-ui/strings';
 import { queuedCalls, waitingWords } from '../workWords.js';
@@ -309,8 +310,17 @@ export function nativeStrings(operationWords: OperationWords): ChatStrings {
     cancel: () => 'Cancel',
     showMoreFacts: (count) => `${count} more`,
     noAnswerSubmitted: () => 'No answer submitted',
-    askedOf: (approver) => (approver === null ? 'Asking you' : `Asking thread ${approver}, which answers for its team instead of you`),
-    decidedBy: (by, note) => `Answered by thread ${by} instead of you${note === undefined ? '' : `: ${note}`}`,
+    askedOf: (approver) => {
+      if (approver === null) return 'Asking you';
+      const plugin = pluginOfCaller(approver);
+      return plugin === null
+        ? `Asking thread ${approver}, which answers for its team instead of you`
+        : `Asking the plugin ${plugin}, which owns this thread, instead of you`;
+    },
+    decidedBy: (by, note) => {
+      const plugin = pluginOfCaller(by);
+      return `Answered by ${plugin === null ? `thread ${by}` : `the plugin ${plugin}`} instead of you${note === undefined ? '' : `: ${note}`}`;
+    },
     typeYourAnswer: () => 'Type your answer',
     done: () => 'Done',
 
