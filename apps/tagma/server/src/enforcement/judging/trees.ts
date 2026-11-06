@@ -4,6 +4,7 @@ import { copyFile, readFile, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Git } from '@runlith/git/Git';
 import { Effect, Result } from 'effect';
+import { generatedAmong } from '../../platform/git/generated.js';
 import { runGit, OwnGitFailed } from '../../platform/git/ownGit.js';
 import type { JudgedTree } from '../contract/wire/checks.js';
 
@@ -50,6 +51,11 @@ const mergingIn = (path: string): Effect.Effect<readonly string[], OwnGitFailed>
   });
 
 export type BuiltTree = Omit<JudgedTree, 'paths'> & { readonly commonDir: string };
+
+export const withoutGenerated = Effect.fn('enforcement.withoutGenerated')(function* <T extends JudgedTree>(tree: T) {
+  const generated = yield* generatedAmong(yield* Git, tree.root, tree.paths, tree.built);
+  return generated.size === 0 ? tree : { ...tree, paths: tree.paths.filter((path) => !generated.has(path)) };
+});
 
 export const pathsOf = Effect.fn('enforcement.pathsOf')(function* (tree: Omit<JudgedTree, 'paths'>) {
   return { ...tree, paths: yield* changed(yield* Git, tree.root, tree.base, tree.built) } satisfies JudgedTree;

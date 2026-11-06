@@ -1,5 +1,6 @@
 import type { Git } from '@runlith/git/Git';
 import { Effect } from 'effect';
+import { GENERATED_ATTRIBUTE, markedGenerated } from '../platform/git/generated.js';
 import { runGit, type OwnGitFailed } from '../platform/git/ownGit.js';
 import type { TreePlace } from '../workspace/contract/service/commitTrees.js';
 import type { FormatCommand } from '../config/contract/wire/config.js';
@@ -82,12 +83,20 @@ export const filtered = Effect.fn('commitSteps.filtered')(function* (
 ): Effect.fn.Return<ReadonlySet<string>, OwnGitFailed> {
   const filtered = new Set<string>();
   if (paths.length === 0) return filtered;
-  const answer = yield* runGit(git, 'commit-steps-filters', ['-C', place.dir, 'check-attr', '-z', '--stdin', 'filter'], {
-    env: { ...place.env },
-    stdin: nul(paths),
-    cleans: true,
-  });
+  const answer = yield* runGit(
+    git,
+    'commit-steps-filters',
+    ['-C', place.dir, 'check-attr', '-z', '--stdin', 'filter', GENERATED_ATTRIBUTE],
+    {
+      env: { ...place.env },
+      stdin: nul(paths),
+      cleans: true,
+    },
+  );
   const fields = answer.split('\0');
-  for (let at = 0; at + 2 < fields.length; at += 3) if (fields[at + 2] !== 'unspecified') filtered.add(fields[at] as string);
+  for (let at = 0; at + 2 < fields.length; at += 3) {
+    const [path, attribute, value] = [fields[at] as string, fields[at + 1], fields[at + 2]];
+    if (attribute === GENERATED_ATTRIBUTE ? markedGenerated(value) : value !== 'unspecified') filtered.add(path);
+  }
   return filtered;
 });

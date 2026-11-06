@@ -31,7 +31,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { type Checked, type HeadSubject, type JudgedTree, type TreeSubject, UNCHECKED } from '../contract/wire/checks.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import { Git } from '@runlith/git/Git';
-import { type BuiltTree, pathsOf } from './trees.js';
+import { type BuiltTree, pathsOf, withoutGenerated } from './trees.js';
 import type { JudgeLane } from '../workers/asks.js';
 import { type GateMemory, gatedIn } from './gateMemory.js';
 import { Inspections, RULES_AT_ONCE } from '../workers/inspectionLanes.js';
@@ -181,11 +181,14 @@ const annotated = (op: string, files: number, judged: Judgement): Effect.Effect<
 
 export const judgement = Effect.fn('enforcement.judgement')(function* (
   op: string,
-  subject: TreeSubject,
+  given: TreeSubject,
   memory?: GateMemory['Service'],
   phase: JudgedPhase = 'before',
 ) {
   const started = performance.now();
+  const judged = yield* Effect.result(withoutGenerated(given));
+  if (Result.isFailure(judged)) return ungated(given.root, judged.failure.message, started);
+  const subject = judged.success;
   const settled = yield* Effect.result(
     Effect.gen(function* () {
       const read = yield* inPlay(op, phase, subject);
