@@ -26,6 +26,7 @@ import { ViewWindows } from './viewWindows.js';
 import { DevSurface } from './devSurface.js';
 import { FreshWorld } from './freshWorld.js';
 import { Fronts } from './fronts.js';
+import { MediaGrants } from './mediaGrants.js';
 import { carriedBy, carriedIn, keptApplication, leaseRelease, numbered, standingIn } from './release.js';
 import { bundleOf } from '@tagma/server/mac-applications/placement';
 import { DESKTOP_DATA, dataDirectory, installationsRoot, serveLogPath } from '@tagma/server/installation/contract/wire/layout';
@@ -434,6 +435,7 @@ app.whenReady().then(() => {
   new ViewWindows(fronts, PRELOAD, projects).install();
   new Folders(fronts).install();
   new Appearance(fronts).install();
+  new MediaGrants((contents) => BrowserWindow.fromWebContents(contents)).guardFrames(session.defaultSession);
   if (data !== null) serveBrowser(fronts, data, projects, keys);
   projects.create(surfaceUrl);
 
