@@ -11,8 +11,10 @@ export const freePorts = (): Ports => {
   return ports as unknown as Ports;
 };
 
+const INHERITED = new Set(['PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'USER', 'LOGNAME', 'SHELL']);
+
 export const worldEnv = (root: string, data: string, ports: Ports): Record<string, string | undefined> => ({
-  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('TAGMA_'))),
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => INHERITED.has(key) || key.startsWith('RUNLITH_'))),
   HOME: join(root, 'home'),
   TAGMA_DATABASE_PATH: join(data, 'tagma.sqlite'),
   TAGMA_SEED_DIRECTORY: join(root, 'seeds'),

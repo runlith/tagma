@@ -126,6 +126,7 @@ it.live(
       mkdirSync(checkout, { recursive: true });
       const added = yield* op(origin, 'add_project', { name: 'tools', rootPath: checkout, storage: 'stealth' });
       const projectId = (added.body as { project: { id: number } }).project.id;
+      expect(yield* op(origin, 'save_console_key', { provider: 'muse', key: 'step-back' })).toMatchObject({ status: 200 });
       const born = yield* op(origin, `create_thread?project=${projectId}`, { approvalMode: 'trust' });
       expect(born).toMatchObject({ status: 200, body: { snapshot: { thread: { id: expect.any(String) } } } });
       const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
