@@ -1,6 +1,6 @@
 import type { ThemeMode } from '@tagma/server/appearance/contract/wire/format';
 
-export const BOOT_STYLE = 'appearance-boot';
+const BOOT_STYLE = 'appearance-boot';
 
 const STILL = '*,*::before,*::after{transition:none!important}';
 

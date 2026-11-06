@@ -1,4 +1,4 @@
-import { contrastOf, opaqueOver } from '@tagma/server/appearance/contract/wire/colour';
+import { readsLight } from '@tagma/server/appearance/contract/wire/colour';
 import type { ITheme, Terminal } from '@xterm/xterm';
 
 export interface EngineOptions {
@@ -63,12 +63,8 @@ export function terminalFontFamily(fontFamily: string | undefined): string {
 const LIGHT_BACKGROUND_CONTRAST = 4.5;
 const DARK_BACKGROUND_CONTRAST = 3;
 
-const SURFACES = { dark: '#0a0a0a', light: '#ffffff' } as const;
-
 export function terminalMinimumContrastRatio(background: string | undefined, surface: 'dark' | 'light'): number {
-  const ground = opaqueOver(background, SURFACES[surface]);
-  if (ground === null) return DARK_BACKGROUND_CONTRAST;
-  return contrastOf('#000000', ground) >= contrastOf('#ffffff', ground) ? LIGHT_BACKGROUND_CONTRAST : DARK_BACKGROUND_CONTRAST;
+  return readsLight(background, surface) ? LIGHT_BACKGROUND_CONTRAST : DARK_BACKGROUND_CONTRAST;
 }
 
 const LIGATURE_FONTS = [

@@ -9,7 +9,7 @@ import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
-import { Appearance, type BootPaint, PAINT_KEY } from './Appearance.svelte.js';
+import { Appearance } from './Appearance.svelte.js';
 
 const PROJECT = { id: 1, name: 'one', kind: 'folder' };
 
@@ -95,7 +95,7 @@ test('a theme chosen in one window paints it in every window, and the first fram
 
   for (const window of [first, second]) {
     expect(window.appearance.look).toMatchObject({ id: 'nord.nord', mode: 'dark', terminal: { background: '#2e3440' } });
-    const boot = JSON.parse(window.storage.getItem(PAINT_KEY) ?? 'null') as BootPaint;
+    const boot = JSON.parse(window.storage.getItem('appearance.paint') ?? 'null') as { variants: Record<string, { declarations: string }> };
     expect(Object.keys(boot.variants)).toEqual(['dark']);
     expect(boot.variants.dark?.declarations).toContain('--background:#2e3440;');
   }

@@ -1,6 +1,6 @@
 import { Service } from '@runlith/layer/key';
 
-export type ThemeMode = 'light' | 'dark';
+type ThemeMode = 'light' | 'dark';
 
 export type Look = {
   readonly id: string;

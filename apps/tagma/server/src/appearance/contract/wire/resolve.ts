@@ -2,7 +2,7 @@ import { hexOf, withAlpha } from './colour.js';
 import { ANSI_KEYS, type Palette, type ThemeMode, type ThemeVariant } from './format.js';
 import { CHAT_TOKENS, ELEVATION_DARK, FIXED, HANDS, SPEAKERS, TAGMA, type Token } from './tagma.js';
 
-export type TerminalPalette = { readonly [K in (typeof ANSI_KEYS)[number]]: string } & {
+type TerminalPalette = { readonly [K in (typeof ANSI_KEYS)[number]]: string } & {
   readonly background: string;
   readonly foreground: string;
   readonly cursor: string;

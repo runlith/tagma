@@ -12,7 +12,7 @@ import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { terminalThemeDark, terminalThemeLight } from '@tagma/server/executions/contract/wire/terminalAppearance';
 import { resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import { catalogTheme } from '$lib/shared/terminalThemes.js';
-import type { Look, ThemeMode } from '$lib/shared/Theme.js';
+import type { Look } from '$lib/shared/Theme.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 
 await loadCatalog();
@@ -89,7 +89,7 @@ async function appearance(
   return { owner, stop };
 }
 
-const lookOf = (mode: ThemeMode): Look => ({ id: 'tagma', mode, terminal: resolve(undefined, mode).terminal });
+const lookOf = (mode: Look['mode']): Look => ({ id: 'tagma', mode, terminal: resolve(undefined, mode).terminal });
 
 const theme: { look: Look } = { look: lookOf('dark') };
 

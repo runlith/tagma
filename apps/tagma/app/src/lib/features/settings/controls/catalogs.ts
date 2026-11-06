@@ -13,7 +13,7 @@ export interface ChoiceSource {
   readonly entries: readonly CatalogEntry[];
 }
 
-export type ChoiceSet = { readonly of: SettingChoiceSet; readonly source: KeyClass<string, ChoiceSource> };
+type ChoiceSet = { readonly of: SettingChoiceSet; readonly source: KeyClass<string, ChoiceSource> };
 
 export const ChoiceSets = Point.define<ChoiceSet>()('ChoiceSets', { tier: 'app', key: (set) => set.of });
 

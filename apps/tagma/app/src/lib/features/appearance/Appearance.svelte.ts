@@ -16,9 +16,9 @@ import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
 import { type Painting, paintWith, sheetOf } from './paint.js';
 
-export const PAINT_KEY = 'appearance.paint';
+const PAINT_KEY = 'appearance.paint';
 
-export type BootPaint = {
+type BootPaint = {
   readonly choice: AppearanceMode;
   readonly variants: { readonly [M in ThemeMode]?: { readonly declarations: string; readonly chrome: string } };
 };
