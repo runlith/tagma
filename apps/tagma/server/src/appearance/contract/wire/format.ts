@@ -4,8 +4,10 @@ import { COLOUR_PATTERN } from './colour.js';
 export const THEME_MODES = ['light', 'dark'] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 
-const Colour = Schema.String.check(Schema.isPattern(COLOUR_PATTERN)).annotate({
-  description: 'An opaque colour: #rrggbb, or oklch(L C H) with L from 0 to 1. Tagma derives every translucent value itself.',
+const COLOUR_FORM = '#rrggbb, or oklch(L C H) with L and C from 0 to 1 and H in degrees under 1000';
+
+const Colour = Schema.String.check(Schema.isPattern(COLOUR_PATTERN, { message: `write a colour as ${COLOUR_FORM}` })).annotate({
+  description: `An opaque colour: ${COLOUR_FORM}. Tagma derives every translucent value itself.`,
 });
 
 const keyed = <const Keys extends readonly string[]>(keys: Keys, meanings: { readonly [K in Keys[number]]: string }) =>

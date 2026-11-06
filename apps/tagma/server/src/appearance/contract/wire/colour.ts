@@ -19,7 +19,7 @@ const toRgb = useMode(modeRgb);
 const toOklch = useMode(modeOklch);
 const intoSrgb = toGamut('rgb', 'oklch');
 
-export const COLOUR_PATTERN = /^(?:#[0-9a-fA-F]{6}|oklch\(\s*(?:0|1|0?\.\d+|1\.0+)\s+(?:0|0?\.\d+|\d+(?:\.\d+)?)\s+\d+(?:\.\d+)?\s*\))$/u;
+export const COLOUR_PATTERN = /^(?:#[0-9a-fA-F]{6}|oklch\(\s*(?:0|1|0?\.\d+|1\.0+)\s+(?:0|1|0?\.\d+|1\.0+)\s+\d{1,3}(?:\.\d+)?\s*\))$/u;
 
 export type Lch = { readonly l: number; readonly c: number; readonly h: number };
 

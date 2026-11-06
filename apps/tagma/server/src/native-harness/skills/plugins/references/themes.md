@@ -23,7 +23,7 @@ export default definePlugin({
 
 ## What a look sets
 
-Every key is optional: one left out keeps Tagma's value for that look, so a theme stays small and keeps working when Tagma adds a colour. A colour is `#rrggbb` or `oklch(L C H)`, always opaque; Tagma derives every border, hover, selection, ring and shadow from them.
+Every key is optional: one left out keeps Tagma's value for that look, so a theme stays small and keeps working when Tagma adds a colour. A colour is `#rrggbb` or `oklch(L C H)` with L and C from 0 to 1 and H in degrees, always opaque; Tagma derives every border, hover, selection, ring and shadow from them.
 
 - `surfaces`: `chrome` (rail, top and status bars), `background` (feed and pages), `field` (inputs), `raised` (cards), `popover` (menus, palette), `sunken` (code blocks), `muted`, `accent`.
 - `text`: `foreground`, `muted` (hints, stamps), `primary` (the primary action).

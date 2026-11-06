@@ -179,6 +179,11 @@ const REFUSED = [
       "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
   },
   {
+    declared: `  themes: { round: { title: 'Round', dark: { signals: { failure: 'oklch(0.7 0.19 ${'9'.repeat(309)})' } } } },`,
+    step: 'check',
+    reason: 'contributes.themes: write a colour as #rrggbb, or oklch(L C H) with L and C from 0 to 1 and H in degrees under 1000',
+  },
+  {
     declared:
       "  tools: {\n    loads: tool({ description: 'Load a module.', audience: 'agents', input: z.object({ name: z.string() }), run: async ({ name }) => String(require(name)) }),",
     step: 'bundle',

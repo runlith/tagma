@@ -39,6 +39,10 @@ const REFUSED: readonly { readonly contributes: Readonly<Record<string, unknown>
     reason:
       "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
   },
+  ...[`oklch(0.7 ${'9'.repeat(309)} 20)`, `oklch(0.7 0.19 ${'9'.repeat(309)})`].map((failure) => ({
+    contributes: { themes: { wide: { title: 'Wide', dark: { signals: { failure } } } } },
+    reason: 'contributes.themes: write a colour as #rrggbb, or oklch(L C H) with L and C from 0 to 1 and H in degrees under 1000',
+  })),
 ];
 
 it.live('a manifest whose points do not agree with each other refuses its install with the point and the reason', () =>
