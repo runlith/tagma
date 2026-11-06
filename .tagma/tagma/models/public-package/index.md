@@ -67,6 +67,12 @@ fields:
       },
       {
         "at": "src/plugin/points.generated.ts"
+      },
+      {
+        "at": "src/plugin/bundling.ts",
+        "for": [
+          "3d78b068"
+        ]
       }
     ],
     "id": "@runlith/tagma"
