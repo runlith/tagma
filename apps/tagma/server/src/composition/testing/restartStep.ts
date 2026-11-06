@@ -5,7 +5,7 @@ export const RESTART_STEP_ENV = 'RESTART_RIG_STEP';
 const WHOLE_SECOND = '.000Z';
 
 export const restartStep: ThreadFormStep = {
-  name: '20261031000000_restart_rig_whole_second',
+  name: '99991231235959_restart_rig_whole_second',
   samples: {
     entry: { type: 'message', id: 'm', role: 'user', text: 'hello', occurredAt: `2026-01-01T00:00:00${WHOLE_SECOND}` },
   },
