@@ -1,6 +1,5 @@
 import type { Applied, Envelope } from '../rule';
-import { selects } from './implementations';
-import { ruleOf } from './registry';
+import { implementationOf, ruleOf } from './registry';
 
 const MIB = 1024 * 1024;
 
@@ -214,8 +213,9 @@ export const calibratingOf = (
   if (!isCalibratedBuiltin(inspection.builtin)) return { kind: 'none' };
   const subject = subjectOf(paths, sides);
   if (known !== undefined && fitsCalibration(known, subject.files, subject.bytes)) return { kind: 'known', calibration: known };
+  const { selects } = implementationOf(inspection.builtin);
   const rest = function* (): Iterable<string> {
-    for (const path of listed) if (selects(inspection, path)) yield path;
+    for (const path of listed) if (selects(inspection.params, path)) yield path;
   };
   const kept = probeOf(paths, rest(), (path) => sides.reduce((sum, side) => sum + (side.size(path) ?? 0), 0));
   const probe = spreadProbe(kept, sides);
