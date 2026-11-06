@@ -61,20 +61,12 @@ export const readApproves = Effect.fnUntraced(function* (
 
 export const openQuestions = (db: MachineStore['Service']['db']) =>
   db
-    .select({
-      id: sql<string>`${threadEntry.threadId}`.as('id'),
-      approver: sql<string | null>`${entryField(threadEntry.entry, 'approver')}`.as('approver'),
-      declined: sql<string | null>`${entryField(threadEntry.entry, 'declinedBy')}`.as('declined'),
-    })
+    .select({ id: sql<string>`${threadEntry.threadId}`.as('id') })
     .from(sql`${threadEntry} indexed by ${sql.identifier(ENTRY_OPEN_QUESTION_INDEX)}`)
     .where(sql`${threadEntry.type} = 'question' and ${entryField(threadEntry.entry, 'status')} = 'open'`)
     .union(
       db
-        .select({
-          id: sql<string>`${thread.id}`.as('id'),
-          approver: sql<string | null>`${entryField(thread.pendingInteraction, 'approver')}`.as('approver'),
-          declined: sql<string | null>`${entryField(thread.pendingInteraction, 'declinedBy')}`.as('declined'),
-        })
+        .select({ id: sql<string>`${thread.id}`.as('id') })
         .from(sql`${thread} indexed by ${sql.identifier(THREAD_OPEN_QUESTION_INDEX)}`)
         .where(sql`${entryField(thread.pendingInteraction, 'status')} = 'open'`),
     )
@@ -91,7 +83,7 @@ export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) 
     const standing = yield* units.read((unit) =>
       unit.run(
         db
-          .selectDistinct({ id: open.id })
+          .select({ id: open.id })
           .from(open)
           .innerJoin(threadRecord, eq(threadRecord.id, open.id))
           .innerJoin(parent, eq(parent.id, threadRecord.parentId))
@@ -106,7 +98,7 @@ export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) 
     const standing = yield* units.read((unit) =>
       unit.run(
         db
-          .selectDistinct({ id: open.id })
+          .select({ id: open.id })
           .from(open)
           .innerJoin(threadRecord, eq(threadRecord.id, open.id))
           .where(sql`${threadRecord.id} in ${among(threadIds)} or ${threadRecord.parentId} in ${among(threadIds)}`),

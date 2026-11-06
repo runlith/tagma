@@ -66,7 +66,7 @@ export const makePluginQuestions = Effect.fnUntraced(function* (input: {
     const standing = yield* units.read((unit) =>
       unit.run(
         db
-          .select({ id: open.id, approver: open.approver, declined: open.declined, plugin, projectId: threadRecord.projectId })
+          .select({ id: open.id, plugin, projectId: threadRecord.projectId })
           .from(open)
           .innerJoin(threadMandate, eq(threadMandate.id, open.id))
           .innerJoin(threadRecord, eq(threadRecord.id, open.id))
@@ -77,14 +77,12 @@ export const makePluginQuestions = Effect.fnUntraced(function* (input: {
           ),
       ),
     );
-    const moved = new Set<string>();
-    for (const row of standing) {
-      if (row.declined !== null || moved.has(row.id)) continue;
-      const wanted = row.projectId === null ? null : yield* owner(row.plugin, row.projectId);
-      if (every || row.approver !== (wanted?.approver ?? null)) moved.add(row.id);
-    }
     const questions = (yield* harness).runs.questions();
-    for (const threadId of moved) yield* questions.reroute(threadId);
+    for (const row of standing) {
+      const wanted = row.projectId === null ? null : ((yield* owner(row.plugin, row.projectId))?.approver ?? null);
+      const routed = (yield* questions.open(row.id)).filter((entry) => entry.declinedBy === undefined);
+      if (every ? routed.length > 0 : routed.some((entry) => (entry.approver ?? null) !== wanted)) yield* questions.reroute(row.id);
+    }
   });
 
   const follow = (bound: Bound, every: boolean): void => {
