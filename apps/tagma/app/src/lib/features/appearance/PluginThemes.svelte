@@ -1,16 +1,12 @@
 <script lang="ts">
   import { THEMES_POINT, themeIdOf } from '@tagma/server/appearance/contract/wire/format';
-  import type { PluginComponent } from '@tagma/server/plugins/contract/wire/rows';
+  import type { CardPartProps } from '$lib/features/plugins/parts.js';
   import Swatches from '$lib/features/settings/controls/Swatches.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Appearance } from './Appearance.svelte.js';
 
-  let {
-    plugin,
-    components,
-    runEverywhere,
-  }: { plugin: string; components: readonly PluginComponent[]; runEverywhere: () => Promise<boolean> } = $props();
+  let { plugin, components, runEverywhere }: CardPartProps = $props();
 
   const appearance = Appearance.use();
 

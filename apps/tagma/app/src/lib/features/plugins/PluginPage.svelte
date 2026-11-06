@@ -8,6 +8,7 @@
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Callout from '@runlith/chat-ui/Callout.svelte';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -20,7 +21,7 @@
   import Asked from '$lib/features/plugins/Asked.svelte';
   import Gives from '$lib/features/plugins/Gives.svelte';
   import Keys from '$lib/features/plugins/Keys.svelte';
-  import PluginThemes from '$lib/features/appearance/PluginThemes.svelte';
+  import { CardParts } from '$lib/features/plugins/parts.js';
   import Threads from '$lib/features/plugins/Threads.svelte';
   import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
@@ -51,6 +52,7 @@
 
   const repo = PluginsRepo.use();
   const secrets = SecretsRepo.use();
+  const parts = CardParts.use();
 
   const row = $derived(item.row);
   const asks = $derived(repo.asks.key({ projectId: project.id, id: row.id }));
@@ -218,7 +220,11 @@
     <Threads projectId={project.id} plugin={row.id} home={project.name} />
 
     <Keys plugin={row.id} />
-    <PluginThemes plugin={row.id} components={row.components} runEverywhere={() => enable(true, 'user')} />
+    <PointView
+      point={parts}
+      props={{ plugin: row.id, components: row.components, runEverywhere: () => enable(true, 'user') }}
+      only={(part) => row.components.some((component) => component.kind === 'contribution' && component.name === part.contribution)}
+    />
     <Gives components={row.components} ignored={row.ignored} options={[]} />
   </div>
 
