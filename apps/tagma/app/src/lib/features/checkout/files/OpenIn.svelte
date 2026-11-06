@@ -2,8 +2,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import Copy from '@lucide/svelte/icons/copy';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
-  import { Host } from '@runlith/layer/Host';
-  import { spellChord } from '$lib/shared/chordSpelling.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { cn } from '$lib/shared/utils.js';
@@ -13,8 +12,7 @@
   let { file, line }: { file: OutsideFile; line?: (() => number | null) | undefined } = $props();
 
   const outside = Outside.use();
-  const apple = Host.use().apple;
-  const chord = (key: string): string => spellChord({ key, meta: apple, ctrl: !apple, alt: true, shift: false }, apple);
+  const keymap = Keymap.use();
 
   let open = $state(false);
   let at = $state<number | null>(null);
@@ -66,7 +64,7 @@
         <DropdownMenu.Label>{at === null ? 'Open in' : `Open at line ${at}`}</DropdownMenu.Label>
         {#each outside.editors as editor (editor.id)}
           <DropdownMenu.Item
-            keys={editor.id === chosen?.id ? chord('O') : null}
+            keys={editor.id === chosen?.id ? keymap.spell('file.openIn') : null}
             onSelect={() => void outside.open(here(), editor.id)}
             data-open-in-editor={editor.id}
           >
@@ -80,7 +78,7 @@
         <DropdownMenu.Item icon={FolderOpen} onSelect={() => void outside.reveal(file)}>{outside.finder}</DropdownMenu.Item>
         <DropdownMenu.Separator />
       {/if}
-      <DropdownMenu.Item icon={Copy} keys={chord('C')} onSelect={() => copy(false)}>Copy path</DropdownMenu.Item>
+      <DropdownMenu.Item icon={Copy} keys={keymap.spell('file.copy-path')} onSelect={() => copy(false)}>Copy path</DropdownMenu.Item>
       <DropdownMenu.Item icon={Copy} onSelect={() => copy(true)}>Copy path:line</DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>

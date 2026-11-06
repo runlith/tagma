@@ -1,6 +1,5 @@
 <script lang="ts">
   import Eye from '@lucide/svelte/icons/eye';
-  import { Host } from '@runlith/layer/Host';
   import { FileOpener } from './FileOpener.svelte.js';
   import OpenIn from './OpenIn.svelte';
   import { Outside, type OutsideFile } from './Outside.svelte.js';
@@ -53,7 +52,6 @@
   const tabs = Tabs.use();
   const opener = FileOpener.use();
   const outside = Outside.use();
-  const apple = Host.use().apple;
   const keymap = Keymap.use();
 
   let editor = $state<Editor>();
@@ -110,29 +108,31 @@
     marks.wraps.set(WRAP, !wrap);
   }
 
-  function keys(event: KeyboardEvent): void {
-    if (event.altKey && event.code === 'KeyZ' && !event.metaKey && !event.ctrlKey) {
-      event.preventDefault();
-      flip();
-    }
-  }
+  let section = $state<HTMLElement>();
 
-  function near(event: KeyboardEvent): void {
-    if (!(apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return;
-    const act =
-      event.altKey && !event.shiftKey && event.code === 'KeyO' && outside.chosen !== null
-        ? () => void outside.open({ ...outsideFile, line: focusLine() })
-        : event.altKey && !event.shiftKey && event.code === 'KeyC'
-          ? () => void navigator.clipboard.writeText(tab.path)
-          : event.shiftKey && !event.altKey && event.code === 'KeyV' && isPreviewable(tab.path) && onPreview !== undefined
-            ? onPreview
-            : staged && event.shiftKey && !event.altKey && event.code === 'KeyE'
-              ? show
-              : null;
-    if (act === null) return;
-    event.preventDefault();
-    act();
-  }
+  const focused = (): boolean => section?.contains(document.activeElement) === true;
+
+  $effect(() => {
+    const near = (action: string, run: (() => void) | null) =>
+      keymap.handle(action, () => {
+        if (run === null || !focused()) return false;
+        run();
+        return true;
+      });
+    const releases = [
+      keymap.handle('file.wrap', () => {
+        flip();
+        return true;
+      }),
+      near('file.openIn', outside.chosen === null ? null : () => void outside.open({ ...outsideFile, line: focusLine() })),
+      near('file.copy-path', () => void navigator.clipboard.writeText(tab.path)),
+      near('file.preview', isPreviewable(tab.path) ? (onPreview ?? null) : null),
+      near('files.explorer', staged ? show : null),
+    ];
+    return () => {
+      for (const release of releases) release();
+    };
+  });
 
   const ICON =
     'grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground';
@@ -150,14 +150,11 @@
   </div>
 {/snippet}
 
-<svelte:window onkeydown={keys} />
-
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section
+  bind:this={section}
   class="flex h-full min-h-0 min-w-0 flex-col bg-background"
   aria-label={tab.path}
   data-file-tab={tab.path}
-  onkeydown={near}
   onfocusin={held.front}
 >
   {#if headed}
@@ -168,14 +165,14 @@
         >
       {/if}
       {#if onPreview !== undefined && isPreviewable(tab.path)}
-        <Tooltip text="Open preview" keys={keymap.spellText('Mod+Shift+V')}>
+        <Tooltip text="Open preview" keys={keymap.spell('file.preview')}>
           <button type="button" class={ICON} aria-label="Open preview" onclick={onPreview}>
             <Eye class="size-3.5" />
           </button>
         </Tooltip>
       {/if}
       <OpenIn file={outsideFile} line={focusLine} />
-      <Tooltip text="Wrap lines" keys={keymap.spellText('Alt+Z')}>
+      <Tooltip text="Wrap lines" keys={keymap.spell('file.wrap')}>
         <button
           type="button"
           class={cn(ICON, wrap && 'bg-selected text-foreground')}

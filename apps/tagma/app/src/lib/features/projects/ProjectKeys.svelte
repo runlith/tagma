@@ -41,15 +41,6 @@
     if (event.isComposing) return;
     const command = stripCommandOf(event, host.os, cycle !== null);
     if (command === null) return;
-    if (command.kind === 'nth' || command.kind === 'last') {
-      const projects = strip.projects;
-      const target = command.kind === 'last' ? projects.at(-1) : projects[command.place - 1];
-      if (target === undefined) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (!event.repeat) go(target);
-      return;
-    }
     event.preventDefault();
     event.stopPropagation();
     if (command.kind === 'cancel') {

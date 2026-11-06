@@ -24,6 +24,7 @@ import { ActionRunner } from '$lib/app/keys/ports.js';
 import { ActionCatalog, Actions } from '$lib/features/workspace/action.js';
 import { ActionRegistry } from './ActionRegistry.svelte.js';
 import { actions } from './actions.js';
+import { history } from './history.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 import { MenuParts, MenuSignal, TopBarParts, WindowParts } from '$lib/shared/window/parts.js';
 
@@ -41,6 +42,7 @@ export const FrameLayer = Layer.mergeAll(
   }),
   ColumnRegistry,
   Actions.contribute('chrome', { id: 'chrome', area: 'Window', actions }),
+  Actions.contribute('history', { id: 'history', area: 'Window', actions: history }),
   Bar,
   Frame,
   WireState,

@@ -2,20 +2,20 @@
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import ViewTab from '$lib/shared/ui/ViewTab.svelte';
+  import { COLUMN_ACTIONS } from './keys.js';
   import { COLUMN_VIEWS, Column, type ColumnView } from './Column.svelte.js';
 
   const column = Column.use();
   const keymap = Keymap.use();
 
   const LABEL: Record<ColumnView, string> = { files: 'Files', search: 'Search', git: 'Git' };
-  const CHORD: Record<ColumnView, string> = { files: 'Mod+Shift+E', search: 'Mod+Shift+F', git: 'Mod+Shift+G' };
 
   let { changes = 0 }: { changes?: number } = $props();
 </script>
 
 <div class="flex h-8 shrink-0 items-center gap-1 border-b px-1" role="tablist" aria-label="Checkout" data-column-tabs>
   {#each COLUMN_VIEWS as view (view)}
-    <Tooltip text={LABEL[view]} keys={keymap.spellText(CHORD[view])}>
+    <Tooltip text={LABEL[view]} keys={keymap.spell(COLUMN_ACTIONS[view])}>
       <ViewTab selected={column.view === view} onclick={() => column.show(view)} data-column-tab={view}>
         {LABEL[view]}
         {#if view === 'git' && changes > 0}

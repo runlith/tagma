@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
+import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
 import { waitUntil } from '@runlith/testing/flush';
 import { expect, test } from 'vitest';
 import { mountShell } from '$lib/app/testing.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+import { resolveKeys } from '$lib/app/keys/resolve.js';
+import { type Action, keyedOf } from '$lib/features/workspace/action.js';
+import { actions } from './actions.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -57,17 +61,19 @@ test('a sidebar file previews Markdown and returns to its source in place, inclu
     ),
     { at: { projectId: 5, branch: null } },
   );
+  app.get(Keymap).set(resolveKeys(keyedOf(actions as readonly Action[], app.get(Host)), {}, []));
   try {
     const target = app.draw(FilePane as never, { pane, close: () => undefined });
     flushSync();
     const open = (keyboard = false) => {
       const button = target.querySelector<HTMLButtonElement>('button[aria-label="Open preview"]');
       expect(button).not.toBeNull();
-      if (keyboard)
+      if (keyboard) {
+        button!.focus();
         button!.dispatchEvent(
-          new KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+          new KeyboardEvent('keydown', { key: 'V', code: 'KeyV', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }),
         );
-      else button!.click();
+      } else button!.click();
       flushSync();
       source.body = { kind: 'text', readOnly: null, size: 20 };
       source.revision += 1;

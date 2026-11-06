@@ -206,8 +206,8 @@
       bound('tab.close', () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
       bound('tab.reopen', () => void act(() => closedPages.reopen())),
       bound('browser.address', edit),
-      bound('browser.back', () => navigate('back')),
-      bound('browser.forward', () => navigate('forward')),
+      bound('history.back', () => navigate('back')),
+      bound('history.forward', () => navigate('forward')),
       bound('browser.reload', () => navigate('reload')),
       bound('browser.find', seek),
       ...(native

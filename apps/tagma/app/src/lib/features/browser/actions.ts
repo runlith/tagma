@@ -26,8 +26,6 @@ export const actions: ActionList = [
     },
   },
   page('browser.address', 'Edit the page address', ['Mod+L'], []),
-  page('browser.back', 'Go back in the page', ['Mod+BracketLeft']),
-  page('browser.forward', 'Go forward in the page', ['Mod+BracketRight']),
   page('browser.reload', 'Reload the page', ['Mod+R'], []),
   page('browser.find', 'Find in the page', ['Mod+F']),
   page('page.zoom-in', 'Zoom the page in', ['Mod+Equal', 'Mod+Shift+Equal']),

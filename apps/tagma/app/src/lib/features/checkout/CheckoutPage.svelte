@@ -3,13 +3,14 @@
   import { Seam } from '@runlith/seam/Seam.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { untrack } from 'svelte';
-  import { Column } from '$lib/features/checkout/files/Column.svelte.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { COLUMN_VIEWS, Column } from '$lib/features/checkout/files/Column.svelte.js';
   import ColumnTabs from '$lib/features/checkout/files/ColumnTabs.svelte';
   import { Documents } from '$lib/features/checkout/files/Documents.svelte.js';
   import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
   import EditorArea from '$lib/features/checkout/files/EditorArea.svelte';
   import ExplorerView from '$lib/features/checkout/files/ExplorerView.svelte';
-  import { commandOf, typingIn, underOverlay } from '$lib/features/checkout/files/keys.js';
+  import { COLUMN_ACTIONS, TAB_PLACES, tabPlace, typingIn, underOverlay } from '$lib/features/checkout/files/keys.js';
   import SearchView from '$lib/features/checkout/files/SearchView.svelte';
   import { isPreviewable } from '$lib/features/checkout/files/tab.js';
   import { Tabs } from '$lib/features/checkout/files/Tabs.svelte.js';
@@ -30,6 +31,7 @@
   const documents = Documents.use();
   const door = GraphDoor.use();
   const router = Router.use();
+  const keymap = Keymap.use();
 
   const linked = $derived(currentCommit(router));
   $effect(() => {
@@ -41,37 +43,66 @@
   const seam = new Seam(seams.seam(CHECKOUT_SEAM), { onCommit: (size) => seams.set(CHECKOUT_SEAM, size) });
 
   function keys(event: KeyboardEvent): void {
-    if (event.defaultPrevented || underOverlay(event.target)) return;
+    if (event.defaultPrevented || event.key !== 'Escape' || underOverlay(event.target)) return;
     const active = tabs.active;
-    if (event.key === 'Escape') {
-      if (active === null || active.kind === 'diff' || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (!onScreen.mainFocused || typingIn(event.target)) return;
-      event.preventDefault();
-      tabs.close(active.id);
-      return;
-    }
-    const command = commandOf(event);
-    if (command === null) return;
-    if (command.kind === 'column') column.show(command.view);
-    else if (command.kind === 'close') {
-      if (active === null) return;
-      tabs.close(active.id);
-    } else if (command.kind === 'reopen') tabs.reopen();
-    else if (command.kind === 'step') tabs.step(command.direction);
-    else if (command.kind === 'nth') tabs.nth(command.place);
-    else if (command.kind === 'keep') {
-      if (active !== null) {
-        tabs.keep(active.id);
-        void documents.flush({ projectId: door.aim.projectId, rootId: active.rootId }, active.path);
-      }
-    } else if (active !== null && isPreviewable(active.path) && (active.kind === 'file' || active.kind === 'preview')) {
-      tabs.open(
-        { rootId: active.rootId, branch: active.branch, path: active.path, kind: active.kind === 'file' ? 'preview' : 'file' },
-        'open',
-      );
-    } else return;
+    if (active === null || active.kind === 'diff' || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (!onScreen.mainFocused || typingIn(event.target)) return;
     event.preventDefault();
+    tabs.close(active.id);
   }
+
+  function keep(): boolean {
+    const active = tabs.active;
+    if (active === null) return false;
+    tabs.keep(active.id);
+    void documents.flush({ projectId: door.aim.projectId, rootId: active.rootId }, active.path);
+    return true;
+  }
+
+  function preview(): boolean {
+    const active = tabs.active;
+    if (active === null || !isPreviewable(active.path) || (active.kind !== 'file' && active.kind !== 'preview')) return false;
+    tabs.open(
+      { rootId: active.rootId, branch: active.branch, path: active.path, kind: active.kind === 'file' ? 'preview' : 'file' },
+      'open',
+    );
+    return true;
+  }
+
+  $effect(() => {
+    const served = (action: string, run: () => boolean) => keymap.handle(action, () => !underOverlay(document.activeElement) && run());
+    const done = (run: () => void) => () => {
+      run();
+      return true;
+    };
+    const releases = [
+      ...COLUMN_VIEWS.map((view) =>
+        served(
+          COLUMN_ACTIONS[view],
+          done(() => column.show(view)),
+        ),
+      ),
+      served(
+        'tab.next',
+        done(() => tabs.step(1)),
+      ),
+      served(
+        'tab.previous',
+        done(() => tabs.step(-1)),
+      ),
+      ...Array.from({ length: TAB_PLACES }, (_, index) =>
+        served(
+          tabPlace(index + 1),
+          done(() => tabs.nth(index + 1)),
+        ),
+      ),
+      served('file.keep', keep),
+      served('file.preview', preview),
+    ];
+    return () => {
+      for (const release of releases) release();
+    };
+  });
 </script>
 
 <svelte:window onkeydown={keys} />

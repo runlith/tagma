@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import Plus from '@lucide/svelte/icons/plus';
-  import { Host } from '@runlith/layer/Host';
   import type { Snippet } from 'svelte';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { buttonVariants } from '$lib/shared/ui/button/index.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -14,7 +14,7 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
   import { labelOf } from '$lib/features/workspace/mark.js';
-  import { chordOf } from './words.js';
+  import { placeAction } from './actions.js';
   import { ProjectPrefetch } from './Prefetch.js';
   import PulseMarks from './PulseMarks.svelte';
   import { ProjectStrip } from './Strip.svelte.js';
@@ -30,8 +30,7 @@
   const prefetch = ProjectPrefetch.use();
   const workspace = Workspace.use();
   const shell = shellActs(ShellOps.use(), Notices.use());
-  const host = Host.use();
-  const chords = host.isDesktop && host.os === 'macos';
+  const keymap = Keymap.use();
   const aim = new ContextAim();
   let aimed = $state<Project | null>(null);
 
@@ -46,7 +45,8 @@
 {#snippet face(project: Project, current: boolean)}
   {@const label = labelOf(project)}
   {@const place = strip.projects.indexOf(project)}
-  {@const chord = chords ? chordOf(place, strip.projects.length) : null}
+  {@const action = placeAction(place, strip.projects.length)}
+  {@const chord = action === null ? null : keymap.spell(action)}
   <Tooltip text={label} keys={chord} side="bottom" class="flex min-w-0 flex-1">
     <span
       class="flex min-w-0 flex-1 items-center gap-1.5"

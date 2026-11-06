@@ -2,7 +2,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
-  import { Host } from '@runlith/layer/Host';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import Badge from '$lib/shared/ui/Badge.svelte';
   import RailMark from '$lib/shared/ui/RailMark.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -12,7 +12,8 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
   import { labelOf } from '$lib/features/workspace/mark.js';
-  import { chordOf, countOf, pulseWords } from './words.js';
+  import { countOf, pulseWords } from './words.js';
+  import { placeAction } from './actions.js';
   import { ProjectPrefetch } from './Prefetch.js';
   import { ProjectPulse } from './Pulse.svelte.js';
   import { glide, Reorder } from '$lib/shared/Reorder.svelte.js';
@@ -30,8 +31,7 @@
   const prefetch = ProjectPrefetch.use();
   const workspace = Workspace.use();
   const shell = shellActs(ShellOps.use(), Notices.use());
-  const host = Host.use();
-  const chords = host.isDesktop && host.os === 'macos';
+  const keymap = Keymap.use();
   const drops = MentionDrops.use();
   const reorder = new Reorder(
     () => strip.projects.map((project) => project.id),
@@ -134,7 +134,8 @@
     {#each reorder.arranged(strip.projects, (project) => project.id) as project, place (project.id)}
       {@const current = project.id === workspace.activeTileId}
       {@const counts = pulse.of(project.id)}
-      {@const chord = chords ? chordOf(place, strip.projects.length) : null}
+      {@const action = placeAction(place, strip.projects.length)}
+      {@const chord = action === null ? null : keymap.spell(action)}
       {@const label = labelOf(project)}
       {@const words = pulseWords(counts)}
       {@const carried = reorder.carried === project.id}

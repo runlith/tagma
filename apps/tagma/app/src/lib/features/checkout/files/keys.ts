@@ -1,41 +1,14 @@
-export type FilesCommand =
-  | { readonly kind: 'column'; readonly view: 'files' | 'search' | 'git' }
-  | { readonly kind: 'close' }
-  | { readonly kind: 'reopen' }
-  | { readonly kind: 'step'; readonly direction: 1 | -1 }
-  | { readonly kind: 'nth'; readonly place: number }
-  | { readonly kind: 'preview' }
-  | { readonly kind: 'keep' };
+import type { ColumnView } from './Column.svelte.js';
 
-export type Stroke = {
-  readonly code: string;
-  readonly metaKey: boolean;
-  readonly ctrlKey: boolean;
-  readonly altKey: boolean;
-  readonly shiftKey: boolean;
+export const COLUMN_ACTIONS: Readonly<Record<ColumnView, string>> = {
+  files: 'files.explorer',
+  search: 'files.search',
+  git: 'files.changes',
 };
 
-const COLUMNS = { KeyF: 'search', KeyE: 'files', KeyG: 'git' } as const;
+export const TAB_PLACES = 9;
 
-export function commandOf(stroke: Stroke): FilesCommand | null {
-  const mod = stroke.metaKey || stroke.ctrlKey;
-  if (stroke.altKey) return null;
-  if (stroke.ctrlKey && !stroke.metaKey && stroke.code === 'Tab') return { kind: 'step', direction: stroke.shiftKey ? -1 : 1 };
-  if (stroke.ctrlKey && !stroke.metaKey && !stroke.shiftKey && /^Digit[1-9]$/.test(stroke.code)) {
-    return { kind: 'nth', place: Number(stroke.code.slice(5)) };
-  }
-  if (!mod) return null;
-  if (stroke.shiftKey) {
-    if (stroke.code in COLUMNS) return { kind: 'column', view: COLUMNS[stroke.code as keyof typeof COLUMNS] };
-    if (stroke.code === 'KeyT') return { kind: 'reopen' };
-    if (stroke.code === 'KeyV') return { kind: 'preview' };
-    if (stroke.code === 'BracketRight') return { kind: 'step', direction: 1 };
-    if (stroke.code === 'BracketLeft') return { kind: 'step', direction: -1 };
-    return null;
-  }
-  if (stroke.code === 'KeyS') return { kind: 'keep' };
-  return stroke.code === 'KeyW' ? { kind: 'close' } : null;
-}
+export const tabPlace = (place: number): string => `tab.place-${place}`;
 
 const FLOATING = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
