@@ -1,7 +1,7 @@
 ---
 id: 01a18500-e4f2-7632-815c-0a9f371c55ee
 title: The operator's own input holds agent actions on the page until it has been quiet for five seconds
-ord: 27
+ord: 3
 tags: ["explanation"]
 edges:
   - kind: relates

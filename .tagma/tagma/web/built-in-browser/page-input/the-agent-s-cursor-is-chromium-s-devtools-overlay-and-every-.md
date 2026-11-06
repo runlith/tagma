@@ -1,7 +1,7 @@
 ---
 id: 01a18500-e258-7fef-a6ef-40bb29394a15
 title: The agent's cursor is Chromium's DevTools overlay, and every agent capture lifts our overlays for its own frame
-ord: 26
+ord: 2
 tags: ["explanation"]
 edges:
   - kind: relates

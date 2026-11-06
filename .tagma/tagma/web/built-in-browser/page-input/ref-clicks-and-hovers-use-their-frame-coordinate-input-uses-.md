@@ -1,7 +1,7 @@
 ---
 id: 01a184c8-ed02-7c9c-a5de-26790a53c2ac
 title: Ref clicks and hovers use their frame; coordinate input uses the painted viewport
-ord: 12
+ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
