@@ -348,7 +348,10 @@ const select = Effect.fnUntraced(function* (
       seen.add(at);
     }
     if (!focused)
-      return yield* inputMode(attached.profile, 'selecting a native control outside the keyboard focus order; choose it at the screen');
+      return yield* inputMode(
+        attached.profile,
+        `selecting ${aim.ref}, which ${seen.size} Tab stops did not reach in the keyboard focus order; choose it at the screen`,
+      );
     yield* markElement(state, attached, located);
     yield* attached.human.type(prefix);
     yield* humanKey(attached, 'Tab');
