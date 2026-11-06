@@ -7,7 +7,7 @@ import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { hostAddress } from '@runlith/executions/hostAddress';
 import { InstallationId } from '@runlith/executions/protocol/execution';
-import { Clock, Context, Data, Effect, Fiber, FileSystem, Layer, Predicate, Ref, Schedule } from 'effect';
+import { Clock, Context, Data, Effect, Fiber, FileSystem, Layer, Ref, Schedule } from 'effect';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
@@ -90,18 +90,14 @@ const fixture = Layer.effect(Fixture, makeFixture).pipe(
 );
 
 const alive = (pid: number) =>
-  Effect.try({
-    try: () => {
-      process.kill(pid, 0);
-      return true;
+  Effect.tryPromise({
+    try: async () => {
+      const ps = Bun.spawn(['ps', '-o', 'stat=', '-p', String(pid)], { stdout: 'pipe', stderr: 'ignore' });
+      const [state] = await Promise.all([new Response(ps.stdout).text(), ps.exited]);
+      return state.trim() !== '' && !state.trim().startsWith('Z');
     },
     catch: (cause) => new ProcessUnmeasured({ pid, cause }),
-  }).pipe(
-    Effect.catchIf(
-      (failure) => Predicate.hasProperty(failure.cause, 'code') && failure.cause.code === 'ESRCH',
-      () => Effect.succeed(false),
-    ),
-  );
+  });
 
 describe('the program road over a live execution host', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
