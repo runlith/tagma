@@ -245,7 +245,7 @@ const ensureWorld = kind(Ensure, (_params: {}, home: string) => setup(home).pipe
 layer(Layer.effect(Ensure, own(ensureWorld, {}, 'the server lifecycle is the subject')).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('ensure server', (it) => {
-  it.effect('while another channel runs on this Mac, neither tagma web nor tagma serve starts, and both name it and the switch', () =>
+  it.effect('while another channel runs on this Mac, neither tagma web nor tagma serve starts, and both name it and how to quit it', () =>
     Effect.gen(function* () {
       const { directory, tagma, spawnedTagma } = yield* Ensure;
       const files = yield* FileSystem.FileSystem;
@@ -266,7 +266,7 @@ layer(Layer.effect(Ensure, own(ensureWorld, {}, 'the server lifecycle is the sub
         expect(web.code).not.toBe(0);
         expect(web.err).toContain('channel-active');
         expect(web.err).toContain(url);
-        expect(web.err).toContain(`${CHANNEL.command} switch`);
+        expect(web.err).toContain(`${other.command} quit`);
         const serve = yield* spawnedTagma(['serve'], environment);
         expect(serve.code).toBe(1);
         expect(`${serve.out}${serve.err}`).toContain('channel-active');
