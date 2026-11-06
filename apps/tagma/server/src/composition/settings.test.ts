@@ -4,7 +4,7 @@ import { SETTING_DECLARATIONS } from './testing/settings.js';
 
 test('execution setting declarations of its own sections occupy one ordered span in the catalog', () => {
   const ids = SETTING_DECLARATIONS.keys.map((key) => key.id);
-  const own = new Set(EXECUTION_SETTING_SECTIONS().map((section) => section.id));
+  const own = new Set<string>(EXECUTION_SETTING_SECTIONS().map((section) => section.id));
   const expected = EXECUTION_SETTING_KEYS()
     .filter((key) => own.has(key.section))
     .map((key) => key.id);
