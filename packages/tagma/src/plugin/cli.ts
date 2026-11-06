@@ -3,6 +3,7 @@ import { watch } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { BuildFailed, buildPlugin, MANIFEST } from './build.js';
+import { pluginIdRefusal } from './checks.generated.js';
 import { pluginTemplate } from './template.js';
 
 const USAGE = [
@@ -33,6 +34,11 @@ const init = async (args: readonly string[]): Promise<number> => {
   }
   const directory = resolve(folder);
   const id = flag(args, '--id') ?? basename(directory);
+  const refused = pluginIdRefusal(id);
+  if (refused !== null) {
+    console.error(`${JSON.stringify(id)} cannot name a plugin: ${refused}`);
+    return 1;
+  }
   await mkdir(directory, { recursive: true });
   if ((await readdir(directory)).length > 0) {
     console.error(`${directory} is not empty: init writes a new plugin folder`);

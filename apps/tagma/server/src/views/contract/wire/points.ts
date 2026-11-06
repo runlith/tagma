@@ -1,6 +1,7 @@
 import { McpAppCsp } from '@runlith/mcp/apps';
 import { Schema } from 'effect';
-import { ToolEntry } from '../../../plugin-host/contract/wire/audience.js';
+import type { PluginFace, PointHeld } from '../../../platform/contract/wire/contribution.js';
+import { ToolEntry, TOOLS_FACE } from '../../../plugin-host/contract/wire/audience.js';
 
 export const ViewId = Schema.String.check(Schema.isPattern(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u), Schema.isMaxLength(40)).annotate({
   description: 'The view, named within its plugin: lowercase letters, digits and inner hyphens.',
@@ -76,3 +77,56 @@ export type LauncherEntry = typeof LauncherEntry.Type;
 
 export const LauncherEntries = Schema.Array(LauncherEntry).check(Schema.makeFilter(unique((entry: LauncherEntry) => entry.view, 'view')));
 export type LauncherEntries = typeof LauncherEntries.Type;
+
+export const VIEWS_FACE: PluginFace<ViewEntries> = { name: 'views', title: 'Pages inside Tagma', schema: ViewEntries };
+
+export const undeclaredViews = (sibling: PointHeld['sibling'], named: readonly string[]): string | null => {
+  const declared = new Set((sibling(VIEWS_FACE) ?? []).map((view) => view.id));
+  const unseen = [...new Set(named.filter((view) => !declared.has(view)))];
+  return unseen.length === 0 ? null : `names the view ${unseen.join(', ')}, which contributes.views does not declare`;
+};
+
+const viewsNamed = (entries: readonly { readonly view: string }[], { sibling }: PointHeld): string | null =>
+  undeclaredViews(
+    sibling,
+    entries.map((entry) => entry.view),
+  );
+
+export const RESULTS_FACE: PluginFace<ResultEntries> = {
+  name: 'results',
+  title: 'Pages that show what a tool did',
+  schema: ResultEntries,
+  refuses: (results, held) => {
+    const unseen = viewsNamed(results, held);
+    if (unseen !== null) return unseen;
+    const called = new Map((held.sibling(TOOLS_FACE) ?? []).map((tool) => [tool.name, tool.audience]));
+    const silent = results.filter((result) => {
+      const audience = called.get(result.tool);
+      return audience !== 'agents' && audience !== 'own';
+    });
+    return silent.length === 0
+      ? null
+      : `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`;
+  },
+};
+
+export const SURFACES_FACE: PluginFace<SectionEntries> = {
+  name: 'surfaces',
+  title: 'Sections in Tagma’s sidebar',
+  schema: SectionEntries,
+  refuses: viewsNamed,
+};
+
+export const PANES_FACE: PluginFace<SectionEntries> = {
+  name: 'panes',
+  title: 'Panels beside a thread',
+  schema: SectionEntries,
+  refuses: viewsNamed,
+};
+
+export const LAUNCHERS_FACE: PluginFace<LauncherEntries> = {
+  name: 'launchers',
+  title: 'Windows you open from the palette',
+  schema: LauncherEntries,
+  refuses: viewsNamed,
+};

@@ -3,21 +3,14 @@ import type { EndingInput } from '@runlith/tagma/plugin/protocol';
 import { Effect } from 'effect';
 import { ContributionPoint } from '../../platform/contract/service/contribution.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
-import { unservedTools } from '../../plugin-host/contract/service/tools.js';
-import { type PluginContribution, PluginPointRefused, type PluginRegister } from '../../plugins/contract/service/points.js';
-import { ENDED_REASON, EndingTools, PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import type { PluginContribution, PluginRegister } from '../../plugins/contract/service/points.js';
+import { ENDED_REASON, ENDINGS_FACE, type EndingTools, PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 
-export const ENDINGS = new ContributionPoint<never, EndingTools>('threads/endings', {
-  name: 'on',
-  title: 'Actions when a thread ends',
-  schema: EndingTools,
-});
+export const ENDINGS = new ContributionPoint<never, EndingTools>('threads/endings', ENDINGS_FACE);
 
 type Hook = { readonly tool: string; readonly contribution: PluginContribution<EndingTools> };
-
-const refused = (reason: string) => new PluginPointRefused({ point: ENDINGS.plugin.name, reason });
 
 const broke = (message: string) => new ThreadCallBroke({ cause: new Error(message) });
 
@@ -53,17 +46,15 @@ export const makeEndingDelivery = Effect.gen(function* () {
   });
 
   const register: PluginRegister<EndingTools> = (contribution) =>
-    Effect.suspend(() => {
-      const { plugin, value, sibling } = contribution;
+    Effect.sync(() => {
+      const { plugin, value } = contribution;
       const tool = value.ended;
-      if (tool === undefined) return Effect.succeed(() => undefined);
-      const unserved = unservedTools(sibling, [tool]);
-      if (unserved !== null) return Effect.fail(refused(unserved));
+      if (tool === undefined) return () => undefined;
       const hook: Hook = { tool, contribution };
       hooks.set(plugin.id, hook);
-      return Effect.succeed(() => {
+      return () => {
         if (hooks.get(plugin.id) === hook) hooks.delete(plugin.id);
-      });
+      };
     });
   const recipient: ThreadEventRecipient = {
     name: 'plugin endings',

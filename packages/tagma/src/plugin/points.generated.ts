@@ -95,4 +95,14 @@ export type PluginPoints = {
   }[];
 };
 
+export type BuildVerdict = {
+  readonly verdict: 'go';
+} | {
+  readonly verdict: 'pending';
+} | {
+  readonly verdict: 'stop';
+  readonly reason: string;
+  readonly thread?: string;
+};
+
 export const POINT_NAMES = ['agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'surfaces', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

@@ -7,10 +7,10 @@ import { Effect, PubSub, Schedule, Stream } from 'effect';
 import type { McpResourceEvent } from '../mcp/contract/wire/feeds.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
-import { PluginTools, TOOLS } from '../plugin-host/contract/service/tools.js';
+import { PluginTools } from '../plugin-host/contract/service/tools.js';
 import { pluginToolName } from '../plugin-host/contract/wire/audience.js';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
-import { type PluginContribution, PluginPointRefused, type PluginRef } from '../plugins/contract/service/points.js';
+import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
 import { PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
 import { PluginViews, type ViewFailure, type ViewMount, type ViewSites } from './contract/service/views.js';
 import type { ResultEntries, ViewEntries } from './contract/wire/points.js';
@@ -23,7 +23,6 @@ const RECOVERY = Schedule.min([Schedule.exponential('500 millis'), Schedule.spac
 const RETURNING: ReadonlySet<string> = new Set(['plugin-unavailable', 'plugin-view-unknown']);
 const READ_PLUGINS = 'read_plugins answers each plugin’s process state and why it stopped';
 const viewer = (mount: ViewMount): McpCaller => ({ kind: 'operator', projectId: mount.projectId, view: mount.view });
-const refusedResults = (reason: string) => new PluginPointRefused({ point: RESULTS.plugin.name, reason });
 const refusal = (code: ViewRefusalCode, reason: string) =>
   new GateRefusal<ViewRefusalCode>(code, reason, code === 'plugin-unavailable' ? [READ_PLUGINS] : ['try again', READ_PLUGINS]);
 const resourceRefusal = (failure: { readonly _tag: string; readonly message: string }) =>
@@ -57,28 +56,17 @@ export const makeShelf = Effect.gen(function* () {
       };
     });
 
-  const registerResults = Effect.fnUntraced(function* ({ plugin, value, sibling }: PluginContribution<ResultEntries>) {
-    if (value.length === 0) return () => undefined;
-    const views = new Set((sibling(VIEWS) ?? []).map((view) => view.id));
-    const unseen = value.filter((result) => !views.has(result.view)).map((result) => result.view);
-    if (unseen.length > 0) return yield* refusedResults(`contributes.views declares no view ${unseen.join(', ')}`);
-    const called = new Map((sibling(TOOLS) ?? []).map((tool) => [tool.name, tool.audience]));
-    const silent = value.filter((result) => {
-      const audience = called.get(result.tool);
-      return audience !== 'agents' && audience !== 'own';
-    });
-    if (silent.length > 0)
-      return yield* refusedResults(
-        `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`,
-      );
-    results.set(plugin.id, value);
-    bump();
-    return () => {
-      if (results.get(plugin.id) !== value) return;
-      results.delete(plugin.id);
+  const registerResults = ({ plugin, value }: PluginContribution<ResultEntries>) =>
+    Effect.sync(() => {
+      if (value.length === 0) return () => undefined;
+      results.set(plugin.id, value);
       bump();
-    };
-  });
+      return () => {
+        if (results.get(plugin.id) !== value) return;
+        results.delete(plugin.id);
+        bump();
+      };
+    });
 
   const setsOf = (enabled: readonly string[], sites: ViewSites['Service']): readonly PluginViewSet[] =>
     enabled.flatMap((id) => {

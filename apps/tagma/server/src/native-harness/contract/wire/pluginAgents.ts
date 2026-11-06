@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import type { PluginFace } from '../../../platform/contract/wire/contribution.js';
 import { PLUGIN_LABEL_PATTERN } from '../../../plugins/contract/wire/names.js';
 
 export const pluginCapability = (plugin: string): string => `plugin:${plugin}`;
@@ -27,3 +28,9 @@ export const PluginAgentEntries = Schema.Array(PluginAgentEntry).check(
   }),
 );
 export type PluginAgentEntries = typeof PluginAgentEntries.Type;
+
+export const PLUGIN_AGENTS_FACE: PluginFace<PluginAgentEntries> = {
+  name: 'agents',
+  title: 'Agents you can start',
+  schema: PluginAgentEntries,
+};

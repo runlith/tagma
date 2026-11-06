@@ -8,8 +8,6 @@ import { type PluginContribution, PluginPointRefused } from '../plugins/contract
 import { PluginTools, TOOLS } from './contract/service/tools.js';
 import { pluginToolName, type ToolAudience, type ToolEntries, type ToolEntry } from './contract/wire/audience.js';
 
-const MODEL_NAME_MAX = 64;
-
 type Offered = {
   readonly plugin: string;
   readonly declaration: McpServerDeclaration;
@@ -55,9 +53,6 @@ export const makeOffers = Effect.gen(function* () {
     const { plugin, value, caller } = contribution;
     const offered = value.filter((entry) => entry.audience !== 'tagma');
     if (offered.length === 0) return () => undefined;
-    const long = offered.filter((entry) => pluginToolName(plugin.id, entry.name).length > MODEL_NAME_MAX).map((entry) => entry.name);
-    if (long.length > 0)
-      return yield* refused(`${long.join(', ')} named under ${plugin.id} pass the ${MODEL_NAME_MAX} characters a model accepts`);
     const audiences = new Map<ToolAudience, McpToolDescriptor[]>();
     for (const entry of offered) {
       const listed = audiences.get(entry.audience) ?? [];

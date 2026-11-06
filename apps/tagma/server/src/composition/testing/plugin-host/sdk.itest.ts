@@ -72,6 +72,7 @@ const authored = (folder: string) =>
     await mkdir(join(folder, 'node_modules', '@types'), { recursive: true });
     await symlink(SDK, join(folder, 'node_modules', '@runlith', 'tagma'));
     await symlink(join(SDK, 'node_modules', '@types', 'bun'), join(folder, 'node_modules', '@types', 'bun'));
+    await symlink(join(SDK, 'node_modules', 'effect'), join(folder, 'node_modules', 'effect'));
   });
 
 const clocked = (home: string) =>

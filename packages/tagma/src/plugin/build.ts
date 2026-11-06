@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BunPlugin } from 'bun';
 import ts from 'typescript';
-import { manifestRefusal } from './check.js';
+import { manifestRefusal } from './checks.generated.js';
 import { describePlugin, manifestOf, PluginInvalid, PROCESS_ENTRY } from './describe.js';
 import type { PluginDefinition } from './plugin.js';
 import type { PluginEnvelope } from './points.generated.js';
@@ -17,7 +17,35 @@ const NAMESPACE = 'tagma-plugin';
 
 const ENTRY = `${NAMESPACE}:process`;
 
-const UNBUNDLED = /\b(?:import|require)\(\s*(?!["'`])/u;
+const isMetaRequire = (node: ts.Node): boolean =>
+  ts.isPropertyAccessExpression(node) &&
+  node.name.text === 'require' &&
+  ts.isMetaProperty(node.expression) &&
+  node.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
+
+const computedImports = (code: string): number => {
+  const source = ts.createSourceFile('process.js', code, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
+  const requires = new Set<string>();
+  const aliases = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined && isMetaRequire(node.initializer))
+      requires.add(node.name.text);
+    ts.forEachChild(node, aliases);
+  };
+  aliases(source);
+  let computed = 0;
+  const calls = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const loads =
+        callee.kind === ts.SyntaxKind.ImportKeyword || isMetaRequire(callee) || (ts.isIdentifier(callee) && requires.has(callee.text));
+      const [specifier] = node.arguments;
+      if (loads && (specifier === undefined || !ts.isStringLiteralLike(specifier))) computed += 1;
+    }
+    ts.forEachChild(node, calls);
+  };
+  calls(source);
+  return computed;
+};
 
 type BuildStep = 'package' | 'types' | 'definition' | 'bundle' | 'check';
 
@@ -81,8 +109,8 @@ const entryPlugin = (directory: string): BunPlugin => ({
       loader: 'ts',
       resolveDir: directory,
       contents: [
-        `import plugin from ${JSON.stringify(join(directory, DEFINITION))};`,
         `import { servePlugin } from ${JSON.stringify(fileURLToPath(import.meta.resolve('@runlith/tagma/plugin/process')))};`,
+        `import plugin from ${JSON.stringify(join(directory, DEFINITION))};`,
         'await servePlugin(plugin);',
         '',
       ].join('\n'),
@@ -108,8 +136,12 @@ const bundled = async (directory: string): Promise<{ readonly code: string; read
   const map = result.outputs.find((output) => output.kind === 'sourcemap');
   if (code === undefined || map === undefined) throw new BuildFailed('bundle', 'the bundler answered no process module');
   const text = await code.text();
-  if (UNBUNDLED.test(text))
-    throw new BuildFailed('bundle', 'the process imports a module the build cannot resolve: an import or require of a computed name');
+  const computed = computedImports(text);
+  if (computed > 0)
+    throw new BuildFailed(
+      'bundle',
+      `the process names a module by a computed value in ${computed} import or require ${computed === 1 ? 'call' : 'calls'}, which its runtime cannot install: import each module by its literal name`,
+    );
   const { sources } = JSON.parse(await map.text()) as { readonly sources: readonly string[] };
   const real = sources.filter((source) => !source.startsWith(`${NAMESPACE}:`));
   const base = await realpath(process.cwd());

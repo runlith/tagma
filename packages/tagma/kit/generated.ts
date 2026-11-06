@@ -1,6 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
-import { jsonCodec } from '@runlith/utils/codec';
 import { signatureOf } from '@tagma/inspection/signature';
 import { Schema } from 'effect';
 import ts from 'typescript';
@@ -9,10 +8,14 @@ const root = resolve(import.meta.dir, '../../..');
 const server = join(root, 'apps/tagma/server/src');
 const plugin = join(root, 'packages/tagma/src/plugin');
 const ENVELOPE = { file: join(server, 'plugin-formats/tagma/contract/wire/manifest.ts'), binding: 'Envelope' };
+const VERDICT = { file: join(server, 'checkout-builds/contract/wire/steps.ts'), binding: 'StepVerdict' };
+const CONTRIBUTIONS = { file: join(server, 'plugins/contract/wire/contributions.ts'), binding: 'contributionsRefusal' };
+const LABEL = { file: join(server, 'plugins/contract/wire/names.ts'), binding: 'PluginLabel' };
 
 const GENERATED = {
   points: join(plugin, 'points.generated.ts'),
-  schemas: join(plugin, 'schemas.generated.json'),
+  checks: join(plugin, 'checks.generated.js'),
+  checksTypes: join(plugin, 'checks.generated.d.ts'),
   operations: join(plugin, 'operations.generated.ts'),
 } as const;
 
@@ -64,32 +67,19 @@ const importedFrom = (source: ts.SourceFile, name: string): { readonly file: str
   return null;
 };
 
-const pointsIn = (file: string, text: string): readonly Located[] => {
+const facesIn = (file: string, text: string): readonly Located[] => {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const found: Located[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'ContributionPoint') {
       const face = node.arguments?.[1];
       if (face !== undefined) {
-        if (!ts.isObjectLiteralExpression(face)) throw new Error(`${relative(root, file)}: a plugin face must be an object literal`);
-        const property = (key: string) =>
-          face.properties.find(
-            (one): one is ts.PropertyAssignment | ts.ShorthandPropertyAssignment =>
-              (ts.isPropertyAssignment(one) || ts.isShorthandPropertyAssignment(one)) && ts.isIdentifier(one.name) && one.name.text === key,
-          );
-        const name = property('name');
-        const schema = property('schema');
-        if (name === undefined || !ts.isPropertyAssignment(name) || !ts.isStringLiteral(name.initializer))
-          throw new Error(`${relative(root, file)}: a plugin face names its point with a string literal`);
-        const identifier = schema === undefined ? undefined : ts.isShorthandPropertyAssignment(schema) ? schema.name : schema.initializer;
-        if (identifier === undefined || !ts.isIdentifier(identifier))
-          throw new Error(`${relative(root, file)}: the point ${name.initializer.text} names its schema by an imported binding`);
-        const origin = importedFrom(source, identifier.text);
+        const origin = ts.isIdentifier(face) ? importedFrom(source, face.text) : null;
         if (origin === null || !origin.file.includes('/contract/wire/'))
           throw new Error(
-            `${relative(root, file)}: the schema of the point ${name.initializer.text} must be imported from its owner's contract/wire`,
+            `${relative(root, file)}: a plugin face is declared in its owner's contract/wire and passed by its imported name`,
           );
-        found.push({ name: name.initializer.text, ...origin });
+        found.push({ name: origin.binding, ...origin });
       }
     }
     ts.forEachChild(node, visit);
@@ -98,54 +88,116 @@ const pointsIn = (file: string, text: string): readonly Located[] => {
   return found;
 };
 
-const declaredPoints = async (): Promise<readonly { readonly name: string; readonly schema: Schema.Top }[]> => {
+type Face = {
+  readonly name: string;
+  readonly schema: Schema.Top;
+  readonly file: string;
+  readonly binding: string;
+};
+
+const faceOf = (value: unknown, where: string): { readonly name: string; readonly schema: Schema.Top } => {
+  const { name, schema } = (value ?? {}) as { readonly name?: unknown; readonly schema?: unknown };
+  if (typeof name !== 'string') throw new Error(`${where} names no point`);
+  return { name, schema: schemaOf(schema, `${where}.schema`) };
+};
+
+const declaredFaces = async (): Promise<readonly Face[]> => {
   const located: Located[] = [];
   for (const file of await sources('**/*.ts')) {
     const text = await readFile(file, 'utf8');
-    if (text.includes('new ContributionPoint<')) located.push(...pointsIn(file, text));
+    if (text.includes('new ContributionPoint<')) located.push(...facesIn(file, text));
   }
+  const faces = await Promise.all(
+    located.map(async ({ file, binding }) => ({
+      ...faceOf(await loaded(file, binding), `${relative(root, file)}#${binding}`),
+      file,
+      binding,
+    })),
+  );
   const names = new Set<string>();
-  for (const { name } of located) {
+  for (const { name } of faces) {
     if (names.has(name)) throw new Error(`two owners declare the plugin point ${name}`);
     names.add(name);
   }
-  return Promise.all(
-    located
-      .sort((left, right) => (left.name < right.name ? -1 : 1))
-      .map(async ({ name, file, binding }) => ({
-        name,
-        schema: schemaOf(await loaded(file, binding), `${relative(root, file)}#${binding}`),
-      })),
-  );
+  return faces.sort((left, right) => (left.name < right.name ? -1 : 1));
 };
 
-const jsonSchemaOf = (schema: Schema.Top): Readonly<Record<string, unknown>> => {
-  const document = Schema.toJsonSchemaDocument(jsonCodec(schema), { onExcessProperty: 'error' });
-  return Object.keys(document.definitions).length === 0 ? document.schema : { ...document.schema, $defs: document.definitions };
-};
-
-const pluginTexts = async (): Promise<{ readonly points: string; readonly schemas: string }> => {
-  const points = await declaredPoints();
+const pointsText = async (faces: readonly Face[]): Promise<string> => {
   const envelope = schemaOf(await loaded(ENVELOPE.file, ENVELOPE.binding), 'the plugin manifest envelope');
+  const verdict = schemaOf(await loaded(VERDICT.file, VERDICT.binding), 'the build step verdict');
   const indent = (text: string) => text.replaceAll('\n', '\n  ');
-  return {
-    points: [
-      `export type PluginEnvelope = ${printed(envelope)};`,
-      '',
-      'export type PluginPoints = {',
-      ...points.map(({ name, schema }) => `  readonly ${name}: ${indent(printed(schema))};`),
-      '};',
-      '',
-      `export const POINT_NAMES = [${points.map(({ name }) => `'${name}'`).join(', ')}] as const satisfies readonly (keyof PluginPoints)[];`,
-      '',
-    ].join('\n'),
-    schemas: `${JSON.stringify(
-      { envelope: jsonSchemaOf(envelope), points: Object.fromEntries(points.map(({ name, schema }) => [name, jsonSchemaOf(schema)])) },
-      null,
-      2,
-    )}\n`,
-  };
+  return [
+    `export type PluginEnvelope = ${printed(envelope)};`,
+    '',
+    'export type PluginPoints = {',
+    ...faces.map(({ name, schema }) => `  readonly ${name}: ${indent(printed(schema))};`),
+    '};',
+    '',
+    `export type BuildVerdict = ${printed(verdict)};`,
+    '',
+    `export const POINT_NAMES = [${faces.map(({ name }) => `'${name}'`).join(', ')}] as const satisfies readonly (keyof PluginPoints)[];`,
+    '',
+  ].join('\n');
 };
+
+const CHECKS_ENTRY = 'tagma-checks:entry';
+
+const checksEntry = (faces: readonly Face[]): string =>
+  [
+    "import { Result, Schema } from 'effect';",
+    `import { ${CONTRIBUTIONS.binding} } from ${JSON.stringify(CONTRIBUTIONS.file)};`,
+    `import { ${ENVELOPE.binding} } from ${JSON.stringify(ENVELOPE.file)};`,
+    `import { ${LABEL.binding} } from ${JSON.stringify(LABEL.file)};`,
+    ...faces.map((face, at) => `import { ${face.binding} as face${at} } from ${JSON.stringify(face.file)};`),
+    `const faces = new Map([${faces.map((_, at) => `face${at}`).join(', ')}].map((face) => [face.name, face]));`,
+    `const decodeEnvelope = Schema.decodeUnknownResult(${ENVELOPE.binding});`,
+    `const decodeId = Schema.decodeUnknownResult(${LABEL.binding});`,
+    'export const manifestRefusal = (manifest: unknown): string | null => {',
+    "  const decoded = decodeEnvelope(manifest, { onExcessProperty: 'error' });",
+    '  if (Result.isFailure(decoded)) return decoded.failure.message;',
+    `  const checked = ${CONTRIBUTIONS.binding}(decoded.success.id, faces, decoded.success.contributes ?? {});`,
+    '  return Result.isFailure(checked) ? checked.failure : null;',
+    '};',
+    'export const pluginIdRefusal = (id: unknown): string | null => {',
+    '  const decoded = decodeId(id);',
+    '  return Result.isFailure(decoded) ? decoded.failure.message : null;',
+    '};',
+    '',
+  ].join('\n');
+
+const checksText = async (faces: readonly Face[]): Promise<string> => {
+  const result = await Bun.build({
+    entrypoints: [CHECKS_ENTRY],
+    plugins: [
+      {
+        name: 'tagma-checks',
+        setup: (build) => {
+          build.onResolve({ filter: /^tagma-checks:entry$/u }, () => ({ path: CHECKS_ENTRY, namespace: 'tagma-checks' }));
+          build.onLoad({ filter: /.*/u, namespace: 'tagma-checks' }, () => ({
+            loader: 'ts',
+            resolveDir: server,
+            contents: checksEntry(faces),
+          }));
+        },
+      },
+    ],
+    target: 'bun',
+    format: 'esm',
+    external: ['effect', 'effect/*'],
+    minify: { whitespace: true, syntax: true },
+    throw: false,
+  });
+  const [output] = result.outputs;
+  if (!result.success || output === undefined) throw new Error(`the plugin checks did not bundle: ${result.logs.map(String).join('\n')}`);
+  return `${(await output.text()).replace(/^\/\/ @bun\n/u, '').trim()}\n`;
+};
+
+const CHECKS_TYPES = [
+  'export declare const manifestRefusal: (manifest: unknown) => string | null;',
+  '',
+  'export declare const pluginIdRefusal: (id: unknown) => string | null;',
+  '',
+].join('\n');
 
 const isOperation = (value: unknown): value is OperationShape =>
   typeof value === 'object' && value !== null && 'id' in value && 'input' in value && 'answer' in value;
@@ -194,14 +246,14 @@ const canonicalTs = (text: string): string => {
   return parts.join(' ');
 };
 
-const sameGenerated = (path: string, written: string, expected: string): boolean =>
-  path.endsWith('.json') ? Bun.deepEquals(JSON.parse(written), JSON.parse(expected)) : canonicalTs(written) === canonicalTs(expected);
+const sameGenerated = (written: string, expected: string): boolean => canonicalTs(written) === canonicalTs(expected);
 
 export const syncGenerated = async ({ write }: { readonly write: boolean }): Promise<readonly string[]> => {
-  const { points, schemas } = await pluginTexts();
+  const faces = await declaredFaces();
   const texts: readonly [string, string][] = [
-    [GENERATED.points, points],
-    [GENERATED.schemas, schemas],
+    [GENERATED.points, await pointsText(faces)],
+    [GENERATED.checks, await checksText(faces)],
+    [GENERATED.checksTypes, CHECKS_TYPES],
     [GENERATED.operations, await operationsText()],
   ];
   const changed: string[] = [];
@@ -210,7 +262,7 @@ export const syncGenerated = async ({ write }: { readonly write: boolean }): Pro
       if (error.code === 'ENOENT') return null;
       throw error;
     });
-    if (standing !== null && sameGenerated(path, standing, text)) continue;
+    if (standing !== null && sameGenerated(standing, text)) continue;
     if (write) await writeFile(path, text);
     changed.push(relative(root, path));
   }

@@ -101,6 +101,10 @@
       "types": "./src/plugin/protocol.ts",
       "default": "./src/plugin/protocol.ts"
     },
+    "./plugin/points": {
+      "types": "./src/plugin/points.generated.ts",
+      "default": "./src/plugin/points.generated.ts"
+    },
     "./plugin/template": {
       "types": "./src/plugin/template.ts",
       "default": "./src/plugin/template.ts"

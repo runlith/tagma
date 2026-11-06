@@ -1,4 +1,7 @@
 import { Schema } from 'effect';
+import type { PluginFace } from '../../../platform/contract/wire/contribution.js';
+
+const MODEL_NAME_MAX = 64;
 
 const TOOL_AUDIENCES = ['agents', 'own', 'view', 'tagma'] as const;
 export type ToolAudience = (typeof TOOL_AUDIENCES)[number];
@@ -40,3 +43,22 @@ export const ToolEntries = Schema.Array(ToolEntry).check(
   }),
 );
 export type ToolEntries = typeof ToolEntries.Type;
+
+export const TOOLS_FACE: PluginFace<ToolEntries> = {
+  name: 'tools',
+  title: 'Tools agents can call',
+  schema: ToolEntries,
+  refuses: (entries, { plugin }) => {
+    const long = entries
+      .filter((entry) => entry.audience !== 'tagma' && pluginToolName(plugin, entry.name).length > MODEL_NAME_MAX)
+      .map((entry) => entry.name);
+    return long.length === 0 ? null : `${long.join(', ')} named under ${plugin} pass the ${MODEL_NAME_MAX} characters a model accepts`;
+  },
+  serves: (entries, tool) => {
+    const audience = entries?.find((entry) => entry.name === tool)?.audience;
+    if (audience === undefined) return `contributes.tools names no tool ${tool}`;
+    return audience === 'tagma'
+      ? null
+      : `the tool ${tool} is offered to ${audience}, and a point calls only a tool whose audience is tagma`;
+  },
+};

@@ -22,11 +22,6 @@ export type NotificationInput = {
 
 export type BuildStepInput = { readonly offer: 'head' | 'tree'; readonly checkout: string };
 
-export type BuildVerdict =
-  | { readonly verdict: 'go' }
-  | { readonly verdict: 'pending' }
-  | { readonly verdict: 'stop'; readonly reason: string; readonly thread?: string };
-
 export const PLUGIN_ENVIRONMENT = {
   server: 'TAGMA_SERVER_URL',
   caller: 'TAGMA_CALLER',

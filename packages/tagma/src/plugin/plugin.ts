@@ -1,8 +1,8 @@
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { ExternalOperations } from './operations.generated.js';
-import type { PluginEnvelope, PluginPoints } from './points.generated.js';
-import type { BuildStepInput, BuildVerdict, EndingInput, NotificationInput, TickInput } from './protocol.js';
+import type { BuildVerdict, PluginEnvelope, PluginPoints } from './points.generated.js';
+import type { BuildStepInput, EndingInput, NotificationInput, TickInput } from './protocol.js';
 
 export type InputSchema<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output> & StandardJSONSchemaV1<Input, Output>;
 
@@ -30,7 +30,7 @@ type ToolEntry = PluginPoints['tools'][number];
 
 export type ToolAudience = Exclude<ToolEntry['audience'], 'tagma'>;
 
-type Parsed<S> = S extends StandardSchemaV1<any, infer Output> ? Output : { readonly [key: string]: unknown };
+type Parsed<S> = S extends StandardSchemaV1<any, infer Output> ? Output : Readonly<Record<never, never>>;
 
 export type Tool<S extends InputSchema | undefined = InputSchema | undefined> = {
   readonly description: ToolEntry['description'];
@@ -85,7 +85,10 @@ export type PluginDefinition = PluginData & {
   readonly onNotification?: NotificationHandler;
 };
 
-export const definePlugin = <const Definition extends PluginDefinition>(definition: Definition): Definition => definition;
+type Unknown<Definition> = { readonly [Field in Exclude<keyof Definition, keyof PluginDefinition>]: never };
+
+export const definePlugin = <const Definition extends PluginDefinition>(definition: Definition & Unknown<Definition>): Definition =>
+  definition;
 
 export const tool = <S extends InputSchema | undefined = undefined>(declared: Tool<S>): NoInfer<Tool<S>> => declared;
 

@@ -6,9 +6,8 @@ import { type BeforeBuild, StepVerdict } from '../checkout-builds/contract/wire/
 import { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 import { placeAt } from '../projects/identity.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
-import { unservedTools } from '../plugin-host/contract/service/tools.js';
 import { EnabledPlugins, HostedPlugins } from '../plugins/contract/service/plugins.js';
-import { PluginPointRefused, PluginPoints } from '../plugins/contract/service/points.js';
+import { PluginPoints } from '../plugins/contract/service/points.js';
 import type { PluginProcessState } from '../plugins/contract/wire/rows.js';
 
 const decodeVerdict = Schema.decodeUnknownEffect(Schema.fromJsonString(StepVerdict));
@@ -33,14 +32,8 @@ export const buildSteps = Layer.effect(
     const declared = new Map<string, Declared>();
 
     yield* Effect.acquireRelease(
-      points.declare(
-        BEFORE_BUILD,
-        Effect.fnUntraced(function* ({ plugin, value, sibling, caller }) {
-          const unserved = unservedTools(
-            sibling,
-            value.map((entry) => entry.tool),
-          );
-          if (unserved !== null) return yield* new PluginPointRefused({ point: BEFORE_BUILD.plugin.name, reason: unserved });
+      points.declare(BEFORE_BUILD, ({ plugin, value, caller }) =>
+        Effect.sync(() => {
           const held: Declared = { entries: value, caller };
           declared.set(plugin.id, held);
           return () => {

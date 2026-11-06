@@ -1,12 +1,8 @@
 import { Context, Data, Effect } from 'effect';
 import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
-import { BeforeBuild, type StepAsk, type StepVerdict } from '../wire/steps.js';
+import { type BeforeBuild, BEFORE_BUILD_FACE, type StepAsk, type StepVerdict } from '../wire/steps.js';
 
-export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-builds/before-build', {
-  name: 'beforeBuild',
-  title: 'Checks before Tagma builds a checkout',
-  schema: BeforeBuild,
-});
+export const BEFORE_BUILD = new ContributionPoint<never, BeforeBuild>('checkout-builds/before-build', BEFORE_BUILD_FACE);
 
 export class BuildStepFailed extends Data.TaggedError('BuildStepFailed')<{ readonly message: string }> {}
 

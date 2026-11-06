@@ -83,7 +83,60 @@ const authored = (name: string, declared: Tool): ToolEntry => {
 
 const tagmaTool = (name: string, description: string): ToolEntry => ({ name, audience: 'tagma', description, inputSchema: TAGMA_INPUT });
 
-const HANDLED: ReadonlySet<string> = new Set<HandledPoint>(['tools', 'schedule', 'beforeBuild', 'on', 'notify']);
+const HANDLED_BY: Readonly<Record<HandledPoint, keyof PluginDefinition>> = {
+  tools: 'tools',
+  schedule: 'schedules',
+  beforeBuild: 'beforeBuild',
+  on: 'onThreadEnded',
+  notify: 'onNotification',
+};
+
+const HANDLED: ReadonlySet<string> = new Set(Object.keys(HANDLED_BY));
+
+const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, true>> = {
+  id: true,
+  title: true,
+  description: true,
+  resident: true,
+  options: true,
+  tools: true,
+  resources: true,
+  schedules: true,
+  beforeBuild: true,
+  onThreadEnded: true,
+  onNotification: true,
+};
+
+const FIELDS: readonly string[] = [...Object.keys(OWN), ...POINT_NAMES.filter((point) => !HANDLED.has(point))];
+
+const distance = (left: string, right: string): number => {
+  let row = Array.from({ length: right.length + 1 }, (_, at) => at);
+  for (let i = 1; i <= left.length; i += 1) {
+    const next = [i];
+    for (let j = 1; j <= right.length; j += 1)
+      next.push(Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (left[i - 1] === right[j - 1] ? 0 : 1)));
+    row = next;
+  }
+  return row[right.length]!;
+};
+
+const meant = (field: string): string | undefined => {
+  if (Object.hasOwn(HANDLED_BY, field)) return HANDLED_BY[field as HandledPoint];
+  const [nearest] = FIELDS.map((known) => ({ known, apart: distance(field.toLowerCase(), known.toLowerCase()) }))
+    .filter(({ apart }) => apart <= 2)
+    .sort((left, right) => left.apart - right.apart);
+  return nearest?.known;
+};
+
+const unknownFields = (definition: PluginDefinition): void => {
+  const unknown = Object.keys(definition).filter((field) => !FIELDS.includes(field));
+  if (unknown.length === 0) return;
+  const told = unknown.map((field) => {
+    const known = meant(field);
+    return known === undefined ? field : `${field} (write ${known})`;
+  });
+  throw new PluginInvalid(`definePlugin takes no field ${told.join(', ')}; its fields are ${FIELDS.join(', ')}`);
+};
 
 const dataOf = (definition: PluginDefinition): PluginData =>
   Object.fromEntries(
@@ -94,6 +147,7 @@ const dataOf = (definition: PluginDefinition): PluginData =>
   );
 
 export const describePlugin = (definition: PluginDefinition): PluginDescription => {
+  unknownFields(definition);
   const { id, title, description, options, resident, resources, schedules, beforeBuild, onThreadEnded, onNotification } = definition;
   const scheduled = Object.entries(schedules ?? {}).map(([name, declared]) => ({
     name: named('schedule', name),

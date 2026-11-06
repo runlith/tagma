@@ -1,3 +1,4 @@
+import { protocolOut } from './stdio.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   ErrorCode,
@@ -21,17 +22,13 @@ const required = (name: string): string => {
 };
 
 export const servePlugin = async (definition: PluginDefinition): Promise<void> => {
-  const toStderr = (...parts: unknown[]) => console.error(...parts);
-  console.log = toStderr;
-  console.info = toStderr;
-  console.debug = toStderr;
   const place = { server: process.env[ENVIRONMENT.server] ?? null, caller: required(ENVIRONMENT.caller) };
   const subscribed = new Set<string>();
   let notify: (uri: string) => void = () => undefined;
   const serving = servingOf(definition, {
     data: required(ENVIRONMENT.data),
     options: Object.fromEntries((definition.options ?? []).map((option) => [option.key, process.env[option.key] ?? option.default])),
-    client: (project) => tagmaClient(place, project),
+    client: (project, signal) => tagmaClient(place, project, signal),
     log: (text) => process.stderr.write(`${text}\n`),
     changed: (uri) => notify(uri),
   });
@@ -75,5 +72,5 @@ export const servePlugin = async (definition: PluginDefinition): Promise<void> =
   };
   process.stdin.once('end', ended);
   process.stdin.once('close', ended);
-  await server.connect(new StdioServerTransport());
+  await server.connect(new StdioServerTransport(process.stdin, protocolOut));
 };

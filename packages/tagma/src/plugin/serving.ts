@@ -17,7 +17,7 @@ import {
 type ServingPlace = {
   readonly data: string;
   readonly options: Readonly<Record<string, string | undefined>>;
-  readonly client: (project: number | null) => TagmaClient;
+  readonly client: (project: number | null, signal: AbortSignal) => TagmaClient;
   readonly log: (text: string) => void;
   readonly changed: (uri: string) => void;
 };
@@ -156,7 +156,7 @@ export const servingOf = (definition: PluginDefinition, place: ServingPlace): Se
     caller,
     project: caller.projectId,
     projects,
-    tagma: place.client(caller.projectId),
+    tagma: place.client(caller.projectId, signal),
     get data() {
       return dataOf(caller.projectId);
     },

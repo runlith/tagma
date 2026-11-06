@@ -1,15 +1,7 @@
-import type { Schema } from 'effect';
-import type { Contributed, Contribution } from '../wire/contribution.js';
+import type { Contributed, Contribution, PluginFace } from '../wire/contribution.js';
 import type { Manifest } from './manifest.js';
 
 type Identified = { readonly id: string };
-
-type PluginFace<W> = {
-  readonly name: string;
-  readonly title: string;
-  readonly schema: Schema.Codec<W, unknown>;
-  readonly claims?: (value: W) => readonly string[];
-};
 
 export type PluginFaced<W> = { readonly id: string; readonly plugin: PluginFace<W> };
 

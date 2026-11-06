@@ -1,4 +1,5 @@
 import { beforeBuild, definePlugin, schedule, tool } from '@runlith/tagma/plugin';
+import { Schema } from 'effect';
 
 const noted = async (data: string, line: string): Promise<void> => {
   const journal = Bun.file(`${data}/journal`);
@@ -15,6 +16,7 @@ export default definePlugin({
       description: 'Echoes the text it is given.',
       audience: 'agents',
       readOnly: true,
+      input: Schema.toStandardJSONSchemaV1(Schema.toStandardSchemaV1(Schema.Struct({ text: Schema.String }))),
       run: async ({ text }, ctx) => {
         await noted(ctx.dataOf(null), 'call');
         return { text, pid: process.pid, project: ctx.project };

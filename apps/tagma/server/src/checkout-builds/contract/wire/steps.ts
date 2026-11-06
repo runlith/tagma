@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import type { PluginFace } from '../../../platform/contract/wire/contribution.js';
 
 export const BeforeBuild = Schema.Array(
   Schema.Struct({
@@ -9,6 +10,13 @@ export const BeforeBuild = Schema.Array(
   }),
 );
 export type BeforeBuild = typeof BeforeBuild.Type;
+
+export const BEFORE_BUILD_FACE: PluginFace<BeforeBuild> = {
+  name: 'beforeBuild',
+  title: 'Checks before Tagma builds a checkout',
+  schema: BeforeBuild,
+  calls: (steps) => steps.map((step) => step.tool),
+};
 
 export const StepVerdict = Schema.Union([
   Schema.Struct({ verdict: Schema.Literal('go') }),

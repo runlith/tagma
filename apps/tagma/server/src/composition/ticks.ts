@@ -1,6 +1,5 @@
 import type { TickInput } from '@runlith/tagma/plugin/protocol';
 import { Context, Effect, Layer } from 'effect';
-import { unservedTools } from '../plugin-host/contract/service/tools.js';
 import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
 import { pluginCaller } from '../plugins/contract/wire/names.js';
 import { SCHEDULED, ScheduleContributions } from '../schedule/contract/service/contributions.js';
@@ -18,10 +17,8 @@ export const ticks = Layer.effectContext(
         declare: (register) =>
           points.declare(
             SCHEDULED,
-            Effect.fnUntraced(function* ({ plugin, value, sibling, caller }) {
+            Effect.fnUntraced(function* ({ plugin, value, caller }) {
               const byName = new Map(value.map((entry) => [entry.name, entry.tool]));
-              const unserved = unservedTools(sibling, [...byName.values()]);
-              if (unserved !== null) return yield* refused(unserved);
               return yield* register(pluginCaller(plugin.id), value, {
                 deliver: Effect.fnUntraced(function* (tick) {
                   const tool = byName.get(tick.name);

@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import type { PluginFace } from '../../../platform/contract/wire/contribution.js';
 
 export const PLUGIN_BINDING = 'plugin';
 
@@ -13,3 +14,10 @@ export const EndingTools = Schema.Struct({
   ),
 });
 export type EndingTools = typeof EndingTools.Type;
+
+export const ENDINGS_FACE: PluginFace<EndingTools> = {
+  name: 'on',
+  title: 'Actions when a thread ends',
+  schema: EndingTools,
+  calls: (value) => (value.ended === undefined ? [] : [value.ended]),
+};

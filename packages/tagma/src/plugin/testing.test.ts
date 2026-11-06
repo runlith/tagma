@@ -1,7 +1,17 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { beforeBuild, definePlugin, Refusal, resource, schedule, tool } from './plugin.js';
+import { beforeBuild, definePlugin, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
 import { testPlugin } from './testing.js';
+
+test('a definition naming a field the SDK does not take is refused with the field it means', () => {
+  const misspelled = {
+    id: 'typo',
+    title: 'Typo',
+    schedule: { beat: schedule({ every: '1h', run: async () => undefined }) },
+    surface: [{ view: 'board', title: 'Board' }],
+  } as PluginDefinition;
+  expect(() => testPlugin(misspelled)).toThrow('schedule (write schedules), surface (write surfaces)');
+});
 
 test('testPlugin runs a tick, a build step, a refusing tool and a project-keyed resource through the handlers the process serves', async () => {
   const ticks: string[] = [];

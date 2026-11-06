@@ -12,13 +12,14 @@ const bodyOf = async (response: Response): Promise<Readonly<Record<string, unkno
   }
 };
 
-const call = async (place: TagmaPlace, project: number | null, id: OperationId, input: unknown): Promise<never> => {
+const call = async (place: TagmaPlace, project: number | null, signal: AbortSignal, id: OperationId, input: unknown): Promise<never> => {
   if (place.server === null) throw new Error(`${id} cannot be called: this process was started without TAGMA_SERVER_URL`);
   const query = project === null ? '' : `?project=${project}`;
   const response = await fetch(`${place.server.replace(/\/+$/u, '')}/api/op/${id}${query}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-tagma-caller': place.caller },
     body: JSON.stringify(input),
+    signal,
   });
   const body = await bodyOf(response);
   if (response.ok && body !== null) return body as never;
@@ -27,7 +28,7 @@ const call = async (place: TagmaPlace, project: number | null, id: OperationId, 
   throw new Error(`${id} failed with HTTP ${response.status}${body === null ? '' : `: ${JSON.stringify(body)}`}`);
 };
 
-export const tagmaClient = (place: TagmaPlace, project: number | null): TagmaClient => ({
-  op: (id, input) => call(place, project, id, input),
-  in: (other) => tagmaClient(place, other),
+export const tagmaClient = (place: TagmaPlace, project: number | null, signal: AbortSignal): TagmaClient => ({
+  op: (id, input) => call(place, project, signal, id, input),
+  in: (other) => tagmaClient(place, other, signal),
 });

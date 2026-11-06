@@ -11,18 +11,20 @@ import type { AgentPackages } from '../../../threads/contract/service/library.js
 import type { AgentFile } from '../../../threads/contract/wire/agentLibrary.js';
 import type { Capability, CapabilitySource } from '../../capabilities/contract.js';
 import type { CapabilityDefinitions } from '../../capabilities/definitions.js';
-import { PluginAgentEntries, type PluginAgentEntry, pluginAgentId, pluginCapability } from '../../contract/wire/pluginAgents.js';
+import {
+  PLUGIN_AGENTS_FACE,
+  type PluginAgentEntries,
+  type PluginAgentEntry,
+  pluginAgentId,
+  pluginCapability,
+} from '../../contract/wire/pluginAgents.js';
 import { capabilitySource } from '../capabilitySources.js';
 import { namable } from './agentFiles.js';
 import { parseAgentFile } from './files.js';
 
 const OWNER = 'native-harness';
 
-export const PLUGIN_AGENTS = new ContributionPoint<never, PluginAgentEntries>('native-harness/plugin-agents', {
-  name: 'agents',
-  title: 'Agents you can start',
-  schema: PluginAgentEntries,
-});
+export const PLUGIN_AGENTS = new ContributionPoint<never, PluginAgentEntries>('native-harness/plugin-agents', PLUGIN_AGENTS_FACE);
 
 const refused = (reason: string) => new PluginPointRefused({ point: PLUGIN_AGENTS.plugin.name, reason });
 

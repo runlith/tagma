@@ -1,37 +1,25 @@
 import { Effect } from 'effect';
 import { ContributionPoint } from '../platform/contract/service/contribution.js';
-import { type PluginRegister, PluginPointRefused } from '../plugins/contract/service/points.js';
-import { VIEWS } from '../views/contract/service/points.js';
+import type { PluginRegister } from '../plugins/contract/service/points.js';
 import { PinOffers } from './contract/service/pins.js';
 import { ThreadInputRefused } from './contract/service/failure.js';
-import { type PinContributions, pinContributionsSchema } from './contract/wire/pins.js';
+import { type PinContributions, PINS_FACE } from './contract/wire/pins.js';
 
-export const PINS = new ContributionPoint<never, PinContributions>('threads/pins', {
-  name: 'pins',
-  title: 'Pages a thread can keep above its feed',
-  schema: pinContributionsSchema,
-});
+export const PINS = new ContributionPoint<never, PinContributions>('threads/pins', PINS_FACE);
 
 export type PinnableViews = PinOffers['Service'] & { readonly register: PluginRegister<PinContributions> };
 
 export const makePinnableViews = (): PinnableViews => {
   const offered = new Map<string, ReadonlySet<string>>();
 
-  const register: PluginRegister<PinContributions> = ({ plugin, value, sibling }) =>
-    Effect.suspend(() => {
-      if (value.length === 0) return Effect.succeed(() => undefined);
-      const declared = new Set((sibling(VIEWS) ?? []).map((view) => view.id));
-      const unseen = value.filter((pin) => !declared.has(pin.view)).map((pin) => pin.view);
-      if (unseen.length > 0) {
-        return Effect.fail(
-          new PluginPointRefused({ point: PINS.plugin.name, reason: `contributes.views declares no view ${unseen.join(', ')}` }),
-        );
-      }
+  const register: PluginRegister<PinContributions> = ({ plugin, value }) =>
+    Effect.sync(() => {
+      if (value.length === 0) return () => undefined;
       const views: ReadonlySet<string> = new Set(value.map((pin) => pin.view));
       offered.set(plugin.id, views);
-      return Effect.succeed(() => {
+      return () => {
         if (offered.get(plugin.id) === views) offered.delete(plugin.id);
-      });
+      };
     });
 
   const require = (plugin: string, view: string): Effect.Effect<void, ThreadInputRefused<'view-not-pinnable'>> => {

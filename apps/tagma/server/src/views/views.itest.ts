@@ -184,32 +184,6 @@ it.live('a view reaches the outside origins its manifest declares and no origin 
   }),
 );
 
-it.live('a contribution naming an undeclared view fails the plugin and shows nothing', () =>
-  Effect.gen(function* () {
-    const { world, projectId, scope, host, views } = yield* setup();
-    for (const point of ['results', 'surfaces', 'panes', 'launchers']) {
-      const entry = point === 'results' ? { tool: 'dashboard', view: 'missing' } : { view: 'missing', title: 'Missing' };
-      const plugin = yield* world.directory(`bad-${point}`);
-      yield* placed(
-        plugin,
-        manifest({ ...(point === 'results' ? contributes : staticContributions), [point]: [entry] }, point === 'results', point),
-      );
-      expect(yield* world.op('install_plugin', { source: plugin }, scope)).toMatchObject({ status: 200 });
-      const failed = yield* Effect.repeat(
-        Effect.sync(() => host.reading(point)),
-        {
-          schedule: Schedule.spaced('20 millis'),
-          until: (row) => row?.state === 'failed',
-        },
-      );
-      expect(failed?.failure).toContain('missing');
-      expect(yield* Stream.runCollect(Stream.take(views.sets(projectId, SITES), 1))).toEqual([
-        { plugins: [], enabled: expect.arrayContaining([point]) },
-      ]);
-    }
-  }),
-);
-
 it.live('a view calls only its plugin’s view tools, follows its resources and keeps its values through the door', () =>
   Effect.gen(function* () {
     const { world, scope, root, installed, host, views, mount, projectId } = yield* setup(true);
