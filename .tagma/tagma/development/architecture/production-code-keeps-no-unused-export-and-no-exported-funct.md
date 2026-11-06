@@ -336,14 +336,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/checkout/files/keys.ts#FilesCommand",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/checkout/files/keys.ts#Stroke",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/checkout/files/serverDouble.ts#ServerDouble",
           "owner": "5a3bed29"
         },
@@ -6544,14 +6536,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/launcher.ts#launcherText",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/switch.ts#SwitchRefused",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/switch.ts#Switched",
           "owner": "5a3bed29"
         },
         {
