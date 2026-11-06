@@ -165,6 +165,7 @@ jobs:
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"
       - if: ${{ !cancelled() && inputs.test-pattern == '' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: timings-${{ inputs.name }}-${{ matrix.shard }}
@@ -172,6 +173,7 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
       - if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.name }}-report-${{ matrix.shard }}
