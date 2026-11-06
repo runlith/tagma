@@ -13,6 +13,9 @@ import { WireCatalog } from './WireCatalog.js';
 
 export const TEST_ORIGIN = 'http://localhost';
 
+//! a lazy operations import still in flight when its test file ends fails in the shared module runner and stays failed for the next file
+await Promise.all(CATALOG_MODULES.map((module: WireModule) => module.operations?.()));
+
 const noServer: PlatformFetch = () => Promise.reject(new Error('This test named no server.'));
 
 export const testCatalog = (...modules: readonly WireModule[]): Point<WireModule> => makePoint(WireCatalog, ...CATALOG_MODULES, ...modules);
