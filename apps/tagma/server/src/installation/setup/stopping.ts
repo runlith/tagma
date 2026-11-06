@@ -6,16 +6,16 @@ import { chainAt, stopChain, stopProcess } from '../process/chain.js';
 import { ACTIVE_LOCK } from '../contract/wire/junction.js';
 import { type ActiveHolder, holderName, junctionDirectory } from '../contract/wire/junction.js';
 
-export class SwitchRefused extends Data.TaggedError('SwitchRefused')<{
+class QuitRefused extends Data.TaggedError('QuitRefused')<{
   readonly code: 'channel-unnamed' | 'host-stayed' | 'chain-unproven';
   readonly reason: string;
   readonly unblock: string[];
 }> {}
 
-export type Switched = { readonly from: string; readonly host: string; readonly killed: boolean };
+type Stopped = { readonly from: string; readonly host: string; readonly killed: boolean };
 
 const chainUnproven = (name: string) => (detail: string) =>
-  new SwitchRefused({
+  new QuitRefused({
     code: 'chain-unproven',
     reason: `${name} may have started again; its process chain could not be proven stopped: ${detail}`,
     unblock: ['press Stop again to stop any Tagma that came back'],
@@ -41,13 +41,13 @@ const endedTag = (printed: string): string | null => {
   }
 };
 
-const hostEnded = Effect.fnUntraced(function* (cli: string, name: string): Effect.fn.Return<string, SwitchRefused> {
-  const shutdown = [cli, 'execution-host', 'shutdown', `--operation=switch-${yield* Clock.currentTimeMillis}`, '--json'];
+const hostEnded = Effect.fnUntraced(function* (cli: string, name: string): Effect.fn.Return<string, QuitRefused> {
+  const shutdown = [cli, 'execution-host', 'shutdown', `--operation=quit-${yield* Clock.currentTimeMillis}`, '--json'];
   const stayed = (said: string) =>
-    new SwitchRefused({
+    new QuitRefused({
       code: 'host-stayed',
       reason: `${name} left, and its execution host did not end: ${said}`,
-      unblock: [`${shutdown.slice(0, -1).join(' ')} — run it again; the same operation resumes the shutdown, then switch again`],
+      unblock: [`${shutdown.slice(0, -1).join(' ')} — run it again; the same operation resumes the shutdown`],
     });
   if (!executable(cli)) return yield* stayed(`${cli} is not executable`);
   const ran = yield* Effect.promise(async () => {
@@ -68,20 +68,20 @@ export const stopUnheld = Effect.fn('installation.stopUnheld')(function* (data: 
   const stopped = yield* stopChain(chain.reference).pipe(Effect.mapError((failure) => unproven(failure.detail)));
   if (!stopped.running) return null;
   if (chain.cli === null) return yield* unproven('the process generation records no command for ending its execution host');
-  return { from: name, host: yield* hostEnded(chain.cli, name), killed: stopped.killed } satisfies Switched;
+  return { from: name, host: yield* hostEnded(chain.cli, name), killed: stopped.killed } satisfies Stopped;
 });
 
-export const switchFrom = Effect.fnUntraced(function* (
+export const stopHolder = Effect.fnUntraced(function* (
   holder: ActiveHolder,
   env: NodeJS.ProcessEnv,
-): Effect.fn.Return<Switched, SwitchRefused, Processes | LockHolders> {
+): Effect.fn.Return<Stopped, QuitRefused, Processes | LockHolders> {
   const name = holderName(holder);
   const junction = junctionDirectory(env);
   if (holder === 'unnamed' || junction === null) {
-    return yield* new SwitchRefused({
+    return yield* new QuitRefused({
       code: 'channel-unnamed',
       reason: `${name} holds this Mac, and its record names no process to ask to leave`,
-      unblock: [`quit ${name} from its window, then switch again`],
+      unblock: [`quit ${name} from its window`],
     });
   }
   const unproven = chainUnproven(name);

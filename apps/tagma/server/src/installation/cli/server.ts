@@ -18,7 +18,7 @@ import type { Restart } from '../contract/wire/source.js';
 import type { ServerCli } from './port.js';
 import { awaitRestart, awaitStart, comingUp, requestRestart } from '../process/serverStart.js';
 import { activeElsewhere, activeHolder, readActive } from '../setup/active.js';
-import { stopUnheld, switchFrom } from '../setup/switch.js';
+import { stopHolder, stopUnheld } from '../setup/stopping.js';
 import { channelActive, junctionDirectory } from '../contract/wire/junction.js';
 import { QUIT_WORDS } from '../contract/wire/words.js';
 import { processStateSchema } from '../contract/wire/probe.js';
@@ -268,36 +268,6 @@ host build, the host's logic moves to it, and every terminal and command keeps
 its process.`),
   );
 
-const starting = Flag.Boolean('start').pipe(
-  Flag.withDescription('start this Tagma once the other left; --no-start leaves the start to the window'),
-  Flag.withDefault(true),
-);
-
-export const switching = (cli: ServerCli) =>
-  Command.make('switch', { start: starting }, ({ start }) =>
-    Effect.gen(function* () {
-      const at = yield* CurrentInvocation;
-      const channel = yield* InstalledChannel;
-      const junction = junctionDirectory(at.env);
-      const saved = junction === null ? null : readActive(junction);
-      const holder = activeElsewhere(channel, at.env) ?? (saved?.chain !== undefined && saved.channel !== channel.id ? saved : null);
-      if (holder !== null) {
-        const switched = yield* switchFrom(holder, at.env).pipe(
-          Effect.catchTag('SwitchRefused', (refused) => Effect.sync(() => refuse(refused.code, refused.reason, refused.unblock))),
-        );
-        yield* Console.log(switched.killed ? `${switched.from} did not leave in time and was killed` : `${switched.from} left`);
-        if (switched.host !== '') yield* Console.log(switched.host);
-      }
-      if (start) yield* saidServer(yield* ensureServer(cli));
-    }),
-  ).pipe(
-    Command.withDescription('end the Tagma that runs on this Mac and bring this one up in its place'),
-    noting(`One Tagma runs on a Mac at a time. The one running leaves the way quitting
-ends it — its threads stop, its execution host ends with every terminal and
-command it runs — and this one starts and takes the entry point that hooks
-and MCP servers reach.`),
-  );
-
 export const processState = Command.make('process-state', { data: Flag.String('data') }, ({ data }) =>
   Effect.gen(function* () {
     const at = yield* CurrentInvocation;
@@ -321,9 +291,9 @@ export const quitting = Command.make('quit', { json }, (o) =>
       return yield* o.json ? print({ stopped: false }, true) : Console.log(`${channel.name} is not running`);
     }
     const data = dataDirectory(channel, at.env);
-    const stopping = holder === null ? (data === null ? Effect.succeed(null) : stopUnheld(data, channel.name)) : switchFrom(holder, at.env);
+    const stopping = holder === null ? (data === null ? Effect.succeed(null) : stopUnheld(data, channel.name)) : stopHolder(holder, at.env);
     const stopped = yield* stopping.pipe(
-      Effect.catchTag('SwitchRefused', (refused) =>
+      Effect.catchTag('QuitRefused', (refused) =>
         Effect.sync(() => refuse(refused.code, refused.reason, refused.unblock, QUIT_WORDS[refused.code])),
       ),
     );

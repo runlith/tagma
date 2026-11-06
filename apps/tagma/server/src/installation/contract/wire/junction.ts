@@ -25,9 +25,14 @@ export const holderName = (holder: ActiveHolder): string =>
 
 export const channelActive = (holder: ActiveHolder, own: Channel): { readonly reason: string; readonly unblock: string[] } => {
   const name = holderName(holder);
+  const command = holder === 'unnamed' ? undefined : Object.values(CHANNELS).find((channel) => channel.id === holder.channel)?.command;
   return {
     reason: `${name} runs on this Mac${holder === 'unnamed' ? '' : ` (pid ${holder.pid}, ${holder.url})`}, and one Tagma runs at a time`,
-    unblock: [`${own.command} switch — ends ${name} the way quitting does and starts ${own.name}`],
+    unblock: [
+      command === undefined
+        ? `quit ${name} from its window, then open ${own.name} again`
+        : `${command} quit — ends ${name} the way its Stop does; then open ${own.name} again`,
+    ],
   };
 };
 

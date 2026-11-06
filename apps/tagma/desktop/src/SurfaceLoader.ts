@@ -6,7 +6,7 @@ import { currentVersion } from '@tagma/server/platform/lock/versionedDirectories
 import { ASKED_EVERY_MS, dataDirectory, installationsRoot, serveLogPath } from '@tagma/server/installation/contract/wire/layout';
 import type { Channel } from '@tagma/server/installation/contract/wire/channel';
 import { ATTEMPT_OPEN } from '@tagma/server/installation/contract/wire/attempt';
-import { activeElsewhere, closureOf, installFrom, switchOver, transferable, transferFrom } from './installation.js';
+import { activeElsewhere, closureOf, installFrom, transferable, transferFrom } from './installation.js';
 import {
   type Bearing,
   branchOf,
@@ -76,7 +76,6 @@ export class SurfaceLoader {
   private started: Started | null = null;
   private deciding = false;
   private standing: LoaderState | null = null;
-  private held: Closure | null = null;
   private settledOn = false;
   private declined = false;
   private asked: string | null = null;
@@ -141,22 +140,6 @@ export class SurfaceLoader {
     this.declined = false;
     this.asked = null;
     this.run(() => this.meet());
-  }
-
-  switchOver(): void {
-    const held = this.held;
-    const places = this.places;
-    if (held === null || places === null || this.deciding) return;
-    this.run(async () => {
-      this.stand({ why: 'switching', from: this.standing?.why === 'channel-active' ? this.standing.holder.name : 'the other Tagma' });
-      const refused = await switchOver(held, places.log, this.opening.env);
-      if (refused !== null) {
-        this.stand({ why: 'unknown', detail: `the other Tagma was not switched off: ${refused}` });
-        return;
-      }
-      this.held = null;
-      await this.meet();
-    });
   }
 
   arrived(copy: string): void {
@@ -532,7 +515,6 @@ export class SurfaceLoader {
   private async begun(places: Places, closure: Closure): Promise<boolean> {
     const holder = await activeElsewhere(this.opening.env, await this.probe(places));
     if (holder !== null) {
-      this.held = closure;
       this.stand({ why: 'channel-active', holder });
       return false;
     }

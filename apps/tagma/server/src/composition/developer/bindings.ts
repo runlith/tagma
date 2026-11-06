@@ -1,5 +1,11 @@
+import { homedir } from 'node:os';
 import { Layer } from 'effect';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { checkoutBuildsLayer } from '../../checkout-builds/runner.js';
+import { freshWorldLayer } from '../../fresh-world/lifecycle.js';
+import { macFresh } from '../../mac-release/fresh.js';
+import { PROGRAM_FEED } from '../../platform/contract/wire/program.js';
+import { CHANNEL as RELEASE_CHANNEL } from '../release/channel.js';
 import { devSurfaceLayer } from '../../checkout-builds/surface.js';
 import { SourceChanges } from '../../checkout-builds/contract/service/changes.js';
 import { buildPlaces } from '../../checkout-builds/places.js';
@@ -38,6 +44,16 @@ const nextInstallation = (place: NextPlace) => {
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 
-const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), app: place.app, port: place.port });
+const door = (place: DoorPlace) =>
+  Layer.mergeAll(
+    devSurfaceLayer({ checkout: checkoutOf(place), app: place.app, port: place.port }),
+    freshWorldLayer({
+      home: homedir(),
+      data: place.dataPath,
+      feed: PROGRAM_FEED,
+      url: `http://127.0.0.1:${RELEASE_CHANNEL.port}`,
+      host: macFresh,
+    }).pipe(Layer.provide(BunFileSystem.layer)),
+  );
 
 export const BINDINGS: BindingChoice = { nextInstallation, door };

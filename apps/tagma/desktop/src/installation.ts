@@ -109,9 +109,6 @@ const settledBy = async (
 export const transferFrom = (closure: Closure, from: Channel, log: string, env: NodeJS.ProcessEnv): Promise<string | null> =>
   settledBy(closure, ['transfer', '--from', from.id], log, env, 'transfer');
 
-export const switchOver = (closure: Closure, log: string, env: NodeJS.ProcessEnv): Promise<string | null> =>
-  settledBy(closure, ['switch', '--no-start'], log, env, 'switch');
-
 const occupancy = async (url: string): Promise<{ readonly agents: number | null; readonly terminals: number | null }> => {
   const answer = await fetch(new URL('/api/op/read_machine_state', url), {
     method: 'POST',

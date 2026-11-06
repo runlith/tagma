@@ -606,7 +606,7 @@ export const serve = async (build: Build): Promise<void> => {
       Scope.provide(
         Layer.build(
           parts.bindings
-            .door({ checkout: build.cut.roots.checkout, app: appOf(build.cut), installation, port })
+            .door({ checkout: build.cut.roots.checkout, app: appOf(build.cut), installation, port, dataPath })
             .pipe(Layer.provide(Layer.mergeAll(Layer.succeedContext(tagma.door), FetchHttpClient.layer))),
         ),
         localScope,

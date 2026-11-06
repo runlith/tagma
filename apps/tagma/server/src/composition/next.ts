@@ -28,7 +28,7 @@ export type SourcePlace = {
   readonly installation: Installation | undefined;
 };
 
-export type DoorPlace = SourcePlace & { readonly app: SurfaceApp; readonly port: number };
+export type DoorPlace = SourcePlace & { readonly app: SurfaceApp; readonly port: number; readonly dataPath: string };
 
 export type NextPlace = SourcePlace & {
   readonly dataPath: string;

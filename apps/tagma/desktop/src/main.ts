@@ -23,6 +23,7 @@ import { Folders } from './folders.js';
 import { ProjectWindows } from './projectWindows.js';
 import { ViewWindows } from './viewWindows.js';
 import { DevSurface } from './devSurface.js';
+import { FreshWorld } from './freshWorld.js';
 import { Fronts } from './fronts.js';
 import { carriedBy, carriedIn, keptApplication, leaseRelease, numbered, standingIn } from './release.js';
 import { bundleOf } from '@tagma/server/mac-applications/placement';
@@ -379,6 +380,7 @@ app.whenReady().then(() => {
   const own = bundle === null ? null : carriedBy(bundle);
   const fronts = new Fronts(surfaceUrl);
   const dev = named || own === null || numbered(own) ? null : new DevSurface(surfaceUrl, fronts, () => void reportProblem());
+  const fresh = dev === null ? null : new FreshWorld(surfaceUrl, shownWindow, () => void reportProblem());
   quitting = new Quitting(
     surfaceUrl,
     named || installRoot === null || serveLog === null || data === null
@@ -393,7 +395,7 @@ app.whenReady().then(() => {
       windows?.focused()?.webContents.send(UPDATES.check);
     },
     () => loader?.leave(),
-    dev?.menu() ?? [],
+    dev === null || fresh === null ? [] : [...dev.menu(), { type: 'separator' }, ...fresh.menu()],
   );
   quitting.install();
   ipcMain.handle(UPDATES.take, () => {

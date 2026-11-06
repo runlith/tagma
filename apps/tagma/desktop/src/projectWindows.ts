@@ -374,7 +374,6 @@ export class ProjectWindows implements PressTarget {
       if (act === null) return;
       event.preventDefault();
       if (act === 'retry') this.loader.retry();
-      else if (act === 'switch') this.loader.switchOver();
       else this.report();
     });
     contents.on('did-start-navigation', (details) => {

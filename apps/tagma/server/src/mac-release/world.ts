@@ -24,10 +24,10 @@ import { RESTART_RECORD } from '../installation/contract/wire/restart.js';
 import { dataDirectoryLocked } from '../platform/lock/holder.js';
 import { CURRENT } from '../platform/contract/wire/versions.js';
 import { pidAlive } from '@runlith/utils/process';
+import { forgetRegistered, isolatedHome } from './home.js';
 
 const UNPACK = ['--no-xattrs', '--no-mac-metadata', '--no-acls', '--no-fflags', '--no-same-owner'];
 const CODESIGN = '/usr/bin/codesign';
-const LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
 const ASKED_EVERY_MS = 250;
 const OFFSETS = Object.values(portBlock(0));
 const PROJECT = 'trial';
@@ -164,12 +164,8 @@ export const openWorld = async (
   const repo = join(dir, 'repo');
   await Promise.all([home, repo, join(dir, 'tmp')].map((at) => mkdir(at, { recursive: true })));
   const env: Record<string, string> = {
-    PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
-    HOME: home,
-    CFFIXED_USER_HOME: home,
-    TMPDIR: `${join(dir, 'tmp')}/`,
+    ...isolatedHome(home, join(dir, 'tmp'), process.env.USER ?? 'tagma'),
     LANG: 'en_US.UTF-8',
-    USER: process.env.USER ?? 'tagma',
     LOGNAME: process.env.LOGNAME ?? process.env.USER ?? 'tagma',
     SHELL: '/bin/sh',
     CLAUDE_CONFIG_DIR: join(home, '.claude'),
@@ -495,13 +491,6 @@ export const keptOf = (world: World): string | null => {
     : null;
 };
 
-const REGISTERED = /^path:\s+(.+?) \(0x[0-9a-f]+\)$/gmu;
-
-const registeredUnder = async (world: World): Promise<readonly string[]> => {
-  const dump = await new Response(Bun.spawn([LSREGISTER, '-dump'], { stdout: 'pipe', stderr: 'ignore' }).stdout).text();
-  return [...dump.matchAll(REGISTERED)].map((match) => match[1]!).filter((path) => path.startsWith(`${world.dir}/`));
-};
-
 export const closed = async (world: World): Promise<string> => {
   const told: string[] = [];
   const quit = await cli(world, 'quit');
@@ -522,8 +511,7 @@ export const closed = async (world: World): Promise<string> => {
   }
   const log = await readFile(join(world.dir, 'serve.log'), 'utf8').catch(() => '');
   await rm(world.dir, { recursive: true, force: true });
-  const registered = await registeredUnder(world);
-  for (const bundle of registered) await Bun.spawn([LSREGISTER, '-u', bundle], { stdout: 'ignore', stderr: 'ignore' }).exited;
-  told.push(`LaunchServices forgot ${registered.length} applications of this world`, log);
+  const forgotten = await forgetRegistered(world.dir);
+  told.push(`LaunchServices forgot ${forgotten} applications of this world`, log);
   return told.join('\n');
 };

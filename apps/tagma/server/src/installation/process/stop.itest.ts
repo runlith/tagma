@@ -7,7 +7,7 @@ import { Effect, Fiber, Layer } from 'effect';
 import { pidAlive } from '@runlith/utils/process';
 import { testLockHolders, testProcesses } from '../testing/processes.js';
 import { activeHolder, takeActive } from '../setup/active.js';
-import { switchFrom } from '../setup/switch.js';
+import { stopHolder } from '../setup/stopping.js';
 import { junctionDirectory } from '../contract/wire/junction.js';
 import { stopChain } from './chain.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
@@ -29,7 +29,7 @@ const cliAt = (home: string) => {
   return cli;
 };
 
-it.live('switching during a prepared restart cancels both generations and leaves the active lock to the chosen channel', () =>
+it.live('stopping during a prepared restart cancels both generations and leaves the active lock free for another channel', () =>
   Effect.gen(function* () {
     const home = yield* rooted;
     const cli = cliAt(home);
@@ -62,7 +62,7 @@ it.live('switching during a prepared restart cancels both generations and leaves
     const junction = junctionDirectory(env)!;
     const holder = activeHolder(junction);
     if (holder === null) return yield* Effect.die('the predecessor did not hold its active lock');
-    const stopping = yield* Effect.forkChild(switchFrom(holder, env));
+    const stopping = yield* Effect.forkChild(stopHolder(holder, env));
     while (!(JSON.parse(readFileSync(join(home, 'process.json'), 'utf8')) as { stopping: boolean }).stopping)
       yield* Effect.sleep('10 millis');
     writeFileSync(join(home, 'close'), 'close');
@@ -139,7 +139,7 @@ if (process.argv.includes('returned')) {
     yield* waitFor(join(home, 'prepared'));
     const holder = activeHolder(junction);
     if (holder === null) return yield* Effect.die('the issued predecessor did not hold its lock');
-    const refused = yield* Effect.flip(switchFrom(holder, { HOME: home }));
+    const refused = yield* Effect.flip(stopHolder(holder, { HOME: home }));
     expect(refused.code).toBe('chain-unproven');
     expect(yield* Effect.promise(() => first.exited)).toBe(0);
     yield* waitFor(join(home, 'returning'));

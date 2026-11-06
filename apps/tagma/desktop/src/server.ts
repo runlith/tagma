@@ -232,6 +232,18 @@ export function workOf(answer: unknown): Work | null {
   };
 }
 
+export async function openFresh(surfaceUrl: URL, over: boolean): Promise<Refusal | null> {
+  const answer = await fetch(new URL('/api/op/open_fresh_world', surfaceUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(over ? { over: true } : {}),
+  }).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+  if (answer instanceof Error) return { code: 'unanswered', reason: `the fresh world was not answered: ${answer.message}`, said: null };
+  const body: unknown = await answer.json().catch(() => null);
+  if (answer.ok && (body as { status?: unknown } | null)?.status === 'opened') return null;
+  return refusalOf(decodeRefusal(body), `the fresh world answered ${answer.status}`);
+}
+
 export async function askRestart(surfaceUrl: URL): Promise<Refusal | null> {
   const answer = await fetch(new URL('/api/op/restart_server', surfaceUrl), {
     method: 'POST',

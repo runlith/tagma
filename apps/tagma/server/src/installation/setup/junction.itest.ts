@@ -9,7 +9,7 @@ import { CHANNELS } from '../contract/wire/channel.js';
 import { ACTIVE_FILE, type ActiveServer, entryPath, junctionDirectory, NOT_RUNNING } from '../contract/wire/junction.js';
 import { activeElsewhere, activeHolder, takeActive } from './active.js';
 import { placeEntry } from './entry.js';
-import { switchFrom } from './switch.js';
+import { stopHolder } from './stopping.js';
 
 const SERVER = new URL('../../../', import.meta.url).pathname;
 const DEVELOPER_CLI = new URL('../../composition/developer/cli.ts', import.meta.url).pathname;
@@ -100,28 +100,28 @@ it.live('a running channel refuses the other by name and address, and its kill -
   }),
 );
 
-it.live('switching asks the running channel to leave, waits for its lock, and ends its execution host', () =>
+it.live('stopping asks the running channel to leave, waits for its lock, and ends its execution host', () =>
   Effect.gen(function* () {
     const cli = fakeCli('dev-cli');
     const dev = yield* Effect.promise(() => holding({ channel: 'dev', cli, url: 'http://127.0.0.1:5633' }));
     const holder = activeElsewhere(CHANNELS.stable, { HOME: home });
     expect(holder).not.toBeNull();
 
-    const switched = yield* switchFrom(holder!, { HOME: home });
+    const stopped = yield* stopHolder(holder!, { HOME: home });
 
     expect(yield* Effect.promise(() => dev.exited)).toBe(0);
-    expect(switched.from).toBe(CHANNELS.dev.name);
-    expect(readFileSync(join(home, 'said'), 'utf8')).toMatch(/^dev-cli execution-host shutdown --operation=switch-\d+ --json\n$/);
+    expect(stopped.from).toBe(CHANNELS.dev.name);
+    expect(readFileSync(join(home, 'said'), 'utf8')).toMatch(/^dev-cli execution-host shutdown --operation=quit-\d+ --json\n$/);
     expect(activeHolder(junction)).toBeNull();
   }).pipe(Effect.provide(native)),
 );
 
-it.live('a switch whose execution host did not end is refused, so nothing starts over terminals still running', () =>
+it.live('a stop whose execution host did not end is refused, so nothing is reported stopped over terminals still running', () =>
   Effect.gen(function* () {
     const cli = fakeCli('dev-cli', '{"_tag":"ShutdownIncomplete","reason":"a terminal stayed"}');
     const dev = yield* Effect.promise(() => holding({ channel: 'dev', cli, url: 'http://127.0.0.1:5633' }));
 
-    const refused = yield* Effect.flip(switchFrom(activeElsewhere(CHANNELS.stable, { HOME: home })!, { HOME: home }));
+    const refused = yield* Effect.flip(stopHolder(activeElsewhere(CHANNELS.stable, { HOME: home })!, { HOME: home }));
 
     expect(yield* Effect.promise(() => dev.exited)).toBe(0);
     expect(refused.code).toBe('host-stayed');

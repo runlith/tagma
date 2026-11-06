@@ -19,7 +19,6 @@ export const installationVerbs = <User, Repo, Entry extends Refreshed>(
     return {
       restart: verbs.restart(port),
       status: verbs.status(port),
-      switch: verbs.switching(port),
       quit: verbs.quitting,
       'process-state': verbs.processState,
     };
@@ -42,7 +41,6 @@ export const installationVerbs = <User, Repo, Entry extends Refreshed>(
     install: setup,
     upgrade: setup,
     status: server,
-    switch: server,
     quit: server,
     'process-state': server,
     transfer: carrying,

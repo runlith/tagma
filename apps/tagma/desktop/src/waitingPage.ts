@@ -10,21 +10,20 @@ export type LoaderState =
   | { readonly why: 'stalled'; readonly heldFor: string | null; readonly seconds: number }
   | { readonly why: 'transferring'; readonly from: string }
   | { readonly why: 'channel-active'; readonly holder: Holder }
-  | { readonly why: 'switching'; readonly from: string }
   | { readonly why: 'not-started'; readonly detail: string; readonly startup: Startup | null }
   | { readonly why: 'unrestored'; readonly build: string; readonly said: string | null; readonly detail: string }
   | { readonly why: 'foreign' }
   | { readonly why: 'no-installation'; readonly detail: string }
   | { readonly why: 'unknown'; readonly detail: string };
 
-export type WindowAct = 'retry' | 'switch' | 'report';
+export type WindowAct = 'retry' | 'report';
 
 export const WINDOW_ACTS = 'tagma-window://';
 
 export const windowAct = (url: string): WindowAct | null => {
   if (!url.startsWith(WINDOW_ACTS)) return null;
   const act = url.slice(WINDOW_ACTS.length).replace(/\/$/u, '');
-  return act === 'retry' || act === 'switch' || act === 'report' ? act : null;
+  return act === 'retry' || act === 'report' ? act : null;
 };
 
 type Page = {
@@ -103,13 +102,11 @@ function pageOf(standing: LoaderState): Page {
         title: `${standing.holder.name} is running`,
         said: [
           `Only one Tagma runs at a time.${at(standing.holder)}`,
-          `Switching stops ${standing.holder.name} — its agents stop and its terminals close — and starts ${name}.`,
+          `Quit ${standing.holder.name} from its window, then try again to open ${name}.`,
         ],
         details: null,
-        acts: [['switch', `Switch to ${name}`]],
+        acts: [RETRY],
       };
-    case 'switching':
-      return { title: `Stopping ${standing.from}…`, said: [`${name} starts as soon as it has stopped.`], details: null, acts: [] };
     case 'not-started':
       return {
         title: `${name} didn't start`,
