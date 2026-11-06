@@ -48,4 +48,6 @@ A theme that changes surfaces usually has to retune `neutral` and the muted text
 
 ## Using it
 
+A theme the person asks for is theirs, not the project's: start it with `create_plugin {scope: "user"}`, which writes it among their own plugins in Tagma's data folder, where no repository carries it, and install it from that folder with `scope: "user"`. A theme a project ships for its team is created without `scope` into the project's `.tagma-plugins/<id>/`.
+
 After `install_plugin` (`scope: "user"` offers it in every project), the theme stands among the person's choices while its plugin runs anywhere. `write_setting {key: "appearance.theme", value: "<plugin>.<theme>"}` makes every window of the person paint it; `appearance.mode` is `system`, `light` or `dark`, and a theme with one look shows that look whatever the mode.

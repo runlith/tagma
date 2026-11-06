@@ -563,7 +563,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(Layer.succeed(ListFormats, [claudeCodeList, codexList])),
     Layer.provideMerge(
       plugins.lifetimes.installation.pipe(
-        Layer.provide(Layer.succeed(PluginPlaces, { home: pluginsHome })),
+        Layer.provideMerge(Layer.succeed(PluginPlaces, { home: pluginsHome })),
         Layer.provide(Layer.succeed(PluginFormats, [tagmaFormat, claudeCodeFormat, codexFormat, agentPluginsFormat])),
       ),
     ),

@@ -14,7 +14,7 @@
   const opening = Opening.use();
   const asking = Asking.use();
 
-  const THEME_REQUEST = 'Make a Tagma theme that ';
+  const THEME_REQUEST = 'Make me a Tagma theme of my own that ';
 </script>
 
 {#if appearance.missing}

@@ -7,6 +7,7 @@ import type { PluginSource } from './contract/wire/rows.js';
 
 export const CLONES = 'agent-plugins';
 export const DATA = 'agent-plugin-data';
+const OWN = 'plugins';
 const STAGING = '.staging';
 const TAKEN = 'package';
 
@@ -33,6 +34,8 @@ export const sameSource = (a: PluginSource, b: PluginSource): boolean =>
 export const cloneRoot = (home: string, id: string): string => join(home, CLONES, id);
 
 export const dataRoot = (home: string, id: string): string => join(home, DATA, id);
+
+export const ownRoot = (home: string, id: string): string => join(home, OWN, id);
 
 const unreadable = (failure: { readonly message: string }) => new SourceUnreadable({ reason: failure.message });
 

@@ -105,6 +105,7 @@ export const PLUGIN_PAIRS = {
           projectId: yield* projectId,
           id: input.id,
           title: input.title,
+          scope: input.scope ?? 'project',
           holder: caller.actor.kind === 'thread' ? { kind: 'thread', thread: caller.actor.threadId } : OPERATOR,
         });
         return { status: 'ok' as const, path };

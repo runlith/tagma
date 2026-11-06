@@ -190,16 +190,22 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer: arms({ ok: { path: Schema.String.annotate({ description: 'The new plugin folder.' }) } }),
     meaning:
-      'Create a new plugin in Tagma’s format: write the SDK’s template into this project’s `.tagma-plugins/<id>/`, ready to have its dependencies installed, be built and be installed from its folder.',
+      'Create a new plugin in Tagma’s format: write the SDK’s template into this project’s `.tagma-plugins/<id>/`, or among the person’s own plugins outside every repository, ready to have its dependencies installed, be built and be installed from its folder.',
     grammar:
-      'The folder holds `package.json`, `plugin.ts`, its test and `.gitattributes` marking the build output generated; it carries no build yet, so install its dependencies, run `tagma-plugin build` there, then install_plugin with the folder as source. A folder that already stands refuses.',
+      'The folder holds `package.json`, `plugin.ts`, its test and `.gitattributes` marking the build output generated; it carries no build yet, so install its dependencies, run `tagma-plugin build` there, then install_plugin with the folder as source — with `scope: user` for the person’s own. A folder that already stands refuses.',
     input: Schema.Struct({
       project: projectField,
       id: PluginLabel.annotate({ description: 'The plugin, which names its folder, its tools and its agents.' }),
       title: Schema.NonEmptyString.annotate({ description: 'What the person reads as its name.' }),
+      scope: Schema.optional(Schema.Literals(SETTABLE_SCOPES)).annotate({
+        description:
+          'project (the default): the project’s plugin, in its `.tagma-plugins/<id>/`, which its repository carries to its team. user: the person’s own, such as a theme they asked for, in Tagma’s data folder, which no repository carries.',
+      }),
     }),
     refusals: ['unknown-project', 'plugin-folder-taken', 'plugin-folder-unwritable'],
-    confirmation: (input) => ({ summary: `Create the plugin ${input.id} in .tagma-plugins/${input.id}?` }),
+    confirmation: (input) => ({
+      summary: `Create the plugin ${input.id} ${input.scope === 'user' ? 'among your own plugins' : `in .tagma-plugins/${input.id}`}?`,
+    }),
     confirmLabel: 'Create',
     presentation: { running: 'Creating a plugin', done: 'Created a plugin' },
     subjects: () => [],

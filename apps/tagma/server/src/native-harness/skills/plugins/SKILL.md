@@ -9,12 +9,12 @@ A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition 
 
 ## Making and changing one
 
-1. `create_plugin {id, title}` writes a new folder into the project's `.tagma-plugins/<id>/` and answers its `path`; a folder already there refuses `plugin-folder-taken`. Outside Tagma, `bunx --package @runlith/tagma tagma-plugin init <folder> --id <id> --title <title>` writes the same files. `id`: lowercase letters, digits and inner hyphens, at most 40.
+1. `create_plugin {id, title}` writes a new folder into the project's `.tagma-plugins/<id>/` and answers its `path`; with `scope: "user"` it writes the person's own plugin, such as a theme they asked for, into Tagma's data folder, which no repository carries. A folder already there refuses `plugin-folder-taken`. Outside Tagma, `bunx --package @runlith/tagma tagma-plugin init <folder> --id <id> --title <title>` writes the same files. `id`: lowercase letters, digits and inner hyphens, at most 40.
 2. Install its dependencies in the folder with the project's package manager (`bun install`). With none on the machine, install Bun first: `curl -fsSL https://bun.sh/install | bash` on macOS and Linux, `powershell -c "irm bun.sh/install.ps1 | iex"` on Windows. Add libraries the same way: the build bundles them, so nothing is installed where the plugin runs.
 3. Write the definition. After every edit run `bunx tagma-plugin build` in the folder: it type-checks, refuses a field `definePlugin` does not take, runs the checks Tagma runs at install, each point alone and against the points it names, and stops with Tagma's reason. `bunx tagma-plugin dev` rebuilds on every change for as long as it runs.
 4. `bun test` runs the folder's tests (Testing).
-5. `install_plugin {source: ".tagma-plugins/<id>"}` installs it once, read in place, and runs it in this project; `scope: "user"` runs it in every project, `enabled: false` only installs it. `enable_plugin {id, enabled, scope?}` runs or stops it; `uninstall_plugin` stops it everywhere and keeps its data. Each rebuild reaches the installed plugin by itself.
-6. Commit the folder with `dist/` and `tagma-plugin.json`, without `node_modules`: whoever opens the project runs it with no build.
+5. `install_plugin {source: "<the path create_plugin answered>"}` installs it once, read in place, and runs it in this project; `scope: "user"` runs it in every project — the person's own plugin takes it — and `enabled: false` only installs it. `enable_plugin {id, enabled, scope?}` runs or stops it; `uninstall_plugin` stops it everywhere and keeps its data. Each rebuild reaches the installed plugin by itself.
+6. Commit a project's plugin folder with `dist/` and `tagma-plugin.json`, without `node_modules`: whoever opens the project runs it with no build. The person's own plugin is committed nowhere.
 
 ## The definition
 
