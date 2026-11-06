@@ -5,10 +5,13 @@ ord: 13
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a19eb2-4a56-79d0-9dbd-af67ec98a662",
+    "status": "in_work"
   }
 sources:
   - kind: file
     ref: apps/tagma/server/src/composition/testing/http/reflectDoor.itest.ts
 ---
 In macOS integration run 42258729273 `apps/tagma/server/src/composition/testing/http/reflectDoor.itest.ts` — "a foreign reflection preserves provenance and sightings, and task or commit answers can be tracked and withdrawn" — printed nothing and waited until the 180 s bound. Find which call or wait stood and end it on its fact.
+
+What the run shows: the test's first request, `file_reflection` with no project, answered 503 after 180085 ms; its interrupted stack stands in `ProjectIdentification.identify` (`projects/identity.ts:126`) → `Git.text` → `Git.spawn`, the `git rev-parse --path-format=absolute --show-toplevel --git-dir --git-common-dir` that `SourceProject.place` runs for the world's `source/server`. That git process never ended or never closed its output. Tested and refuted: the git fsmonitor daemon holding the pipe — with Apple Git 2.50.1 and `core.fsmonitor=true`, `git status` starts the daemon and still closes stdout at once. Locally the test passes three runs out of three.
