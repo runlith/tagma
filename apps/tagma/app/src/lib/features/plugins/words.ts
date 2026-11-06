@@ -1,5 +1,5 @@
 import type { MarketplaceRow, TrustLabel } from '@tagma/server/marketplaces/contract/wire/rows';
-import type { PluginComponent, PluginComponentKind, PluginProcessRow } from '@tagma/server/plugins/contract/wire/rows';
+import type { PluginComponent, PluginComponentKind, PluginProcessRow, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
 import type { StepTone } from './here.js';
 
 type ProcessSaid = { readonly tone: StepTone; readonly title: string; readonly detail: string | null };
@@ -74,8 +74,21 @@ export function saidOf(component: PluginComponent): ComponentSaid {
       return { kind: 'process', title: 'A program of its own on this computer', detail: component.name };
     case 'contribution':
       return { kind: 'contribution', title: component.title ?? `Adds ${component.name} to Tagma`, detail };
+    case 'provider':
+      return { kind: 'provider', title: component.title ?? `The provider ${component.name}`, detail };
   }
 }
+
+export type ProvidersSaid = { readonly kind: keyof NonNullable<PluginRow['providers']>; readonly title: string; readonly detail: string };
+
+const PROVIDERS: readonly ProvidersSaid[] = [
+  { kind: 'models', title: 'Models', detail: 'Agents run on them; the model menu lists them.' },
+  { kind: 'harnesses', title: 'A CLI agent', detail: 'Threads run in it, in its own terminal.' },
+  { kind: 'speech', title: 'Speech', detail: 'Settings → Speech lists it for dictation and reading aloud.' },
+];
+
+export const providersSaid = (providers: PluginRow['providers']): readonly ProvidersSaid[] =>
+  providers === undefined ? [] : PROVIDERS.filter((one) => providers[one.kind]);
 
 export const KINDS: Readonly<Record<PluginComponentKind, string>> = {
   skill: 'Skills',
@@ -85,6 +98,7 @@ export const KINDS: Readonly<Record<PluginComponentKind, string>> = {
   hook: 'Hooks',
   process: 'Programs',
   contribution: 'Additions',
+  provider: 'Providers',
 };
 
 export const FORMATS: Readonly<Record<string, string>> = {

@@ -10,21 +10,34 @@
   import SquareSlash from '@lucide/svelte/icons/square-slash';
   import Terminal from '@lucide/svelte/icons/terminal';
   import Zap from '@lucide/svelte/icons/zap';
+  import AudioLines from '@lucide/svelte/icons/audio-lines';
+  import Cpu from '@lucide/svelte/icons/cpu';
+  import SquareTerminal from '@lucide/svelte/icons/square-terminal';
   import type { Component } from 'svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
-  import { type ComponentSaid, saidOf } from '$lib/features/plugins/words.js';
+  import { type ComponentSaid, type ProvidersSaid, providersSaid, saidOf } from '$lib/features/plugins/words.js';
 
   let {
     components,
+    providers,
     ignored,
     consent,
     options,
   }: {
     components: readonly PluginComponent[];
+    providers?: PluginRow['providers'];
     ignored: PluginRow['ignored'];
     consent?: PluginPreview['consent'];
     options: PluginRow['options'];
   } = $props();
+
+  const BROUGHT: Readonly<Record<ProvidersSaid['kind'], Component<{ class?: string }>>> = {
+    models: Cpu,
+    harnesses: SquareTerminal,
+    speech: AudioLines,
+  };
+
+  const brought = $derived(providersSaid(providers));
 
   const ICONS: Readonly<Record<ComponentSaid['kind'], Component<{ class?: string }>>> = {
     'mcp-server': Plug,
@@ -35,6 +48,7 @@
     hook: Zap,
     process: Terminal,
     contribution: Puzzle,
+    provider: Cpu,
   };
 
   const said = $derived(components.map(saidOf));
@@ -69,10 +83,11 @@
   </div>
 {/snippet}
 
-{#if said.length > 0}
+{#if brought.length > 0 || said.length > 0}
   <section class="grid gap-2" aria-label="What agents get">
     <h3 class="text-small font-medium text-muted-foreground">What agents get</h3>
     <div class="grid divide-y rounded-lg border bg-raised">
+      {#each brought as one (one.kind)}{@render line(BROUGHT[one.kind], one.title, one.detail)}{/each}
       {#each said as one, index (index)}{@render line(ICONS[one.kind], one.title, one.detail)}{/each}
     </div>
   </section>

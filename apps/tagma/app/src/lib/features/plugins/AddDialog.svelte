@@ -1,24 +1,7 @@
 <script lang="ts">
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
-  import Package from '@lucide/svelte/icons/package';
-  import Plug from '@lucide/svelte/icons/plug';
-  import Store from '@lucide/svelte/icons/store';
-  import Terminal from '@lucide/svelte/icons/terminal';
-  import Callout from '@runlith/chat-ui/Callout.svelte';
-  import { Button } from '$lib/shared/ui/button/index.js';
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
-  import { Input } from '$lib/shared/ui/input/index.js';
-  import { Refusal, toldOf } from '$lib/wire/refusal.js';
-  import type { Told } from '$lib/wire/told.js';
-  import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
-  import { McpRepo, type McpDeclarationInput } from '$lib/features/mcp/Repo.js';
-  import Waiting from '@runlith/chat-ui/Waiting.svelte';
-  import FadeText from '$lib/shared/FadeText.svelte';
-  import { addressOf } from '$lib/features/plugins/address.js';
-  import Gives from '$lib/features/plugins/Gives.svelte';
-  import { idOf, type Place } from '$lib/features/plugins/place.js';
-  import { type Found, PluginsRepo } from '$lib/features/plugins/Repo.js';
-  import Tile from '$lib/features/plugins/Tile.svelte';
+  import AddField from '$lib/features/plugins/AddField.svelte';
 
   let {
     open = $bindable(false),
@@ -29,69 +12,6 @@
     project: Project;
     ondone: (at: string | null) => Promise<unknown>;
   } = $props();
-
-  const plugins = PluginsRepo.use();
-  const mcp = McpRepo.use();
-
-  let typed = $state('');
-  let busy = $state(false);
-  let failed = $state<Told | undefined>(undefined);
-  let refusal = $state<{ code: string; reason: string; unblock: readonly string[] } | undefined>(undefined);
-  let found = $state<{ readonly at: string; readonly what: Found } | undefined>(undefined);
-
-  const address = $derived(addressOf(typed));
-
-  $effect(() => {
-    if (open) return;
-    typed = '';
-    found = undefined;
-    failed = undefined;
-    refusal = undefined;
-  });
-
-  async function act(work: () => Promise<Place | null>): Promise<void> {
-    busy = true;
-    failed = undefined;
-    try {
-      const at = await work();
-      open = false;
-      await ondone(at === null ? null : idOf(at));
-    } catch (error: unknown) {
-      failed = toldOf(error);
-      refusal = error instanceof Refusal ? { code: error.code, reason: error.reason, unblock: error.unblock } : undefined;
-    } finally {
-      busy = false;
-    }
-  }
-
-  const addSource = (source: string) =>
-    act(async () => {
-      const marketplace = await plugins.addMarketplace.run({ source }, { throwOnError: true });
-      return marketplace === undefined ? null : { kind: 'source', id: marketplace.id };
-    });
-  const installPrepared = (prepared: string) =>
-    act(async () => {
-      const plugin = await plugins.installPrepared.run({ projectId: project.id, prepared, scope: 'project' }, { throwOnError: true });
-      return plugin === undefined ? null : { kind: 'plugin', id: plugin.id };
-    });
-
-  async function inspect(source: string): Promise<void> {
-    busy = true;
-    failed = undefined;
-    try {
-      const what = await plugins.inspect.run({ projectId: project.id, source }, { throwOnError: true });
-      found = what === undefined ? undefined : { at: source, what };
-    } catch (error: unknown) {
-      failed = toldOf(error);
-    } finally {
-      busy = false;
-    }
-  }
-  const declare = (declaration: McpDeclarationInput) =>
-    act(async () => {
-      await mcp.add.run({ projectId: project.id, scope: 'project', declaration }, { throwOnError: true });
-      return { kind: 'server', scope: 'project', name: declaration.name };
-    });
 </script>
 
 <Dialog.Root bind:open>
@@ -100,76 +20,14 @@
       <Dialog.Title class="text-page">Add by address</Dialog.Title>
       <Dialog.Description>A source of plugins, one plugin, a service's address or a program to run.</Dialog.Description>
     </Dialog.Header>
-    <Input class="font-mono" placeholder="owner/repo, a git URL, a folder, https://…/mcp or npx …" bind:value={typed} disabled={busy} />
-
-    {#if address.kind === 'empty'}
-      <div class="grid grid-cols-2 gap-2 text-small text-muted-foreground">
-        <span class="flex items-center gap-2"
-          ><Store class="size-3.5" />A source: <code class="stamp text-foreground">owner/repo</code></span
-        >
-        <span class="flex items-center gap-2"><Package class="size-3.5" />A plugin: a git URL or a folder</span>
-        <span class="flex items-center gap-2"
-          ><Plug class="size-3.5" />A service: <code class="stamp text-foreground">https://…/mcp</code></span
-        >
-        <span class="flex items-center gap-2"
-          ><Terminal class="size-3.5" />A program: <code class="stamp text-foreground">npx some-mcp</code></span
-        >
-      </div>
-    {:else if address.kind === 'source'}
-      {@const shown = found !== undefined && found.at === address.source ? found.what : undefined}
-      {#if shown === undefined}
-        <div class="flex items-center gap-3">
-          <p class="flex-1 text-ui text-muted-foreground">A repository or folder. Tagma reads it first and says what it holds.</p>
-          <Button disabled={busy} onclick={() => void inspect(address.source)}>
-            {#if busy}<Waiting class="size-3" />{/if}Read it
-          </Button>
-        </div>
-      {:else if shown.kind === 'marketplace'}
-        <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border bg-raised p-3">
-          <Store class="size-4 text-muted-foreground" />
-          <span class="grid min-w-0 gap-0.5">
-            <FadeText text="A source of plugins: {shown.title ?? shown.name}" class="text-ui font-medium" />
-            <span class="text-small text-muted-foreground tabular"
-              >{shown.entries} {shown.entries === 1 ? 'plugin' : 'plugins'}. Unreviewed: Tagma has not read them.</span
-            >
-          </span>
-          <Button disabled={busy} onclick={() => void addSource(address.source)}>Add source</Button>
-        </div>
-      {:else}
-        <div class="grid max-h-96 gap-4 overflow-y-auto">
-          <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-            <Tile title={shown.preview.title ?? shown.preview.id} />
-            <span class="grid min-w-0 gap-0.5">
-              <FadeText text={shown.preview.title ?? shown.preview.id} class="text-ui font-medium" />
-              <FadeText text={shown.preview.description ?? 'One plugin'} class="text-small text-muted-foreground" />
-            </span>
-            <Button disabled={busy} onclick={() => void installPrepared(shown.preview.prepared)}>Add to {project.name}</Button>
-          </div>
-          <Gives
-            components={shown.preview.components}
-            ignored={shown.preview.ignored}
-            consent={shown.preview.consent}
-            options={shown.preview.options}
-          />
-        </div>
-      {/if}
-    {:else}
-      {#key typed}
-        <div class="overflow-hidden rounded-lg border">
-          <p class="bg-sunken px-3 pt-3 text-small text-muted-foreground">
-            {address.kind === 'service' ? 'A service agents reach over the network' : 'A program agents run on this computer'}, for {project.name}.
-          </p>
-          <McpDeclarationForm
-            start={address.start}
-            {busy}
-            {refusal}
-            onsubmit={(declaration) => void declare(declaration)}
-            oncancel={() => (open = false)}
-          />
-        </div>
-      {/key}
-    {/if}
-
-    {#if failed !== undefined && address.kind === 'source'}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
+    <AddField
+      {project}
+      scope="project"
+      ondone={async (at) => {
+        open = false;
+        await ondone(at);
+      }}
+      oncancel={() => (open = false)}
+    />
   </Dialog.Content>
 </Dialog.Root>

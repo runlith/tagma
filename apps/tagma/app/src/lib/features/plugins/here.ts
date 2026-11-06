@@ -78,9 +78,15 @@ export const processShown = (row: PluginRow): PluginProcessRow | undefined =>
     ? row.process
     : undefined;
 
+const PROVIDER_POINTS: ReadonlySet<string> = new Set(['providers', 'speech']);
+
+export const onlyProviders = (row: PluginRow): boolean => row.providers !== undefined && row.components.length === 0;
+
 export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
   if (row.refused !== undefined && !stillWorking(row)) return 'fails';
-  if (!row.enabled) return 'off';
+  if (row.off) return 'off';
+  if (row.faults.some((fault) => PROVIDER_POINTS.has(fault.point))) return 'fails';
+  if (!row.enabled && !onlyProviders(row)) return 'off';
   const states = [...servers.map(serverState), ...(row.process === undefined ? [] : [processState(row.process)])];
   if (states.includes('waits') || row.options.some((option) => option.required && !option.set)) return 'waits';
   if (states.includes('fails')) return 'fails';

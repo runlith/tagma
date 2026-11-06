@@ -6,10 +6,12 @@
   import ConsoleKeyGroup from './auth/ConsoleKeyGroup.svelte';
   import SpeechKeyGroup from './auth/SpeechKeyGroup.svelte';
   import ProviderGroup from './Group.svelte';
-  import AdapterSection from './adapters/Section.svelte';
+  import Failed from './Failed.svelte';
   import InstanceSection from './instances/Section.svelte';
   import AccountRow from './accounts/Row.svelte';
   import { UsageAccounts } from './usage/Accounts.svelte.js';
+
+  let { projectId = null }: { projectId?: number | null } = $props();
 
   const notices = Notices.use();
   const accounts = AccountsRepo.use();
@@ -40,7 +42,8 @@
   });
 </script>
 
-<div class="grid max-w-[46rem] gap-4">
+<div class="grid max-w-3xl gap-4">
+  <Failed {projectId} />
   {#each catalog.subscriptions as provider (provider)}
     <ProviderGroup {provider} lifetime={lifetimes.find((row) => row.provider === provider)} />
   {/each}
@@ -50,7 +53,6 @@
   {#each catalog.settings as settings (settings.adapter)}
     <InstanceSection {settings} />
   {/each}
-  <AdapterSection />
   {#each uninstalled as group (group.provider)}
     <section class="@container overflow-hidden rounded-lg border bg-raised" aria-label={group.provider}>
       <div class="flex min-h-9 items-center gap-2 px-3 py-1">

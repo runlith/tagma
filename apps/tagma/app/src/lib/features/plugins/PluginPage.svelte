@@ -2,10 +2,11 @@
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import type { PluginFault } from '@tagma/server/plugins/contract/wire/rows';
   import type { PluginOptionValues } from '@tagma/server/plugins/contract/wire/settings';
-  import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+  import type { PluginSwitchScope } from '@tagma/server/plugins/contract/wire/operations';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import Layers from '@lucide/svelte/icons/layers';
   import Power from '@lucide/svelte/icons/power';
+  import PowerOff from '@lucide/svelte/icons/power-off';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Callout from '@runlith/chat-ui/Callout.svelte';
@@ -25,7 +26,7 @@
   import Keys from '$lib/features/plugins/Keys.svelte';
   import { CardParts } from '$lib/features/plugins/parts.js';
   import Threads from '$lib/features/plugins/Threads.svelte';
-  import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
+  import { type Here, onlyProviders, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
   import ProcessStep from '$lib/features/plugins/ProcessStep.svelte';
@@ -61,6 +62,7 @@
     `The plugin ${row.id} has a fault in Tagma: ${fault.title}.\n\n${fault.detail}\n\nFix it in the plugin's sources, build it again with tagma-plugin build, and check with read_plugins that the fault is gone.`;
 
   const row = $derived(item.row);
+  const projected = $derived(!row.builtin && !row.off && !onlyProviders(row));
   const asks = $derived(repo.asks.key({ projectId: project.id, id: row.id }));
   const owned = $derived(secrets.sets.key({ projectId: project.id, owner: SECRET_OWNER }));
   const secretSet = $derived(owned.data?.find((set) => set.id === row.id));
@@ -93,7 +95,7 @@
     }
   }
 
-  const enable = (enabled: boolean, scope: SettableScope) =>
+  const enable = (enabled: boolean, scope: PluginSwitchScope) =>
     act('enable', () => repo.enable.run({ projectId: project.id, id: row.id, enabled, scope }, { throwOnError: true }));
   const update = () => act('update', () => repo.update.run({ projectId: project.id, id: row.id }, { throwOnError: true }));
   const remove = () =>
@@ -115,16 +117,61 @@
     }
   }
 
+  const machine = (enabled: boolean) => enable(enabled, 'machine');
+
   const where = $derived(
-    row.everywhere
-      ? row.enabled
-        ? 'Runs in all your projects'
-        : `Off in ${project.name}, on in your other projects`
-      : row.enabled
-        ? `Runs in ${project.name}`
-        : `Off in ${project.name}`,
+    row.off
+      ? 'Turned off everywhere on this machine'
+      : row.builtin
+        ? 'Built into Tagma'
+        : onlyProviders(row)
+          ? 'Its providers serve all your projects'
+          : row.everywhere
+            ? row.enabled
+              ? 'Runs in all your projects'
+              : `Off in ${project.name}, on in your other projects`
+            : row.enabled
+              ? `Runs in ${project.name}`
+              : `Off in ${project.name}`,
   );
 </script>
+
+{#snippet more()}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+      aria-label="More about {item.title}"
+    >
+      <Ellipsis class="size-4" />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="end" class="min-w-60">
+      {#if projected && row.enabled}
+        <DropdownMenu.Item icon={Power} disabled={busy !== null} onSelect={() => void enable(false, 'project')}>
+          Turn off in {project.name}
+        </DropdownMenu.Item>
+      {/if}
+      {#if projected}
+        <DropdownMenu.Item icon={Layers} disabled={busy !== null} onSelect={() => void enable(!row.everywhere, 'user')}>
+          {row.everywhere ? 'Stop in all my projects' : 'Run in all my projects'}
+        </DropdownMenu.Item>
+      {/if}
+      {#if !row.off}
+        <DropdownMenu.Item icon={PowerOff} disabled={busy !== null} onSelect={() => void machine(false)}>
+          Turn off everywhere
+        </DropdownMenu.Item>
+      {/if}
+      {#if item.newer !== null}
+        <DropdownMenu.Item icon={RefreshCw} disabled={busy !== null} onSelect={() => void update()}
+          >Update to {item.newer}</DropdownMenu.Item
+        >
+      {/if}
+      <DropdownMenu.Separator />
+      <DropdownMenu.Item icon={Trash2} variant="destructive" disabled={busy !== null} onSelect={() => void remove()}>
+        Remove from this machine
+      </DropdownMenu.Item>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{/snippet}
 
 <div class="mx-auto grid w-full max-w-5xl grid-cols-[1fr_15rem] content-start gap-10 px-8 py-6">
   <div class="grid min-w-0 content-start gap-6">
@@ -135,42 +182,22 @@
         <span class="text-small text-muted-foreground">{where}</span>
       </div>
       <div class="flex items-center gap-2">
-        {#if !row.enabled}
+        {#if row.off}
+          <Button disabled={busy !== null} onclick={() => void machine(true)}>Turn on</Button>
+        {:else if row.builtin}
+          <Button variant="outline" disabled={busy !== null} onclick={() => void machine(false)}>Turn off everywhere</Button>
+        {:else if projected && !row.enabled}
           <Button disabled={busy !== null} onclick={() => void enable(true, 'project')}>Turn on in {project.name}</Button>
         {:else if item.newer !== null}
           <Button disabled={busy !== null} onclick={() => void update()}
             >{busy === 'update' ? 'Updating…' : `Update to ${item.newer}`}</Button
           >
-        {:else if item.state === 'ok'}
+        {:else if item.state === 'ok' && projected}
           <TryIt title={item.title} {skill} />
         {/if}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger
-            class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-            aria-label="More about {item.title}"
-          >
-            <Ellipsis class="size-4" />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="min-w-60">
-            {#if row.enabled}
-              <DropdownMenu.Item icon={Power} disabled={busy !== null} onSelect={() => void enable(false, 'project')}>
-                Turn off in {project.name}
-              </DropdownMenu.Item>
-            {/if}
-            <DropdownMenu.Item icon={Layers} disabled={busy !== null} onSelect={() => void enable(!row.everywhere, 'user')}>
-              {row.everywhere ? 'Stop running in all projects' : 'Run in all my projects'}
-            </DropdownMenu.Item>
-            {#if item.newer !== null}
-              <DropdownMenu.Item icon={RefreshCw} disabled={busy !== null} onSelect={() => void update()}
-                >Update to {item.newer}</DropdownMenu.Item
-              >
-            {/if}
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item icon={Trash2} variant="destructive" disabled={busy !== null} onSelect={() => void remove()}>
-              Remove from this machine
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+        {#if !row.builtin}
+          {@render more()}
+        {/if}
       </div>
     </header>
 
@@ -191,13 +218,17 @@
       <Callout tone="plain" title="Tagma could not tell whether this plugin was changed after it was last built" />
     {/if}
     {#each row.faults as fault (fault.point)}
-      <Callout tone="error" title={fault.title}>
-        {#snippet actions()}
-          <Button size="sm" variant="outline" onclick={() => void asking.ask({ projectId: project.id }, repairOf(fault))}>
-            Fix with an agent
-          </Button>
-        {/snippet}
-      </Callout>
+      {#if row.builtin}
+        <Callout tone="error" title={fault.title} note={fault.detail} />
+      {:else}
+        <Callout tone="error" title={fault.title}>
+          {#snippet actions()}
+            <Button size="sm" variant="outline" onclick={() => void asking.ask({ projectId: project.id }, repairOf(fault))}>
+              Fix with an agent
+            </Button>
+          {/snippet}
+        </Callout>
+      {/if}
     {/each}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
@@ -231,16 +262,18 @@
       </section>
     {/if}
 
-    {#if row.enabled && asks.data !== undefined}<Asked {...asks.data} />{/if}
-    <Threads projectId={project.id} plugin={row.id} home={project.name} />
+    {#if !row.builtin}
+      {#if row.enabled && asks.data !== undefined}<Asked {...asks.data} />{/if}
+      <Threads projectId={project.id} plugin={row.id} home={project.name} />
 
-    <Keys plugin={row.id} />
-    <PointView
-      point={parts}
-      props={{ plugin: row.id, components: row.components, runEverywhere: () => enable(true, 'user') }}
-      only={(part) => row.components.some((component) => component.kind === 'contribution' && component.name === part.contribution)}
-    />
-    <Gives components={row.components} ignored={row.ignored} options={[]} />
+      <Keys plugin={row.id} />
+      <PointView
+        point={parts}
+        props={{ plugin: row.id, components: row.components, runEverywhere: () => enable(true, 'user') }}
+        only={(part) => row.components.some((component) => component.kind === 'contribution' && component.name === part.contribution)}
+      />
+    {/if}
+    <Gives components={row.components} providers={row.providers} ignored={row.ignored} options={[]} />
   </div>
 
   <aside class="grid content-start gap-3 pt-2 text-small">
@@ -255,12 +288,17 @@
         <span class="text-meta text-muted-foreground">Package</span><span>{FORMATS[row.format] ?? row.format} format</span>
       </div>
     {/if}
-    <div class="grid gap-0.5">
-      <span class="text-meta text-muted-foreground">Read from</span>
-      {#if row.source.kind === 'folder'}<PathText path={row.source.path} class="stamp" />{:else}<FadeText
-          text={row.source.url}
-          class="stamp"
-        />{/if}
-    </div>
+    {#if row.source !== null}
+      <div class="grid gap-0.5">
+        <span class="text-meta text-muted-foreground">Read from</span>
+        {#if row.source.kind === 'folder'}<PathText path={row.source.path} class="stamp" />{:else if row.source.kind === 'git'}<FadeText
+            text={row.source.url}
+            class="stamp"
+          />{:else}<FadeText
+            text={row.source.range === undefined ? row.source.name : `${row.source.name}@${row.source.range}`}
+            class="stamp"
+          />{/if}
+      </div>
+    {/if}
   </aside>
 </div>

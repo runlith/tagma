@@ -2,7 +2,7 @@
   import AuthPanel from '$lib/features/providers/AuthPanel.svelte';
   import type { SectionProps } from '$lib/features/settings/section.js';
 
-  let {}: SectionProps = $props();
+  let { project }: SectionProps = $props();
 </script>
 
-<AuthPanel />
+<AuthPanel projectId={project?.id ?? null} />

@@ -1,4 +1,5 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+import type { PluginSwitchScope } from '@tagma/server/plugins/contract/wire/operations';
 import type { PluginPreview, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
 import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
@@ -15,7 +16,7 @@ export type PluginTarget = { readonly projectId: number; readonly id: string };
 
 type ThreadsTarget = PluginTarget & { readonly cursor: string | null };
 
-export type PluginReach = { readonly enabled: boolean; readonly scope: SettableScope };
+export type PluginReach = { readonly enabled: boolean; readonly scope: PluginSwitchScope };
 
 export type EntryTarget = { readonly projectId: number; readonly marketplace: string; readonly entry: string };
 

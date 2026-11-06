@@ -38,6 +38,9 @@
     const byKey = new Map(here.map((item) => [item.key, item]));
     return order.shown.flatMap((key) => byKey.get(key) ?? []);
   });
+  const builtin = (item: Here): boolean => item.kind === 'plugin' && item.row.builtin;
+  const installed = $derived(shown.filter((item) => !builtin(item)));
+  const built = $derived(shown.filter(builtin));
 
   const ROW = 'relative flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-ui transition-colors';
   const rowClass = (current: boolean, quiet = false) => [
@@ -48,6 +51,17 @@
 
 {#snippet mark(current: boolean)}
   {#if current}<span class="absolute inset-y-1.5 -left-2 w-0.5 bg-brand" aria-hidden="true"></span>{/if}
+{/snippet}
+
+{#snippet hereRow(item: Here)}
+  {@const at = placeOfHere(item)}
+  {@const current = samePlace(at, place)}
+  <a href={hrefOf(idOf(at))} aria-current={current ? 'page' : undefined} class={rowClass(current, item.state === 'off')}>
+    {@render mark(current)}
+    <Tile title={item.title} size="sm" />
+    <FadeText text={item.title} class="flex-1" />
+    <StateMark state={item.state} />
+  </a>
 {/snippet}
 
 <SectionColumn
@@ -72,29 +86,32 @@
   </div>
 
   <nav class="grid min-h-0 flex-1 content-start overflow-y-auto px-3 pb-6" aria-label="Plugin places">
-    <p class="eyebrow flex items-baseline px-2 pt-3 pb-1 text-muted-foreground/70">
-      <span class="flex-1">In this project</span>
-      {#if here.length > 0}<span class="stamp tabular">{here.length}</span>{/if}
-    </p>
     <div role="presentation" class="grid" onpointerenter={() => order.enter()} onpointerleave={() => order.leave()}>
-      {#each shown as item (item.key)}
-        {@const at = placeOfHere(item)}
-        {@const current = samePlace(at, place)}
-        <a href={hrefOf(idOf(at))} aria-current={current ? 'page' : undefined} class={rowClass(current, item.state === 'off')}>
-          {@render mark(current)}
-          <Tile title={item.title} size="sm" />
-          <FadeText text={item.title} class="flex-1" />
-          <StateMark state={item.state} />
-        </a>
+      <p class="eyebrow flex items-baseline px-2 pt-3 pb-1 text-muted-foreground/70">
+        <span class="flex-1">In this project</span>
+        {#if installed.length > 0}<span class="stamp tabular">{installed.length}</span>{/if}
+      </p>
+      {#each installed as item (item.key)}
+        {@render hereRow(item)}
       {:else}
         {#if failure === null}
           <p class="px-2 pb-1 text-small text-muted-foreground">Nothing yet. Add a plugin from the catalog below.</p>
         {/if}
       {/each}
+      {#if failure !== null}
+        <p class="px-2 pb-1 text-small text-destructive">Could not be read: {failure}</p>
+      {/if}
+
+      {#if built.length > 0}
+        <p class="eyebrow flex items-baseline px-2 pt-4 pb-1 text-muted-foreground/70">
+          <span class="flex-1">Built into Tagma</span>
+          <span class="stamp tabular">{built.length}</span>
+        </p>
+        {#each built as item (item.key)}
+          {@render hereRow(item)}
+        {/each}
+      {/if}
     </div>
-    {#if failure !== null}
-      <p class="px-2 pb-1 text-small text-destructive">Could not be read: {failure}</p>
-    {/if}
 
     <p class="eyebrow px-2 pt-4 pb-1 text-muted-foreground/70">Browse</p>
     <a href={hrefOf(null)} aria-current={all ? 'page' : undefined} class={rowClass(all)}>
