@@ -75,5 +75,5 @@ export const pluginTemplate = ({ id, title }: PluginTemplateInput): readonly Plu
     path: '.gitattributes',
     text: ['dist/** linguist-generated=true merge=binary', 'tagma-plugin.json linguist-generated=true merge=binary', ''].join('\n'),
   },
-  { path: '.gitignore', text: 'node_modules/\n' },
+  { path: '.gitignore', text: 'node_modules/\n!dist/\n' },
 ];
