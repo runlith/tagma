@@ -8061,10 +8061,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/external.ts#AdapterHosts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/fetch.ts#FetchedSource",
           "owner": "5a3bed29"
         },
@@ -18217,18 +18213,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/speech/src/protocol/adapter.ts#Recognizer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/protocol/adapter.ts#Synthesizer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/protocol/adapter.ts#CredentialForm",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/speech/src/protocol/link.ts#Driving",
           "owner": "5a3bed29"
         },
@@ -18249,79 +18233,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#Timestamps",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#Languages",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#Translation",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#Prompting",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#FileLimits",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/capabilities.ts#SynthesisLimits",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#Granularity",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#TranslationUnit",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#Partial",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#Final",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#TurnEnd",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#TurnFailed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#SpeechStart",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#SpeechEnd",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#Committed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/events.ts#Finalized",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/failure.ts#FailureReason",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/speech/src/wire/heard.ts#UtteranceId",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/wire/requests.ts#TranslationRequest",
           "owner": "5a3bed29"
         },
         {

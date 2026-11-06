@@ -9,7 +9,7 @@ fields:
       "debt": [],
       "escaped": [
         {
-          "commit": "b54b9d275f7d50a25f6bd41c92fd7e4204711067",
+          "commit": "2c0cf37396ac4bbc2e5bae170909d222693a0a66",
           "fingerprint": "workspace/testing/rowsFixture.ts -> @runlith/agent",
           "fix": "In `apps/tagma/server/src/threads/threads.ts`, load `@runlith/agent/protocol` or `@runlith/agent/paging` or `@runlith/agent/ToolPage` or `@runlith/agent/ToolOutputSpool` or `@runlith/agent/tool` or `@runlith/agent/permissions` or `@runlith/agent/contracts` or `@runlith/agent/callProgress` or `@runlith/agent/transcript/entries` or `@runlith/agent/thread/cache/ThreadCacheWarmth` or `@runlith/agent/thread/persisted` or `@runlith/agent/thread/storage/settlement` or `@runlith/agent/collaboration/label` or `@runlith/agent/collaboration/CollaborationConfig` instead of `@runlith/agent/modes/ApprovalModes`, or cut the chain at its first hop `../../composition/testing/migrations.js`.",
           "line": 1,
@@ -17,7 +17,7 @@ fields:
           "said": "loads `@runlith/agent/modes/ApprovalModes` · via apps/tagma/server/src/composition/testing/migrations.ts → apps/tagma/server/src/composition/core.ts → apps/tagma/server/src/threads/threads.ts → @runlith/agent/modes/ApprovalModes"
         },
         {
-          "commit": "b54b9d275f7d50a25f6bd41c92fd7e4204711067",
+          "commit": "2c0cf37396ac4bbc2e5bae170909d222693a0a66",
           "fingerprint": "workspace/testing/rowsFixture.ts -> @runlith/agent-tools",
           "fix": "In `apps/tagma/server/src/native-harness/contract/wire/settings.ts`, load `@runlith/agent-tools/world` or `@runlith/agent-tools/WorkspaceChanges` instead of `@runlith/agent-tools/workspace`, or cut the chain at its first hop `../../composition/testing/migrations.js`.",
           "line": 1,
@@ -25,7 +25,7 @@ fields:
           "said": "loads `@runlith/agent-tools/workspace` · via apps/tagma/server/src/composition/testing/migrations.ts → apps/tagma/server/src/composition/core.ts → apps/tagma/server/src/native-harness/native-harness.ts → apps/tagma/server/src/native-harness/contract/wire/settingDeclarations.ts → apps/tagma/server/src/native-harness/contract/wire/settings.ts → @runlith/agent-tools/workspace"
         },
         {
-          "commit": "b54b9d275f7d50a25f6bd41c92fd7e4204711067",
+          "commit": "2c0cf37396ac4bbc2e5bae170909d222693a0a66",
           "fingerprint": "workspace/testing/rowsFixture.ts -> @runlith/agent/collaboration",
           "fix": "In `apps/tagma/server/src/native-harness/turns/delegationRule.ts`, load `@runlith/agent/collaboration/label` or `@runlith/agent/collaboration/CollaborationConfig` instead of `@runlith/agent/collaboration/CollaborationVoice`, or cut the chain at its first hop `../../composition/testing/migrations.js`.",
           "line": 1,
@@ -33,7 +33,7 @@ fields:
           "said": "loads `@runlith/agent/collaboration/CollaborationVoice` · via apps/tagma/server/src/composition/testing/migrations.ts → apps/tagma/server/src/composition/core.ts → apps/tagma/server/src/native-harness/native-harness.ts → apps/tagma/server/src/native-harness/turns/delegationRule.ts → @runlith/agent/collaboration/CollaborationVoice"
         },
         {
-          "commit": "b54b9d275f7d50a25f6bd41c92fd7e4204711067",
+          "commit": "2c0cf37396ac4bbc2e5bae170909d222693a0a66",
           "fingerprint": "workspace/testing/rowsFixture.ts -> @runlith/mcp",
           "fix": "In `apps/tagma/server/src/mcp/contract/wire/feeds.ts`, load `@runlith/mcp/declaration` instead of `@runlith/mcp/apps`, or cut the chain at its first hop `../../composition/testing/migrations.js`.",
           "line": 1,

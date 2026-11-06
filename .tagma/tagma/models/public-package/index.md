@@ -82,6 +82,9 @@ fields:
         "for": [
           "e0801f50"
         ]
+      },
+      {
+        "at": "src/adapter/speech.ts"
       }
     ],
     "id": "@runlith/tagma"
@@ -95,6 +98,8 @@ edges:
     to: 01a0ca5d-3b72-7529-8b88-94c413756ad0
   - kind: imports
     to: 01a0d584-d0b8-7967-9796-a8e3bbddbda9
+  - kind: imports
+    to: 01a106db-b8b2-7b23-bc99-c3d1eaabfb41
 sources:
   - kind: dir
     ref: packages/tagma
