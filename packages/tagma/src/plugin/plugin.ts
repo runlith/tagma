@@ -79,7 +79,7 @@ export type ToolFace<Plugin, Name extends keyof ToolsOf<Plugin> & string> = {
   readonly name: Name;
   readonly input: ToolIO<ToolsOf<Plugin>[Name]>['input'];
   readonly output: ToolIO<ToolsOf<Plugin>[Name]>['output'] | undefined;
-  readonly state: 'running' | 'done' | 'refused';
+  readonly state: 'running' | 'done' | 'refused' | 'failed';
   readonly threadId: string;
 };
 

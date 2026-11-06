@@ -105,7 +105,7 @@ A view is a Svelte 5 component of the folder, as `ui/Board.svelte`, mounted insi
 
 A `Reference:` names a section of this skill: ask for it in `references` of `load_skill`.
 
-In a result view the component takes the call as props, `{name, input, output, state, threadId}`, `state` one of `running`, `done` or `refused`, typed by `ToolFace<typeof plugin, '<tool>'>`. The feed may draw it days after the call: draw from these props, not from a fresh call. A feed entry is capped at a share of the window; sections and panes fill their space.
+In a result view the component takes the call as props, `{name, input, output, state, threadId}`, `state` one of `running`, `done`, `refused` or `failed`, typed by `ToolFace<typeof plugin, '<tool>'>`. The feed may draw it days after the call: draw from these props, not from a fresh call. A feed entry is capped at a share of the window; sections and panes fill their space.
 
 A view that does not compile shows the reason where it stands and on the plugin's card, with **Fix with an agent**. A rebuild that changes only views keeps the running process; each open view mounts the new build. Views mount only in a project where the plugin is enabled; elsewhere a result shows as an ordinary tool card.
 

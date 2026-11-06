@@ -30,7 +30,7 @@ test('a view tool keeps its audience, its input and its output type, so a view c
     Equal<Views['ping'], (input?: Readonly<Record<never, never>>) => Promise<string>>,
     Equal<Face['input'], { column: string }>,
     Equal<Face['output'], { count: number } | undefined>,
-    Equal<Face['state'], 'running' | 'done' | 'refused'>,
+    Equal<Face['state'], 'running' | 'done' | 'refused' | 'failed'>,
   ] = [true, true, true, true, true, true];
   expect(proof).toHaveLength(6);
 });
