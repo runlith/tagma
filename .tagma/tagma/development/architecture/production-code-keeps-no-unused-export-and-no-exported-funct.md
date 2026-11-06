@@ -13208,11 +13208,6 @@ fields:
         },
         {
           "count": 2,
-          "fingerprint": "dead-code dead packages/agent/src/transcript/entries.ts#ThreadQuestionPrompt",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
           "fingerprint": "dead-code dead packages/agent/src/transcript/entries.ts#ThreadInteractionToolCall",
           "owner": "5a3bed29"
         },
@@ -13931,10 +13926,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/chat-ui/src/session/ThreadOpening.svelte.ts#ThreadOpeningPhase",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/chat-ui/src/session/ThreadSession.svelte.ts#ThreadSessionStatus",
           "owner": "5a3bed29"
         },
         {

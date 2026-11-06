@@ -14,6 +14,9 @@ fields:
       },
       {
         "at": "src/WindowPlacement.ts"
+      },
+      {
+        "at": "src/GlobalShortcuts.ts"
       }
     ],
     "id": "@runlith/desktop-host",

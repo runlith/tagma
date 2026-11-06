@@ -34,7 +34,8 @@ fields:
       {
         "at": "src/ChatFold.svelte.ts",
         "for": [
-          "96400e93"
+          "96400e93",
+          "9cc7259f"
         ]
       },
       {
@@ -108,7 +109,8 @@ fields:
       {
         "at": "src/entries.ts",
         "for": [
-          "96400e93"
+          "96400e93",
+          "9cc7259f"
         ]
       },
       {
@@ -277,7 +279,8 @@ fields:
       {
         "at": "src/session/ThreadSession.svelte.ts",
         "for": [
-          "96400e93"
+          "96400e93",
+          "9cc7259f"
         ]
       },
       {
@@ -356,6 +359,12 @@ fields:
       {
         "at": "stand/",
         "role": "testing"
+      },
+      {
+        "at": "src/appended.ts",
+        "for": [
+          "9cc7259f"
+        ]
       }
     ],
     "id": "@runlith/chat-ui",
