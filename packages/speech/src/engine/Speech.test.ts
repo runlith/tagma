@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Stream } from 'effect';
+import { Effect, Exit, Fiber, Scope, Stream } from 'effect';
 import { batching, filing, streaming } from '../testing/models.ts';
 import { LIVE, RECORDED } from '../wire/capabilities.ts';
 import { controlOf, incoming, scriptedProvider } from '../testing/scriptedProvider.ts';
@@ -166,12 +166,14 @@ it.effect('a provider with inconsistent capabilities or a taken id is left out w
       world.reload([
         { owner: 'first', providers: [broken, provider] },
         { owner: 'second', providers: [scriptedProvider({ id: 'scripted', recognition: [streaming('other')] })] },
+        { owner: 'third', providers: [], failure: 'its module threw on import' },
       ]),
     );
     expect(set.recognition.map((offer) => `${offer.provider}/${offer.model.id}`)).toEqual(['scripted/live']);
     expect(set.faults.map((fault) => [fault.owner, fault.provider])).toEqual([
       ['first', 'broken'],
       ['second', 'scripted'],
+      ['third', ''],
     ]);
     expect(set.faults[1]?.reason).toContain('first');
   }),
@@ -201,6 +203,26 @@ it.effect('a recognition keeps the set it started on through a reload, and the n
     expect(seen.told.at(-1)?.closed).toBe(true);
     expect(seen.offered).toBe(0);
     expect(seen.refused).toContain('not a registered recognizer');
+  }),
+);
+
+it.effect('work holding a set keeps its revision standing through a reload, and its end releases it', () =>
+  Effect.gen(function* () {
+    const seen = yield* inWorld([], (world) =>
+      Effect.gen(function* () {
+        yield* world.reload([{ owner: 'plugin', revision: 'A', providers: [provider] }]);
+        const work = yield* Scope.make();
+        yield* Scope.provide(world.service.take, work);
+        yield* world.reload([{ owner: 'plugin', revision: 'B', providers: [provider] }]);
+        const during = [...world.service.revisions()].sort();
+        const released = yield* Effect.forkChild(Stream.runHead(world.service.released));
+        yield* settle;
+        yield* Scope.close(work, Exit.void);
+        yield* Fiber.join(released);
+        return { during, after: [...world.service.revisions()] };
+      }),
+    );
+    expect(seen).toEqual({ during: ['A', 'B'], after: ['B'] });
   }),
 );
 

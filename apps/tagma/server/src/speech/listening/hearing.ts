@@ -72,7 +72,7 @@ export const makeRecognitions = Effect.fnUntraced(function* ({ captures }: { rea
         }
         const entry = yield* admitted(ask.id);
         const tracks = named(ask.tracks, yield* settings.value(microphone));
-        const set = yield* speech.now;
+        const set = yield* speech.take;
         const { choice, recognizer } = yield* chosen(
           set,
           settings,

@@ -70,8 +70,6 @@ export const makeSpeaking = Effect.gen(function* () {
 
   const speaking: Speaking['Service'] = Speaking.of({
     open: Effect.fn('Speaking.open')(function* (ask) {
-      const set = yield* speech.now;
-      const choice = yield* chosen(set, ask);
       const session = yield* Scope.make();
       sessions.set(session, undefined);
       yield* Effect.addFinalizer(() =>
@@ -80,6 +78,8 @@ export const makeSpeaking = Effect.gen(function* () {
           Scope.close(session, Exit.void),
         ),
       );
+      const set = yield* Scope.provide(speech.take, session);
+      const choice = yield* chosen(set, ask);
       const live = Effect.suspend(() => (sessions.has(session) ? Effect.void : Effect.fail(silenced)));
       const synthesis = yield* Effect.mapError(set.synthesize(choice, { account: ask.account }), failed).pipe(Scope.provide(session));
       const player = yield* Effect.mapError(devices.play(synthesis.format), refused).pipe(Scope.provide(session));
@@ -136,7 +136,7 @@ export const makeSpeaking = Effect.gen(function* () {
     audio: (ask) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const set = yield* speech.now;
+          const set = yield* speech.take;
           const choice = yield* chosen(set, ask);
           const synthesis = yield* Effect.mapError(set.synthesize(choice, {}), failed);
           const writing = Stream.fromEffect(Effect.andThen(synthesis.say(ask.text), synthesis.end).pipe(Effect.mapError(failed))).pipe(

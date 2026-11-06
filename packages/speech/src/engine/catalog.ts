@@ -13,7 +13,9 @@ export const live = (offer: Offer<RecognitionModel>): offer is Offer<Recognition
 
 export type SpeechPart<R> = {
   readonly owner: string;
+  readonly revision?: string | undefined;
   readonly providers: ReadonlyArray<AnyProvider<R>>;
+  readonly failure?: string | undefined;
 };
 
 export type SpeechFault = {
@@ -148,6 +150,7 @@ export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>): SpeechCat
   const providers: Array<AnyProvider<R>> = [];
   const faults: Array<SpeechFault> = [];
   for (const part of parts) {
+    if (part.failure !== undefined) faults.push({ owner: part.owner, provider: '', reason: part.failure });
     for (const provider of part.providers) {
       const reason = refusalOf(provider, holders);
       if (reason !== undefined) {
