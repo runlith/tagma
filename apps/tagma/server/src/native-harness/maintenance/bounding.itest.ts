@@ -26,7 +26,7 @@ import { retainedToolValue } from '../contract/wire/toolResult.js';
 import { ToolOutputs } from '../contract/service/toolOutputs.js';
 import { CORE_KINDS, threadStore } from '../testing/doubles.js';
 
-const fileRoot = mkdtempSync(join(fixtureHome(), 'entry-bounding-'));
+const rootFor = (name: string): string => join(mkdtempSync(join(fixtureHome(), 'entry-bounding-')), name);
 
 const machine = Layer.orDie(
   unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
@@ -110,7 +110,7 @@ const eventEntry = Effect.fnUntraced(function* (on: Stand, threadId: string, ent
 
 it.live('a value past the row ceiling moves whole into its file and the row and its event keep the pointer', () =>
   Effect.gen(function* () {
-    const on = yield* stand(join(fileRoot, 'moved'));
+    const on = yield* stand(rootFor('moved'));
     const thread = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     const values = [wide(1), wide(2), wide(3)] as const;
     yield* carry(on, thread, [
@@ -169,7 +169,7 @@ it.live('an unmarked resident thread is bounded through its current-form reader 
         },
       ],
     });
-    const on = yield* stand(join(fileRoot, 'forms'), kinds);
+    const on = yield* stand(rootFor('forms'), kinds);
     const thread = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     const value = wide(1);
     yield* carry(on, thread, [toolEntry(0, value)]);
@@ -185,7 +185,7 @@ it.live('an unmarked resident thread is bounded through its current-form reader 
 
 it.live('the model reaches a moved value again through the tool that pages it', () =>
   Effect.gen(function* () {
-    const on = yield* stand(join(fileRoot, 'paged'));
+    const on = yield* stand(rootFor('paged'));
     const thread = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     const value = wide(7);
     yield* carry(on, thread, [toolEntry(0, value)]);
@@ -211,7 +211,7 @@ it.live('the model reaches a moved value again through the tool that pages it', 
 
 it.live('a second pass over the same rows moves nothing', () =>
   Effect.gen(function* () {
-    const on = yield* stand(join(fileRoot, 'again'));
+    const on = yield* stand(rootFor('again'));
     const thread = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     yield* carry(on, thread, [toolEntry(0, wide(4)), toolEntry(1, wide(5))]);
 
@@ -226,7 +226,7 @@ it.live('a second pass over the same rows moves nothing', () =>
 
 it.live('a value that cannot land in its file is counted, left whole, and the rest of the pass moves', () =>
   Effect.gen(function* () {
-    const on = yield* stand(join(fileRoot, 'blocked'));
+    const on = yield* stand(rootFor('blocked'));
     const blocked = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     const moving = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     mkdirSync(on.root, { recursive: true });
@@ -250,7 +250,7 @@ it.live('a value that cannot land in its file is counted, left whole, and the re
 
 it.live('only a row this door moves takes the write permit, and a value that escapes six-fold is one', () =>
   Effect.gen(function* () {
-    const on = yield* stand(join(fileRoot, 'permits'));
+    const on = yield* stand(rootFor('permits'));
     const thread = yield* on.threads.insert({ ownerId: 'owner', agentId: 'agent' });
     let taken = 0;
     const permits: MachineUnits['Service'] = {
