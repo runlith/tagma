@@ -50,8 +50,8 @@ layer(doorFixture(), { excludeTestServices: true })('reflection law admission', 
       const born = yield* world.op('create_thread', { approvalMode: 'bypass' }, at(home));
       expect(born.status).toBe(200);
       const thread = (born.body as { snapshot: { thread: { id: string; ownerId: string } } }).snapshot.thread;
-      const sourceGraph = yield* world.runtime.pool.resolve({ projectId: source });
-      const homeGraph = yield* world.runtime.pool.resolve({ projectId: home });
+      const sourceGraph = yield* world.runtime.pool.hold({ projectId: source });
+      const homeGraph = yield* world.runtime.pool.hold({ projectId: home });
       const instructions = (projectId: number, graph: typeof homeGraph) =>
         Context.get(graph.context, Orientation).instructions({ projectId, audience: 'graph' }).pipe(Effect.provide(graph.context));
       const originalSource = yield* instructions(source, sourceGraph);
