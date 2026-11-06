@@ -59,7 +59,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
       }),
     ),
   );
-  it.effect('a write that overwrites a neighbour’s uncommitted line lands the file and names the neighbour whose row it holds', () =>
+  it.effect('a write that overwrites a neighbour’s uncommitted line lands the file without carrying the neighbour whose line is gone', () =>
     withCheckout((checkout) =>
       Effect.gen(function* () {
         const w = checkout;
@@ -78,7 +78,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           status: 'landed',
           commit: yield* w.run(['rev-parse', 'HEAD']),
           committed: ['src/a.ts'],
-          carried: [{ path: 'src/a.ts', holders: [THEIRS] }],
+          carried: [],
         });
         expect(yield* w.committed()).toContain('const one = 101;');
       }),
