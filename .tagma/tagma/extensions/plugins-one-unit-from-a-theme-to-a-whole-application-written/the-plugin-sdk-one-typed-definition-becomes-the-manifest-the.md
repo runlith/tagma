@@ -109,7 +109,7 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
 
 ## What the build emits
 
-`tagma-plugin build` writes `dist/` and `tagma-plugin.json`, and type-checks the plugin first.
+`tagma-plugin build` writes `dist/` and `tagma-plugin.json`, and type-checks the plugin first. A `.svelte` file is checked through svelte2tsx, and `svelte` and `@runlith/tagma/ui` resolve from the SDK itself, whatever the plugin's folder holds: the types a view is checked against are the SDK's own Svelte and its `/ui` facade. A misuse fails with the file and place in the `.svelte` source (`ui/Board.svelte(12,8)`). A file Svelte cannot parse stops the build at the views step, not here.
 
 1. **It reads the definition** in describe mode: it imports `plugin.ts`, `definePlugin` returns a description, and no handler runs.
 2. **It writes the manifest:**
