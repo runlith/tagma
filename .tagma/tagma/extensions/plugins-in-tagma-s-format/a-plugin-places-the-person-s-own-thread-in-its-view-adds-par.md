@@ -16,7 +16,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/native/pluginParts.composer.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/seats/ThreadSeat.svelte
+    ref: apps/tagma/app/src/lib/features/threads/seats/PlacedThread.svelte
   - kind: file
     ref: apps/tagma/server/src/plugins/contract/wire/hooks.ts
 ---

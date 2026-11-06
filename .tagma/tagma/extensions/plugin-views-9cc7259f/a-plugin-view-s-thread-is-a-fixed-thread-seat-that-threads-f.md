@@ -5,7 +5,7 @@ ord: 3
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/seats/ThreadSeat.svelte
+    ref: apps/tagma/app/src/lib/features/threads/seats/PlacedThread.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/plugin-views/ViewThreads.ts
   - kind: file
