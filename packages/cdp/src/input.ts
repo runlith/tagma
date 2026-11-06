@@ -154,6 +154,18 @@ const ORIGIN: Point = { x: 0, y: 0 };
 
 export type Pointer = { at: Point | null };
 
+const erf = (x: number) => {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x < 0 ? -y : y;
+};
+
+const lognormal = (sigma: number, median: number) => {
+  const at = (tau: number) => (tau <= 0 ? 0 : 0.5 * (1 + erf((Math.log(tau) - Math.log(median)) / (sigma * Math.SQRT2))));
+  const whole = at(1);
+  return (tau: number) => at(tau) / whole;
+};
+
 const ENTRY_MARGIN = 0.15;
 const DETOUR_FROM = 120;
 const DETOUR_REACH = 260;
@@ -190,20 +202,19 @@ export const humanInput = (session: Session, pointer: Pointer = { at: null }) =>
           pointer.at = { x: at.x + offset.x, y: at.y + offset.y };
         }),
       );
-    const glide = Effect.fnUntraced(function* (a: Point, b: Point, share: number) {
+    const sweep = Effect.fnUntraced(function* (a: Point, b: Point, share: number, duration: number) {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const length = Math.hypot(dx, dy);
       if (length < 1) return;
-      const bend = Math.min(100, Math.max(8, length * share)) * (Math.random() < 0.5 ? -1 : 1);
+      const bend = Math.min(100, Math.max(Math.min(8, length * 0.1), length * share)) * (Math.random() < 0.5 ? -1 : 1);
       const normal = { x: -dy / length, y: dx / length };
       const c1 = { x: a.x + dx * 0.28 + normal.x * bend, y: a.y + dy * 0.28 + normal.y * bend };
       const c2 = { x: a.x + dx * 0.76 + normal.x * bend * 0.5, y: a.y + dy * 0.76 + normal.y * bend * 0.5 };
-      const duration = between(160, 280) + Math.sqrt(length) * between(8, 14);
-      const steps = Math.max(12, Math.ceil(duration / 16));
+      const progress = lognormal(between(0.28, 0.42), between(0.42, 0.52));
+      const steps = Math.max(4, Math.ceil(duration / between(14, 18)));
       for (let step = 1; step <= steps; step += 1) {
-        const t = step / steps;
-        const eased = t * t * (3 - 2 * t);
+        const eased = progress(step / steps);
         const u = 1 - eased;
         yield* send({
           x: u ** 3 * a.x + 3 * u ** 2 * eased * c1.x + 3 * u * eased ** 2 * c2.x + eased ** 3 * b.x,
@@ -212,10 +223,32 @@ export const humanInput = (session: Session, pointer: Pointer = { at: null }) =>
         yield* rest((duration / steps) * 0.7, (duration / steps) * 1.3);
       }
     });
+    const glide = Effect.fnUntraced(function* (a: Point, b: Point, share: number, corrected: boolean) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1) return;
+      const duration = between(220, 320) + Math.sqrt(length) * between(9, 15);
+      if (!corrected || length < 24) return yield* sweep(a, b, share, duration);
+      const normal = { x: -dy / length, y: dx / length };
+      const reach = between(0.9, 0.97);
+      const miss = Math.max(-6, Math.min(6, length * between(-0.03, 0.03)));
+      let at = { x: a.x + dx * reach + normal.x * miss, y: a.y + dy * reach + normal.y * miss };
+      yield* sweep(a, at, share, duration);
+      for (let left = Math.random() < 0.6 ? 1 : 2; left > 0; left -= 1) {
+        yield* rest(30, 110);
+        const gap = { x: b.x - at.x, y: b.y - at.y };
+        const part = left === 1 ? 1 : between(0.55, 0.8);
+        const aside = left === 1 ? 0 : between(-0.15, 0.15);
+        const next = { x: at.x + gap.x * part - gap.y * aside, y: at.y + gap.y * part + gap.x * aside };
+        yield* sweep(at, next, 0, between(70, 150) + Math.sqrt(Math.hypot(gap.x, gap.y)) * 3);
+        at = next;
+      }
+    });
     const via = held ? null : yield* detour(from, to, offset, distance);
-    if (via === null) yield* glide(from, to, between(0.08, 0.22));
+    if (via === null) yield* glide(from, to, between(0.08, 0.22), true);
     else {
-      yield* glide(from, via, between(0.02, 0.06));
+      yield* glide(from, via, between(0.02, 0.06), false);
       const ahead = { x: (to.x - from.x) / distance, y: (to.y - from.y) / distance };
       let at = via;
       for (let drift = Math.floor(between(1, 4)); drift > 0; drift -= 1) {
@@ -226,7 +259,7 @@ export const humanInput = (session: Session, pointer: Pointer = { at: null }) =>
         yield* send(at);
       }
       yield* rest(40, 160);
-      yield* glide(at, to, between(0.02, 0.06));
+      yield* glide(at, to, between(0.02, 0.06), true);
     }
     pointer.at = { x: to.x + offset.x, y: to.y + offset.y };
   });
