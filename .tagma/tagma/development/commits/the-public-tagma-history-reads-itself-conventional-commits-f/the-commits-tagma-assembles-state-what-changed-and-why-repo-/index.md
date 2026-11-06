@@ -1,6 +1,6 @@
 ---
 id: 01a17f5f-3c8d-78c2-b6c7-2ab1c11265c5
-title: "The commits Tagma assembles state what changed and why: repo format, body, trailers, graph commits from Tagma <agent@tagma.dev>"
+title: "The commits Tagma assembles state what changed and why: repo format, body, trailers, graph commits from Tagma <agent@tagma.app>"
 ord: 1
 tags: ["spec"]
 fields:
@@ -27,7 +27,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/worktrees/retirement/cleanup.ts
 ---
-**What we get.** For any Tagma user, a commit assembled by Tagma reads without Tagma: the subject in the repo's accepted shape, the body stating what changed and why, trailers stating which tasks it carries and that a Tagma agent took part. Graph commits are signed `Tagma <agent@tagma.dev>` — the `tagma-dev` account — state what changed in knowledge, and are recognized by content, not by subject.
+**What we get.** For any Tagma user, a commit assembled by Tagma reads without Tagma: the subject in the repo's accepted shape, the body stating what changed and why, trailers stating which tasks it carries and that a Tagma agent took part. Graph commits are signed `Tagma <agent@tagma.app>` — the `tagma-dev` account — state what changed in knowledge, and are recognized by content, not by subject.
 
 ## What stands now
 
@@ -48,13 +48,13 @@ Tagma imposes no shape: before a graph commit it reads the subjects of the last 
 
 - `submit_work` takes a body separately from the subject. The agent writes the subject in the repo style and the body in one to three sentences: what changed in behavior and why; a micro-edit may omit the body. Doctrine states it in one line.
 - Tasks move from subject into trailers: one `Task: <name> <title>` line per task the commit carries. The subject stays the caller's words. No reader parses the current suffix out of history, so moving it breaks nothing.
-- Every commit Tagma assembles from agent work — `submit_work` and the `merge_worktree` merge commit — carries `Co-authored-by: Tagma <agent@tagma.dev>`. A project setting, on by default, removes it. Author, committer, and signature stay the user's: it is their repo and their contribution.
+- Every commit Tagma assembles from agent work — `submit_work` and the `merge_worktree` merge commit — carries `Co-authored-by: Tagma <agent@tagma.app>`. A project setting, on by default, removes it. Author, committer, and signature stay the user's: it is their repo and their contribution.
 - All trailers are one block at the end after a blank line, in `git interpret-trailers` shape; `Tagma-Worktree` joins the same block.
 
 ### Graph commits
 
 - One owner assembles one message for team and stealth; the second assembler leaves.
-- Author and committer are `Tagma <agent@tagma.dev>`, the product constant. The address is verified on the `tagma-dev` machine GitHub account: for any user the commit on GitHub shows the Tagma avatar and leads to `github.com/tagma-dev`; on other hosts this name and address.
+- Author and committer are `Tagma <agent@tagma.app>`, the product constant. The address is verified on the `tagma-dev` machine GitHub account: for any user the commit on GitHub shows the Tagma avatar and leads to `github.com/tagma-dev`; on other hosts this name and address.
 - Subject is the batch meaning by weight: opened and closed specs, done and new tasks, new rules, then the rest. One leading act gets its title, if it fits 72 characters, else a count by kind: `docs(graph): finish 2 tasks, open spec, edit 4 explanations`. Without Conventional Commits — the same phrase with no prefix.
 - Body is one line per batch act: verb, block name, title; repeated edits of one block are one line. The last line names the agents whose acts are in the batch.
 - The journal position leaves the subject for the `Tagma-Graph: <position>` trailer.
@@ -69,7 +69,7 @@ A graph commit is one whose every change lies in the graph tree (`.tagma`). Work
 Through real doors:
 - `submit_work` with tasks and body gives the caller's subject, a body, and a `Task` + `Co-authored-by` trailer block; with the setting off — no `Co-authored-by`.
 - `merge_worktree` gives one trailer block with `Tagma-Worktree` and `Co-authored-by`.
-- Team graph in a Conventional Commits history repo commits `docs(graph): …` from `Tagma <agent@tagma.dev>` with a body per act and `Tagma-Graph`; in a repo without it — a subject with no prefix.
+- Team graph in a Conventional Commits history repo commits `docs(graph): …` from `Tagma <agent@tagma.app>` with a body per act and `Tagma-Graph`; in a repo without it — a subject with no prefix.
 - Deleting a worktree counts graph commits of old and new shape as no work, and counts a commit touching both code and `.tagma` as work.
 - The stealth graph commits with the same assembler.
 

@@ -279,13 +279,14 @@ By rule [[0528876d]], nothing old is carried over or read beside the new.
 
 1. **Replace apps with plugins in `plugins` and its screen.** One install act for every format, process state on the screen, and the app mechanism removed. Any existing app worth keeping is rebuilt as a plugin in step 2.
 2. **The SDK and `create_plugin`,** with the SDK as a prerelease on npm. Contributions published from the manifest, idle and on-demand start, committed build output.
-3. **Themes, shortcuts and window entries**, as data or as an action the process serves.
+3. **Themes and shortcuts**, as data or as an action the process serves. A shortcut opens a plugin's view where views already stand (a section, a pane) or runs an action; it opens no new window.
 4. **Depth 1 of the agent layer** (child spec).
 5. **The window's module host:** Svelte views, `<Frame>`, the link step, the utilities sheet. MCP App windows move to the MCP client's module.
 6. **Depth 2** (child spec).
 7. **Depth 3** (child spec).
 8. **Providers through the one loader**, speech included.
 9. **The SDK's stable release**, and Tagma's marketplace carrying plugins in Tagma's format.
+10. **Window entries:** plain, frameless and always-on-top windows a plugin declares, the shell's grants for them, and their floating panels on the web. Plugins use no new windows before this step (operator's decision, 2026-11-06).
 
 ## Acceptance
 
@@ -310,7 +311,8 @@ Performer checks, each through the same door a real caller uses.
 **What the person sees**
 - **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A change in the window build's manifest hash relinks it, as the link cache counts.
 - **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, and keeps the state colours' meanings.
-- **Windows and shortcuts.** A shortcut on a chord the keymap leaves free opens a frameless, always-on-top window holding a grid of four threads on four providers, in a project where the plugin is enabled. A plugin claiming a chord Tagma uses is refused, and its card names the chord with Rebind.
+- **Shortcuts.** A shortcut on a chord the keymap leaves free opens the plugin's section, in a project where the plugin is enabled. A plugin claiming a chord Tagma uses is refused, and its card names the chord with Rebind.
+- **Windows (step 10).** A shortcut opens a frameless, always-on-top window holding a grid of four threads on four providers.
 - **Providers.** A model provider and a speech provider install as plugins with no rebuild and appear in their catalogs. A built-in provider stands under "Built into Tagma", cannot be removed, and turns off only for the machine.
 - **The screen.**
   - A server waiting on a sign-in shows "needs you" with Sign in.

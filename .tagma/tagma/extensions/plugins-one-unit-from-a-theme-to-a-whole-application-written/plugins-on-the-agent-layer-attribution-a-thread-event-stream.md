@@ -156,7 +156,7 @@ A plugin writes no feed entries of its own. Entries decode only installed kinds,
    Its `ask_model` spending shows on its card. `thread.events` and the window's projection come from the one function. A quiet stream outlives the idle timeout. A question to a broken plugin reaches the person.
 3. **Depth 2**, after the parent spec's module host:
    - a section lists merge requests beside a live `<Thread>`;
-   - a shortcut on a free chord opens a grid of four threads on four providers.
+   - once the parent spec's window entries land (its last step), a shortcut on a free chord opens a window holding a grid of four threads on four providers.
 4. **Depth 3:**
    - a composer button inserts text into the draft, and shows only in projects where its plugin is enabled;
    - a Svelte tool card draws the plugin's own tool;
