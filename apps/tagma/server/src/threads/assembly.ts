@@ -89,7 +89,7 @@ import { WorktreeUpdates } from './contract/service/worktreeUpdates.js';
 import { worktreeUpdates } from './worktreeUpdates.js';
 import { SessionBirthWriting } from './contract/service/sessionBirths.js';
 import { PinOffers, ThreadPins } from './contract/service/pins.js';
-import { makePinnableViews, PINS } from './pinOffers.js';
+import { makePinnableViews } from './pinOffers.js';
 import { makeThreadPins } from './store/pins.js';
 import { ThreadSubscriptions } from './contract/service/subscriptions.js';
 import { ThreadEvents, type ThreadFact } from './contract/service/events.js';
@@ -102,7 +102,6 @@ import { OperatorNotes } from './contract/service/notes.js';
 import { makeOperatorNotes } from './notes/owner.js';
 import { notesRule } from './notes/rule.js';
 import { AgentRules } from './contract/service/rules.js';
-import { PluginPoints } from '../plugins/contract/service/points.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { ModelChanges } from './contract/service/modelChanges.js';
 import { makeModelChanges } from './events/modelChanges.js';
@@ -114,8 +113,7 @@ export const threadStoresLayer = Layer.effectContext(
     const db = (yield* MachineStore).db;
     const places = yield* makeWorkingPlaces;
     const notes = yield* makeOperatorNotes;
-    const pinnable = makePinnableViews();
-    yield* Effect.acquireRelease((yield* PluginPoints).declare(PINS, pinnable.register), (withdraw) => Effect.sync(withdraw));
+    const pinnable = yield* makePinnableViews;
     return Context.make(ThreadInbox, yield* makeThreadInbox).pipe(
       Context.add(WorkPlaces, places),
       Context.add(PinOffers, pinnable),
