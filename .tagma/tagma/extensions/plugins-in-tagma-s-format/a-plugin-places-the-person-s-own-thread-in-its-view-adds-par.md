@@ -28,6 +28,6 @@ sources:
 - `<Thread>` is the whole thread — feed, composer, model picker — and acts as the person; other threads it opens go beside.
 - A composer part receives the thread, the draft (`setText`, `insert` at the caret, `attach`) and `send`; a part that fails shows its failure alone.
 - A text command fills the draft, asking for words first when its text holds `$ARGUMENTS`; an action command asks for words and fills the draft with the action's answer.
-- A hook is asked only for matching calls, MCP and plugin tools included, wakes the plugin's process, waits 10 s by default, and lets the agent go on when it fails or answers something other than its point's verdict, unless it blocks on failure.
+- A hook is asked only for matching calls, MCP and plugin tools included, wakes the plugin's process, waits 10 s by default, and lets the agent go on when it fails or answers something other than its point's verdict, unless it blocks on failure. A message a hook blocks stays in the thread but never reaches the agent, now or later; the agent reads the reason instead.
 
 **Limits.** Parts and commands show only in projects where the plugin runs. Hooks reach Tagma's own agent, never Claude Code's or Codex's own tools. A plugin adds no entries of its own to the feed. The seat takes no keyboard focus and none of the window's thread shortcuts by itself.
