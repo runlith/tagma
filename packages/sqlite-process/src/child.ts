@@ -20,7 +20,7 @@ const leave = (): never => {
 
 for (const signal of ['SIGHUP', 'SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    if (orphaned() || (host.open() === 0 && !host.maintaining())) leave();
+    if (orphaned()) leave();
   });
 }
 

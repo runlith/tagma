@@ -62,7 +62,7 @@ test('a SQLite child leaves as soon as its owner dies, without waiting for a par
   }
 });
 
-test('a Unix terminal hangup leaves SQLite available until its owner closes the store', async () => {
+test('a Unix terminal hangup to every SQLite child leaves SQLite available until its owner closes the store', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'sqlite-lifetime-'));
   const filename = join(directory, 'store.db');
   const script = `
@@ -87,7 +87,11 @@ test('a Unix terminal hangup leaves SQLite available until its owner closes the 
     })));
     process.disconnect();
   `;
-  let sqlitePid: number | undefined;
+  const sqlitePids: number[] = [];
+  const hangUp = (pid: number) => {
+    process.kill(pid, 'SIGHUP');
+    process.kill(pid, 'SIGTERM');
+  };
   let ready!: () => void;
   const announced = new Promise<void>((resolve) => {
     ready = resolve;
@@ -101,7 +105,7 @@ test('a Unix terminal hangup leaves SQLite available until its owner closes the 
     ipc: (message) => {
       if (message === 'ready') ready();
       else if (typeof message === 'object' && message !== null && 'sqlite' in message && typeof message.sqlite === 'number') {
-        sqlitePid = message.sqlite;
+        sqlitePids.push(message.sqlite);
       }
     },
   });
@@ -113,9 +117,8 @@ test('a Unix terminal hangup leaves SQLite available until its owner closes the 
         throw new Error(`SQLite owner exited ${code} before opening its store`);
       }),
     ]);
-    if (sqlitePid === undefined) throw new Error('SQLite owner announced no child');
-    process.kill(sqlitePid, 'SIGHUP');
-    process.kill(sqlitePid, 'SIGTERM');
+    expect(sqlitePids.length).toBeGreaterThan(1);
+    for (const pid of sqlitePids) hangUp(pid);
     process.kill(-owner.pid, 'SIGHUP');
     expect(await owner.exited, await stderr).toBe(0);
     const stored = new Database(filename, { readonly: true });

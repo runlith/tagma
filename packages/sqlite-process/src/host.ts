@@ -28,8 +28,6 @@ export type SqliteHost = {
   readonly answered: (request: SqliteRequest, said: SqliteSaid) => void;
   readonly serve: (request: SqliteRequest, queueMs: number) => void;
   readonly busyTimeoutMs: (request: SqliteRequest) => number;
-  readonly open: () => number;
-  readonly maintaining: () => boolean;
   readonly close: () => void;
 };
 
@@ -80,7 +78,6 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
   const timeouts = new Map<number, number>();
   const captures = new Map<number, RowCapture>();
   const rebound = new Map<number, RowCapture | undefined>();
-  let maintaining = false;
 
   const answer = (connection: number, ask: SqliteAsk, queueMs: number): SqliteSaid => {
     const started = performance.now();
@@ -259,7 +256,6 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
           }
         }
         case 'Maintain':
-          maintaining = true;
           return { _tag: 'Maintaining', id: 0 };
         case 'Ping':
           return { _tag: 'Did', id: ask.id };
@@ -295,8 +291,6 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
     answered,
     serve: (request, queueMs) => answered(request, answer(request.connection, request.ask, queueMs)),
     busyTimeoutMs: ({ connection, ask }) => (ask._tag === 'Open' ? ask.config.busyTimeoutMs : (timeouts.get(connection) ?? 0)),
-    open: () => databases.size,
-    maintaining: () => maintaining,
     close: () => {
       for (const db of databases.values()) db.close();
       databases.clear();

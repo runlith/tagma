@@ -3,9 +3,10 @@ import type { SqliteReply } from './channel.js';
 import type { Host, Hosting } from './hosting.js';
 
 const CHILD = fileURLToPath(new URL('./child.ts', import.meta.url));
+const SIGNALS_IGNORED = 'trap "" HUP INT TERM; exec "$0" "$@"';
 
 export const childHosting: Hosting = (receive, onExit) => {
-  const child = Bun.spawn([process.execPath, 'run', CHILD], {
+  const child = Bun.spawn(['/bin/sh', '-c', SIGNALS_IGNORED, process.execPath, 'run', CHILD], {
     detached: true,
     ipc: (message: unknown) => receive(message as SqliteReply),
     stdio: ['ignore', 'inherit', 'inherit'],
@@ -21,7 +22,7 @@ export const childHosting: Hosting = (receive, onExit) => {
     send: (request) => {
       child.send(request);
     },
-    kill: (signal) => child.kill(signal),
+    kill: (signal) => (signal === undefined ? child.disconnect() : child.kill(signal)),
   };
   return host;
 };
