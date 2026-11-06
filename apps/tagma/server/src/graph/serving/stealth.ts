@@ -56,7 +56,7 @@ export const actingTrees = (
   const beside = overTree(gates, stealthRoot);
   return {
     guard: (act) => own(beside(act)),
-    settled: Effect.andThen(gate.beforeAct(layout.treeRoot), gate.beforeAct(stealthRoot)),
+    settled: Effect.andThen(gate.beforeAct(stealthRoot), gate.beforeAct(layout.treeRoot)),
   };
 };
 
@@ -115,7 +115,7 @@ export const servedStealth = Effect.fnUntraced(function* (
   const both = (each: (treeRoot: string) => Effect.Effect<void, GateRefusal<OpenRefusal>>) =>
     Effect.suspend(() => {
       const tree = hold?.tree() ?? null;
-      return Effect.andThen(each(layout.treeRoot), tree === null ? Effect.void : each(tree.layout.treeRoot));
+      return Effect.andThen(tree === null ? Effect.void : each(tree.layout.treeRoot), each(layout.treeRoot));
     });
   const unregister = () => {
     hidden?.unregister();

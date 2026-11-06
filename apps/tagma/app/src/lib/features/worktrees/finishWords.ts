@@ -1,4 +1,5 @@
-import type { AfterMerged, GraphSync } from '@tagma/server/landing/contract/wire/merge';
+import type { AfterMerged } from '@tagma/server/landing/contract/wire/merge';
+import type { GraphSync } from '@tagma/server/landing/contract/wire/receipt';
 import type { WorktreeDeleted } from '@tagma/server/worktrees/contract/wire/retirement';
 import type { GraphChanges, GraphKindChanges } from '@tagma/server/graph/contract/wire/branchChanges';
 import type { WorktreeActKind, WorktreeActPhase } from '@tagma/server/worktrees/contract/wire/rows';

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Effect, Queue, Schedule, Stream, type Semaphore } from 'effect';
@@ -6,7 +7,7 @@ import { GateRefusal, refusalBody } from '../../platform/contract/wire/refusal.j
 import { GraphRecoveries } from '../contract/service/recovery.js';
 import { ProjectPolicy, ServingSwitch } from '../contract/service/serving.js';
 import type { GraphRecovery, RecoveryAim, RecoveryNotice } from '../contract/wire/recovery.js';
-import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
+import { resolveStorageLayout, stealthBeside, storageHomes } from '../storage/layout.js';
 import { ShadowGit } from '../tree/shadow.js';
 import type { GraphSide } from '../contract/service/exchange.js';
 import { TreeMerges } from '../tree/merges.js';
@@ -33,22 +34,18 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
 
   const at = Effect.fnUntraced(function* (aim: RecoveryAim) {
     const { row, checkout, readOnly } = yield* switching.servedBy(aim);
-    const layout = yield* refused(
-      resolveStorageLayout({
-        mode: row.storage,
-        projectId: row.id,
-        ...storageHomes(storePath),
-        worktree: checkout,
-      }),
+    const homes = storageHomes(storePath);
+    const layout = yield* refused(resolveStorageLayout({ mode: row.storage, projectId: row.id, ...homes, worktree: checkout }));
+    const stealth = layout.mode === 'stealth' ? layout : stealthBeside(layout, { projectId: row.id, ...homes, worktree: checkout });
+    const merges = Effect.map(refused(ShadowGit.open(stealth.gitDir, git, side(row.id))), (shadow) =>
+      TreeMerges.at(shadow, stealth.treeRoot),
     );
-    if (layout.mode === 'team') return { checkout, readOnly, permit: overRepositoryAndTree(gates, layout) };
-    if (layout.mode !== 'stealth') return null;
-    const shadow = yield* refused(ShadowGit.open(layout.gitDir, git, side(row.id)));
+    const isolated = { readOnly, permit: overRepositoryAndTree(gates, stealth), assignment: gates(`graph-recovery:${stealth.treeRoot}`) };
+    if (layout.mode === 'stealth') return { ...isolated, team: null, merges: yield* merges };
     return {
-      readOnly,
-      merges: TreeMerges.at(shadow, layout.treeRoot),
-      permit: overRepositoryAndTree(gates, layout),
-      assignment: gates(`graph-recovery:${layout.treeRoot}`),
+      ...isolated,
+      team: { checkout, permit: overRepositoryAndTree(gates, layout) },
+      merges: existsSync(stealth.gitDir) ? yield* merges : null,
     };
   });
 
@@ -56,7 +53,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
     Stream.unwrap(
       Effect.gen(function* () {
         const here = yield* at({ projectId });
-        if (here === null || 'checkout' in here)
+        if (here.merges === null)
           return Stream.concat(Stream.make<[RecoveryNotice]>({ recovery: null, total: 0, unreadable: [] }), Stream.never);
         const wake = yield* Queue.sliding<void>(1);
         const directory = dirname(here.merges.file);
@@ -151,8 +148,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
     );
 
   return GraphRecoveries.of({
-    read: (aim) =>
-      Effect.flatMap(at(aim), (here) => (here === null || 'checkout' in here ? Effect.succeed(null) : refused(here.merges.read()))),
+    read: (aim) => Effect.flatMap(at(aim), (here) => (here.merges === null ? Effect.succeed(null) : refused(here.merges.read()))),
     follow: (projectId) =>
       Stream.callback<void>(
         (queue) =>
@@ -172,37 +168,40 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
       create: (recovery: GraphRecovery) => Effect.Effect<string, E, R>,
     ) {
       const here = yield* at(aim);
-      if (here === null || 'checkout' in here)
+      const merges = here.merges;
+      if (merges === null)
         return yield* new GateRefusal('not-found', 'this project has no isolated graph recovery', ['read_graph_recovery']);
       return yield* here.assignment.withPermit(
         Effect.gen(function* () {
-          yield* here.permit(refused(here.merges.restore()));
-          const record = yield* here.permit(refused(here.merges.read()));
+          yield* here.permit(refused(merges.restore()));
+          const record = yield* here.permit(refused(merges.read()));
           if (record === null || record.id !== id)
             return yield* new GateRefusal('not-found', 'this graph recovery is no longer pending', ['read_graph_recovery']);
           if (record.threadId !== null) return record.threadId;
           const threadId = yield* create(record);
-          yield* here.permit(refused(here.merges.assign(threadId)));
+          yield* here.permit(refused(merges.assign(threadId)));
           return threadId;
         }),
       );
     }),
     finish: Effect.fnUntraced(function* (aim) {
       const here = yield* at(aim);
-      if (here === null)
-        return yield* new GateRefusal('team-tree', 'this project has no isolated graph merge', ['resolve the merge in its own repository']);
       yield* writableAt(here);
-      if (here.checkout !== undefined)
-        return yield* here
-          .permit(resolveCheckout(git, here.checkout))
-          .pipe(
-            Effect.mapError((failure) =>
-              failure instanceof GateRefusal
-                ? failure
-                : new GateRefusal('graph-pool', failure.message, ['read the graph merge files and resolve again']),
-            ),
-          );
-      return yield* here.assignment.withPermit(here.permit(refused(Effect.andThen(here.merges.restore(), here.merges.finish()))));
+      const isolated = (merges: TreeMerges) =>
+        here.assignment.withPermit(here.permit(refused(Effect.andThen(merges.restore(), merges.finish()))));
+      if (here.team === null) return yield* isolated(here.merges);
+      const merges = here.merges;
+      const pending = merges === null ? null : yield* here.permit(refused(Effect.andThen(merges.restore(), merges.read())));
+      if (merges !== null && pending !== null) return yield* isolated(merges);
+      return yield* here.team
+        .permit(resolveCheckout(git, here.team.checkout))
+        .pipe(
+          Effect.mapError((failure) =>
+            failure instanceof GateRefusal
+              ? failure
+              : new GateRefusal('graph-pool', failure.message, ['read the graph merge files and resolve again']),
+          ),
+        );
     }),
   });
 });

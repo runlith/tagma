@@ -9,7 +9,8 @@ import type { FinishingThreads } from '../../worktrees/contract/service/finishin
 import type { WorktreeRetirement } from '../../worktrees/contract/service/retirement.js';
 import { finishRefusalOf } from '../../worktrees/retirement/finishing.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import type { AfterMerged, GraphSync, MergeReceipt } from '../contract/wire/merge.js';
+import type { AfterMerged, MergeReceipt } from '../contract/wire/merge.js';
+import type { GraphSync } from '../contract/wire/receipt.js';
 import type { MergeNoticeFailure } from '../contract/service/mergeNotice.js';
 import type { MergeRequestRow, MergeRequests } from '../store/mergeRequests.js';
 

@@ -59,6 +59,7 @@ export type Landed = {
   readonly hooked: Committing;
   readonly posted: Posted | null;
   readonly earlier: RefusedEdits;
+  readonly merged: boolean;
   readonly conclusion: string | null;
   readonly receipt: Extract<SubmitReceipt, { readonly status: 'landed' }>;
 };
@@ -444,6 +445,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
             hooked: committing,
             posted,
             earlier: earlier ?? NOTHING_CARRIED,
+            merged: prepared.merge !== undefined,
             conclusion: published.conclusion,
             receipt: submitted,
           },

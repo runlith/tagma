@@ -1,4 +1,4 @@
-import type { SubmitReceipt, Unrecorded } from './contract/wire/receipt.js';
+import type { GraphSync, SubmitReceipt, Unrecorded } from './contract/wire/receipt.js';
 import {
   type LandingUnjudged,
   type RuleBodies,
@@ -50,10 +50,27 @@ export function submitLines(report: SubmitReceipt): string[] {
     ...(report.unmatched === undefined ? [] : [`not in this commit — \`paths\` named no changed file: ${report.unmatched.join(', ')}`]),
     ...judgedLines(report),
     ...(report.formatSkipped === true ? ["made without the repository's commit steps, on the operator's word"] : []),
+    ...graphLines(report.graph),
     ...editedLines(report),
     ...unrecordedLines(report.unrecorded),
   ];
 }
+
+const graphLines = (graph: GraphSync | undefined): string[] => {
+  if (graph === undefined || graph.status === 'carried') return [];
+  if (graph.status === 'unread') return [`the graph of this checkout did not take in the merged branches' graph: ${graph.reason}`];
+  return [
+    ...graph.merges
+      .filter((merge) => merge.conflicts.length > 0)
+      .map(
+        (merge) =>
+          `the graph of ${merge.branch} conflicts with this checkout's graph on ${merge.conflicts.join(', ')} — read_graph_recovery, then resolve_graph_conflict`,
+      ),
+    ...(graph.copyFailures ?? []).map(
+      (failure) => `the graph copy ${failure.copy.tree} failed while the merge was taken in: ${failure.error.reason}`,
+    ),
+  ];
+};
 
 const unattributedLines = (report: { readonly unattributed?: readonly string[] }): string[] => {
   const paths = report.unattributed ?? [];

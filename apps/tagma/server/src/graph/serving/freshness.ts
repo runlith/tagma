@@ -238,6 +238,11 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
     return position === null ? null : { position, slot, filed };
   });
 
+  const besideOf = (state: EntryState): EntryState | undefined => {
+    const other = state.prefix === '' ? state.roots.stealth : state.roots.root;
+    return other === null || other === state.treeRoot ? undefined : entries.get(other);
+  };
+
   const refresh = Effect.fn('FreshnessGate.refresh', { root: true })(
     function* (state: EntryState) {
       const { layout, poolContext, ledger, row, stamp } = state;
@@ -324,7 +329,11 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
         }),
       );
       yield* Effect.annotateCurrentSpan({ outcome });
-      if (outcome !== 'fresh' || replayed) changed(row.id);
+      if (outcome !== 'fresh' || replayed) {
+        changed(row.id);
+        const beside = besideOf(state);
+        if (beside !== undefined && beside.failed !== null) observe(beside);
+      }
       if (outcome === 'fresh') return;
       yield* builder.forgetRegistry(poolContext);
       yield* refused(builder.syncRegistry(poolContext));

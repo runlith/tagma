@@ -110,7 +110,7 @@ export const HISTORY_OPERATIONS = {
   resolve_graph_conflict: operation('resolve_graph_conflict', {
     ...SURFACE_ACT,
     meaning:
-      'Resolve the graph files of an open merge. In team storage, validate the edited graph files and stage only their conflicts in the project checkout; commit is null and the repository merge stays open for its commit owner. In stealth storage, publish the validated isolated recovery preserving newer target work; read_graph_recovery names its directory.',
+      "Resolve the graph files of an open merge. In stealth storage, and for a team project's stealth blocks while their merge awaits recovery, publish the validated isolated recovery preserving newer target work; read_graph_recovery names its directory. Otherwise, in team storage, validate the edited graph files and stage only their conflicts in the project checkout; commit is null and the repository merge stays open for its commit owner.",
     input: graphInput({ branch: Schema.optional(Schema.String) }),
     answer: arms({
       ok: {

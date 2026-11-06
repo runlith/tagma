@@ -315,8 +315,10 @@ export const integrate = (
               tookYielded = checked.yielded;
             }
             let absorbed = twin !== null;
-            if (twin === true && options.graph !== undefined) {
-              const brought = yield* options.graph(projectId, record.path);
+            const bring = options.graph;
+            const bringing = bring !== undefined && (twin === true || (carries && source !== tip));
+            if (bringing) {
+              const brought = yield* bring(projectId, record.path);
               if (brought.status === 'unread')
                 return yield* refused(
                   'inspection-failed',
@@ -337,17 +339,19 @@ export const integrate = (
                   `a graph copy failed while the graph of ${baseBranch} was brought into the graph of ${branch}: ${failures.map((one) => one.error.reason).join('; ')}`,
                   [`read the graph of ${record.path} with sync_graph, then merge again`],
                 );
-              const still = yield* Effect.mapError(
-                options.twinBehind!(projectId, record.path, branch, baseBranch),
-                (failure) =>
-                  new WorktreeUnavailable({
-                    reason: 'storage',
-                    message: `whether the graph of ${baseBranch} is ahead of the worktree's could not be read: ${failure.reason}`,
-                  }),
-              );
-              absorbed = still !== true;
+              if (twin === true) {
+                const still = yield* Effect.mapError(
+                  options.twinBehind!(projectId, record.path, branch, baseBranch),
+                  (failure) =>
+                    new WorktreeUnavailable({
+                      reason: 'storage',
+                      message: `whether the graph of ${baseBranch} is ahead of the worktree's could not be read: ${failure.reason}`,
+                    }),
+                );
+                absorbed = still !== true;
+              }
             }
-            if ((source !== tip || twin !== null) && options.settled !== undefined) {
+            if ((source !== tip || twin !== null) && options.settled !== undefined && !bringing) {
               yield* Effect.mapError(
                 options.settled(projectId, record.path),
                 (failure) =>

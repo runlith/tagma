@@ -21,7 +21,7 @@ import { WorkingOrigins } from '../../workspace/contract/service/places.js';
 import { WorktreeRecords } from '../../worktrees/contract/service/worktrees.js';
 import { MergeNotice } from '../../landing/contract/service/mergeNotice.js';
 import { MergeReceipts } from '../../landing/contract/service/receipts.js';
-import type { GraphSync } from '../../landing/contract/wire/merge.js';
+import type { GraphSync } from '../../landing/contract/wire/receipt.js';
 import type { TreeDelivery } from '../../graph/contract/service/delivery.js';
 import { RequestKey } from '../../platform/contract/wire/ids.js';
 import { ProgramUnavailable } from '@runlith/github/GitHubCli';

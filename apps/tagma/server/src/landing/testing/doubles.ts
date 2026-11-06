@@ -35,6 +35,8 @@ import { mergeReceipts } from '../store/receipts.js';
 import { intentLifecycle } from '../store/intentLifecycle.js';
 import { mergeRequests } from '../store/mergeRequests.js';
 import { landingStore as landingStoreImpl } from '../queue/board.js';
+import { GraphSyncing } from '../contract/service/graphSyncing.js';
+import type { GraphSync } from '../contract/wire/receipt.js';
 
 export const holdingsAt = Effect.fnUntraced(function* (
   git: Parameters<typeof holdingsOver>[2],
@@ -61,6 +63,7 @@ export const submitOver = Effect.fnUntraced(function* (
   return yield* submitWork(git, git, root, store, units, origin, caller, ...rest).pipe(
     Effect.provideService(Holdings, rig.holdings),
     Effect.provideService(Retirement, rig.retirement),
+    Effect.provideService(GraphSyncing, () => Effect.succeed<GraphSync>({ status: 'unread', reason: 'no graph pool serves this landing' })),
   );
 });
 

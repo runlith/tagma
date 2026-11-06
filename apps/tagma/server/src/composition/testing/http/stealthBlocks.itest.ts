@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { graphHome, stealthTreeName } from '../../../graph/storage/layout.js';
+import { MCP_SESSION_HEADER } from '../../../platform/contract/wire/session.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
 import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
@@ -303,5 +304,65 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(yield* layer()).toEqual(before);
       expect(yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all')).toBe('');
     }),
+  );
+
+  it.effect(
+    'a block main moved from stealth to team stands once in a worktree that took main by a git merge concluded with submit_work',
+    () =>
+      Effect.gen(function* () {
+        const world = yield* DoorFixture;
+        const files = yield* FileSystem.FileSystem;
+        const root = yield* files.realPath(yield* world.directory('taking'));
+        yield* suiteGit(root, 'init', '-q', '-b', 'main');
+        yield* files.writeFileString(join(root, 'seed.txt'), 'seed\n');
+        yield* suiteGit(root, 'add', '-A');
+        yield* suiteGit(root, 'commit', '-qm', 'seed');
+        const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+        const project = (born.body as { project: { id: number } }).project.id;
+        yield* projectLeaving(world, project);
+        yield* Context.get(world.runtime.workspace, Coverage).cover(project);
+        const at = (cwd: string) => `project=${project}&cwd=${encodeURIComponent(cwd)}`;
+        const created = yield* world.op(
+          'create_block',
+          { title: 'Probe plan', storage: 'stealth', parentId: yield* rootOf(project) },
+          at(root),
+        );
+        const name = (created.body as Written).block.name;
+        expect((yield* world.op('sync_graph', {}, at(root))).status).toBe(200);
+        const repository = ((yield* world.op('read_repositories', {}, at(root))).body as CoveredRepositoriesAnswer).repositories[0]!
+          .binding;
+        const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'taker');
+        const operationId = world.uniqueName();
+        const mode = { kind: 'new-branch', branch: 'taker', start: 'HEAD' };
+        expect((yield* world.op('prepare_worktree', { operationId, repository, destination, mode }, at(root))).status).toBe(200);
+        const made = yield* world.op('create_worktree', { operationId }, at(root));
+        expect(made.status).toBe(200);
+        const rootId = (made.body as { operation: { rootId: string } }).operation.rootId;
+        const seen = (cwd: string) =>
+          Effect.map(world.op('search_blocks', { query: name }, at(cwd)), (answer) => (answer.body as { total?: number }).total);
+        expect(yield* seen(destination)).toBe(1);
+        yield* files.writeFileString(join(destination, 'side.txt'), 'side\n');
+        yield* suiteGit(destination, 'add', 'side.txt');
+        yield* suiteGit(destination, 'commit', '-qm', 'side work');
+
+        expect((yield* world.op('set_block_storage', { blockId: name, storage: 'team' }, at(root))).status).toBe(200);
+        expect((yield* world.op('sync_graph', {}, at(root))).status).toBe(200);
+        yield* files.writeFileString(join(root, 'main.txt'), 'main\n');
+        yield* suiteGit(root, 'add', 'main.txt');
+        yield* suiteGit(root, 'commit', '-qm', 'main moves on');
+        yield* suiteGit(destination, 'merge', '--no-ff', '--no-commit', 'main');
+        const taken = yield* world.op('submit_work', { subject: 'take main', paths: ['main.txt'] }, at(destination), {
+          [MCP_SESSION_HEADER]: 'claude-code:outside',
+        });
+        expect(taken.body).toMatchObject({ submitted: { status: 'landed' } });
+
+        const team = yield* world.op('query_blocks', { stealth: false, sort: { by: 'created', order: 'asc' } }, at(destination));
+        expect((team.body as { blocks: readonly { title: string }[] }).blocks.map((row) => row.title)).toContain('Probe plan');
+        expect(taken.body).toMatchObject({ submitted: { graph: { status: 'synced', merges: [{ branch: 'main', conflicts: [] }] } } });
+
+        const merged = yield* world.op('merge_worktree', { rootId }, at(root));
+        expect(merged).toMatchObject({ status: 200, body: { graph: { status: 'synced' } } });
+        expect(yield* seen(root)).toBe(1);
+      }),
   );
 });

@@ -43,10 +43,11 @@ import { intentLifecycle } from '../store/intentLifecycle.js';
 import { SignedCall } from '../../platform/contract/service/writers.js';
 import { landedBy, witnessSubmission } from '../store/submissions.js';
 import { receipt as publicationReceipt } from '../../platform/git/publish.js';
+import { GraphSyncing } from '../contract/service/graphSyncing.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
 
-type Landing = CommitTrees | ChangeRecord | FileSystem.FileSystem | LineWrites | Retirement | Holdings | CommitLandings;
+type Landing = CommitTrees | ChangeRecord | FileSystem.FileSystem | LineWrites | Retirement | Holdings | CommitLandings | GraphSyncing;
 
 type Submission = { readonly receipt: SubmitReceipt; readonly team: readonly TeamMember[]; readonly carried: ReadonlySet<string> };
 
@@ -377,6 +378,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
     });
   }
   const base = done.built.base ?? (empty?._tag === 'Success' ? empty.success : null);
+  const graph = done.merged ? yield* (yield* GraphSyncing)(projectId, root) : undefined;
   yield* checks.after({
     kind: 'tree',
     projectId,
@@ -391,6 +393,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       ...done.receipt,
       unsynced: done.unsynced.length === 0 ? undefined : done.unsynced,
       unrecorded: unrecorded.length === 0 ? undefined : unrecorded,
+      graph,
       ...hookFields(edits),
     },
     team,

@@ -7,8 +7,7 @@ import { MergedAfter } from '../../../worktrees/contract/wire/entries.js';
 import { WorktreeDeleted } from '../../../worktrees/contract/wire/retirement.js';
 import { RootId } from '../../../workspace/contract/wire/ids.js';
 import { GraphChanges } from '../../../graph/contract/wire/branchChanges.js';
-import { copyFailureSchema } from '../../../graph/contract/wire/answers.js';
-import { HOOK_FIELDS } from './receipt.js';
+import { GraphSync, HOOK_FIELDS } from './receipt.js';
 
 export const MERGE_TRAILER = 'Tagma-Worktree';
 
@@ -23,24 +22,6 @@ export const MergeReading = Schema.Struct({
   graph: GraphChanges,
 });
 export type MergeReading = typeof MergeReading.Type;
-
-export const GraphMerge = Schema.Struct({
-  branch: Schema.NonEmptyString,
-  merged: Schema.NullOr(Schema.NonEmptyString),
-  conflicts: Schema.Array(Schema.NonEmptyString),
-});
-export type GraphMerge = typeof GraphMerge.Type;
-
-export const GraphSync = Schema.Union([
-  Schema.Struct({
-    status: Schema.Literal('synced'),
-    merges: Schema.Array(GraphMerge),
-    copyFailures: Schema.optional(Schema.Array(copyFailureSchema)),
-  }),
-  Schema.Struct({ status: Schema.Literal('carried') }),
-  Schema.Struct({ status: Schema.Literal('unread'), reason: Schema.String }),
-]);
-export type GraphSync = typeof GraphSync.Type;
 
 export const WorktreePullRequest = Schema.Struct({
   rootId: RootId,

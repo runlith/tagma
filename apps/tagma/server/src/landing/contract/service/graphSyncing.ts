@@ -1,7 +1,7 @@
 import { Context, type Effect, type Scope } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
-import type { GraphSync } from '../wire/merge.js';
+import type { GraphSync } from '../wire/receipt.js';
 
 export class GraphSyncing extends Context.Service<GraphSyncing, (projectId: number, checkout: string) => Effect.Effect<GraphSync>>()(
   'tagma/landing/GraphSyncing',

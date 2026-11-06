@@ -21,7 +21,7 @@ import { actChecks } from '../../../enforcement/contract/service/ruleChecks.js';
 import type { ModuleSet } from '../../../enforcement/contract/wire/modules.js';
 import { LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 import { MeasuredCheckout } from '../../../graph/contract/service/serving.js';
-import type { GraphSync } from '../../../landing/contract/wire/merge.js';
+import type { GraphSync } from '../../../landing/contract/wire/receipt.js';
 
 const put = Effect.fn('testing.mergeGraph.put')(function* (dir: string, path: string, text: string) {
   const files = yield* FileSystem.FileSystem;

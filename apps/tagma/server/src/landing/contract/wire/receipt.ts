@@ -1,5 +1,23 @@
 import { Schema } from 'effect';
 import { LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../../../enforcement/contract/wire/enforcement.js';
+import { copyFailureSchema } from '../../../graph/contract/wire/answers.js';
+
+const GraphMerge = Schema.Struct({
+  branch: Schema.NonEmptyString,
+  merged: Schema.NullOr(Schema.NonEmptyString),
+  conflicts: Schema.Array(Schema.NonEmptyString),
+});
+
+export const GraphSync = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal('synced'),
+    merges: Schema.Array(GraphMerge),
+    copyFailures: Schema.optional(Schema.Array(copyFailureSchema)),
+  }),
+  Schema.Struct({ status: Schema.Literal('carried') }),
+  Schema.Struct({ status: Schema.Literal('unread'), reason: Schema.String }),
+]);
+export type GraphSync = typeof GraphSync.Type;
 
 export type SubmitCarry = { readonly path: string; readonly holders: readonly string[] };
 
@@ -77,6 +95,7 @@ export type SubmitReceipt =
       readonly bodies?: RuleBodies;
       readonly unjudged?: readonly LandingUnjudged[];
       readonly unrecorded?: readonly Unrecorded[];
+      readonly graph?: GraphSync;
       readonly edited?: readonly string[];
       readonly kept?: readonly HookKept[];
       readonly owed?: readonly string[];
@@ -145,6 +164,10 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
     bodies: Schema.optional(RuleBodies),
     unjudged: Schema.optional(Schema.Array(LandingUnjudged)),
     unrecorded: Schema.optional(Schema.Array(Unrecorded)),
+    graph: Schema.optional(GraphSync).annotate({
+      description:
+        "Present when this commit concluded a merge: the checkout's graph took in the merged branches' graph twins. A merge with conflicts waits in read_graph_recovery; resolve_graph_conflict publishes its resolution.",
+    }),
     formatSkipped: FORMAT_SKIPPED,
     ...HOOK_FIELDS,
   }),
