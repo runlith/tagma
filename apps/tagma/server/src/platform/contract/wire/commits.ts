@@ -1,6 +1,6 @@
 export type Person = { readonly name: string; readonly email: string };
 
-export const AGENT_PERSON: Person = { name: 'Tagma', email: 'agent@tagma.dev' };
+export const AGENT_PERSON: Person = { name: 'Tagma', email: 'agent@tagma.app' };
 
 export const personOf = (person: Person): string => `${person.name} <${person.email}>`;
 

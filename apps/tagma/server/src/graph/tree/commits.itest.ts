@@ -147,7 +147,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* fs.writeFileString(join(w.treeRoot, '.watch-cookie-4242-7'), '');
         expect(yield* w.commits.commit).toMatchObject({ kind: 'committed', files: 2 });
         expect(yield* w.run(['log', '-1', '--format=%an <%ae>|%cn <%ce>|%s'])).toBe(
-          'Tagma <agent@tagma.dev>|Tagma <agent@tagma.dev>|Sync graph files',
+          'Tagma <agent@tagma.app>|Tagma <agent@tagma.app>|Sync graph files',
         );
         expect((yield* w.run(['show', '--name-only', '--format=', 'HEAD'])).split('\n').sort()).toEqual([
           `${CHECKOUT_DIRECTORY}/demo/born.md`,

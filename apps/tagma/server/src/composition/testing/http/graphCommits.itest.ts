@@ -11,7 +11,7 @@ import { suiteGit } from '../suiteGit.js';
 
 type Written = { readonly block: { readonly name: string } };
 
-const TAGMA = 'Tagma <agent@tagma.dev>';
+const TAGMA = 'Tagma <agent@tagma.app>';
 const LONG_TITLE = "The team tree's commit stream belongs to the tree and survives every reopening without another graph write";
 
 const lastCommit = (root: string) =>

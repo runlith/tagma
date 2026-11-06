@@ -1255,6 +1255,11 @@
       "browser": "./src/platform/contract/wire/operation.ts",
       "default": "./src/platform/contract/wire/operation.ts"
     },
+    "./app-state/contract/wire/documents": {
+      "types": "./src/app-state/contract/wire/documents.ts",
+      "browser": "./src/app-state/contract/wire/documents.ts",
+      "default": "./src/app-state/contract/wire/documents.ts"
+    },
     "./platform/contract/wire/manifest": {
       "types": "./src/platform/contract/wire/manifest.ts",
       "browser": "./src/platform/contract/wire/manifest.ts",

@@ -60,10 +60,10 @@ it.live('submit_work attributes exactly the declared tasks, held or not, and an 
     const selectedHead = yield* spawnedEffect(['git', 'log', '-1', '--format=%B'], { cwd: root });
     expect(selectedHead.exitCode).toBe(0);
     expect(new TextDecoder().decode(selectedHead.stdout).trim()).toBe(
-      `Complete the first task\n\nAttribute only the declared task.\n\nTask: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`,
+      `Complete the first task\n\nAttribute only the declared task.\n\nTask: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.app>`,
     );
     const trailers = yield* spawnedEffect(['git', 'log', '-1', '--format=%(trailers:only,unfold)'], { cwd: root });
-    expect(new TextDecoder().decode(trailers.stdout).trim()).toBe(`Task: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`);
+    expect(new TextDecoder().decode(trailers.stdout).trim()).toBe(`Task: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.app>`);
     expect(yield* read('second.ts')).toBe('export const second = 1;\n');
 
     const spec = yield* world.op('create_block', { tags: ['spec'], title: 'Not work', parentId }, `project=${projectId}`);

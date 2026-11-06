@@ -33,7 +33,7 @@ const answered = Effect.fnUntraced(function* (id: string, input: unknown, projec
   return answer.body as { readonly mcp?: readonly Row[]; readonly url?: string; readonly skipped?: string };
 });
 
-const DOCUMENT = 'https://tagma.dev/oauth/client.json';
+const DOCUMENT = 'https://tagma.app/oauth/client.json';
 
 const publishing = (listing: { redirects: readonly string[] }) =>
   Effect.acquireRelease(

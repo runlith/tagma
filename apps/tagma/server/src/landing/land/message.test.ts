@@ -6,7 +6,7 @@ const tasks = [
   { name: 'cd34ef56', title: 'second task', stealth: false },
 ];
 
-const CO = 'Co-authored-by: Tagma <agent@tagma.dev>';
+const CO = 'Co-authored-by: Tagma <agent@tagma.app>';
 
 test('a commit keeps the subject and body as written and closes on one trailer block of its tasks and Tagma', () => {
   expect(messageOf('fix(landing): keep the result', 'Keep the detail.', tasks, true)).toBe(

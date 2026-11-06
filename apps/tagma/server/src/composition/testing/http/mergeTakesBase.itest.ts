@@ -120,9 +120,9 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       expect(delivered.every(inGraphTree)).toBe(true);
       expect(yield* suiteGit(root, 'rev-parse', 'HEAD^2')).toBe(took);
       expect(yield* suiteGit(destination, 'log', '-1', '--format=%B', took)).toBe(
-        'Merge main into side\n\nCo-authored-by: Tagma <agent@tagma.dev>',
+        'Merge main into side\n\nCo-authored-by: Tagma <agent@tagma.app>',
       );
-      const block = `Tagma-Worktree: ${rootId}\nCo-authored-by: Tagma <agent@tagma.dev>`;
+      const block = `Tagma-Worktree: ${rootId}\nCo-authored-by: Tagma <agent@tagma.app>`;
       expect(yield* suiteGit(root, 'log', '-1', '--format=%B')).toBe(`Merge worktree side (side) into main\n\n${block}`);
       expect(yield* suiteGit(root, 'log', '-1', '--format=%(trailers:only,unfold)')).toBe(block);
       expect(yield* op('search_blocks', { query: later.block.name, limit: 1 }, destination)).toMatchObject({

@@ -498,7 +498,7 @@ test("a terminal the thread holds in another project's checkout shows its addres
             holder: 'thread:thread-1',
             heldBy: 'thread-1',
             rootId: 'root-b',
-            label: 'tagma.dev site dev server',
+            label: 'tagma.app site dev server',
             cwd: '/b/apps/site',
             revision: 0,
             acceptedAt: Date.now() - 1000,

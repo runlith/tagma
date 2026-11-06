@@ -79,7 +79,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       yield* Effect.gen(function* () {
         for (const [name, email, subject] of [
           ['tagma', 'tagma@tagma', 'tagma: graph @ 1'],
-          ['Tagma', 'agent@tagma.dev', 'Sync graph files'],
+          ['Tagma', 'agent@tagma.app', 'Sync graph files'],
         ] as const) {
           yield* files.writeFileString(join(root, 'graph.md'), `${subject}\n`);
           yield* suiteGit(root, 'add', 'graph.md');

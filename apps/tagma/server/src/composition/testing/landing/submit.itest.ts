@@ -23,7 +23,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           expect(answer.carried).toEqual([]);
           expect(yield* world.committed()).toEqual(mine);
           expect((yield* world.run(['log', '-1', '--format=%B'])).trimEnd()).toBe(
-            `the work of one session (AB12CD34)${body}\n\nTask: ab12cd34 the work this commit answers\nCo-authored-by: Tagma <agent@tagma.dev>`,
+            `the work of one session (AB12CD34)${body}\n\nTask: ab12cd34 the work this commit answers\nCo-authored-by: Tagma <agent@tagma.app>`,
           );
           const rows = yield* world.rows();
           expect(rows.every((row) => row.commit !== null && row.committedAt !== null)).toBe(true);

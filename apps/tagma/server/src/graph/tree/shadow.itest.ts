@@ -96,7 +96,7 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
         ['Tagma', 'create doctrine'],
       ]);
       expect(yield* shadow.run('identity', ['-C', tree, 'log', '-1', '--format=%an <%ae>|%cn <%ce>'])).toBe(
-        'Tagma <agent@tagma.dev>|Tagma <agent@tagma.dev>',
+        'Tagma <agent@tagma.app>|Tagma <agent@tagma.app>',
       );
     }),
   );
@@ -146,7 +146,7 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
         expect((yield* shadow.stagedSides(tree, `${name}.md`)).get(3)).toBe('the rival truth');
         yield* block(tree, name, 'the merged truth');
         expect(yield* shadow.concludeMerge(tree)).toBeString();
-        expect(yield* shadow.run('identity', ['-C', tree, 'log', '-1', '--format=%ae|%ce'])).toBe('agent@tagma.dev|agent@tagma.dev');
+        expect(yield* shadow.run('identity', ['-C', tree, 'log', '-1', '--format=%ae|%ce'])).toBe('agent@tagma.app|agent@tagma.app');
         expect(yield* fs.readFileString(join(tree, `${name}.md`))).toBe('the merged truth');
         expect(yield* shadow.mergeInProgress(tree)).toBe(false);
       }),

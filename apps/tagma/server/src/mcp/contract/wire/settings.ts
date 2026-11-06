@@ -35,7 +35,7 @@ export const mcpClientDocument = settingKey({
   description:
     'The HTTPS address of the OAuth client metadata document Tagma signs into MCP servers with, where a server accepts one; the document Tagma publishes by default, and null skips it for a client the operator registered, then dynamic registration.',
   schema: Schema.NullOr(Schema.String.check(Schema.isStartingWith('https://'))),
-  fallback: 'https://tagma.dev/oauth/client.json',
+  fallback: 'https://tagma.app/oauth/client.json',
   scopes: ['user'],
   merge: 'replace',
 });
