@@ -8,7 +8,7 @@ edges:
     to: 01a1236d-51e7-7552-ad52-dbc10c2dbada
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/hostStyles.ts
+    ref: apps/tagma/app/src/lib/features/mcp/hostStyles.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/views/toolNotices.ts
   - kind: symbol
