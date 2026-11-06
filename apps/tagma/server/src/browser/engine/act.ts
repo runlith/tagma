@@ -229,7 +229,55 @@ const humanKey = Effect.fnUntraced(function* (attached: Attached, key: string) {
   yield* attached.human.press(chord);
 });
 
+type Level = { readonly frame: string; readonly child: string | undefined; readonly object: string };
+
+const ORDER = `function (other) {
+  const chain = (node) => { const held = [node]; while (held[0].getRootNode() !== held[0].ownerDocument) held.unshift(held[0].getRootNode().host); return held; };
+  const mine = chain(this), theirs = chain(other);
+  let at = 0;
+  while (at < mine.length && at < theirs.length && mine[at] === theirs[at]) at += 1;
+  if (at === mine.length || at === theirs.length) return 0;
+  return mine[at].compareDocumentPosition(theirs[at]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+}`;
+
+const targetLevels = Effect.fnUntraced(function* (attached: Attached, located: Located) {
+  const levels: Level[] = [{ frame: located.anchor.frame, child: located.child, object: located.object }];
+  for (let frame = located.anchor.frame; ;) {
+    const parent = attached.frames.get(frame)?.parent;
+    if (parent === null || parent === undefined) return levels;
+    const child = attached.frames.get(parent)?.child;
+    const context = yield* world(attached, parent);
+    const { backendNodeId } = yield* attached.session.send('DOM.getFrameOwner', { frameId: frame }, child);
+    const { object } = yield* attached.session.send(
+      'DOM.resolveNode',
+      { backendNodeId, executionContextId: context, objectGroup: attached.group },
+      child,
+    );
+    if (object.objectId === undefined) return levels;
+    levels.unshift({ frame: parent, child, object: object.objectId });
+    frame = parent;
+  }
+});
+
+const precedes = Effect.fnUntraced(function* (attached: Attached, target: readonly Level[], focus: readonly Level[]) {
+  for (let at = 0; at < Math.min(target.length, focus.length); at += 1) {
+    if (target[at]!.frame !== focus[at]!.frame) return false;
+    const { result } = yield* attached.session.send(
+      'Runtime.callFunctionOn',
+      { objectId: target[at]!.object, functionDeclaration: ORDER, arguments: [{ objectId: focus[at]!.object }], returnByValue: true },
+      target[at]!.child,
+    );
+    if (result.value !== 0) return result.value === -1;
+  }
+  return false;
+});
+
 const focusKey = Effect.fnUntraced(function* (attached: Attached) {
+  return (yield* focusPath(attached)).key;
+});
+
+const focusPath = Effect.fnUntraced(function* (attached: Attached) {
+  const levels: Level[] = [];
   let frame = attached.main;
   for (;;) {
     const context = yield* world(attached, frame);
@@ -244,7 +292,7 @@ const focusKey = Effect.fnUntraced(function* (attached: Attached) {
       },
       child,
     );
-    if (result.objectId === undefined) return `${frame}:none`;
+    if (result.objectId === undefined) return { key: `${frame}:none`, levels };
     let objectId = result.objectId;
     for (;;) {
       const { node } = yield* attached.session.send('DOM.describeNode', { objectId, depth: 1, pierce: true }, child);
@@ -266,8 +314,9 @@ const focusKey = Effect.fnUntraced(function* (attached: Attached) {
           continue;
         }
       }
+      levels.push({ frame, child, object: objectId });
       if (node.frameId === undefined || !attached.frames.has(node.frameId) || !['IFRAME', 'FRAME'].includes(node.nodeName))
-        return `${frame}:${node.backendNodeId}`;
+        return { key: `${frame}:${node.backendNodeId}`, levels };
       frame = node.frameId;
       break;
     }
@@ -330,8 +379,10 @@ const select = Effect.fnUntraced(function* (
       );
     yield* reveal(attached, located);
     const isFocused = call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
-    let at = yield* focusKey(attached);
+    const start = yield* focusPath(attached);
+    let at = start.key;
     let focused = yield* isFocused;
+    const step = (yield* precedes(attached, yield* targetLevels(attached, located), start.levels)) ? 'Shift+Tab' : 'Tab';
     if (focused) {
       yield* humanKey(attached, 'Tab');
       at = yield* focusMoved(attached, at);
@@ -341,7 +392,7 @@ const select = Effect.fnUntraced(function* (
     }
     const seen = new Set<string>([at]);
     while (!focused) {
-      yield* humanKey(attached, 'Tab');
+      yield* humanKey(attached, step);
       at = yield* focusMoved(attached, at);
       focused = yield* isFocused;
       if (focused || seen.has(at)) break;
@@ -350,7 +401,7 @@ const select = Effect.fnUntraced(function* (
     if (!focused)
       return yield* inputMode(
         attached.profile,
-        `selecting ${aim.ref}, which ${seen.size} Tab stops did not reach in the keyboard focus order; choose it at the screen`,
+        `selecting ${aim.ref}, which ${seen.size} ${step} stops did not reach in the keyboard focus order; choose it at the screen`,
       );
     yield* markElement(state, attached, located);
     yield* attached.human.type(prefix);
