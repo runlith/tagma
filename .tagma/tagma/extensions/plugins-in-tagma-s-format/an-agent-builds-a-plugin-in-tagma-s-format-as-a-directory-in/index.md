@@ -32,7 +32,7 @@ sources:
 
 **Behaviour.**
 - The manifest carries the id, title, version, options, an optional process entry and contributions by points, each tool with its description and input schema. A plugin without a process is views and agents only.
-- A manifest or a contribution its point rejects refuses the install with the reason; a point whose check needs a sibling — a tool the manifest does not name for Tagma, a view `views` does not name — shows as the plugin failing, with the reason.
+- A manifest or a contribution its point rejects, alone or against the points it names — a tool the manifest does not name for Tagma, a view `views` does not name — refuses the install with the reason, and the build refuses it first with the same reason.
 - Contributions stand while any project enables the plugin, before its process ever runs: an agent sees its tools at once. The first call, tick, ending, notification answer, build step or view subscription starts the process, which goes to sleep after five quiet minutes; a resident plugin's process runs from its enabling.
 - One process per machine serves all projects and is told, on every call, the projects where the plugin is enabled. Uninstalling stops it everywhere and drops its secrets; neither its folder nor its data is touched.
 - A rebuild — a new manifest or entry module — or an option change restarts a running process once; editing `ui/` does not. A restart waits for started calls, new ones wait for the next process. A crashed process comes back on the next demand after an increasing delay, a resident one by itself. A bad manifest after an edit keeps the old declaration working.

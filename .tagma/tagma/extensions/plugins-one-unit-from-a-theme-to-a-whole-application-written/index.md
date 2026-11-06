@@ -122,7 +122,7 @@ Tagma's format is the superset that translation into it needs. Each part is a po
 - `resources`;
 - `providers`.
 
-The manifest's JSON Schema stays generated from the declared points. Every point's schema sits in its owner's `contract/wire` and is listed in its owner's manifest.
+The SDK's field types and its build check stay generated from the declared points. Every point's face — its schema and its checks against the other points — sits in its owner's `contract/wire` and is listed in its owner's manifest.
 
 **Where each part runs.**
 

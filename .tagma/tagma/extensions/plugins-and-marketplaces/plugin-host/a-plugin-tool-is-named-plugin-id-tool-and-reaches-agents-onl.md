@@ -19,10 +19,8 @@ The tools agents and views are offered are built from the manifest's `tools` ent
 - `own` — through the `plugin:<id>` capability of the plugin's own agents.
 - `view` — MCP descriptors as is, only for the view bridge. No path hands it to agents.
 
-The fourth audience, `tagma`, reaches nobody: it names a tool only Tagma calls for a point — a tick, an ending, a notification answer, a build step — and a point naming any other tool is refused.
+The fourth audience, `tagma`, reaches nobody: it names a tool only Tagma calls for a point — a tick, an ending, a notification answer, a build step — and a point naming any other tool refuses the install, through the `tools` face's `serves`.
 
-Two cases refuse registration, so nothing promised silently disappears:
-- a name past the 64 characters a model accepts;
-- a tool from `agents` or `own` the model catalog will not accept (tasks, names).
+Nothing promised silently disappears. A name past the 64 characters a model accepts refuses the install, through the `tools` face's own check. A tool from `agents` or `own` that the model catalog will not accept (tasks, names) refuses its registration at publication.
 
 While the plugin's process is `failed`, its `agents` and `own` tools are withdrawn from every catalog, so no agent is shown a tool that cannot run; they return when a process opens cleanly. `mutates` derives from the entry's `readOnlyHint`: without it the tool asks the operator in review mode — so ordering consent arrives with no new mechanism.

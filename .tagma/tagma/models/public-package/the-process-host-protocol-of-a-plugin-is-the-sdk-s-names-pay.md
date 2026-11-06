@@ -14,8 +14,9 @@ sources:
 Spec 5067fa15 gives the SDK the protocol between a plugin's process and the host. The SDK is also the lower module, so the shared names stand in `@runlith/tagma/plugin/protocol`, and `plugin-host` and the point owners import them rather than declaring their own. The shared names are:
 - the environment variables a process is started with;
 - the `_meta` key carrying the projects where the plugin is enabled;
-- the payloads of the calls Tagma makes: tick, ending, notification answer, build step;
-- the build step's verdict.
+- the payloads of the calls Tagma makes: tick, ending, notification answer, build step.
+
+The build step's verdict travels the other way, so the server owns it: `BuildVerdict` is printed from checkout-builds' `StepVerdict`, the schema the server decodes it with, into `/plugin/points` beside the point types.
 
 The caller stays `@runlith/mcp`'s `McpCaller`, under `runlith/caller`, which Tagma's other MCP clients share.
 
@@ -29,6 +30,6 @@ The points name these tools, and the host treats them like any other tool. An au
 
 **What the runtime does that a hand-written process had to.**
 - It answers every failure as `isError`, a thrown `Refusal` with its reason, so a handler's error never becomes a protocol fault.
-- It sends `console.log` to stderr, so a stray log cannot corrupt stdout.
+- `stdio.ts`, the first module the process evaluates, sends `console.log` and writes to `process.stdout` to stderr and keeps the original stdout for the protocol alone. So nothing printed while the plugin's modules load reaches the stream; the build's entry imports the runtime before `plugin.ts` for this.
 - It exits when stdin ends.
 - It gives `ctx.data` per project, `projects/<id>` under `TAGMA_PLUGIN_DATA`, or `machine` for a call with no project. One process serves every project, and its data would otherwise mix them.

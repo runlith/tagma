@@ -1,6 +1,6 @@
 ---
 id: 01a1ae0e-74de-71b4-9c10-91ef09039173
-title: The plugin SDK's field types, build check and client types are generated from the server owners' schemas into committed files
+title: The plugin SDK's field types, build check and client types are generated from the server owners' own code into committed files
 ord: 2
 tags: ["explanation"]
 sources:
@@ -9,19 +9,17 @@ sources:
   - kind: file
     ref: packages/tagma/src/plugin/points.generated.ts
   - kind: file
-    ref: packages/tagma/src/plugin/schemas.generated.json
-  - kind: file
     ref: packages/tagma/src/plugin/operations.generated.ts
   - kind: file
-    ref: packages/tagma/src/plugin/check.ts
+    ref: packages/tagma/src/plugin/checks.generated.js
 ---
-The SDK sits below the server: the server imports `@runlith/tagma`. Its field types and its build's check must still be the owners' point schemas, so the kit generates them instead of importing them. An import would close a module cycle, and it would pull the whole server into every typecheck of the package. `kit/generated.ts` reads the server sources as data and writes three committed files into `src/plugin/`:
-- `points.generated.ts`, the encoded TS types of the envelope and of every point, plus their names;
-- `schemas.generated.json`, their JSON Schemas;
-- `operations.generated.ts`, the input and known answer arms of every `external: true` operation.
+The SDK sits below the server: the server imports `@runlith/tagma`. Its field types, the build step's verdict and its build's check must still be the owners' own, so the kit generates them instead of importing them. An import would close a module cycle and pull the whole server into every typecheck of the package. `kit/generated.ts` reads the server sources and writes these committed files into `src/plugin/`:
+- `points.generated.ts`: the encoded TS types of the envelope, of every point and of checkout-builds' `StepVerdict` (as `BuildVerdict`), plus the point names;
+- `checks.generated.js` with `checks.generated.d.ts`: a Bun bundle of the owners' code itself — the envelope, the plugin id label, every point's face with its schema and checks, and `contributionsRefusal` — answering `manifestRefusal` and `pluginIdRefusal`;
+- `operations.generated.ts`: the input and known answer arms of every `external: true` operation.
 
-**Finding the parts.** A point is any `new ContributionPoint(id, { name, schema })` in the server, so the generator holds no list of points. The schema must be imported from its owner's `contract/wire`, or generation fails. Operations come from every `contract/wire/module.ts`. A new point or external operation therefore reaches the SDK the next time the files are regenerated.
+**Finding the parts.** A point is any `new ContributionPoint(id, FACE)` in the server whose face is a binding imported from its owner's `contract/wire`, so the generator holds no list of points. Operations come from every `contract/wire/module.ts`. A new point, check or external operation reaches the SDK the next time the files are regenerated.
 
-**Running it.** Run `bun kit/generated.ts` after changing a point, the envelope or an external operation. `kit/generated.itest.ts` fails while any file is stale. It compares the TS by syntax tree and the JSON by value, because the commit's formatter rewrites both files.
+**Running it.** Run `bun kit/generated.ts` after changing a point, its checks, the envelope, the verdict or an external operation. `kit/generated.itest.ts` fails while any file is stale. It compares by syntax tree, so formatting and comments never make a file stale; the formatter skips the generated files.
 
-**What the build checks.** The build checks a manifest by reviving these JSON Schemas with Effect and decoding with excess properties refused. Its messages are those of the server's own checks. JSON Schema carries no custom `makeFilter` check, such as a name listed twice, a reserved option key or unsorted sources. The build passes those, and the server refuses them at install. An owner who wants the build to catch a check writes it as a built-in check that JSON Schema carries.
+**What the build checks.** The bundle carries the owners' filters (`makeFilter`) and cross-point checks as code. So the build's verdict is the server's: the same decode, the same checks, the same reasons. `effect` stays external, and the bundle runs on the SDK's own Effect, the server's version. Two things stay the server's alone: claims, which depend on the other installed plugins, and what a register checks at publication.
