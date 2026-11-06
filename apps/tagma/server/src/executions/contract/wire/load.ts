@@ -4,6 +4,19 @@ import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { BackgroundWork } from '../../../platform/contract/wire/background.js';
 import { PageId } from '../../../browser/contract/wire/ids.js';
+import { settingKey } from '../../../platform/contract/wire/setting.js';
+
+export const loadInStatusBar = settingKey({
+  id: 'appearance.loadInStatusBar',
+  order: 10,
+  title: 'Load in the status bar',
+  description:
+    'Whether the status bar shows the machine load button. The load is still read for the thread badges, and a badge still opens it, when the button is hidden.',
+  schema: Schema.Boolean,
+  fallback: true,
+  scopes: ['user'],
+  merge: 'replace',
+});
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Pid = Schema.Int.check(Schema.isGreaterThan(0));

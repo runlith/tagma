@@ -40,6 +40,7 @@ import {
   terminalPlaceLayouts,
   hostMemoryShare,
 } from './contract/wire/terminalBehavior.js';
+import { loadInStatusBar } from './contract/wire/load.js';
 
 export const EXECUTION_SETTING_KEYS = [
   terminalFontFamily,
@@ -80,6 +81,7 @@ export const EXECUTION_SETTING_KEYS = [
   terminalSkipCloseConfirm,
   terminalPlaceLayouts,
   hostMemoryShare,
+  loadInStatusBar,
 ] as const;
 
 export const EXECUTION_SETTING_SECTIONS = [
