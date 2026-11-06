@@ -171,7 +171,11 @@ export const threadAdmissionLayer: Layer.Layer<ThreadAdmission, never, ThreadAgg
       const key = options.key ?? mintThreadSignalId();
       const digest = actDigest(['say', threadId, item.mode, item.text.trim(), (item.attachments ?? []).map((ref) => ref.id)]);
       const road = (thread: ThreadMetadataRow, admitted: Keyed) => {
-        const options_ = { key, inputId: inputItemId(caller, key), admitted };
+        const sender =
+          caller.kind === 'external'
+            ? ({ kind: 'external', name: caller.name, ...(caller.title === undefined ? {} : { title: caller.title }) } as const)
+            : undefined;
+        const options_ = { key, inputId: inputItemId(caller, key), admitted, sender };
         return item.mode === 'send'
           ? aggregate.send(thread, item.text, item.attachments, options_)
           : aggregate.queue(thread, item.text, item.attachments, options_);

@@ -68,6 +68,7 @@ export const pluginHostLayer: Layer.Layer<
         }),
         reading: supervisor.reading,
         hosts: supervisor.hosts,
+        title: supervisor.title,
         pending: (id) => Effect.map(hosted.roots(), (roots) => roots.has(id) && !supervisor.standing(id)),
         call: supervisor.call,
         callAdmitted: supervisor.callAdmitted,

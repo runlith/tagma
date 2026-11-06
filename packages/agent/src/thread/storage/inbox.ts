@@ -34,6 +34,7 @@ export const threadInboxSenderSchema = Schema.Union([
     asOperator: Schema.optional(Schema.Literal(true)),
   }),
   Schema.Struct({ kind: Schema.Literal('host') }),
+  Schema.Struct({ kind: Schema.Literal('external'), name: Schema.String, title: Schema.optional(Schema.String) }),
 ]);
 export type ThreadInboxSender = typeof threadInboxSenderSchema.Type;
 

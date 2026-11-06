@@ -39,15 +39,26 @@ export function saidAsOperator(item: ThreadInboxItemLike): boolean {
   return item.sender.kind === 'thread' && item.sender.asOperator === true;
 }
 
-export function spokenByAgent(item: ThreadInboxItemLike): boolean {
-  return item.sender.kind === 'thread' && item.sender.asOperator !== true;
+export function spokenByOther(item: ThreadInboxItemLike): boolean {
+  return (item.sender.kind === 'thread' && item.sender.asOperator !== true) || item.sender.kind === 'external';
 }
+
+const OUTSIDE_SIGNAL_TYPE = 'message';
 
 export function threadSignalOfInboxItem(item: ThreadInboxWords): ThreadSignal {
   const address = senderAddress(item.sender);
   switch (item.kind) {
     case 'turn':
-      return { id: item.id, type: USER_MESSAGE_SIGNAL_TYPE, addressee: 'reader', text: item.body.text, occurredAt: item.occurredAt };
+      return address === null
+        ? { id: item.id, type: USER_MESSAGE_SIGNAL_TYPE, addressee: 'reader', text: item.body.text, occurredAt: item.occurredAt }
+        : {
+            id: item.id,
+            type: OUTSIDE_SIGNAL_TYPE,
+            addressee: 'transport',
+            text: item.body.text,
+            from: address.from,
+            occurredAt: item.occurredAt,
+          };
     case 'task':
     case 'envelope':
       if (saidAsOperator(item)) {
@@ -84,7 +95,8 @@ function intentOf(item: ThreadInboxWords): string | undefined {
   return item.kind === 'signal' ? item.body.type : item.body.intent;
 }
 
-function senderAddress(sender: ThreadInboxSender): { from: string; senderThreadId: string; senderProjectId?: number } | null {
+function senderAddress(sender: ThreadInboxSender): { from: string; senderThreadId?: string; senderProjectId?: number } | null {
+  if (sender.kind === 'external') return { from: sender.title ?? sender.name };
   if (sender.kind !== 'thread') return null;
   const address = { from: sender.name ?? sender.threadId, senderThreadId: sender.threadId };
   return sender.projectId === undefined ? address : { ...address, senderProjectId: sender.projectId };
@@ -103,7 +115,7 @@ export function threadQueuedTurnOf(runId: string, item: ThreadInboxItemLike): Th
     };
   }
   const attachments = item.kind === 'turn' || item.kind === 'signal' ? item.body.attachments : undefined;
-  const address = spokenByAgent(item) ? senderAddress(item.sender) : null;
+  const address = spokenByOther(item) ? senderAddress(item.sender) : null;
   return {
     id: item.id,
     runId,
@@ -118,32 +130,36 @@ export function threadQueuedTurnOf(runId: string, item: ThreadInboxItemLike): Th
   };
 }
 
-export function inboxTurnValues(
-  threadId: string,
-  input: { readonly id?: string; readonly text: string; readonly attachments?: readonly ThreadAttachmentRef[] },
-): ThreadInboxItemValues {
+type SpokenWords = {
+  readonly id?: string;
+  readonly text: string;
+  readonly attachments?: readonly ThreadAttachmentRef[];
+  readonly sender?: ThreadInboxSender;
+};
+
+export function inboxTurnValues(threadId: string, input: SpokenWords): ThreadInboxItemValues {
   return {
     id: input.id ?? mintThreadSignalId(),
     threadId,
-    sender: { kind: 'reader' },
+    sender: input.sender ?? { kind: 'reader' },
     kind: 'turn',
     body: { text: input.text, attachments: input.attachments?.length ? input.attachments : undefined },
     occurredAt: new Date().toISOString(),
   };
 }
 
-export function inboxSteerValues(
-  threadId: string,
-  input: { readonly id?: string; readonly text: string; readonly attachments?: readonly ThreadAttachmentRef[] },
-): ThreadInboxItemValues {
-  return inboxSignalValues(threadId, {
+export function inboxSteerValues(threadId: string, input: SpokenWords): ThreadInboxItemValues {
+  const address = input.sender === undefined ? null : senderAddress(input.sender);
+  const values = inboxSignalValues(threadId, {
     id: input.id ?? mintThreadSignalId(),
-    type: USER_MESSAGE_SIGNAL_TYPE,
-    addressee: 'reader',
+    type: address === null ? USER_MESSAGE_SIGNAL_TYPE : OUTSIDE_SIGNAL_TYPE,
+    addressee: address === null ? 'reader' : 'transport',
     text: input.text,
+    from: address?.from,
     attachments: input.attachments?.length ? input.attachments : undefined,
     occurredAt: new Date().toISOString(),
   });
+  return input.sender === undefined ? values : { ...values, sender: input.sender };
 }
 
 export function inboxSignalValues(threadId: string, signal: ThreadSignal, waits = false): ThreadInboxItemValues {
@@ -226,7 +242,8 @@ export function summarizerCohort<T extends ThreadCompactionRequest>(
 
 export function isReaderWordsItem(item: ThreadInboxItemLike): boolean {
   return (
-    item.kind === 'turn' || (item.kind === 'signal' && item.body.addressee === 'reader' && item.body.type === USER_MESSAGE_SIGNAL_TYPE)
+    (item.kind === 'turn' && item.sender.kind !== 'external') ||
+    (item.kind === 'signal' && item.body.addressee === 'reader' && item.body.type === USER_MESSAGE_SIGNAL_TYPE)
   );
 }
 
@@ -243,8 +260,8 @@ export function opensTurn(item: ThreadInboxItemLike): boolean {
 }
 
 export function openingWords(items: readonly ThreadInboxItem[]): readonly ThreadInboxItem[] {
-  if (!items.some((item) => opensTurn(item) && !spokenByAgent(item))) return [];
-  return items.filter((item) => (opensTurn(item) || isReaderWordsItem(item)) && !spokenByAgent(item));
+  if (!items.some((item) => opensTurn(item) && !spokenByOther(item))) return [];
+  return items.filter((item) => (opensTurn(item) || isReaderWordsItem(item)) && !spokenByOther(item));
 }
 
 export function isInboxRequest(item: ThreadInboxItemLike): item is Extract<ThreadInboxItemLike, { kind: 'task' }> {

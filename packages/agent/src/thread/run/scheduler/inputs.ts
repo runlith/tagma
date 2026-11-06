@@ -14,7 +14,7 @@ import {
   inboxTurnValues,
   isInboxRequest,
   saidAsOperator,
-  spokenByAgent,
+  spokenByOther,
   threadQueuedTurnOf,
   threadSignalOfInboxItem,
   waitsForTurn,
@@ -22,7 +22,7 @@ import {
 } from '../../inboxItems';
 import { actDigest, type Keyed } from '../../keyed';
 import { threadRunInterrupted, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../../rows';
-import type { ThreadInboxItem, ThreadInboxItemValues, ThreadInputAcceptance } from '../../storage/inbox';
+import type { ThreadInboxItem, ThreadInboxItemValues, ThreadInboxSender, ThreadInputAcceptance } from '../../storage/inbox';
 import { ThreadRunConflictError, type ThreadRunStartKey } from '../../storage/runs';
 import { ThreadCallBroke, threadCauseOf, type ThreadBorderFailed, type ThreadPortFailure } from '../../ThreadBorder';
 import { ThreadAttachments, ThreadBudgetSpentError, ThreadInbox, type ThreadTx, type ThreadWriteTx } from '../../ThreadPorts';
@@ -43,6 +43,7 @@ export type ThreadTurnInput = {
   readonly text: string;
   readonly inputId?: string;
   readonly admitted?: Keyed;
+  readonly sender?: ThreadInboxSender;
 };
 
 export type ThreadSaid = (
@@ -151,6 +152,7 @@ type Spoken = {
   readonly id?: string;
   readonly attachments?: readonly ThreadAttachmentRef[];
   readonly admitted?: Keyed;
+  readonly sender?: ThreadInboxSender;
 };
 type Aim = 'step' | 'turn' | { readonly run: string };
 type Placed = {
@@ -296,7 +298,7 @@ export const makeInputs = Effect.fnUntraced(function* ({
   ): Effect.Effect<ThreadSaid, ThreadBorderFailed> => {
     const text = turn.text.trim();
     if (!text && !refs?.length) return Effect.fail(new ThreadCallBroke({ cause: new Error('Message is empty.') }));
-    const words = { text, id: turn.inputId, attachments: refs?.length ? refs : undefined, admitted: turn.admitted };
+    const words = { text, id: turn.inputId, attachments: refs?.length ? refs : undefined, admitted: turn.admitted, sender: turn.sender };
     return speak(thread, words, mode === 'send' ? 'step' : 'turn');
   };
   const steer = Effect.fnUntraced(function* (
@@ -466,7 +468,7 @@ export const makeInputs = Effect.fnUntraced(function* ({
       Effect.flatMap(
         Effect.all([handover.words(thread), start === undefined ? Effect.undefined : inbox.receipt(start.itemId)]),
         ([how, asked]) => {
-          const task = asked?.kind === 'task' && spokenByAgent(asked) ? asked : undefined;
+          const task = asked?.kind === 'task' && spokenByOther(asked) ? asked : undefined;
           const item =
             how === 'opening'
               ? null

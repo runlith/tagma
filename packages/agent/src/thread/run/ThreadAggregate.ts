@@ -11,7 +11,7 @@ import type { FeedPosition, ThreadResumeOf, ThreadSnapshotOf } from '../../trans
 import type { ThreadSnapshot, ThreadState, ThreadStateProject } from '../state';
 import { ATTACHED_CONTEXT_SIGNAL_TYPE, type ThreadSignal } from '../../transcript/parts';
 import { isReaderWordsItem } from '../inboxItems';
-import type { ThreadInboxItem } from '../storage/inbox';
+import type { ThreadInboxItem, ThreadInboxSender } from '../storage/inbox';
 import { threadRunLimited, type ThreadAuthority, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../rows';
 import type { ThreadInsertValues } from '../storage/aggregate';
 import type { ThreadTranscriptPage } from '../../transcript/rows';
@@ -89,6 +89,7 @@ export type ThreadSayOptions = {
   readonly key?: string;
   readonly inputId?: string;
   readonly admitted?: Keyed;
+  readonly sender?: ThreadInboxSender;
 };
 export type ThreadCreateInput = {
   ownerId: string;
@@ -309,7 +310,7 @@ export const threadAggregateLayer = Layer.effect(
         if (!trimmed && !refs?.length) return yield* new ThreadCallBroke({ cause: new Error('Message is empty.') });
         yield* agents.get(thread.agentId);
         if (refs?.length) yield* attachments.resolve(thread.id, thread.ownerId, refs);
-        const turn = { text: trimmed, inputId: options.inputId || undefined, admitted: options.admitted };
+        const turn = { text: trimmed, inputId: options.inputId || undefined, admitted: options.admitted, sender: options.sender };
         return yield* scheduler.admit(thread, { kind: 'say', mode, turn, refs: refs });
       });
     const seated = Effect.fnUntraced(function* (thread: ThreadMetadataRow) {

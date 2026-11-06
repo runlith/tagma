@@ -57,7 +57,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       const projectId = yield* world.stealthProject(root);
       yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
       yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
-      yield* installedFixture(world, projectId, 'core-pin');
+      yield* installedFixture(world, projectId, { id: 'core-pin' });
       const op = (id: string, input: unknown, headers?: Readonly<Record<string, string>>) =>
         world.op(id, input, `project=${projectId}`, headers);
       const repository = ((yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer).repositories[0]!;

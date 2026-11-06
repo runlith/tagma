@@ -18,6 +18,7 @@ export class PluginHost extends Context.Service<
     start(): Effect.Effect<void>;
     reading(id: string): PluginProcessRow | undefined;
     hosts(id: string): boolean;
+    title(id: string): string | null;
     pending(id: string): Effect.Effect<boolean, PluginsUnreadable>;
     call: McpToolCaller['call'];
     callAdmitted<E>(

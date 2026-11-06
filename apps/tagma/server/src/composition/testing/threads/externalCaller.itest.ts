@@ -1,15 +1,16 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, Layer, Schema, Stream } from 'effect';
+import { Context, Effect, Layer, Schedule, Schema, Stream } from 'effect';
 import { DoorFixture, doorFixture } from '../doorFixture.js';
 import { nativeLeads, subscriptionLogin, modelDefaults } from '../claudeLogin.js';
 import { projectLeaving } from '../doorFixture.js';
-import { birthsOf, listOf, turnsOf } from '../../../threads/testing/doubles.js';
+import { birthsOf, inboxOf, listOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { threadWireSnapshotPayloadSchema } from '../../../threads/contract/wire/snapshot.js';
 import { TURN_OPERATIONS } from '../../../threads/contract/wire/operations/turns.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { installedFixture } from '../plugin-host/installed.js';
+import { inputItemId } from '@runlith/agent/thread/keyed';
 
 const DEALER = { 'x-tagma-caller': 'dealer' } as const;
 const PLUGIN = { 'x-tagma-caller': 'plugin:poker' } as const;
@@ -18,10 +19,19 @@ const decodeSnapshot = Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchem
 const decodeStart = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer));
 const decodeStatuses = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.read_statuses.answer));
 
+const heard = new Map<string, string>();
+
 const fixture = doorFixture({
   models: (standing) => ({
     ...standing,
-    request: (input) => ({ ...standing.request(input), web: undefined, stream: () => Stream.never }),
+    request: (input) => ({
+      ...standing.request(input),
+      web: undefined,
+      stream: (call) => {
+        if (input.runId !== undefined) heard.set(input.runId, JSON.stringify(call.messages));
+        return Stream.never;
+      },
+    }),
   }),
 });
 const setup = Effect.gen(function* () {
@@ -31,8 +41,8 @@ const setup = Effect.gen(function* () {
   const projectId = yield* world.plainProject();
   const elsewhere = yield* world.plainProject();
   yield* projectLeaving(world, projectId, elsewhere);
-  yield* installedFixture(world, projectId, 'poker');
-  yield* installedFixture(world, projectId, 'other');
+  yield* installedFixture(world, projectId, { id: 'poker', title: 'Poker table' });
+  yield* installedFixture(world, projectId, { id: 'other' });
   const catalog = yield* Context.get(world.runtime.owners, ProviderRegistry).catalog;
   return { world, account, projectId, elsewhere, catalog };
 });
@@ -237,6 +247,28 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
         rows: [{ status: { runId: runs[1] } }],
       });
       yield* turnsOf(world.runtime.owners).stop(person.id, (yield* World).projectId, runs[1]!);
+    }),
+  );
+
+  it.effect('a plugin’s turn in the person’s thread is recorded as the plugin’s and reaches the agent under its title', () =>
+    Effect.gen(function* () {
+      const { world, projectId } = yield* World;
+      const { thread } = yield* born();
+      const answer = yield* decodeStart((yield* op('start_turn', { threadId: thread.id, text: 'Your hand.', key: 'hand-1' }, PLUGIN)).body);
+      expect(answer).toMatchObject({ status: 'started', acted: true });
+      const runId = (answer as { readonly runId: string }).runId;
+      const item = yield* inboxOf(world.runtime.owners).receipt(inputItemId({ kind: 'external', name: 'plugin:poker' }, 'hand-1'));
+      expect(item).toMatchObject({
+        kind: 'turn',
+        sender: { kind: 'external', name: 'plugin:poker', title: 'Poker table' },
+        body: { text: 'Your hand.' },
+      });
+      yield* Effect.repeat(
+        Effect.sync(() => heard.get(runId)),
+        { schedule: Schedule.spaced('20 millis'), until: (said) => said !== undefined },
+      );
+      expect(heard.get(runId)).toContain('<message from=\\"Poker table\\">Your hand.</message>');
+      yield* turnsOf(world.runtime.owners).stop(thread.id, projectId, runId);
     }),
   );
 

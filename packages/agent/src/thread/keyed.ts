@@ -57,7 +57,7 @@ export function startedKey(threadId: string, key: string): CallKey {
 export type AdmitCaller =
   | { readonly kind: 'reader' }
   | { readonly kind: 'thread'; readonly threadId: string }
-  | { readonly kind: 'external'; readonly name: string };
+  | { readonly kind: 'external'; readonly name: string; readonly title?: string };
 
 export type ThreadInputOptions = { readonly key?: string; readonly caller?: AdmitCaller };
 

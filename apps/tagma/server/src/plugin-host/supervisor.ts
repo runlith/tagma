@@ -471,6 +471,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       new Map([...slots.values()].flatMap((slot) => (slot.title === null ? [] : [[slot.id, slot.title] as const]))),
     hosting: (): readonly string[] => [...slots.keys()],
     hosts: (id: string): boolean => slots.has(id),
+    title: (id: string): string | null => slots.get(id)?.title ?? null,
     ensure: Effect.fnUntraced(function* (id: string, root: string, projects: readonly number[]) {
       const standing = slots.get(id);
       if (standing?.root === root) {

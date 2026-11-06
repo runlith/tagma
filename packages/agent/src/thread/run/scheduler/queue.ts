@@ -12,7 +12,7 @@ import {
   queuedTurnSaid,
   readableBefore,
   saidAsOperator,
-  spokenByAgent,
+  spokenByOther,
   threadQueuedTurnOf,
   threadSignalOfInboxItem,
   waitsForTurn,
@@ -91,7 +91,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
     const turns = queued.filter(opensTurn);
     const told = yield* openings.told(thread, queued);
     const said = openingWords(queued).filter((item) => !told.has(item.id));
-    const tasked = turns.filter(carriesWords).filter(spokenByAgent);
+    const tasked = turns.filter(carriesWords).filter(spokenByOther);
     const refs = said.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? [...(item.body.attachments ?? [])] : []));
     const stored = refs.length > 0 ? yield* attachments.resolve(thread.id, thread.ownerId, refs) : undefined;
     const reader = said.some((item) => isReaderWordsItem(item) || saidAsOperator(item));
@@ -114,10 +114,14 @@ export const makeQueues = Effect.fnUntraced(function* ({
       answer:
         door === undefined
           ? undefined
-          : (run, turn) =>
-              turn !== null && said.some((item) => item.id === door.item.id)
-                ? { status: 'started', runId: run.id, entry: turn.payload.entry }
-                : { status: 'queued', runId: run.id, queued: threadQueuedTurnOf(run.id, door.item) },
+          : (run, turn) => {
+              if (turn !== null && said.some((item) => item.id === door.item.id))
+                return { status: 'started', runId: run.id, entry: turn.payload.entry };
+              const spoken = tasked.find((item) => item.id === door.item.id);
+              return spoken === undefined
+                ? { status: 'queued', runId: run.id, queued: threadQueuedTurnOf(run.id, door.item) }
+                : { status: 'started', runId: run.id, entry: threadSignalEvent(threadSignalOfInboxItem(spoken), run.id).payload.entry };
+            },
     });
     return opened;
   });

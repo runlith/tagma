@@ -18,7 +18,7 @@ import { stateThreads, threadBasis } from '../list/basis.js';
 import { wireSnapshotPayload } from '../list/wire.js';
 import { ThreadRewinds } from '../turns/rewinds.js';
 import { ThreadTurns } from '../turns/acts.js';
-import { admitCallerOf } from '../turns/caller.js';
+import { admitCallerOf, speakingCallerOf } from '../turns/caller.js';
 import { REWIND_FILES } from '../contract/wire/rewind.js';
 
 export const TURN_PAIRS: { readonly [K in TurnOperationId]: OperationPair<(typeof OPS)[K]> } = {
@@ -32,7 +32,7 @@ export const TURN_PAIRS: { readonly [K in TurnOperationId]: OperationPair<(typeo
             return threadSaidOnTheWire(
               yield* (yield* ThreadTurns).send(threadId, call.project.id, text ?? '', attachments, {
                 key,
-                caller: admitCallerOf(caller.actor),
+                caller: yield* speakingCallerOf(caller.actor),
               }),
             );
           }),
@@ -49,7 +49,7 @@ export const TURN_PAIRS: { readonly [K in TurnOperationId]: OperationPair<(typeo
             return threadSaidOnTheWire(
               yield* (yield* ThreadTurns).queue(threadId, call.project.id, text ?? '', attachments, {
                 key,
-                caller: admitCallerOf(caller.actor),
+                caller: yield* speakingCallerOf(caller.actor),
               }),
             );
           }),

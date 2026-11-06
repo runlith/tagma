@@ -1,7 +1,7 @@
 import { Cause, Duration, Effect, Exit, FiberMap, Option } from 'effect';
 import type { RunOwnership, ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { ThreadRunStoppedBy } from '@runlith/agent/thread/ending';
-import { carriesWords, opensTurn, queuedTurnText, spokenByAgent } from '@runlith/agent/thread/inboxItems';
+import { carriesWords, opensTurn, queuedTurnText, spokenByOther } from '@runlith/agent/thread/inboxItems';
 import type { ThreadInboxItem } from '@runlith/agent/thread/storage/inbox';
 import type { ThreadRunRow } from '@runlith/agent/thread/rows';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
@@ -53,7 +53,7 @@ const framed = (seed: readonly ThreadInboxItem[]): Delivery => {
   return {
     items: words.map((word) => word.id),
     text,
-    spoken: queuedTurnText(seed.filter((item) => opensTurn(item) && !spokenByAgent(item))),
+    spoken: queuedTurnText(seed.filter((item) => opensTurn(item) && !spokenByOther(item))),
     digest: undefined,
     typed: text === '' ? undefined : typedShape(text),
   };
@@ -62,7 +62,7 @@ const framed = (seed: readonly ThreadInboxItem[]): Delivery => {
 const verbatim = (stored: readonly ThreadInboxItem[]): Delivery => {
   const words = stored.filter(carriesWords);
   const text = plainWords(words.map((item) => item.body.text).join('\n\n'));
-  const said = words.filter((item) => !spokenByAgent(item));
+  const said = words.filter((item) => !spokenByOther(item));
   const spoken = said.length === words.length ? text : plainWords(said.map((item) => item.body.text).join('\n\n'));
   return {
     items: words.map((item) => item.id),
