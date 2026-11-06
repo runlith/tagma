@@ -36,4 +36,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/plugin-formats/tagma
 ---
-A plugin written in Tagma's own format is read from the `tagma-plugin.json` its directory holds: its id, title, options with the secret ones among them, the process that serves its tools over stdio MCP, and its contributions by point. The adapter turns that manifest into the one plugin description the plugins module installs and enables; what each point means stays with the point's owner, and the host runs the process.
+A plugin written in Tagma's own format is read from the `tagma-plugin.json` its directory holds: its id, title, options with the secret ones among them, the process that serves its tools over stdio MCP, the MCP servers it brings (`mcpServers`, read with the Agent Plugins format's server reader, so both formats hold a server entry to the same checks and `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` expansion), and its contributions by point. The adapter turns that manifest into the one plugin description the plugins module installs and enables; what each point means stays with the point's owner, and the host runs the process.

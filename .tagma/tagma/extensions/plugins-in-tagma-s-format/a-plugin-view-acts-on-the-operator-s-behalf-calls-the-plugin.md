@@ -1,6 +1,6 @@
 ---
 id: 01a14c08-8336-7b3c-965a-b0997b731471
-title: "A plugin view acts on the operator's behalf: calls the plugin's process, reads its data with updates, keeps state, and opens a thread on click"
+title: "A plugin view acts on the operator's behalf: calls the plugin's process, reads its data with updates, keeps state, and opens threads"
 ord: 6
 tags: ["feature"]
 fields:
@@ -34,7 +34,8 @@ sources:
 - A view calls only `view`-audience tools of its own plugin, enabled in the project; the process gets the caller as "the operator from this view and thread".
 - Resource reads and subscriptions carry the project and view: one process for all projects decides itself whether to give a project's resource. A subscription outlives a process restart and fall.
 - View storage is server-side key-value, shared by all of the plugin's views, projects and devices, with a bounded value size.
+- A view calls the MCP servers its plugin brought, under their sign-in, as its process does (see [[46bba31b]]).
 - A view opens a thread, its own section or a pane; it sees what the thread does (see [[94567243]]); it speaks and listens through the server speech.
 - The client takes plugin, view, thread and key from the mount, never from the view's own code.
 
-**Limits.** A view acts in Tagma only through what `useTagma()` offers.
+**Limits.** A view's code runs in the window's own document with the window's authority. `useTagma()` is the surface it is written against and the one its calls are attributed to, not a wall: nothing stops its code from reaching the rest of the window. Installing a plugin with views asks no consent for this.

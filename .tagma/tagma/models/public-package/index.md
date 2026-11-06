@@ -76,6 +76,12 @@ fields:
       },
       {
         "at": "src/plugin/value.ts"
+      },
+      {
+        "at": "src/plugin/svelteProgram.ts",
+        "for": [
+          "e0801f50"
+        ]
       }
     ],
     "id": "@runlith/tagma"
