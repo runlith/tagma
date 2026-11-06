@@ -1396,6 +1396,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -1554,6 +1555,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -1701,6 +1703,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -2427,6 +2430,7 @@ export type ExternalOperations = {
             readonly batchKey?: string;
             readonly covers?: readonly string[];
             readonly retell?: false;
+            readonly withholds?: readonly string[];
             readonly toolName?: string;
             readonly toolCallId?: string;
             readonly taskId?: string;
@@ -4628,6 +4632,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -4786,6 +4791,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -4933,6 +4939,7 @@ export type ExternalOperations = {
                 readonly batchKey?: string;
                 readonly covers?: readonly string[];
                 readonly retell?: false;
+                readonly withholds?: readonly string[];
                 readonly toolName?: string;
                 readonly toolCallId?: string;
                 readonly taskId?: string;
@@ -5223,6 +5230,7 @@ export type ExternalOperations = {
             readonly batchKey?: string;
             readonly covers?: readonly string[];
             readonly retell?: false;
+            readonly withholds?: readonly string[];
             readonly toolName?: string;
             readonly toolCallId?: string;
             readonly taskId?: string;
