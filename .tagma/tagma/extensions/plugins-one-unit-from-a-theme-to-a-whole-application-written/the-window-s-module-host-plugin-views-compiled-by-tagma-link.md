@@ -205,7 +205,9 @@ and builds it over the window's candidates and those of every published plugin's
 
 `<Frame src title height? fill?>` from `/ui` is that component, with the sandbox plugin views have today (explanation a9714f0d):
 - `sandbox`: `allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups`;
-- `allow`: fullscreen, autoplay, encrypted-media and picture-in-picture.
+- `allow`: fullscreen, autoplay, encrypted-media and picture-in-picture, plus `camera` and `microphone` when the view's `<Frame media>` asks for them (operator's decision, 2026-11-06: a framed meeting app must be able to call).
+
+The SDK build records which views frame with `media`, and the plugin's card says "uses camera and microphone". A framed site's request goes through the decision the built-in browser's pages already use (explanation de72d807): the person allows it per origin in the window that shows it, a frame in no shown window is denied, and only after Allow is the system asked. One grant mechanism serves pages and frames; Tagma's own microphone access for dictation never passes to a site on the system status alone.
 
 The framed page stays on its own origin and reaches no Tagma API. It keeps its own keys ([[ba083eb0]]) and its own look ([[ca575591]]).
 
@@ -369,6 +371,6 @@ These are rewritten when the code lands:
 - **A window older than the server.** Whether an update reloads open windows (`ClientBuild`) before they mount modules a newer Svelte compiled.
 - **Resource use.** The compile worker's memory at rest, and the cost of the sheet on the weakest machine Tagma serves.
 
-## Open for the operator
+## Decided with the operator on 2026-11-06
 
-- **Camera and microphone in `<Frame>`.** Should a site that a plugin frames, such as a meeting app, be able to ask for the camera and microphone? Today's `allow` grants fullscreen, autoplay, encrypted media and picture-in-picture; adding the camera and microphone would let the browser, or Tagma's desktop, ask the person.
+- **Camera and microphone in `<Frame>`.** A site a plugin frames may ask for the camera and microphone when the plugin declares it; the person grants it per origin as for built-in browser pages (see `<Frame>`).

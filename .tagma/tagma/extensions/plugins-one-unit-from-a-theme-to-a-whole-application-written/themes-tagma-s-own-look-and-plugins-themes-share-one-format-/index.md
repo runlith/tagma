@@ -5,7 +5,7 @@ ord: 6
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -235,10 +235,9 @@ Performer checks, each through its real caller's door:
 - **First paint.** A headless e2e with `appearance.paint` seeded paints the theme's background in the first frame, before the bundle runs.
 - **The person asks in words.** In a test world, "make Tagma look like Nord" leads an agent to write a theme plugin, build it, install it and set `appearance.theme`. The window shows it, and the person types no command.
 
-## What remains
+## Acceptance not run
 
-- **The person asks in words** has not run. It judges an agent on a real model, so it is an experiment on a test project, not a test of this code. Every door it would use is proved on its own: the build and install refusals, `install_plugin` from a folder reaching `appearance.subscribe`, `settings.watch`, and two windows painting a newly chosen theme.
-- **Use on a plugin that runs nowhere** ([[d2b5f488]], The Plugins screen) is not built. The card lists only offered themes, and a plugin running nowhere offers none. A plugin's row names its `themes` point but not the themes, so the card cannot list them until the server reads them from the manifest.
+**The person asks in words** is the one acceptance check that has not run. It judges an agent on a real model, so it needs an agent experiment on a test project, not a test of this code. Every door it would use is proved on its own: the build and install refusals, `install_plugin` from a folder reaching `appearance.subscribe`, `settings.watch`, and two windows painting a newly chosen theme.
 
 ## Text that follows
 
