@@ -110,7 +110,8 @@ const printer = () => {
         const lines = [
           ...encoded.propertySignatures.map((one) => field(one, own, inner)),
           ...encoded.indexSignatures.map(
-            (index) => `${inner}readonly [key: ${print(index.parameter, undefined, inner)}]: ${print(index.type, undefined, inner)};`,
+            (index, at) =>
+              `${inner}readonly [key: ${print(index.parameter, undefined, inner)}]: ${print(index.type, own?.indexSignatures[at]?.type, inner)};`,
           ),
         ];
         return lines.length === 0 ? '{}' : `{\n${lines.join('\n')}\n${indent}}`;

@@ -1,10 +1,13 @@
 export type ExternalOperations = {
   readonly act_on_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly steps: readonly [{
         readonly action: 'click' | 'double-click' | 'hover' | 'fill' | 'type' | 'press' | 'select' | 'check' | 'uncheck' | 'scroll' | 'drag' | 'upload' | 'focus';
+        /** An element reference a snapshot or a picked element answered, like `e12`. */
         readonly ref?: string;
         readonly x?: number;
         readonly y?: number;
@@ -59,7 +62,9 @@ export type ExternalOperations = {
   };
   readonly answer_page_dialog: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly accept: boolean;
       readonly text?: string;
@@ -107,6 +112,7 @@ export type ExternalOperations = {
   readonly archive_thread: {
     readonly input: {
       readonly threadId: string;
+      /** true — put away (the default); false — bring back what was put away with it. */
       readonly archived?: boolean;
     };
     readonly answer: {
@@ -140,10 +146,14 @@ export type ExternalOperations = {
   };
   readonly audit_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
+      /** An element reference a snapshot or a picked element answered, like `e12`. */
       readonly within?: string;
       readonly tags?: readonly [string, ...string[]];
+      /** How many rows to answer, 30 by default and 97 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -164,31 +174,45 @@ export type ExternalOperations = {
       readonly violations: readonly ({
         readonly rule: string;
         readonly impact: 'critical' | 'serious' | 'moderate' | 'minor' | null;
+        /** What the rule requires, in one line. */
         readonly help: string;
         readonly url: string;
+        /** The WCAG tags of the rule; empty for a best practice. */
         readonly wcag: readonly string[];
+        /** How many nodes fail the rule; `nodes` lists the share the limit left it. */
         readonly failing: number;
         readonly nodes: readonly ({
+          /** The reference act_on_page and snapshot_page take; null when the node left the page before the audit answered. */
           readonly ref: string | null;
+          /** What fails on this node, as axe-core measured it. */
           readonly why: string;
           readonly html: string;
         })[];
       })[];
       readonly shown: number;
+      /** Failing nodes across every rule. */
       readonly total: number;
+      /** Nodes axe-core could not judge, which want a human look. */
       readonly incomplete: number;
+      /** Rules every node passed. */
       readonly passed: number;
+      /** Documents audited: the page and its frames. */
       readonly frames: number;
+      /** Frames that could not be audited, by address. */
       readonly skipped: readonly string[];
       readonly status: 'audited';
     };
   };
   readonly capture_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly what?: 'viewport' | 'full' | 'element' | 'pdf' | 'heap';
+      /** An element reference a snapshot or a picked element answered, like `e12`. */
       readonly ref?: string;
+      /** How many rows to answer, 20 by default and 105 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -255,6 +279,7 @@ export type ExternalOperations = {
   };
   readonly clear_profile: {
     readonly input: {
+      /** The profile id list_profiles answered. */
       readonly profile: string;
     };
     readonly answer: {
@@ -265,7 +290,9 @@ export type ExternalOperations = {
   };
   readonly close_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
     };
     readonly answer: {
@@ -287,6 +314,7 @@ export type ExternalOperations = {
   };
   readonly create_profile: {
     readonly input: {
+      /** The profile's name, at most 80 characters. */
       readonly name: string;
       readonly adapter: string;
       readonly document?: unknown;
@@ -298,6 +326,7 @@ export type ExternalOperations = {
         readonly id: string;
         readonly name: string;
         readonly adapter: string;
+        /** `auto` captures console on loopback and private-network pages and on any page after its console is first read; `always` on every driven page; `never` refuses console reads. */
         readonly console: 'auto' | 'always' | 'never';
         readonly input: 'human' | 'fast';
         readonly connected: boolean;
@@ -322,11 +351,13 @@ export type ExternalOperations = {
       readonly switches?: {
         readonly [key: string]: string;
       };
+      /** Keys an outside program files the thread under. `plugin` is Tagma’s own: written from the plugin that creates the thread, refused here. */
       readonly bindings?: {
         readonly [key: string]: string;
       };
       readonly approvalMode?: string;
       readonly delegation?: boolean;
+      /** The thread’s own copy of the sub-agent team, as set_thread_team takes it; absent, it follows the project. */
       readonly team?: {
         readonly models: readonly ({
           readonly provider: string;
@@ -356,6 +387,7 @@ export type ExternalOperations = {
       };
       readonly parent?: never;
       readonly task?: string;
+      /** A block of work the new thread takes in its own name at birth and opens its first turn on. */
       readonly work?: string;
       readonly worktree?: string;
       readonly base?: string;
@@ -1754,6 +1786,7 @@ export type ExternalOperations = {
   };
   readonly delete_profile: {
     readonly input: {
+      /** The profile id list_profiles answered. */
       readonly profile: string;
     };
     readonly answer: {
@@ -1764,6 +1797,7 @@ export type ExternalOperations = {
   };
   readonly delete_worktree: {
     readonly input: {
+      /** The worktree, by the `rootId` its row in list_worktrees answers. */
       readonly rootId: string;
     };
     readonly answer: {
@@ -1848,7 +1882,9 @@ export type ExternalOperations = {
   };
   readonly emulate_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly viewport?: {
         readonly width: number;
@@ -1860,8 +1896,11 @@ export type ExternalOperations = {
       readonly scheme?: 'light' | 'dark';
       readonly cpu?: number;
       readonly network?: 'offline' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g' | {
+        /** Added latency in milliseconds. */
         readonly latency: number;
+        /** Download throughput in bytes per second; -1 leaves it unlimited. */
         readonly download: number;
+        /** Upload throughput in bytes per second; -1 leaves it unlimited. */
         readonly upload: number;
       } | null;
       readonly geolocation?: {
@@ -1898,8 +1937,11 @@ export type ExternalOperations = {
         readonly scheme: 'light' | 'dark' | null;
         readonly cpu: number;
         readonly network: 'offline' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g' | {
+          /** Added latency in milliseconds. */
           readonly latency: number;
+          /** Download throughput in bytes per second; -1 leaves it unlimited. */
           readonly download: number;
+          /** Upload throughput in bytes per second; -1 leaves it unlimited. */
           readonly upload: number;
         } | null;
         readonly geolocation: {
@@ -1913,7 +1955,9 @@ export type ExternalOperations = {
   };
   readonly evaluate_in_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly expression: string;
     };
@@ -1956,10 +2000,15 @@ export type ExternalOperations = {
   };
   readonly import_cookies: {
     readonly input: {
+      /** The Tagma profile that receives the cookies, as list_profiles answered it. */
       readonly profile: string;
+      /** A browser id list_cookie_sources answered. */
       readonly browser?: string;
+      /** A profile id of that browser. */
       readonly browserProfile?: string;
+      /** Another Tagma profile to copy the cookies of. */
       readonly from?: string;
+      /** A JSON cookie file: absolute, or relative to the checkout this call stands in. */
       readonly file?: string;
     };
     readonly answer: {
@@ -1978,6 +2027,7 @@ export type ExternalOperations = {
       readonly browsers: readonly ({
         readonly id: string;
         readonly title: string;
+        /** `keychain`: reading it asks macOS for the browser key, which the Tagma app reads; `full-disk`: it needs Full Disk Access. */
         readonly access: 'keychain' | 'full-disk' | null;
         readonly profiles: readonly {
           readonly id: string;
@@ -1989,6 +2039,7 @@ export type ExternalOperations = {
         readonly id: string;
         readonly name: string;
         readonly adapter: string;
+        /** `auto` captures console on loopback and private-network pages and on any page after its console is first read; `always` on every driven page; `never` refuses console reads. */
         readonly console: 'auto' | 'always' | 'never';
         readonly input: 'human' | 'fast';
         readonly connected: boolean;
@@ -2000,9 +2051,12 @@ export type ExternalOperations = {
   };
   readonly list_pages: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
       readonly closed?: boolean;
+      /** How many rows to answer, 20 by default and 72 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
+      /** The cursor the previous page answered, handed back unchanged. */
       readonly cursor?: string;
     };
     readonly answer: {
@@ -2016,6 +2070,7 @@ export type ExternalOperations = {
         readonly openedBy: string | null;
         readonly opener: string | null;
         readonly state: 'live' | 'dormant' | 'away';
+        /** The id of the connected host that holds the page now. */
         readonly host: string | null;
         readonly live: {
           readonly loading: boolean;
@@ -2034,8 +2089,11 @@ export type ExternalOperations = {
           readonly conditions: {
             readonly cpu: number;
             readonly network: 'offline' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g' | {
+              /** Added latency in milliseconds. */
               readonly latency: number;
+              /** Download throughput in bytes per second; -1 leaves it unlimited. */
               readonly download: number;
+              /** Upload throughput in bytes per second; -1 leaves it unlimited. */
               readonly upload: number;
             } | null;
             readonly geolocation: {
@@ -2045,6 +2103,7 @@ export type ExternalOperations = {
             } | null;
           };
           readonly trace: {
+            /** The thread that started it; null for the operator or an outside caller. */
             readonly by: string | null;
             readonly at: string;
           } | null;
@@ -2053,6 +2112,7 @@ export type ExternalOperations = {
             readonly at: string;
           } | null;
         };
+        /** How many downloads the page keeps; read_page_downloads lists them. */
         readonly downloads: number;
         readonly activeAt: string;
         readonly closedAt: string | null;
@@ -2070,6 +2130,7 @@ export type ExternalOperations = {
         readonly id: string;
         readonly name: string;
         readonly adapter: string;
+        /** `auto` captures console on loopback and private-network pages and on any page after its console is first read; `always` on every driven page; `never` refuses console reads. */
         readonly console: 'auto' | 'always' | 'never';
         readonly input: 'human' | 'fast';
         readonly connected: boolean;
@@ -2081,7 +2142,9 @@ export type ExternalOperations = {
   };
   readonly navigate_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly url?: string;
       readonly go?: 'back' | 'forward' | 'reload' | 'stop';
@@ -2106,8 +2169,11 @@ export type ExternalOperations = {
   };
   readonly open_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The address to load; omitted, a blank page. */
       readonly url?: string;
+      /** The profile id list_profiles answered. */
       readonly profile?: string;
     };
     readonly answer: {
@@ -2121,6 +2187,7 @@ export type ExternalOperations = {
         readonly openedBy: string | null;
         readonly opener: string | null;
         readonly state: 'live' | 'dormant' | 'away';
+        /** The id of the connected host that holds the page now. */
         readonly host: string | null;
         readonly live: {
           readonly loading: boolean;
@@ -2139,8 +2206,11 @@ export type ExternalOperations = {
           readonly conditions: {
             readonly cpu: number;
             readonly network: 'offline' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g' | {
+              /** Added latency in milliseconds. */
               readonly latency: number;
+              /** Download throughput in bytes per second; -1 leaves it unlimited. */
               readonly download: number;
+              /** Upload throughput in bytes per second; -1 leaves it unlimited. */
               readonly upload: number;
             } | null;
             readonly geolocation: {
@@ -2150,6 +2220,7 @@ export type ExternalOperations = {
             } | null;
           };
           readonly trace: {
+            /** The thread that started it; null for the operator or an outside caller. */
             readonly by: string | null;
             readonly at: string;
           } | null;
@@ -2158,6 +2229,7 @@ export type ExternalOperations = {
             readonly at: string;
           } | null;
         };
+        /** How many downloads the page keeps; read_page_downloads lists them. */
         readonly downloads: number;
         readonly activeAt: string;
         readonly closedAt: string | null;
@@ -2361,9 +2433,13 @@ export type ExternalOperations = {
   };
   readonly read_endings: {
     readonly input: {
+      /** The threads whose endings to read, in the order to answer them. */
       readonly threads: readonly string[];
+      /** How many endings each row carries, newest first (default 1, at most 3). */
       readonly depth?: number;
+      /** The `cursor` the previous page answered; a changed set of threads refuses `cursor-stale`. */
       readonly cursor?: string;
+      /** How many rows to answer, 10 by default and 33 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -2462,13 +2538,18 @@ export type ExternalOperations = {
   };
   readonly read_page_console: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly level?: 'error' | 'warning' | 'info' | 'log' | 'debug';
       readonly match?: string;
       readonly after?: number;
+      /** How many rows to answer, 50 by default and 115 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
+      /** Answer only the entry with this `seq`, whatever the filters. */
       readonly seq?: number;
+      /** Add each entry's stack; such a read answers 10 rows by default and 36 at most. */
       readonly stack?: boolean;
     };
     readonly answer: {
@@ -2477,11 +2558,13 @@ export type ExternalOperations = {
         readonly seq: number;
         readonly level: 'error' | 'warning' | 'info' | 'log' | 'debug';
         readonly source: string;
+        /** The console call that wrote it — log, table, trace, dir, startGroup, assert, count, timeEnd…; null for other sources. */
         readonly kind: string | null;
         readonly text: string;
         readonly url: string | null;
         readonly line: number | null;
         readonly at: string;
+        /** Present when asked: the stack of the error it carries, else of the call, 10 frames at most; null when none was recorded. */
         readonly stack?: string | null;
       })[];
       readonly shown: number;
@@ -2494,8 +2577,11 @@ export type ExternalOperations = {
   };
   readonly read_page_downloads: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
+      /** How many rows to answer, 20 by default and 168 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -2516,11 +2602,14 @@ export type ExternalOperations = {
   };
   readonly read_page_network: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly match?: string;
       readonly failed?: boolean;
       readonly after?: number;
+      /** How many rows to answer, 50 by default and 140 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
       readonly body?: string;
     };
@@ -2556,24 +2645,32 @@ export type ExternalOperations = {
   };
   readonly read_page_trace: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The trace id trace_page answered. */
       readonly trace: string;
       readonly set?: string;
       readonly insight?: 'LCPBreakdown' | 'INPBreakdown' | 'CLSCulprits' | 'DocumentLatency' | 'RenderBlocking' | 'LCPDiscovery' | 'NetworkDependencyTree' | 'ImageDelivery' | 'FontDisplay' | 'Viewport' | 'DOMSize' | 'ThirdParties' | 'DuplicatedJavaScript' | 'SlowCSSSelector' | 'ForcedReflow' | 'Cache' | 'CharacterSet' | 'ModernHTTP' | 'LegacyJavaScript';
       readonly hot?: boolean;
+      /** How many rows to answer, 20 by default and 281 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
+      /** The trace id trace_page answered. */
       readonly trace: string;
       readonly path: string;
       readonly bytes: number;
       readonly durationMs: number;
       readonly conditions: string | null;
+      /** Chromium reported dropping events: the trace buffer filled. */
       readonly dataLoss: boolean;
+      /** For a load: whether the page reached its load event and a quiet with no request in flight before the deadline. */
       readonly settled: boolean | null;
       readonly sets: readonly ({
+        /** NAVIGATION_<n> for a navigation, NO_NAVIGATION for the range before any. */
         readonly id: string;
         readonly url: string;
+        /** Where the set starts, in milliseconds from the start of the trace. */
         readonly startMs: number;
         readonly durationMs: number;
         readonly lcp: {
@@ -2594,6 +2691,7 @@ export type ExternalOperations = {
           readonly line: string;
         })[];
       })[];
+      /** How many insight sets the trace holds; the first twenty are kept and listed. */
       readonly setsTotal: number;
       readonly status: 'summary';
     } | {
@@ -2610,6 +2708,7 @@ export type ExternalOperations = {
       readonly functions: readonly {
         readonly function: string;
         readonly url: string;
+        /** 1-based; 0 when the engine knows no line. */
         readonly line: number;
         readonly selfMs: number;
         readonly totalMs: number;
@@ -2621,8 +2720,11 @@ export type ExternalOperations = {
   };
   readonly read_statuses: {
     readonly input: {
+      /** The threads to read, in the order to answer them. */
       readonly threads: readonly string[];
+      /** The `cursor` the previous page answered; a changed set of threads refuses `cursor-stale`. */
       readonly cursor?: string;
+      /** How many rows to answer, 50 by default and 50 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -2677,32 +2779,46 @@ export type ExternalOperations = {
   };
   readonly read_thread: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** One thread. Its shape, or the facts queried. */
       readonly threadId?: string;
+      /** A set of threads to query across. Every one is admitted before any fact is answered. */
       readonly threads?: readonly string[];
+      /** A set named the way list_threads names one, instead of by id. */
       readonly selection?: {
+        /** Exactly these threads. */
         readonly ids?: readonly string[];
+        /** The threads whose bindings name this plugin. Without `plugin` or `ids`, the general list leaves out the threads of every plugin that runs in their project and does not list its threads (`contributes.threads.listed`). */
         readonly plugin?: string;
+        /** Part of the thread's title or of its agent's team name — either half of the list's `title (name)`. */
         readonly title?: string;
+        /** The thread whose relations are selected. */
         readonly of?: string;
         readonly reach?: 'children' | 'descendants' | 'tree';
         readonly set?: 'live' | 'archived' | 'all';
+        /** running: a run or a CLI session is going. stalled: a native run, not waiting on a question, with no durable movement for longer than the widest gap its bounds allow — its heartbeat proves only that its process lives. */
         readonly state?: 'running' | 'stalled';
         readonly models?: readonly string[];
         readonly providers?: readonly string[];
+        /** An ISO instant, e.g. 2026-08-25T00:00:00Z. */
         readonly ranSince?: string;
         readonly ranBefore?: string;
+        /** An activity of the thread opened at or after this instant: "what happened in this project in the last five minutes". */
         readonly activeSince?: string;
         readonly activeBefore?: string;
         readonly createdSince?: string;
         readonly createdBefore?: string;
+        /** Durable movement at or after this instant — a turn, a run, a rename. */
         readonly updatedSince?: string;
+        /** No durable movement since this instant: "idle for three days" is now minus three days here. */
         readonly updatedBefore?: string;
         readonly readerSince?: string;
         readonly readerBefore?: string;
         readonly archivedSince?: string;
         readonly archivedBefore?: string;
       };
+      /** Which body of facts. Omit for the thread shape, or with a cursor to continue its saved question. */
       readonly select?: 'runs' | 'steps' | 'measurements' | 'entries' | 'records' | 'activity';
       readonly where?: readonly ({
         readonly field: string;
@@ -2717,6 +2833,7 @@ export type ExternalOperations = {
         readonly by: string;
         readonly dir: 'asc' | 'desc';
       };
+      /** How many rows to answer with. An aggregate is not cut by it. */
       readonly limit?: number;
       readonly cursor?: string;
     };
@@ -3431,9 +3548,12 @@ export type ExternalOperations = {
   };
   readonly record_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly action: 'start' | 'stop';
+      /** For start: frames per second, at most 30. */
       readonly fps?: number;
     };
     readonly answer: {
@@ -3451,6 +3571,7 @@ export type ExternalOperations = {
         readonly navigated: boolean;
         readonly conditions: string | null;
       };
+      /** Where the video is written once the recording stops. */
       readonly path: string;
       readonly fps: number;
       readonly status: 'recording';
@@ -3469,14 +3590,18 @@ export type ExternalOperations = {
         readonly navigated: boolean;
         readonly conditions: string | null;
       };
+      /** The MP4 file, H.264. */
       readonly path: string;
       readonly bytes: number;
       readonly durationMs: number;
+      /** The frame width in the file: the stream’s size, which a smaller viewer of the page lowers. */
       readonly width: number;
       readonly height: number;
       readonly fps: number;
       readonly ending: {
+        /** `session-ended`: the page closed or the browser lost its session. */
         readonly cause: 'stopped' | 'run-ended' | 'session-ended';
+        /** The thread that stopped it or whose run ended; null for the operator, an outside caller or an ended session. */
         readonly by: string | null;
       };
       readonly status: 'recorded';
@@ -3494,12 +3619,17 @@ export type ExternalOperations = {
   };
   readonly send_notification: {
     readonly input: {
+      /** What this is about, at most 120 characters. */
       readonly title: string;
+      /** More words under the title, at most 480 characters. */
       readonly body?: string;
       readonly question?: {
+        /** What the operator is asked, at most 240 characters. */
         readonly text: string;
+        /** The answers the operator picks from, at most 4 different ones of at most 80 characters. Empty means a free-text answer. */
         readonly options: readonly string[];
       };
+      /** The sender's own name for this notification, at most 200 characters. Sending the same key again returns the notification it first made instead of making another. */
       readonly key?: string;
     };
     readonly answer: {
@@ -4888,9 +5018,13 @@ export type ExternalOperations = {
   };
   readonly snapshot_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
+      /** An element reference a snapshot or a picked element answered, like `e12`. */
       readonly within?: string;
+      /** How many rows to answer, 844 by default and 844 at most for this reading. The answer carries the total and the cursor, so a cut is never silent. */
       readonly limit?: number;
     };
     readonly answer: {
@@ -5114,11 +5248,14 @@ export type ExternalOperations = {
   };
   readonly trace_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly action: 'load' | 'start' | 'stop';
       readonly cold?: boolean;
       readonly screenshots?: boolean;
+      /** For load: how long to wait for the page to settle, at most 120000 ms. */
       readonly timeoutMs?: number;
     };
     readonly answer: {
@@ -5136,7 +5273,9 @@ export type ExternalOperations = {
         readonly navigated: boolean;
         readonly conditions: string | null;
       };
+      /** The trace id trace_page answered. */
       readonly trace: string;
+      /** Where the trace is written once it stops. */
       readonly path: string;
       readonly status: 'started';
     } | {
@@ -5159,11 +5298,15 @@ export type ExternalOperations = {
       readonly bytes: number;
       readonly durationMs: number;
       readonly conditions: string | null;
+      /** Chromium reported dropping events: the trace buffer filled. */
       readonly dataLoss: boolean;
+      /** For a load: whether the page reached its load event and a quiet with no request in flight before the deadline. */
       readonly settled: boolean | null;
       readonly sets: readonly ({
+        /** NAVIGATION_<n> for a navigation, NO_NAVIGATION for the range before any. */
         readonly id: string;
         readonly url: string;
+        /** Where the set starts, in milliseconds from the start of the trace. */
         readonly startMs: number;
         readonly durationMs: number;
         readonly lcp: {
@@ -5184,6 +5327,7 @@ export type ExternalOperations = {
           readonly line: string;
         })[];
       })[];
+      /** How many insight sets the trace holds; the first twenty are kept and listed. */
       readonly setsTotal: number;
       readonly status: 'traced';
     };
@@ -5205,7 +5349,9 @@ export type ExternalOperations = {
   };
   readonly update_profile: {
     readonly input: {
+      /** The profile id list_profiles answered. */
       readonly profile: string;
+      /** The profile's name, at most 80 characters. */
       readonly name?: string;
       readonly console?: 'auto' | 'always' | 'never';
       readonly input?: 'human' | 'fast';
@@ -5215,6 +5361,7 @@ export type ExternalOperations = {
         readonly id: string;
         readonly name: string;
         readonly adapter: string;
+        /** `auto` captures console on loopback and private-network pages and on any page after its console is first read; `always` on every driven page; `never` refuses console reads. */
         readonly console: 'auto' | 'always' | 'never';
         readonly input: 'human' | 'fast';
         readonly connected: boolean;
@@ -5226,10 +5373,13 @@ export type ExternalOperations = {
   };
   readonly wait_for_page: {
     readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
       readonly project?: string | number;
+      /** The page id open_page or list_pages answered; omitted, the page this thread worked with last. */
       readonly page?: string;
       readonly until: 'load' | 'text' | 'url' | 'element';
       readonly value?: string;
+      /** How long to wait, at most 120000 ms. */
       readonly timeoutMs: number;
     };
     readonly answer: {

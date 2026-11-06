@@ -51,8 +51,6 @@ const schemaOf = (value: unknown, where: string): Schema.Top => {
   return value;
 };
 
-const printed = (schema: Schema.Top): string => signatureOf(schema).replace(/^[ \t]*\/\*\*[\s\S]*?\*\/\n/gmu, '');
-
 const importedFrom = (source: ts.SourceFile, name: string): { readonly file: string; readonly binding: string } | null => {
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -131,15 +129,15 @@ const pointsText = async (faces: readonly Face[]): Promise<string> => {
   const graph = schemaOf(await loaded(GRAPH.file, GRAPH.binding), 'the view graph');
   const indent = (text: string) => text.replaceAll('\n', '\n  ');
   return [
-    `export type PluginEnvelope = ${printed(envelope)};`,
+    `export type PluginEnvelope = ${signatureOf(envelope)};`,
     '',
     'export type PluginPoints = {',
-    ...faces.map(({ name, schema }) => `  readonly ${name}: ${indent(printed(schema))};`),
+    ...faces.map(({ name, schema }) => `  readonly ${name}: ${indent(signatureOf(schema))};`),
     '};',
     '',
-    `export type BuildVerdict = ${printed(verdict)};`,
+    `export type BuildVerdict = ${signatureOf(verdict)};`,
     '',
-    `export type ViewGraph = ${printed(graph)};`,
+    `export type ViewGraph = ${signatureOf(graph)};`,
     '',
     `export const POINT_NAMES = [${faces.map(({ name }) => `'${name}'`).join(', ')}] as const satisfies readonly (keyof PluginPoints)[];`,
     '',
@@ -250,8 +248,8 @@ const operationsText = async (): Promise<string> => {
       const declaration = external.get(id)!;
       return [
         `  readonly ${id}: {`,
-        `    readonly input: ${indent(printed(declaration.input))};`,
-        `    readonly answer: ${indent(printed(knownAnswer(declaration.answer)))};`,
+        `    readonly input: ${indent(signatureOf(declaration.input))};`,
+        `    readonly answer: ${indent(signatureOf(knownAnswer(declaration.answer)))};`,
         '  };',
       ];
     }),
@@ -269,7 +267,8 @@ const canonicalTs = (text: string): string => {
     ts.forEachChild(node, visit);
   };
   visit(ts.createSourceFile('generated.ts', text, ts.ScriptTarget.Latest, true));
-  return parts.join(' ');
+  const docs = [...text.matchAll(/\/\*\*[\s\S]*?\*\//gu)].map((doc) => doc[0].replace(/\s+/gu, ' '));
+  return [...parts, ...docs].join(' ');
 };
 
 const sameGenerated = (written: string, expected: string): boolean => canonicalTs(written) === canonicalTs(expected);
