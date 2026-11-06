@@ -28,7 +28,7 @@ Tagma's developer works in Tagma Dev all day and must see, at any moment and wit
 
 - **Open Fresh Tagma** — an item in Tagma Dev's View menu and `tagma-dev fresh`. The first time, it takes the newest release from the release feed, places the published `Tagma.app` in a world of its own and opens it; while that world runs, the act brings its window forward; standing and closed, it opens it again. Tagma Dev keeps running untouched.
 - **Start Fresh Tagma Over** — a menu item and `tagma-dev fresh --over`: the fresh world quits, everything it wrote is removed, and the release opens again on its first launch. No confirmation: the act is the request.
-- **Which release** — `--release <version>` takes any release the feed lists (an older one tests the update path through the release's own update offer); `--from <path>` takes a local `.app`, `.dmg` or release archive, a cut not yet published among them. Either starts the world over. Without them, the newest. A release taken from the feed is kept in Tagma Dev's data directory (`fresh/releases/<version>`), so a start over clones it instead of downloading: its cost is a quit and a launch.
+- **Which release** — `--release <version>` takes any release the feed lists (an older one tests the update path through the release's own update offer); `--from <path>` takes a local `.app`, `.dmg` or release archive, a cut not yet published among them. Either starts the world over. Without them, the newest of the feed; a build that knows no feed takes the newest kept release, and an unreachable feed refuses, naming the kept releases. A release taken from the feed is kept in Tagma Dev's data directory (`fresh/releases/<version>`), so a start over clones it instead of downloading: its cost is a quit and a launch.
 - **Close** — quitting the fresh window, as a user quits.
 - `tagma-dev fresh --status` and `read_fresh_world` answer whether it runs, its release, its root and its address, so a Tagma Dev agent asked to can open the fresh world's surface in the built-in browser and walk a first launch.
 
@@ -47,9 +47,9 @@ It is not a new Mac: the machine's tools stay — `/usr/bin/git` with Command Li
 ## Start over
 
 1. The window gets SIGTERM and the act waits for it to end, so it cannot raise its server again; then the release's own `tagma quit` under the fresh environment ends its server, execution host and terminals; whatever still runs from under the root is ended with SIGKILL, and the act goes on only when no process of the root lives.
-2. What macOS keeps for the bundle outside the home is reset: privacy permissions for the app and each helper, while LaunchServices still knows them, and the preferences domain, which `cfprefsd` keeps in the real `~/Library` whatever the home says. Caches and the other Cocoa paths follow `CFFIXED_USER_HOME` into the home.
+2. What macOS keeps for the bundle outside the home is reset: privacy permissions for the app and the helpers whose ids extend its own (Electron's helpers carry the stock id Tagma Dev shares, task [[0870c6d1]]), while LaunchServices still knows them, and the preferences domain, which `cfprefsd` keeps in the real `~/Library` whatever the home says. Caches and the other Cocoa paths follow `CFFIXED_USER_HOME` into the home.
 3. The root is removed, then LaunchServices forgets every registration under it, since it keeps a deleted bundle registered.
-4. The kept release is cloned into the new home, its signature verified, and opened.
+4. The kept release is cloned into a staging copy in the new home, its signature verified, renamed into place and opened; nothing of the standing world needs to read for a start over, so a broken one is replaced too. A registration LaunchServices keeps refuses the act.
 
 Start over never touches `~/.tagma-dev`, `~/.tagma`, the account's junction, harness homes or shell profile. Waiting is on process exits, never a deadline.
 

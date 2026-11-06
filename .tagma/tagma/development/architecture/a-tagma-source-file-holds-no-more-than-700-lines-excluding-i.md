@@ -42,7 +42,7 @@ fields:
         {
           "fingerprint": "F4 apps/tagma/app/src/lib/shared/terminalThemes.ts",
           "owner": "e239d4dc",
-          "value": 789
+          "value": 743
         },
         {
           "fingerprint": "F4 packages/execution-host/src/ExecutionRecord.ts",

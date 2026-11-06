@@ -1508,10 +1508,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/settings/controls/catalogs.ts#ChoicesPort",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/settings/controls/modelField.ts#ModelFieldComponent",
           "owner": "5a3bed29"
         },
@@ -2021,14 +2017,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/shared/Reorder.svelte.ts#Axis",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/shared/Theme.svelte.ts#ThemeMode",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/shared/Theme.svelte.ts#THEME_KEY",
           "owner": "5a3bed29"
         },
         {
