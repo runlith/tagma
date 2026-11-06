@@ -1,5 +1,6 @@
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
+import type { ModelsClient } from './models.js';
 import type { ExternalOperations } from './operations.generated.js';
 import type { BuildVerdict, PluginEnvelope, PluginPoints } from './points.generated.js';
 import type { BuildStepInput, EndingInput, NotificationInput, TickInput } from './protocol.js';
@@ -18,6 +19,7 @@ export type PluginContext = {
   readonly project: number | null;
   readonly projects: readonly number[];
   readonly tagma: TagmaClient;
+  readonly models: ModelsClient;
   readonly data: string;
   readonly dataOf: (project: number | null) => string;
   readonly options: Readonly<Record<string, string | undefined>>;

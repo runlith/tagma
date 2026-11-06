@@ -2,8 +2,9 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type McpCaller, MCP_CALLER_META_KEY } from '@runlith/mcp/caller';
 import type { McpServedResult, McpServedTool } from '@runlith/mcp/server';
-import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { describePlugin, type PluginDescription } from './describe.js';
+import { issueText } from './issues.js';
+import { modelsClient } from './models.js';
 import { type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
 import {
   type BuildStepInput,
@@ -106,11 +107,6 @@ const failed = (error: unknown): McpServedResult => ({
   isError: true,
 });
 
-const issueText = (issue: StandardSchemaV1.Issue): string => {
-  const path = (issue.path ?? []).map((segment) => String(typeof segment === 'object' ? segment.key : segment));
-  return path.length === 0 ? issue.message : `${path.join('.')}: ${issue.message}`;
-};
-
 const authored =
   (declared: Tool): Handler =>
   async (input, ctx) => {
@@ -152,20 +148,24 @@ export const servingOf = (definition: PluginDefinition, place: ServingPlace): Se
     }
     return path;
   };
-  const contextOf = (caller: McpCaller, projects: readonly number[], signal: AbortSignal): PluginContext => ({
-    caller,
-    project: caller.projectId,
-    projects,
-    tagma: place.client(caller.projectId, signal),
-    get data() {
-      return dataOf(caller.projectId);
-    },
-    dataOf,
-    options: place.options,
-    log: (...parts) => place.log(parts.map(textOf).join(' ')),
-    signal,
-    changed: place.changed,
-  });
+  const contextOf = (caller: McpCaller, projects: readonly number[], signal: AbortSignal): PluginContext => {
+    const tagma = place.client(caller.projectId, signal);
+    return {
+      caller,
+      project: caller.projectId,
+      projects,
+      tagma,
+      models: modelsClient(tagma),
+      get data() {
+        return dataOf(caller.projectId);
+      },
+      dataOf,
+      options: place.options,
+      log: (...parts) => place.log(parts.map(textOf).join(' ')),
+      signal,
+      changed: place.changed,
+    };
+  };
   return {
     description,
     tools: description.tools,

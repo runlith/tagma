@@ -1,4 +1,5 @@
 import { AccountKey } from '@runlith/llm/models/authStatus';
+import { JsonSchema } from '@runlith/llm/schema/ids';
 import { Schema } from 'effect';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
@@ -25,6 +26,8 @@ import {
 } from './signIns.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { adaptersCapability } from './capability.js';
+import { ASK_REFUSALS } from './asks.js';
+import { AskChoice } from '../../../platform/contract/wire/setting.js';
 
 const CREDENTIAL_REFUSALS = ['token-store', 'credential-reconnect', 'credential-origin', 'unknown-account'] as const;
 
@@ -47,7 +50,25 @@ const adapterActs = {
   waits: [],
   lifetimes: [],
 } as const;
+const outside = {
+  doors: { http: 'perform' },
+  tool: undefined,
+  callers: 'any',
+  external: true,
+  subject: 'none',
+  place: 'machine',
+  graph: 'none',
+  waits: [],
+  lifetimes: [],
+} as const;
 const nobody = () => [];
+
+const menuModelSchema = Schema.Struct({
+  id: Schema.String,
+  reasoning: Schema.Array(Schema.String),
+  operatorOnly: Schema.Boolean,
+});
+const menuProviderSchema = Schema.Struct({ id: Schema.String, models: Schema.Array(menuModelSchema) });
 
 export const PROVIDER_OPERATIONS = {
   refresh_model_catalog: operation('refresh_model_catalog', {
@@ -503,6 +524,66 @@ export const PROVIDER_OPERATIONS = {
     confirmation: (input) => ({ summary: `List the models of the ${input.adapter} server?` }),
     confirmLabel: 'List models',
     presentation: { running: 'Listing the models', done: 'Listed the models' },
+  }),
+  read_model_menu: operation('read_model_menu', {
+    approval: ASKS_NEVER,
+    ...outside,
+    meaning:
+      'Read the models the installed providers offer for text, by provider: each model’s reasoning rungs and whether it is operator-only — the menu agents read through read_models. A model is named by its provider and id.',
+    input: Schema.Struct({}),
+    answer: arms({ read: { providers: Schema.Array(menuProviderSchema) } }),
+    refusals: [],
+    effect: 'read',
+    identity: 'none',
+    subjects: nobody,
+    confirmation: () => ({ summary: 'Read the model menu?' }),
+    confirmLabel: 'Read menu',
+    presentation: { running: 'Reading the model menu', done: 'Read the model menu' },
+  }),
+  read_ask_usage: operation('read_ask_usage', {
+    approval: ASKS_NEVER,
+    ...operatorOnly,
+    meaning:
+      'Read what the ask_model calls of one outside caller, named as it calls (`plugin:<id>` for a plugin), spent over the activity record’s window, `activity.keepHours`: how many asks, how many failed or were refused, and the tokens they read and wrote.',
+    input: Schema.Struct({ caller: Schema.String.check(Schema.isMinLength(1)) }),
+    answer: arms({
+      read: {
+        hours: Schema.Int,
+        asks: Schema.Int,
+        unanswered: Schema.Int,
+        inputTokens: Schema.Int,
+        outputTokens: Schema.Int,
+      },
+    }),
+    refusals: ['activity-unreadable'],
+    effect: 'read',
+    identity: 'none',
+    subjects: nobody,
+    confirmation: (input) => ({ summary: `Read the asks of ${input.caller}?` }),
+    confirmLabel: 'Read asks',
+    presentation: { running: 'Reading the asks', done: 'Read the asks' },
+  }),
+  ask_model: operation('ask_model', {
+    approval: ASKS_IN_REVIEW,
+    ...outside,
+    meaning:
+      'Ask a model once, with no thread, on the operator’s accounts, and record the ask as the caller’s. Answers `text`, or, when `schema` is a JSON Schema, an `object` value that matches it.',
+    grammar:
+      'Without `model`, the model is the operator’s choice in the `ask.model` setting. A `model` you name is answered by that model or refuses `ask-unanswerable`; it is never swapped for another. `reasoning` is a rung the model offers, absent its default.',
+    input: Schema.Struct({
+      prompt: Schema.String.check(Schema.isMinLength(1)),
+      system: Schema.optional(Schema.String),
+      model: Schema.optional(AskChoice),
+      schema: Schema.optional(JsonSchema),
+    }),
+    answer: arms({ text: { text: Schema.String }, object: { value: Schema.Unknown } }),
+    refusals: [...ASK_REFUSALS],
+    effect: 'external',
+    identity: { key: 'request' },
+    subjects: nobody,
+    confirmation: () => ({ summary: 'Ask a model once?' }),
+    confirmLabel: 'Ask',
+    presentation: { running: 'Asking a model', done: 'Asked a model' },
   }),
 };
 

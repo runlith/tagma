@@ -197,6 +197,7 @@ const world = Effect.fnUntraced(function* (
             choose: () => Effect.die('a recap only asks its warm copy'),
             capacity: () => Effect.die('a recap only asks its warm copy'),
             text: () => Effect.die('a recap only asks its warm copy'),
+            object: () => Effect.die('a recap only asks its warm copy'),
             decide: () => Effect.die('a recap answers text'),
           }),
         ),

@@ -14,6 +14,7 @@ export type AskActivity = {
   readonly provider: string | undefined;
   readonly model: string | undefined;
   readonly rung: string | null;
+  readonly caller?: string;
 };
 
 type AskSpend = { readonly account?: string; readonly usage?: Usage };

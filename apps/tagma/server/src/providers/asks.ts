@@ -112,11 +112,19 @@ export const makeModelAsks = Effect.gen(function* () {
     catalog: ProviderCatalog,
     selection: AskSelection,
     work: (route: AskRoute) => Effect.Effect<Spoken<A>, AskRefused>,
+    caller?: string,
   ): Effect.Effect<Answered<A>, AskRefused> => {
     const route = catalog.asks.route(selection.provider, selection.model);
     return Effect.provideService(
       askActivity(
-        { kind, path: route?.path ?? 'unresolved', provider: selection.provider, model: selection.model, rung: selection.reasoning },
+        {
+          kind,
+          path: route?.path ?? 'unresolved',
+          provider: selection.provider,
+          model: selection.model,
+          rung: selection.reasoning,
+          caller,
+        },
         Effect.suspend(() =>
           route === null
             ? Effect.fail(noRoute(selection))
@@ -381,7 +389,12 @@ export const makeModelAsks = Effect.gen(function* () {
 
     text: Effect.fn('ModelAsks.text')(function* (selection, ask) {
       const catalog = catalogOf(ask);
-      return yield* observed('text', catalog, selection, (route) => spokenText(catalog, route, selection, ask));
+      return yield* observed('text', catalog, selection, (route) => spokenText(catalog, route, selection, ask), ask.caller);
+    }),
+
+    object: Effect.fn('ModelAsks.object')(function* (selection, ask, schema) {
+      const catalog = catalogOf(ask);
+      return yield* observed('object', catalog, selection, (route) => spokenObject(catalog, route, selection, ask, schema), ask.caller);
     }),
 
     decide: Effect.fn('ModelAsks.decide')(function* (selection, request) {

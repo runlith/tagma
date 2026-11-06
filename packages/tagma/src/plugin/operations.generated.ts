@@ -117,6 +117,27 @@ export type ExternalOperations = {
       readonly status: 'unarchived';
     };
   };
+  readonly ask_model: {
+    readonly input: {
+      readonly prompt: string;
+      readonly system?: string;
+      readonly model?: {
+        readonly provider: string;
+        readonly model: string;
+        readonly reasoning?: string | null;
+      };
+      readonly schema?: {
+        readonly [key: string]: unknown;
+      };
+    };
+    readonly answer: {
+      readonly text: string;
+      readonly status: 'text';
+    } | {
+      readonly value: unknown;
+      readonly status: 'object';
+    };
+  };
   readonly audit_page: {
     readonly input: {
       readonly project?: string | number;
@@ -2405,6 +2426,20 @@ export type ExternalOperations = {
       readonly total: number;
       readonly cursor: string | null;
       readonly status: 'ok';
+    };
+  };
+  readonly read_model_menu: {
+    readonly input: {};
+    readonly answer: {
+      readonly providers: readonly {
+        readonly id: string;
+        readonly models: readonly {
+          readonly id: string;
+          readonly reasoning: readonly string[];
+          readonly operatorOnly: boolean;
+        }[];
+      }[];
+      readonly status: 'read';
     };
   };
   readonly read_page_console: {

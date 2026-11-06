@@ -8,6 +8,7 @@ import { AccountQuota } from './contract/service/quota.js';
 import { ProviderRegistry } from './contract/service/registry.js';
 import type { AccountsLive } from './contract/service/live.js';
 import { adaptersCapability } from './contract/wire/capability.js';
+import { PROVIDER_SETTING_KEYS, PROVIDER_SETTING_SECTIONS } from './contract/wire/settings.js';
 
 const FEEDS = [ACCOUNTS_FEED, CATALOG_FEED] as const;
 
@@ -28,6 +29,8 @@ export const providers = manifest({
   ...declaration,
   verbs: providersVerbs,
   capabilities: [adaptersCapability],
+  settings: [...PROVIDER_SETTING_KEYS],
+  settingSections: PROVIDER_SETTING_SECTIONS,
   snapshots: async (home) => (await import('./credentials/snapshot.js')).credentialParticipant(home.credentials),
   bodies: async () => Object.values((await import('./operations.js')).PROVIDER_PAIRS),
   live,

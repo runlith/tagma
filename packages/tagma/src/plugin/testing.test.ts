@@ -13,6 +13,53 @@ test('a definition naming a field the SDK does not take is refused with the fiel
   expect(() => testPlugin(misspelled)).toThrow('schedule (write schedules), surface (write surfaces)');
 });
 
+test('models.ask sends a Standard Schema as JSON Schema and answers the typed value, refusing an answer off the shape', async () => {
+  const sent: unknown[] = [];
+  const plugin = definePlugin({
+    id: 'tutor',
+    title: 'Tutor',
+    tools: {
+      grade: tool({
+        description: 'Grade a sentence.',
+        audience: 'agents',
+        run: async (_input, ctx) => {
+          const graded = await ctx.models.ask('Grade: Ich bin müde.', { schema: z.object({ score: z.number() }) });
+          return { doubled: graded.score * 2 };
+        },
+      }),
+      greet: tool({
+        description: 'Greet.',
+        audience: 'agents',
+        run: async (_input, ctx) => ctx.models.ask('Say hello.', { system: 'Be brief.' }),
+      }),
+    },
+  });
+  let answer: unknown = { status: 'object', value: { score: 4 } };
+  const tested = testPlugin(plugin, {
+    tagma: async (operation, input) => {
+      sent.push([operation, input]);
+      return answer;
+    },
+  });
+  expect(await tested.call('grade')).toEqual({ text: '{"doubled":8}', isError: false, structured: { doubled: 8 } });
+  expect(sent).toEqual([
+    [
+      'ask_model',
+      {
+        prompt: 'Grade: Ich bin müde.',
+        schema: { type: 'object', properties: { score: { type: 'number' } }, required: ['score'] },
+      },
+    ],
+  ]);
+  answer = { status: 'object', value: { score: 'high' } };
+  const off = await tested.call('grade');
+  expect(off.isError).toBe(true);
+  expect(off.text).toContain('score');
+  answer = { status: 'text', text: 'Hallo' };
+  expect(await tested.call('greet')).toEqual({ text: 'Hallo', isError: false });
+  expect(sent.at(-1)).toEqual(['ask_model', { prompt: 'Say hello.', system: 'Be brief.' }]);
+});
+
 test('testPlugin runs a tick, a build step, a refusing tool and a project-keyed resource through the handlers the process serves', async () => {
   const ticks: string[] = [];
   const plugin = definePlugin({

@@ -3,6 +3,7 @@ import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
 import type { DecisionAnswer, DecisionRequest } from '@runlith/llm/decision';
 import type { Usage } from '@runlith/llm/schema/events';
 import type { LLMError } from '@runlith/llm/schema/errors';
+import type { JsonSchema } from '@runlith/llm/schema/ids';
 import type { ModelIdentity } from '@runlith/llm/schema/options';
 import { isContextOverflowFailure } from '@runlith/llm/provider-error';
 import type { AskKind } from '@runlith/llm/models/description';
@@ -52,7 +53,13 @@ export type ModelResolution = { readonly origin: ModelIdentity | undefined; read
 
 export type AskSelection = ModelSelection & NamedModel;
 
-export type FreshAsk = { readonly system: string; readonly input: string; readonly stallMs?: number; readonly runId?: string };
+export type FreshAsk = {
+  readonly system: string;
+  readonly input: string;
+  readonly stallMs?: number;
+  readonly runId?: string;
+  readonly caller?: string;
+};
 
 export type AskCapacity = { readonly input: number; readonly output: number };
 
@@ -71,6 +78,7 @@ export class ModelAsks extends Context.Service<
     choose(kind: AskKind, role: AskChoice | null, asker?: Asker): Effect.Effect<AskSelection, AskRefused>;
     capacity(selection: AskSelection, system: string): Effect.Effect<AskCapacity, AskRefused>;
     text(selection: AskSelection, ask: FreshAsk): Effect.Effect<Answered<string>, AskRefused>;
+    object(selection: AskSelection, ask: FreshAsk, schema: JsonSchema): Effect.Effect<Answered<unknown>, AskRefused>;
     decide(selection: AskSelection, request: DecisionRequest): Effect.Effect<Answered<DecisionAnswer>, AskRefused>;
   }
 >()('tagma/providers/ModelAsks') {}

@@ -18,6 +18,7 @@ import { cacheLifetimes } from './quota/cacheLifetimes.js';
 import { listModels, removeInstance, saveInstance } from './adapters/instanceActs.js';
 import { readAdapters, readSettings } from './adapters/reads.js';
 import { ModelCatalogs } from './catalogs.js';
+import { askModel, askUsage } from './askCalls.js';
 import { DefaultLogins } from './accounts/defaultLogins.js';
 
 const declared =
@@ -365,6 +366,37 @@ export const PROVIDER_PAIRS = {
     body(OPS.discover_adapter_models, {
       execute: (input) =>
         declared(OPS.discover_adapter_models)(Effect.map(listModels(input), (rows) => ({ status: 'discovered' as const, rows }))),
+    }),
+  ),
+  read_model_menu: pair(
+    OPS.read_model_menu,
+    body(OPS.read_model_menu, {
+      execute: Effect.fnUntraced(function* () {
+        const offered = (yield* ProviderRegistry).current().menu.modelsByCapability('text');
+        const providers = [...Map.groupBy(offered, (option) => option.provider)].map(([id, models]) => ({
+          id,
+          models: models.map((option) => ({
+            id: option.id,
+            reasoning: option.reasoningOptions.map((rung) => rung.id),
+            operatorOnly: option.operatorOnly,
+          })),
+        }));
+        return { status: 'read' as const, providers };
+      }),
+    }),
+  ),
+  ask_model: pair(
+    OPS.ask_model,
+    body(OPS.ask_model, {
+      execute: (input, _prepared, caller) =>
+        declared(OPS.ask_model)(askModel(input, caller.actor.kind === 'external' ? caller.actor.name : undefined)),
+    }),
+  ),
+  read_ask_usage: pair(
+    OPS.read_ask_usage,
+    body(OPS.read_ask_usage, {
+      execute: (input) =>
+        declared(OPS.read_ask_usage)(Effect.map(askUsage(input.caller), (usage) => ({ status: 'read' as const, ...usage }))),
     }),
   ),
 } satisfies { readonly [K in ProviderOperationId]: OperationPair<(typeof OPS)[K]> };
