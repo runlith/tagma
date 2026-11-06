@@ -199,27 +199,34 @@ it.live('a step back puts back the rows a leaving migration dropped, from the co
   }),
 );
 
-it.live('a step back takes a moved table from the module store that adopted it, as the person left it there', () =>
-  Effect.gen(function* () {
-    const { installRoot, store, place } = dropping('adopted');
-    const copy = new Database(setAsidePath(store, DROP));
-    copy.run(`INSERT INTO tag (id, name) VALUES (3, 'deleted after the move')`);
-    copy.close();
-    renameSync(setAsidePath(store, DROP), adoptedPath(setAsidePath(store, DROP), 'calls'));
-    const adopter = new Database(ownStorePath(store, 'calls'));
-    adopter.run('CREATE TABLE tag (id integer PRIMARY KEY, name text)');
-    adopter.run(`INSERT INTO tag (id, name) VALUES (1, 'crimson'), (2, 'blue')`);
-    adopter.close();
-    const back = { from: NEW, to: OLD, carried: false };
-    writeStepBack(installRoot, back);
-    expect(yield* stepBackCarried(place, back)).toBe(true);
-    const db = new Database(store, { readonly: true });
-    expect(db.query('select id, name from tag order by id').all()).toEqual([
-      { id: 1, name: 'crimson' },
-      { id: 2, name: 'blue' },
-    ]);
-    db.close();
-  }),
+it.live(
+  'a step back takes a moved table from the module store that adopted it, as the person left it there, and leaves it there no more, so adopting it again takes what the installation before made of it',
+  () =>
+    Effect.gen(function* () {
+      const { installRoot, store, files, place } = dropping('adopted');
+      const copy = new Database(setAsidePath(store, DROP));
+      copy.run(`INSERT INTO tag (id, name) VALUES (3, 'deleted after the move')`);
+      copy.close();
+      renameSync(setAsidePath(store, DROP), adoptedPath(setAsidePath(store, DROP), 'calls'));
+      const own = ownStorePath(store, 'calls');
+      const adopter = new Database(own);
+      adopter.run('CREATE TABLE tag (id integer PRIMARY KEY, name text)');
+      adopter.run(`INSERT INTO tag (id, name) VALUES (1, 'crimson'), (2, 'blue')`);
+      adopter.close();
+      const stores = [...files, { path: own, chain: 'store-migrations/calls' }];
+      const back = { from: NEW, to: OLD, carried: false };
+      writeStepBack(installRoot, back);
+      expect(yield* stepBackCarried({ ...place, files: () => stores, kept: () => stores }, back)).toBe(true);
+      const db = new Database(store, { readonly: true });
+      expect(db.query('select id, name from tag order by id').all()).toEqual([
+        { id: 1, name: 'crimson' },
+        { id: 2, name: 'blue' },
+      ]);
+      db.close();
+      const left = new Database(own, { readonly: true });
+      expect(left.query('select id from tag').all()).toEqual([]);
+      left.close();
+    }),
 );
 
 test('what a migration kept aside is released once every standing installation carries it, and a moved copy waits for its adopter', () => {

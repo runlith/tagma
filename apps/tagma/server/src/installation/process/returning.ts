@@ -158,16 +158,50 @@ export const asidesReleased = (installRoot: string, ownRoot: string, files: read
   return released;
 };
 
+type Handed = { readonly store: string; readonly tables: readonly string[] };
+
+type FileReturned = { readonly losses: readonly ChainLoss[]; readonly handed: readonly Handed[] };
+
+const UNCHANGED: FileReturned = { losses: [], handed: [] };
+
+const handedBack = Effect.fnUntraced(function* ({ store, tables }: Handed) {
+  if (!existsSync(`${store}${STEP_BACK_SUFFIX}`))
+    yield* copied(store).pipe(
+      Effect.mapError(
+        (failure: DurableWriteFailed) =>
+          new StepBackFailed({ detail: `${store} could not be copied aside before the moved tables leave it: ${failure.reason}` }),
+      ),
+    );
+  yield* Effect.try({
+    try: () => {
+      const db = new Database(store);
+      try {
+        const standing = tablesIn(store);
+        db.run('BEGIN IMMEDIATE');
+        for (const table of tables) if (standing.has(table)) db.run(`DELETE FROM "${table.replaceAll('"', '""')}"`);
+        db.run('COMMIT');
+        db.run('PRAGMA wal_checkpoint(TRUNCATE)');
+      } finally {
+        db.close();
+      }
+    },
+    catch: (cause) => failedOf(`the moved tables could not leave ${store}`, cause),
+  });
+  console.error(
+    `[tagma] ${tables.join(', ')} left ${basename(store)}: the step back put their rows where the installation before reads them`,
+  );
+});
+
 const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: string, fromRoot: string) {
   const { path, chain } = file;
   const folder = join(toRoot, chain);
-  if (!existsSync(path) || !existsSync(folder)) return [];
+  if (!existsSync(path) || !existsSync(folder)) return UNCHANGED;
   const target = yield* Effect.try({
     try: () => chainTarget(folder),
     catch: (cause) => failedOf(`the migrations of ${folder} could not be read`, cause),
   });
   const fits = yield* Effect.try({ try: () => chainFits(path, target), catch: (cause) => failedOf(`${path} could not be read`, cause) });
-  if (fits) return [];
+  if (fits) return UNCHANGED;
   yield* copied(path).pipe(
     Effect.mapError(
       (failure: DurableWriteFailed) =>
@@ -175,7 +209,7 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
     ),
   );
   const leaving = join(fromRoot, chain);
-  const answer = yield* Effect.try({
+  const { answer, kept } = yield* Effect.try({
     try: () => {
       const steps = existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [];
       const kept = new Map(
@@ -184,9 +218,14 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
           return aside === undefined ? [] : [[step.name!, aside] as const];
         }),
       );
-      return returnToChain(path, target, { steps, folder: existsSync(leaving) ? leaving : null, kept }, file.fills);
+      return { answer: returnToChain(path, target, { steps, folder: existsSync(leaving) ? leaving : null, kept }, file.fills), kept };
     },
     catch: (cause) => failedOf(`${path} could not be returned`, cause),
+  });
+  const back = new Set(answer.restored.map((one) => one.table.toLowerCase()));
+  const handed = [...kept.values()].flatMap(({ file: store, tables }) => {
+    const left = tables === null ? [] : [...tables].filter((table) => back.has(table));
+    return left.length === 0 ? [] : [{ store, tables: left }];
   });
   if (answer.returned) snapshotsDropped(path);
   for (const index of answer.unfilled)
@@ -195,7 +234,10 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
     console.error(
       `[tagma] the step back put ${back.rows} rows of ${basename(path)} ${back.table} back from what its migrations kept aside`,
     );
-  return answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` }));
+  return {
+    losses: answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` })),
+    handed,
+  } satisfies FileReturned;
 });
 
 const forEachCopy = Effect.fnUntraced(function* (
@@ -228,8 +270,13 @@ const returned = Effect.fn('installation.returnStores')(function* (place: Return
   yield* Effect.try({ try: selectEngine, catch: (cause) => failedOf('the SQLite engine could not be selected', cause) });
   const toRoot = join(place.installRoot, back.to);
   const carried = yield* Effect.forEach(files, (file) => returnedFile(file, toRoot, place.ownRoot));
-  for (const loss of carried.flat())
+  for (const loss of carried.flatMap((one) => one.losses))
     console.error(`[tagma] the step back to ${back.to} left out ${loss.rows} rows of ${loss.table}: its build cannot hold them`);
+  yield* Effect.forEach(
+    carried.flatMap((one) => one.handed),
+    handedBack,
+    { discard: true },
+  );
 });
 
 const failedRecord = (back: StepBack, failure: StepBackFailed): StepBack => ({
