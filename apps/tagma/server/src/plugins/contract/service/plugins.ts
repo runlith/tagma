@@ -53,10 +53,9 @@ export type PluginDescribed = {
   readonly brings: readonly PluginComponentKind[];
 };
 
-type PluginReadRefusal = 'unknown-project' | 'secret-store-failed';
-export type PluginListRefusal = PluginReadRefusal | 'plugins-unreadable';
+export type PluginListRefusal = 'unknown-project' | 'secret-store-failed';
 export type PluginPrepareRefusal =
-  | PluginReadRefusal
+  | PluginListRefusal
   | 'plugin-source-unreadable'
   | 'plugin-clone-failed'
   | 'plugin-pin-unreachable'
@@ -65,7 +64,6 @@ export type PluginPrepareRefusal =
   | 'plugin-id-taken';
 export type PluginInstallRefusal =
   | PluginPrepareRefusal
-  | 'plugins-unreadable'
   | 'plugin-not-installed'
   | 'plugin-preview-expired'
   | SettingLandRefusal

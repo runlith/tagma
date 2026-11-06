@@ -227,26 +227,32 @@ it.live('a resident plugin runs from its enabling and comes back by itself after
   }),
 );
 
-it.live('a plugin reads outdated once a source its build lists changes or goes missing', () =>
-  Effect.gen(function* () {
-    const world = yield* hostWorld({ prefix: 'host-outdated-' });
-    const { plugins, projectId } = world;
-    const source = 'export default 1;\n';
-    const hash = createHash('sha256')
-      .update(`plugin.ts\u0000${Buffer.byteLength(source)}\u0000${source}`)
-      .digest('hex');
-    const root = yield* world.place('fixture', { build: { hash, sources: ['plugin.ts'] } });
-    yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), source));
-    yield* world.install(root);
-    const outdated = Effect.map(plugins.rows(projectId, ['fixture']), ([row]) => row?.outdated);
-    expect(yield* outdated).toBe(false);
-    yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), 'export default 2;\n'));
-    expect(yield* outdated).toBe(true);
-    yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), source));
-    expect(yield* outdated).toBe(false);
-    yield* Effect.promise(() => rm(join(root, 'plugin.ts')));
-    expect(yield* outdated).toBe(true);
-  }),
+it.live(
+  'a plugin reads outdated once a source its build lists changes or goes missing, and unknown with the cause on its own row while its sources cannot be hashed',
+  () =>
+    Effect.gen(function* () {
+      const world = yield* hostWorld({ prefix: 'host-outdated-' });
+      const { plugins, projectId } = world;
+      const source = 'export default 1;\n';
+      const hash = createHash('sha256')
+        .update(`plugin.ts\u0000${Buffer.byteLength(source)}\u0000${source}`)
+        .digest('hex');
+      const root = yield* world.place('fixture', { build: { hash, sources: ['plugin.ts'] } });
+      yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), source));
+      yield* world.install(root);
+      const outdated = Effect.map(plugins.rows(projectId, ['fixture']), ([row]) => row?.outdated);
+      expect(yield* outdated).toBe(false);
+      yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), 'export default 2;\n'));
+      expect(yield* outdated).toBe(true);
+      yield* Effect.promise(() => writeFile(join(root, 'plugin.ts'), source));
+      expect(yield* outdated).toBe(false);
+      yield* Effect.promise(() => rm(join(root, 'plugin.ts')));
+      expect(yield* outdated).toBe(true);
+      yield* world.shutdown;
+      expect(yield* plugins.rows(projectId, ['fixture'])).toMatchObject([
+        { id: 'fixture', title: 'Fixture', outdated: null, unhashed: expect.stringContaining('could not be hashed: the plugins closed') },
+      ]);
+    }),
 );
 
 it.live('a manifest naming a point no owner declares refuses the install', () =>
