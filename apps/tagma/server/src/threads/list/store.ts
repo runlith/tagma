@@ -28,7 +28,7 @@ import { ThreadInputRefused } from '../contract/service/failure.js';
 import type { ArchiveWork } from '../contract/service/list.js';
 import { standingDriven, standingOf } from '../events/standing.js';
 import { OwnWork } from '../contract/service/ownWork.js';
-import { ThreadListing } from '../contract/service/listing.js';
+import { type PluginHiding, ThreadListing } from '../contract/service/listing.js';
 import { endSubscriptions, threadSubscription } from '../store/subscriptions.js';
 import { moveOf, summaryOf, type SummaryRow, type ThreadSummary } from './summary.js';
 import {
@@ -46,6 +46,7 @@ import {
   selected,
   summariesOf,
   type ThreadSelection,
+  unhidden,
 } from './select.js';
 
 export type ThreadMetadata = ThreadMetadataRow & {
@@ -74,13 +75,8 @@ export type ThreadGate = {
   readonly evictedAt: Date | null;
 };
 
-const matchedWhere = (
-  ownerId: string,
-  homes: readonly number[],
-  selection: ThreadSelection,
-  spared: string | null,
-  listed: ReadonlySet<string>,
-) => and(selected(ownerId, homes, selection, listed), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
+const matchedWhere = (ownerId: string, homes: readonly number[], selection: ThreadSelection, spared: string | null, hiding: PluginHiding) =>
+  and(selected(ownerId, homes, selection, hiding), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
 
 export type ThreadListReads = ThreadLookup['Service'] &
   ThreadWindows['Service'] &
@@ -157,7 +153,8 @@ export const makeThreadListReads = Effect.gen(function* () {
     page: { readonly limit: number; readonly before?: Date },
     owing: ReadonlySet<string>,
   ) {
-    const roots = and(selected(ownerId, homes, { view: 'live' }, listing.listed()), liveRoot(ownerId, homes));
+    const hiding = yield* listing.hiding(homes);
+    const roots = and(selected(ownerId, homes, { view: 'live' }, hiding), liveRoot(ownerId, homes));
     const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
     const working = yield* unit.run(
       db
@@ -201,7 +198,7 @@ export const makeThreadListReads = Effect.gen(function* () {
     const admitted = [...heldIds, ...idle.map((row) => row.id)];
     const last = idle.at(-1);
     return {
-      admitted: sql`${recordFacts.id} in ${liveFamilyOf(ownerId, admitted)}`,
+      admitted: sql`${recordFacts.id} in ${liveFamilyOf(ownerId, admitted, hiding)}`,
       roots: counted?.total ?? 0,
       windowBefore: last === undefined || newest.length <= idleLimit ? null : last.readerOrderAt,
     };
@@ -275,32 +272,34 @@ export const makeThreadListReads = Effect.gen(function* () {
         );
       }
       const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
-      const counting = selected(ownerId, homes.projects, selection, listing.listed());
-      const where = and(counting, pastCursor(clock, selection.before));
-      const page = units.read((unit) =>
-        Effect.gen(function* () {
-          let page = summariesOf(db, where).orderBy(desc(clock), desc(recordFacts.id)).$dynamic();
-          if (selection.limit !== undefined) page = page.limit(selection.limit);
-          const rows = yield* unit.run(page);
-          const counted = yield* unit.run(
-            db.select({ total: count() }).from(recordFacts).leftJoin(thread, eq(thread.id, recordFacts.id)).where(counting).get(),
-          );
-          const summaries = yield* summarized('list', rows);
-          const last = summaries.at(-1);
-          const more = selection.limit !== undefined && summaries.length === selection.limit;
-          return {
-            rows: summaries,
-            total: counted?.total ?? 0,
-            before:
-              !more || last === undefined
-                ? null
-                : {
-                    orderAt: selection.view === 'archived' ? (last.archivedAt ?? last.readerOrderAt) : last.readerOrderAt,
-                    id: last.id,
-                  },
-          };
-        }),
-      );
+      const page = Effect.flatMap(listing.hiding(homes.projects), (hiding) => {
+        const counting = selected(ownerId, homes.projects, selection, hiding);
+        const where = and(counting, pastCursor(clock, selection.before));
+        return units.read((unit) =>
+          Effect.gen(function* () {
+            let page = summariesOf(db, where).orderBy(desc(clock), desc(recordFacts.id)).$dynamic();
+            if (selection.limit !== undefined) page = page.limit(selection.limit);
+            const rows = yield* unit.run(page);
+            const counted = yield* unit.run(
+              db.select({ total: count() }).from(recordFacts).leftJoin(thread, eq(thread.id, recordFacts.id)).where(counting).get(),
+            );
+            const summaries = yield* summarized('list', rows);
+            const last = summaries.at(-1);
+            const more = selection.limit !== undefined && summaries.length === selection.limit;
+            return {
+              rows: summaries,
+              total: counted?.total ?? 0,
+              before:
+                !more || last === undefined
+                  ? null
+                  : {
+                      orderAt: selection.view === 'archived' ? (last.archivedAt ?? last.readerOrderAt) : last.readerOrderAt,
+                      id: last.id,
+                    },
+            };
+          }),
+        );
+      });
       return Effect.flatMap(owingOf(), (owing) => Effect.map(page, (read) => ({ ...read, rows: marked(owing, read.rows) })));
     },
 
@@ -379,6 +378,7 @@ export const makeThreadListReads = Effect.gen(function* () {
             Effect.map(
               units.read((unit) =>
                 Effect.gen(function* () {
+                  const hiding = yield* listing.hiding([...new Set(lists.flatMap((list) => list.projects))]);
                   const roots = yield* Effect.forEach(lists, (list) =>
                     Effect.map(
                       unit.run(
@@ -392,6 +392,7 @@ export const makeThreadListReads = Effect.gen(function* () {
                               inArray(recordFacts.projectId, [...list.projects]),
                               sql`${recordFacts.id} in ${lineageOf(member.id)}`,
                               liveRoot(ownerId, list.projects),
+                              unhidden(hiding, recordFacts.id, recordFacts.projectId),
                             ),
                           ),
                       ),
@@ -403,7 +404,10 @@ export const makeThreadListReads = Effect.gen(function* () {
                       const rows = yield* unit.run(
                         summariesOf(
                           db,
-                          and(sql`${recordFacts.id} in ${liveFamilyOf(ownerId, [root.id])}`, sql`${recordFacts.id} != ${member.id}`),
+                          and(
+                            sql`${recordFacts.id} in ${liveFamilyOf(ownerId, [root.id], hiding)}`,
+                            sql`${recordFacts.id} != ${member.id}`,
+                          ),
                         ),
                       );
                       return { listId: root.listId, rows: [member, ...(yield* summarized('families', rows))] };
@@ -421,42 +425,46 @@ export const makeThreadListReads = Effect.gen(function* () {
       units.write(writes('ThreadListReads.setPinned', [recordRows]), (unit) => records.setPinned(unit, threadId, at)),
 
     heldUpMatching: (ownerId, homes, selection, spared) =>
-      units.read((unit) =>
-        unit.run(
-          db
-            .select({
-              threadId: recordFacts.id,
-              runId: sql<string>`held.run_id`,
-              kind: sql<'run' | 'harness'>`held.kind`,
-              sessionThreadId: sql<string>`held.session_thread`,
-              harness: sql<HarnessId>`held.harness`,
-            })
-            .from(recordFacts)
-            .leftJoin(thread, eq(thread.id, recordFacts.id))
-            .innerJoin(sql`${heldUp} held`, sql`held.id = ${recordFacts.id}`)
-            .where(matchedWhere(ownerId, homes, selection, spared, listing.listed())),
+      Effect.flatMap(listing.hiding(homes), (hiding) =>
+        units.read((unit) =>
+          unit.run(
+            db
+              .select({
+                threadId: recordFacts.id,
+                runId: sql<string>`held.run_id`,
+                kind: sql<'run' | 'harness'>`held.kind`,
+                sessionThreadId: sql<string>`held.session_thread`,
+                harness: sql<HarnessId>`held.harness`,
+              })
+              .from(recordFacts)
+              .leftJoin(thread, eq(thread.id, recordFacts.id))
+              .innerJoin(sql`${heldUp} held`, sql`held.id = ${recordFacts.id}`)
+              .where(matchedWhere(ownerId, homes, selection, spared, hiding)),
+          ),
         ),
       ),
 
     selectsBeyond: (ownerId, homes, selection, callerId) =>
-      units.read((unit) =>
-        Effect.map(
-          unit.run(
-            db
-              .select({ id: recordFacts.id })
-              .from(recordFacts)
-              .leftJoin(thread, eq(thread.id, recordFacts.id))
-              .where(
-                and(
-                  selected(ownerId, homes, selection, listing.listed()),
-                  sql`${recordFacts.id} not in ${lineageOf(callerId)}`,
-                  sql`${recordFacts.id} not in ${subtreeOf(callerId)}`,
-                ),
-              )
-              .limit(1)
-              .get(),
+      Effect.flatMap(listing.hiding(homes), (hiding) =>
+        units.read((unit) =>
+          Effect.map(
+            unit.run(
+              db
+                .select({ id: recordFacts.id })
+                .from(recordFacts)
+                .leftJoin(thread, eq(thread.id, recordFacts.id))
+                .where(
+                  and(
+                    selected(ownerId, homes, selection, hiding),
+                    sql`${recordFacts.id} not in ${lineageOf(callerId)}`,
+                    sql`${recordFacts.id} not in ${subtreeOf(callerId)}`,
+                  ),
+                )
+                .limit(1)
+                .get(),
+            ),
+            (row) => row !== undefined,
           ),
-          (row) => row !== undefined,
         ),
       ),
 
@@ -468,7 +476,7 @@ export const makeThreadListReads = Effect.gen(function* () {
       spared: string | null,
       before?: ArchiveWork,
     ) {
-      const matched = matchedWhere(ownerId, homes, selection, spared, listing.listed());
+      const matched = matchedWhere(ownerId, homes, selection, spared, yield* listing.hiding(homes));
       const chosen = (rootsWithin?: readonly string[]) =>
         units.read((unit) =>
           Effect.gen(function* () {

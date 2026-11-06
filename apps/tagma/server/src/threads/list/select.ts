@@ -5,7 +5,8 @@ import type { StoreDb } from '../../platform/contract/service/store.js';
 import { ENDED_RUN, thread, threadRun, stalledKernelThread, unparkedRun } from '../store/kernel.js';
 import { threadSeen, keepWarmRun } from '../store/tables.js';
 import { entryField } from '../store/fields.js';
-import { threadLiveSpell } from '../store/mandate.js';
+import { threadLiveSpell, threadMandate } from '../store/mandate.js';
+import type { PluginHiding } from '../contract/service/listing.js';
 import { liveRootOf, subtreeOf } from '../../thread-record/lineage.js';
 import { recordFacts, recordsAs } from '../../thread-record/facts.js';
 import { mandateFacts } from '../mandate.js';
@@ -79,29 +80,33 @@ const homesSql = (homes: readonly number[]): SQL =>
 
 const unasked: SQL = sql`${readableField(recordFacts.bornOf, '$.ask')} is null`;
 
-const boundPlugin: SQL = sql`(select json_extract(m.bindings, '$.plugin') from thread_mandate m where m.id = ${recordFacts.id})`;
+const boundPlugin: SQL = sql`json_extract(${threadMandate.bindings}, '$.plugin')`;
 
-const generalList = (selection: ThreadSelection, listed: ReadonlySet<string>): SQL | undefined => {
-  if (selection.plugin !== undefined) return sql`${boundPlugin} = ${selection.plugin}`;
-  if (selection.ids !== undefined) return undefined;
-  const members = sql.join(
-    [...listed].map((id) => sql`${id}`),
-    sql`, `,
+export const unhidden = (hiding: PluginHiding, id: SQL | SQLiteColumn, project: SQL | SQLiteColumn): SQL | undefined => {
+  if (hiding.size === 0) return undefined;
+  const hides = [...hiding].map(
+    ([home, plugins]) =>
+      sql`(${project} = ${home} and ${boundPlugin} in (${sql.join(
+        [...plugins].map((plugin) => sql`${plugin}`),
+        sql`, `,
+      )}))`,
   );
-  return listed.size === 0 ? sql`${boundPlugin} is null` : sql`(${boundPlugin} is null or ${boundPlugin} in (${members}))`;
+  return sql`not exists (select 1 from ${threadMandate} where ${threadMandate.id} = ${id} and (${sql.join(hides, sql` or `)}))`;
 };
 
-export const selected = (
-  ownerId: string,
-  homes: readonly number[],
-  selection: ThreadSelection,
-  listed: ReadonlySet<string>,
-): SQL | undefined =>
+const generalList = (selection: ThreadSelection, hiding: PluginHiding): SQL | undefined => {
+  if (selection.plugin !== undefined) {
+    return sql`exists (select 1 from ${threadMandate} where ${threadMandate.id} = ${recordFacts.id} and ${boundPlugin} = ${selection.plugin})`;
+  }
+  return selection.ids === undefined ? unhidden(hiding, recordFacts.id, recordFacts.projectId) : undefined;
+};
+
+export const selected = (ownerId: string, homes: readonly number[], selection: ThreadSelection, hiding: PluginHiding): SQL | undefined =>
   and(
     eq(recordFacts.principalId, ownerId),
     inArray(recordFacts.projectId, [...homes]),
     unasked,
-    generalList(selection, listed),
+    generalList(selection, hiding),
     archivedView(selection.view),
     stateOf(selection.state),
     selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),
@@ -222,7 +227,7 @@ export const liveRoot = (ownerId: string, homes: readonly number[]): SQL => sql`
   )
 )`;
 
-export const liveFamilyOf = (ownerId: string, seeds: readonly string[]): SQL => sql`(
+export const liveFamilyOf = (ownerId: string, seeds: readonly string[], hiding: PluginHiding): SQL => sql`(
   with recursive family(id) as (
     select value from json_each(${JSON.stringify(seeds)})
     union
@@ -231,6 +236,7 @@ export const liveFamilyOf = (ownerId: string, seeds: readonly string[]): SQL => 
       where child.principal_id = ${ownerId}
         and child.archived_at is null
         and ${readableField(sql.raw('child.born_of'), '$.ask')} is null
+        and ${unhidden(hiding, sql.raw('child.id'), sql.raw('child.project_id')) ?? sql`true`}
   )
   select id from family
 )`;

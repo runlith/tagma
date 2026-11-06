@@ -18,8 +18,7 @@ import { rolloutBirth, type RolloutParts } from './journal/rolloutMeta.js';
 import { rolloutWriter, RolloutWriting } from './journal/rolloutWriter.js';
 import { makeThreadListReads } from './list/store.js';
 import { ThreadListing } from './contract/service/listing.js';
-import { LISTING, makeListedPlugins } from './listing.js';
-import { PluginPoints } from '../plugins/contract/service/points.js';
+import { makeListedPlugins } from './listing.js';
 import { makeThreadLiveSpells } from './list/liveSpells.js';
 import { makeMandateRows } from './mandate.js';
 import { makeRestedReads } from './journal/restedReads.js';
@@ -192,8 +191,7 @@ export const threadsCoreLayer = Layer.effectContext(
     const scratch = yield* makeThreadScratch({ root: place.scratch ?? join(home ?? tmpdir(), 'scratch') });
     const reach = yield* makeBaseReach;
     const attachments = yield* makeThreadAttachments({ root: place.attachments, sources: reach.sources });
-    const listing = makeListedPlugins();
-    yield* Effect.acquireRelease((yield* PluginPoints).declare(LISTING, listing.register), (withdraw) => Effect.sync(withdraw));
+    const listing = yield* makeListedPlugins;
     const core = yield* makeThreadsLifetime({ rolloutHome: home === undefined ? undefined : join(home, ROLLOUT_HOME) }).pipe(
       Effect.provideService(ScratchAreas, scratch),
       Effect.provideService(AttachmentFiles, attachments),

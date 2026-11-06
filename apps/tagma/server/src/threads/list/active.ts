@@ -64,6 +64,7 @@ export const makeThreadSelections = Effect.gen(function* () {
   const pin = Effect.fn('ThreadWindows.pin')(function* (owner: string, homes: ListHomes, selection: ThreadSelection) {
     const reading = randomUUID();
     const project = homes.id;
+    const hiding = yield* listing.hiding(homes.projects);
     const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
     const insert = (ids?: readonly string[]) =>
       units.write('ThreadWindows.select', (unit) =>
@@ -73,7 +74,7 @@ export const makeThreadSelections = Effect.gen(function* () {
             db.run(sql`insert into temp.thread_selection_member (reading, thread, order_at)
           select ${reading}, ${recordFacts.id}, ${clock} from ${recordFacts}
           left join ${thread} on ${thread.id} = ${recordFacts.id}
-          where ${and(selected(owner, homes.projects, selection, listing.listed()), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
+          where ${and(selected(owner, homes.projects, selection, hiding), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
           );
         }),
       );

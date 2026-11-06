@@ -112,7 +112,7 @@ export const THREAD_SELECTOR = {
   ids: Schema.optional(Schema.Array(ThreadId)).annotate({ description: 'Exactly these threads.' }),
   plugin: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
     description:
-      'The threads whose bindings name this plugin. Without `plugin` or `ids`, the general list leaves out the threads of every plugin that does not list its threads (`contributes.threads.listed`).',
+      'The threads whose bindings name this plugin. Without `plugin` or `ids`, the general list leaves out the threads of every plugin that runs in their project and does not list its threads (`contributes.threads.listed`).',
   }),
   title: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
     description: "Part of the thread's title or of its agent's team name — either half of the list's `title (name)`.",
