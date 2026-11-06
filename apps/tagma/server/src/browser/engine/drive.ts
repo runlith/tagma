@@ -15,6 +15,7 @@ import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { InputMode } from '../contract/wire/profile.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
+import { makeChooser, type Chooser } from './chooser.js';
 import { adoptPicking, type Mark } from './cursor.js';
 import {
   applyConditions,
@@ -45,6 +46,7 @@ export type Attached = {
   readonly session: Session;
   readonly input: InputMode;
   readonly human: HumanInput;
+  readonly chooser: Chooser;
   readonly domains: Domains;
   readonly pictures: Pictures;
   readonly scope: Scope.Closeable;
@@ -209,6 +211,8 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
 
   const onEvent = Effect.fnUntraced(function* (state: Paged, attached: Attached, event: CdpEvent) {
     switch (event.method) {
+      case 'Page.fileChooserOpened':
+        return yield* attached.chooser.arrive(event);
       case 'Page.frameResized':
         return event.child === undefined ? yield* resizedMetrics(attached) : undefined;
       case 'Page.frameNavigated': {
@@ -391,6 +395,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         session,
         input: record.input,
         human: humanInput(session, state.pointer),
+        chooser: yield* Scope.provide(makeChooser(session), attachment),
         domains,
         pictures: yield* Scope.provide(makePictures(session), attachment),
         scope: attachment,

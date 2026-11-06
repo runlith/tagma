@@ -1,8 +1,8 @@
 import { TEXT_CHUNK } from '@runlith/cdp/input';
 import { keyOf, MODIFIERS } from '@runlith/cdp/keys';
 import { castFrame, sliceData } from '@runlith/cdp/screencast';
-import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, type SessionEnded } from '@runlith/cdp/session';
-import { Cause, Clock, Deferred, Effect, Exit, FileSystem, Path, Scope, Semaphore, Stream } from 'effect';
+import { type CdpEvent, type CommandFailure, isCommandFailure, type Session, type SessionEnded } from '@runlith/cdp/session';
+import { Cause, Clock, Deferred, Effect, Exit, FileSystem, Path, PubSub, Scope, Semaphore, Stream } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
 import { hostRefusal, type Pages } from '../contract/service/pages.js';
@@ -68,8 +68,6 @@ type Viewer = {
   buttons: number;
 };
 
-type Chooser = { readonly node: number; readonly child: string | undefined; readonly multiple: boolean };
-
 type Cast = {
   readonly page: PageId;
   readonly state: Paged;
@@ -83,7 +81,6 @@ type Cast = {
   last: Held | null;
   pending: number | null;
   arrived: number;
-  chooser: Chooser | null;
   tuning: boolean;
 };
 
@@ -287,12 +284,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       if (deliver(cast, held, now)) yield* Effect.forkIn(settled(cast), scope);
       return;
     }
-    if (event.method !== 'Page.fileChooserOpened') return;
-    const opened = yield* eventParams('Page.fileChooserOpened', event);
-    if (opened.backendNodeId === undefined) return yield* Effect.logInfo(`browser: page ${cast.page} asked for a file without a field`);
-    const multiple = opened.mode === 'selectMultiple';
-    cast.chooser = { node: opened.backendNodeId, child: event.child, multiple };
-    notice(cast, { type: 'chooser', multiple });
   });
 
   const run = Effect.fnUntraced(function* (cast: Cast, attached: Attached) {
@@ -305,24 +296,20 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         HostRefused: (refused) => Effect.fail(hostRefusal(refused)),
       }),
     );
-    const events = yield* attached.session.events((method) => method === 'Page.screencastFrame' || method === 'Page.fileChooserOpened');
-    yield* Stream.runForEach(events, (event) =>
-      onEvent(cast, event).pipe(
-        Effect.catchTags({
-          PayloadUnreadable: (unreadable) =>
-            Effect.logWarning(`browser: an event of page ${cast.page} was unreadable: ${unreadable.message}`),
-          WorkerUnavailable: (gone) => Effect.logWarning(`browser: an event of page ${cast.page} was not read: ${gone.message}`),
-        }),
-      ),
+    const choices = yield* PubSub.subscribe(attached.chooser.changes);
+    yield* Stream.runForEach(Stream.fromSubscription(choices), (choice) =>
+      Effect.sync(() => notice(cast, choice === null ? { type: 'chosen' } : { type: 'chooser', multiple: choice.multiple })),
     ).pipe(Effect.forkScoped);
+    const events = yield* attached.session.events((method) => method === 'Page.screencastFrame');
+    yield* Stream.runForEach(events, (event) => onEvent(cast, event)).pipe(Effect.forkScoped);
     yield* cast.lock
       .withPermits(1)(
         Effect.gen(function* () {
           cast.attached = attached;
           cast.held = yield* Effect.scope;
           cast.params = null;
-          yield* attached.session
-            .send('Page.setInterceptFileChooserDialog', { enabled: true })
+          yield* attached.chooser
+            .intercept()
             .pipe(
               Effect.catchTag('CommandRefused', (refused) =>
                 Effect.logInfo(`browser: page ${cast.page} keeps its own file choice: ${refused.message}`),
@@ -346,7 +333,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       cast.held = null;
       cast.params = null;
       cast.pending = null;
-      cast.chooser = null;
       if (cast.state.attached === attached) yield* drive.detach(cast.state);
     }
   });
@@ -379,7 +365,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     cast.life = null;
     if (attached !== null) {
       yield* attached.session.post('Page.stopScreencast');
-      yield* attached.session.post('Page.setInterceptFileChooserDialog', { enabled: false });
     }
     if (life !== null) yield* Scope.close(life, Exit.void);
     cast.attached = null;
@@ -387,7 +372,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     cast.params = null;
     cast.last = null;
     cast.pending = null;
-    cast.chooser = null;
     cast.state.watching -= 1;
     if (cast.viewers.size === 0 && casts.get(cast.page) === cast) casts.delete(cast.page);
     yield* Effect.forkIn(layout(cast), scope);
@@ -409,7 +393,6 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       last: null,
       pending: null,
       arrived: 0,
-      chooser: null,
       tuning: false,
     };
     casts.set(page, cast);
@@ -429,7 +412,8 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       buttons: 0,
     };
     cast.viewers.set(viewer.id, viewer);
-    if (cast.chooser !== null && !keep) viewer.notices.push({ type: 'chooser', multiple: cast.chooser.multiple });
+    const chooser = cast.attached?.chooser.current();
+    if (chooser !== undefined && chooser !== null && !keep) viewer.notices.push({ type: 'chooser', multiple: chooser.multiple });
     yield* cast.lock.withPermits(1)(Effect.suspend(() => (cast.life === null ? start(cast) : tune(cast))));
     return { cast, viewer };
   });
@@ -617,11 +601,10 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     }),
     choose: Effect.fn('Screencast.choose')(function* (page, chosen) {
       const cast = casts.get(page);
-      const chooser = cast?.chooser ?? null;
       const attached = cast?.attached ?? null;
-      if (cast === undefined || chooser === null || attached === null) return yield* noChooser(page);
-      cast.chooser = null;
-      notice(cast, { type: 'chosen' });
+      if (cast === undefined || attached === null) return yield* noChooser(page);
+      const chooser = yield* attached.chooser.take();
+      if (chooser === null) return yield* noChooser(page);
       const taken: readonly Chosen[] = chooser.multiple ? chosen : chosen.slice(0, 1);
       if (taken.length === 0) return 0;
       const dir = path.join(chosenOf(path, place, page), String(yield* Clock.currentTimeMillis));
@@ -634,9 +617,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         yield* Effect.orDie(files.writeFile(named, file.bytes));
         paths.push(named);
       }
-      yield* attached.session
-        .send('DOM.setFileInputFiles', { files: paths, backendNodeId: chooser.node }, chooser.child)
-        .pipe(Effect.catchIf(isCommandFailure, settle(page)));
+      yield* attached.chooser.supply(chooser, paths).pipe(Effect.catchIf(isCommandFailure, settle(page)));
       return taken.length;
     }),
   });
