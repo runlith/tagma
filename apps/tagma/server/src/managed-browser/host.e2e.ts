@@ -6,8 +6,10 @@ import { dirname, join } from 'node:path';
 import { headed, notRun } from '@runlith/testbed/fixture';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
+import { Hosts } from '../browser/contract/service/hosts.js';
 import { Pages } from '../browser/contract/service/pages.js';
-import { type PageId } from '../browser/contract/wire/ids.js';
+import { Profiles } from '../browser/contract/service/profiles.js';
+import { type PageId, type ProfileId } from '../browser/contract/wire/ids.js';
 import { agentIn, browserWorld, calling, OPERATOR, PAGE, refIn, refusalOf, Seeded, type Served } from '../browser/testing/world.js';
 import { MANAGED_AGENT } from './adapter.js';
 import { chromeInstalled, INSTALLED, managedFixture, managedTestHost, SHOWN, testAdapter as adapter } from './testing/host.js';
@@ -87,12 +89,37 @@ const evaluate = (page: PageId, expression: string) =>
     Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : undefined)),
   );
 
+const windowsOf = Effect.fnUntraced(function* (profile: ProfileId) {
+  const record = yield* (yield* Profiles).record(profile);
+  const inspection = yield* (yield* (yield* Hosts).reach(record.adapter)).profiles.session(record);
+  const { targetInfo } = yield* inspection.send('Target.getTargetInfo');
+  const { targetInfos } = yield* inspection.send('Target.getTargets');
+  const pages = targetInfos.filter((info) => info.type === 'page' && info.targetId !== targetInfo.targetId);
+  const held = yield* Effect.forEach(pages, (info) => inspection.send('Browser.getWindowForTarget', { targetId: info.targetId }));
+  return { urls: pages.map((info) => info.url).sort(), windows: new Set(held.map((one) => one.windowId)).size };
+}, Effect.scoped);
+
 const IDENTITY = 'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation';
-if (chromeInstalled && !headed()) notRun(IDENTITY.replace('%s', SHOWN), 'headed');
+const WINDOWS = 'a shown profile holds one window per open page and no other, from its launch on';
+if (chromeInstalled && !headed()) {
+  notRun(IDENTITY.replace('%s', SHOWN), 'headed');
+  notRun(WINDOWS, 'headed');
+}
 const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED, ...(headed() ? [SHOWN] : [])] : [MANAGED_AGENT];
 const fixture = managedFixture();
 
 layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
+  if (chromeInstalled && headed())
+    it.effect(WINDOWS, () =>
+      Effect.gen(function* () {
+        const open = (path: string) => calling(PAGE.open_page.body.execute({ url: at(path), profile: SHOWN }, undefined, agent));
+        yield* open('/second');
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/second')], windows: 1 });
+        yield* open('/labels');
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/labels'), at('/second')], windows: 2 });
+      }),
+    );
+
   it.effect.each(PROFILES)(IDENTITY, (profile) =>
     Effect.gen(function* () {
       heard.length = 0;

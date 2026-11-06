@@ -13,6 +13,8 @@ const ARGS = [
 
 const HIDDEN = ['--headless=new', '--mute-audio', '--window-size=1280,800'];
 
+const SHOWN = ['--no-startup-window'];
+
 const SECRET_STORE: Readonly<Record<string, readonly string[]>> = {
   darwin: ['--use-mock-keychain'],
   linux: ['--password-store=basic'],
@@ -34,7 +36,7 @@ const agentOf = (release: string): string[] => {
 
 export const chromeArgs = (release: string, profileDir: string, window: WindowMode): readonly string[] => [
   ...ARGS,
-  ...(window === 'hidden' ? [...HIDDEN, ...agentOf(release)] : []),
+  ...(window === 'hidden' ? [...HIDDEN, ...agentOf(release)] : SHOWN),
   ...(SECRET_STORE[process.platform] ?? []),
   `--user-data-dir=${profileDir}`,
 ];

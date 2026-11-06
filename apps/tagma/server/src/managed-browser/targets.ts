@@ -2,7 +2,7 @@ import { type CommandFailure, type Connection, type Params } from '@runlith/cdp/
 import { Effect } from 'effect';
 import { type CaptureHost, type HostFailure, HostLost, HostRefused, type ProfileRecord } from '../browser/contract/service/hosts.js';
 import { ProfileId } from '../browser/contract/wire/ids.js';
-import { type BuildId, MANAGED } from './contract/wire/document.js';
+import { type BuildId, MANAGED, type WindowMode } from './contract/wire/document.js';
 
 export type Browser = { readonly connection: Connection; users: number; idleSince: number | null };
 
@@ -30,6 +30,12 @@ const HIDDEN: Params<'Target.createTarget'> = { url: 'about:blank', hidden: true
 
 const WINDOWED: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: true };
 
+const BEHIND: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: true, background: true };
+
+const TAB: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: false };
+
+export const pageTarget = (window: WindowMode): Params<'Target.createTarget'> => (window === 'shown' ? WINDOWED : TAB);
+
 const heldTarget = Effect.fnUntraced(function* (browser: Browser, opening: Params<'Target.createTarget'>) {
   yield* Effect.acquireRelease(
     Effect.sync(() => {
@@ -43,13 +49,13 @@ const heldTarget = Effect.fnUntraced(function* (browser: Browser, opening: Param
   );
   const root = browser.connection.root;
   const { targetId } = yield* Effect.acquireRelease(root.send('Target.createTarget', opening).pipe(Effect.mapError(lost)), (created) =>
-    root.send('Target.closeTarget', { targetId: created.targetId }).pipe(quiet(`closing the hidden target ${created.targetId}`)),
+    root.send('Target.closeTarget', { targetId: created.targetId }).pipe(quiet(`closing the held target ${created.targetId}`)),
   );
   const { sessionId } = yield* root.send('Target.attachToTarget', { targetId, flatten: true }).pipe(Effect.mapError(lost));
   return yield* browser.connection.attach(sessionId);
 });
 
-export const hiddenTarget = (browser: Browser) => heldTarget(browser, HIDDEN);
+export const profileTarget = (browser: Browser, framed: boolean) => heldTarget(browser, framed ? HIDDEN : BEHIND);
 
 const capturing = (build: BuildId): ProfileRecord => ({
   id: CAPTURE,

@@ -27,15 +27,14 @@ import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
 import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
 import { LaunchPlatform } from './contract/service/launch.js';
-import { type BuildId, MANAGED, ManagedDocument } from './contract/wire/document.js';
+import { type BuildId, MANAGED, ManagedDocument, type WindowMode } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
 import { makeInstalledChrome } from './builds/installedChrome.js';
 import { committed } from './commit.js';
-import { captureHost, hiddenTarget, lost, quiet } from './targets.js';
+import { captureHost, lost, pageTarget, profileTarget, quiet } from './targets.js';
 import { makePermissions, type Permissions } from './permissions.js';
 import { makeNavigation, type NavigationGate } from './navigation.js';
-import { makeWindows, type Windows } from './windows.js';
 
 const IDLE_MS = 5 * 60_000;
 const UNLOAD_MS = 15 * 60_000;
@@ -81,7 +80,7 @@ type Running = {
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
   readonly dir: string;
-  readonly windows: Windows;
+  readonly window: WindowMode;
   users: number;
   idleSince: number | null;
 };
@@ -160,8 +159,6 @@ export const makeManagedHost = Effect.gen(function* () {
     if (event.child !== undefined || tab.page === null) return;
     const page = tab.page;
     switch (event.method) {
-      case 'Page.frameResized':
-        return yield* state.windows.remember(tab.target);
       case 'Page.frameNavigated': {
         const { frame } = yield* eventParams('Page.frameNavigated', event);
         if (frame.parentId === undefined)
@@ -372,10 +369,8 @@ export const makeManagedHost = Effect.gen(function* () {
       const navigation = yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held);
       yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
       const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
-      const own = yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
-      const windows = yield* makeWindows({ browser: connection.root, own: own.targetId, mode: document.window }).pipe(
-        Effect.mapError(lost),
-      );
+      if (document.window === 'hidden')
+        yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
       const state: Running = {
         profile: profile.id,
         connection,
@@ -385,7 +380,7 @@ export const makeManagedHost = Effect.gen(function* () {
         permissions,
         navigation,
         dir,
-        windows,
+        window: document.window,
         users: 0,
         idleSince: null,
       };
@@ -468,7 +463,7 @@ export const makeManagedHost = Effect.gen(function* () {
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
     const url = tab.url || 'about:blank';
-    const { targetId } = yield* state.connection.root.send('Target.createTarget', state.windows.page);
+    const { targetId } = yield* state.connection.root.send('Target.createTarget', pageTarget(state.window));
     yield* state.navigation.swap(tab.target, targetId);
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
@@ -539,7 +534,7 @@ export const makeManagedHost = Effect.gen(function* () {
       open: Effect.fn('ManagedHost.open')(function* (opening) {
         const state = yield* ensure(opening.profile);
         const url = opening.history?.entries[opening.history.at]?.url ?? opening.url;
-        const { targetId } = yield* state.connection.root.send('Target.createTarget', state.windows.page).pipe(Effect.mapError(lost));
+        const { targetId } = yield* state.connection.root.send('Target.createTarget', pageTarget(state.window)).pipe(Effect.mapError(lost));
         yield* Effect.gen(function* () {
           const service = yield* bind(state, targetId, opening.page);
           yield* state.navigation.open(targetId, opening.policy);
@@ -709,7 +704,8 @@ export const makeManagedHost = Effect.gen(function* () {
     profiles: {
       prepare: (profile) => Effect.asVoid(ensure(profile)),
       session: Effect.fn('ManagedHost.profileSession')(function* (profile) {
-        return yield* hiddenTarget(yield* ensure(profile));
+        const state = yield* ensure(profile);
+        return yield* profileTarget(state, state.window === 'hidden' || state.tabs.size > 0);
       }),
       remove: Effect.fn('ManagedHost.remove')(function* (profile) {
         const state = running.get(profile);
