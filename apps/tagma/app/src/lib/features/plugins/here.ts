@@ -73,6 +73,11 @@ export const broughtBy = (servers: readonly McpServerRow[], id: string): readonl
 
 export const stillWorking = (row: PluginRow): boolean => row.process?.state === 'running' || row.process?.state === 'idle';
 
+export const processShown = (row: PluginRow): PluginProcessRow | undefined =>
+  row.process !== undefined && (row.process.state === 'failed' || row.components.some((component) => component.kind === 'process'))
+    ? row.process
+    : undefined;
+
 export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
   if (row.refused !== undefined && !stillWorking(row)) return 'fails';
   if (!row.enabled) return 'off';

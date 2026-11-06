@@ -18,7 +18,7 @@
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import Gives from '$lib/features/plugins/Gives.svelte';
-  import { type Here, stillWorking } from '$lib/features/plugins/here.js';
+  import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
   import ProcessStep from '$lib/features/plugins/ProcessStep.svelte';
@@ -60,6 +60,7 @@
   const plain = $derived(row.options.filter((option) => !option.sensitive));
   const skill = $derived(row.components.find((component) => component.kind === 'skill')?.name ?? null);
   const refusal = $derived(row.refused ?? row.process?.refused);
+  const process = $derived(processShown(row));
 
   let busy = $state<string | null>(null);
   let failed = $state<Told | undefined>(undefined);
@@ -174,9 +175,9 @@
     {/if}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
-    {#if row.process !== undefined || (row.enabled && item.servers.length > 0)}
+    {#if process !== undefined || (row.enabled && item.servers.length > 0)}
       <section class="grid rounded-lg border bg-raised px-4 py-1" aria-label="Its services">
-        {#if row.process !== undefined}<ProcessStep process={row.process} here={row.enabled} />{/if}
+        {#if process !== undefined}<ProcessStep {process} here={row.enabled} />{/if}
         {#if row.enabled}<ServerSteps projectId={project.id} servers={item.servers} />{/if}
       </section>
     {/if}
