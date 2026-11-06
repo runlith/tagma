@@ -87,7 +87,7 @@ export type PluginDefinition = PluginData & {
 
 export const definePlugin = <const Definition extends PluginDefinition>(definition: Definition): Definition => definition;
 
-export const tool = <S extends InputSchema | undefined = undefined>(declared: Tool<S>): Tool<S> => declared;
+export const tool = <S extends InputSchema | undefined = undefined>(declared: Tool<S>): NoInfer<Tool<S>> => declared;
 
 export const resource = (declared: Resource): Resource => declared;
 
