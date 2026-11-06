@@ -15,6 +15,8 @@ import type { TreeBlock } from '../../../../graph/tree/layout.js';
 import { writeBlockTree } from '../../../../graph/tree/layout.js';
 import { indexMirror, rebuildMirror, repairMirror } from '../../../../graph/tree/mirror.js';
 import { scanTree } from '../../../../graph/tree/scan.js';
+import { projectToTree } from '../../../../graph/tree/projection.js';
+import { decodeBlockFile } from '../../../../graph/tree/blockFile.js';
 
 const A = '0198aaaa-0000-7000-8000-00000000a001';
 const B = '0198aaaa-0000-7000-8000-00000000b002';
@@ -169,6 +171,24 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     );
   }
+
+  it.effect('a rebuilt mirror projects a block back with its sources in its own file order', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const sources = [
+          { kind: 'file' as const, ref: 'src/zeta.ts' },
+          { kind: 'file' as const, ref: 'src/alpha.ts' },
+        ];
+        const { treeRoot } = yield* prepare(demo, [
+          blocks[0]!,
+          { parentId: A, frontmatter: { id: B, tags: ['idea'], title: 'Palladium Charter', ord: 1, sources }, body: 'Two places.' },
+        ]);
+        yield* projectToTree({ projectId: demo.projectId, treeRoot });
+        const text = yield* (yield* FileSystem.FileSystem).readFileString(join(treeRoot, 'doctrine/palladium-charter.md'));
+        expect((yield* decodeBlockFile(text)).frontmatter.sources).toEqual(sources);
+      }),
+    ),
+  );
 
   it.effect('rebuild and incremental repair keep the holder while upserting and trashing only their delta', () =>
     withDemo((demo) =>

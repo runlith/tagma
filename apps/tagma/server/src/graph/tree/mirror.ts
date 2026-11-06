@@ -249,10 +249,7 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
       for (const row of ordered) {
         const front = row.frontmatter;
         const blockId = ids.get(front.id) as number;
-        const measured = [...(front.sources ?? [])].sort(
-          (a, b) => a.kind.localeCompare(b.kind) || a.ref.localeCompare(b.ref) || (a.symbol ?? '').localeCompare(b.symbol ?? ''),
-        );
-        for (const sourceRow of measured) {
+        for (const sourceRow of front.sources ?? []) {
           sources.push({
             id: sources.length + 1,
             blockId,
