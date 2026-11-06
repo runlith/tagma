@@ -19,6 +19,9 @@ import {
   type Located,
   pointOf,
   reveal,
+  rootStamp,
+  scrolled,
+  stampOf,
   world,
 } from './target.js';
 
@@ -564,11 +567,18 @@ const performed = Effect.fnUntraced(function* (
         const located = yield* locate(state, attached, action.aim.ref);
         return yield* mark(state, attached, { kind: 'box', box: yield* reveal(attached, located) });
       }
-      const at = action.aim === null ? yield* viewportCenter(attached) : (yield* aimAt(state, attached, action.aim, false)).point;
-      if (action.aim === null) yield* pointAt(state, attached, at);
-      return yield* attached.input === 'human'
-        ? attached.human.wheel(at, { x: action.dx, y: action.dy })
-        : wheel(session, at, { x: action.dx, y: action.dy });
+      const aimed = action.aim === null ? null : yield* aimAt(state, attached, action.aim, false);
+      const at = aimed === null ? yield* viewportCenter(attached) : aimed.point;
+      if (aimed === null) yield* pointAt(state, attached, at);
+      const under =
+        aimed?.located ?? (yield* locateAt(state, attached, at).pipe(Effect.catchTag('GateRefusal', () => Effect.succeed(null))));
+      return yield* scrolled(
+        attached,
+        under === null ? rootStamp(attached) : stampOf(attached, under),
+        attached.input === 'human'
+          ? attached.human.wheel(at, { x: action.dx, y: action.dy })
+          : wheel(session, at, { x: action.dx, y: action.dy }),
+      );
     }
     case 'drag': {
       const from = yield* aimAt(state, attached, action.aim, true);

@@ -242,18 +242,40 @@ export const reveal = Effect.fn('browser.reveal')(function* (
     if (read.scroll === null || read.stamp === previous)
       return yield* actionFailed(`${located.ref} cannot be reached through its scroll containers`);
     previous = read.stamp;
-    yield* attached.human.wheel(read.scroll.at, read.scroll.delta);
-    let shown = read.stamp;
-    let moved = false;
-    for (let still = 0; still < (moved ? 1 : 5);) {
-      yield* attached.pictures.paint;
-      const now = (yield* call<Reveal>(attached, located, REVEAL, [bounds, box.center])).stamp;
-      if (now === shown) still += 1;
-      else {
-        moved = true;
-        still = 0;
-        shown = now;
-      }
+    yield* scrolled(attached, stampOf(attached, located), attached.human.wheel(read.scroll.at, read.scroll.delta));
+  }
+});
+
+const SCROLLED = `function () {
+  const element = this.nodeType === 1 ? this : this.parentElement;
+  const parts = [];
+  for (let node = element; node; node = node.parentElement || node.getRootNode().host || null) parts.push(node.scrollLeft, node.scrollTop);
+  const root = element.ownerDocument.scrollingElement;
+  const rect = element.getBoundingClientRect();
+  return parts.concat(root.scrollLeft, root.scrollTop, rect.x, rect.y).join(',');
+}`;
+
+export const stampOf = (attached: Attached, located: Located) => call<string>(attached, located, SCROLLED);
+
+export const rootStamp = (attached: Attached): Effect.Effect<string, CommandFailure> =>
+  Effect.map(attached.session.send('Page.getLayoutMetrics'), ({ cssLayoutViewport: view }) => `${view.pageX},${view.pageY}`);
+
+export const scrolled = Effect.fnUntraced(function* <E>(
+  attached: Attached,
+  stamp: Effect.Effect<string, E>,
+  wheeling: Effect.Effect<void, CommandFailure>,
+) {
+  let shown = yield* stamp;
+  yield* wheeling;
+  let moved = false;
+  for (let still = 0; still < (moved ? 1 : 5);) {
+    yield* attached.pictures.paint;
+    const now = yield* stamp;
+    if (now === shown) still += 1;
+    else {
+      moved = true;
+      still = 0;
+      shown = now;
     }
   }
 });

@@ -372,6 +372,7 @@ export const inputScenarios = (input: EngineHost): void => {
                 page,
                 steps: [
                   { action: 'fill', ref: refIn(fresh.text, /textbox "Email"/u), text: 'aBé' },
+                  { action: 'scroll', x: 10, y: 10, dy: 120 },
                   { action: 'click', ref: refIn(fresh.text, /button "Submit"/u) },
                 ],
               },
@@ -382,7 +383,7 @@ export const inputScenarios = (input: EngineHost): void => {
           yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'value=aBé', timeoutMs: 10_000 }, undefined, agent));
           const fast = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
           expect(fast.text).toContain(
-            'value=aBé;keys=0;chars=1;press=0;up=0;ticks=false;scroll=0;moves=1;curved=false;offcenter=false;trusted=true',
+            'value=aBé;keys=0;chars=1;press=0;up=0;ticks=false;scroll=120;moves=1;curved=false;offcenter=false;trusted=true',
           );
           yield* (yield* Pages).close(page);
         }),
