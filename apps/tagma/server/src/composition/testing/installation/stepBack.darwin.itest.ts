@@ -127,7 +127,7 @@ it.live(
       const added = yield* op(origin, 'add_project', { name: 'tools', rootPath: checkout, storage: 'stealth' });
       const projectId = (added.body as { project: { id: number } }).project.id;
       const born = yield* op(origin, `create_thread?project=${projectId}`, { approvalMode: 'trust' });
-      expect(born.body).toHaveProperty('snapshot.thread.id');
+      expect(born).toMatchObject({ status: 200, body: { snapshot: { thread: { id: expect.any(String) } } } });
       const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
       expect(mark(store, threadId)).toBe(NEWEST);
       const offered = yield* op(origin, 'read_machine_state', {});
