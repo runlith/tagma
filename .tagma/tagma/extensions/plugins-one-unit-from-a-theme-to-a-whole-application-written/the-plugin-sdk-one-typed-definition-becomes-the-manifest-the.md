@@ -58,10 +58,9 @@ export default definePlugin({
   },
   skills: { review: './skills/review' },
   agents: { reviewer: { file: './agents/reviewer.md' } },
-  views: { mrs: view('./ui/Mrs.svelte'), grid: view('./ui/Grid.svelte') },
+  views: { mrs: view('./ui/Mrs.svelte') },
   sections: [{ view: 'mrs', title: 'Merge requests', icon: './ui/icon.svg' }],
-  windows: { grid: { view: 'grid', frame: false, onTop: true } },
-  shortcuts: [{ keys: 'Mod+Alt+G', open: 'grid' }],
+  shortcuts: [{ keys: 'Mod+Alt+G', action: 'section:mrs' }],
   schedules: { poll: schedule({ every: '1m', run: async (tick, ctx) => syncBoards(ctx) }) },
   hooks: [hook({ at: 'beforeTool', match: { tool: 'bash' }, run: async (call) => (risky(call) ? deny('…') : undefined) })],
 });
@@ -76,7 +75,8 @@ export default definePlugin({
 | `mcpServers` | `mcp`, through its port for contributors |
 | `agents` | `native-harness` |
 | `secrets` | `secrets` |
-| `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts`, `actions`, `themes` | `views` |
+| `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts`, `actions` | `views` |
+| `themes` | `appearance` ([[ca575591]]) |
 | `schedules` | `schedule` |
 | `notifications` | `notify` |
 | `onThreadEnded`, `onQuestion`, `threads` (`listed`) | `threads` |
@@ -181,6 +181,7 @@ Typing `op` by operation id, rather than mapping operations to method names by h
 | `tagma.openLink(url)` | Opens a link, during a click |
 | `tagma.open(...)` | Opens a thread or a section of Tagma |
 | `tagma.servers.<name>.call(...)` | Calls a tool of a server the plugin brought |
+| `tagma.theme` | The theme in force, `{id, mode}`, as a reactive value, for a view that draws on a canvas ([[ca575591]]) |
 
 `@runlith/tagma/ui` also exports the host's components and tokens, and `<Frame src>`, which embeds someone else's site, widget or web application in an iframe on its own origin. A view reaches only this surface, through the view host's declared methods (`BRIDGE_METHODS`). `<Thread>` is the person's own thread interface and acts as the person: placing it hands the person their own composer, not the plugin.
 

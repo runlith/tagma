@@ -20,6 +20,6 @@ sources:
 
 **How.** Theme in the app menu: System, Light or Dark.
 
-**Behaviour.** The choice applies via `mode-watcher` and is stored browser-side. The theme bootstrap script applies before the app renders, and returning to System clears the explicit choice.
+**Behaviour.** Tagma's own `Theme` service keeps the choice in the browser's local storage, under the key name `mode-watcher-mode` inherited from the library it replaced. A script in `app.html` applies it before the app renders, and the window repaints on every change. System is stored as a choice of its own and follows the system's light or dark setting.
 
 **Limits.** This is a device preference, not a server setting with project and user layers. Terminal content styling has its own owner and settings.

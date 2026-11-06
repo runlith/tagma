@@ -76,7 +76,7 @@ Trust and consent at install are not part of this spec.
 - **Source** names where a plugin came from: a marketplace, npm, git, a folder, or the project itself.
 - **Connection** is what an MCP server is. The screen calls these "MCP servers".
 - **View** is a Svelte view, compiled by Tagma.
-- **Prompt command** is a slash command in the composer: text from the plugin, or a handler in its process. **Action** is something the process serves that a shortcut or the palette runs.
+- **Prompt command** is a slash command in the composer: text from the plugin, or a handler in its process. **Action** is what a shortcut or the palette runs: one of Tagma's, or a plugin's — something its process serves, or opening its section or pane.
 - **Tagma's own loop** is the agent loop Tagma runs: Tagma's own threads, and Tagma's agent hosted by an outside runner.
 
 ## What stands
@@ -117,7 +117,8 @@ Tagma's format is the superset that translation into it needs. Each part is a po
 - `mcpServers`, through `mcp`'s port for contributors;
 - `options` and `secrets`;
 - `agents` and `tools`;
-- `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts` and `themes`, whose schemas `views` owns;
+- `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts` and `actions`, whose schemas `views` owns;
+- `themes`, whose schema and meaning check `appearance` owns ([[ca575591]]);
 - `schedules`, `notifications`, `onThreadEnded`, `onQuestion`, `beforeBuild` and `hooks`;
 - `resources`;
 - `providers`.
@@ -145,8 +146,9 @@ The graph, threads, law and gates are never plugins: the product's guarantees st
 | Providers | The machine | — | Withdrawn from the catalogs | Withdrawn; a built-in provider cannot be removed |
 
 - **Outside a project.** A tick has no project of its own. Its handler gets the projects where the plugin is enabled, and acts in one by naming it.
-- **Windows without a project.** A window the person opens with a global shortcut stands in the last focused project where the plugin is enabled, or asks which one when there is none.
+- **Windows without a project.** A window the person opens with a global shortcut stands where a shortcut press acts ([[ba083eb0]]): the context project, or else the first project of the person's list where the plugin is enabled. It asks nothing.
 - **"Stop in all my projects"** drops the person's layer. **"Turn off everywhere"** disables the plugin for the machine. The card uses these two phrases and does not mix them.
+- **Themes** stay offered while the plugin is on in any project or for all my projects, so "off here" changes nothing while it is on elsewhere. **Use** turns a theme's plugin on for all my projects, when it is on nowhere, and chooses the theme in the same act ([[ca575591]]).
 - **Removing** keeps the plugin's data, and the card says so; a separate act deletes the data. Its pins stay, drawn as a gone view. Threads bound to it, and threads typed as one of its agents, stay as ordinary threads.
 
 **Process life.** Contributions are published from the manifest while the plugin is enabled, with or without a running process. A process generation only executes them, and a broken plugin's tools are withdrawn from agents' catalogs while it stays broken. The supervisor gains an `idle` state:
@@ -210,15 +212,16 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 
 **Windows and shortcuts.** Any window Tagma opens loads Tagma's client, so a plugin's window shows real threads, as the main window does.
 - **Window entries.** A plugin declares windows: plain, frameless, or always on top. On the web, where there is no shell, they open as floating panels.
-- **Shortcut entries.** A plugin declares shortcuts that open a view or run an action, either local or global.
+- **Shortcut entries.** A plugin declares shortcuts that open one of its sections or panes, or run one of its actions, either local or global ([[ba083eb0]]).
 - **The shell grants them.** It already holds frameless, always-on-top windows and global shortcuts for its own dictation pill and quick hide (`apps/tagma/desktop/src/main.ts`, `projectWindows.ts`). It grants the declared entries, never Electron itself.
-- **Conflicts.** A shortcut is a proposal, and the keymap owner resolves it (`app/src/lib/features/executions/terminal/Keymap.ts`). Tagma's own keys win. A second claim on a chord is refused and named on the plugin's card, with **Rebind** in place.
+- **Conflicts.** A shortcut is a proposal. One table over every action resolves it, in the window's keymap `app-keys`: the person's own keys win, then Tagma's, then plugins in install order. A proposal on a taken chord stays unbound and is named on the plugin's card, with **Rebind** in place; the plugin itself is never refused for it.
 
-**Themes.**
-- **Contents.** A `themes` entry carries token values for light and dark: surfaces, text, brand, syntax roles and the terminal palette.
-- **The `Theme` service** holds a theme catalog — light, dark, and the themes of enabled plugins — and applies the chosen one. Today it only switches light and dark.
-- **The terminal catalog** takes the theme's terminal palette as hex, as Tagma's own themes keep theirs (note 1ec33fbf).
-- **State colours** keep their meaning. A theme retunes their values, never swaps one for another.
+**Themes** ([[ca575591]]).
+- **Contents.** A `themes` entry has a light variant, a dark one, or both. Each sets, by meaning, only the colours it changes — surfaces, text, signals, syntax roles, project and worktree marks, the terminal's ANSI colours — over Tagma's own values. Tagma derives the rest.
+- **Tagma's own look** is the first theme, in the same format, and its stylesheet is generated from it.
+- **The person's choice** is two `user`-scope settings, the theme and light or dark. Every window and device follows it live.
+- **The terminal** defaults to "Same as the theme". Code colours follow from the syntax roles.
+- **State colours** keep their meaning. A check in the point's face, run at build, install and read, refuses a theme that moves a signal out of its hue family or below contrast.
 
 ## Modules after the change
 
@@ -226,13 +229,15 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
   - the manifest and the point registry: it checks contributions when a package is prepared, and publishes them while the plugin is enabled;
   - the one install act for every format, updates for every source, the machine record, and the person's and the project's enabling;
   - installed directories, their leases and the sweep, and each plugin's data directory;
-  - `create_plugin`, which writes the SDK's template into `.tagma-plugins/<id>/`.
+  - `create_plugin`, which writes the SDK's template into `.tagma-plugins/<id>/` for a project's plugin, or into `<data>/plugins/<id>/` for the person's own, such as a theme he asked for.
 
   Adapter fetching moves into it. "Enabled in this project" is an `invocation` port that `plugins` fills.
 - **`plugin-host` (server), today `tagma-apps`,** keeps process life only: the supervisor, its generations, `idle`, the backoff gate, and the `caller` each contribution carries for executing it, hooks included. It imports `plugins`, never the other way.
 - **One in-server loader** is extracted from `providers/adapters`: `importAdapter`, host modules, run pinning. It imports from a directory `plugins` gives it, and registers its runs as holders through `plugins`' lease port. `providers` and `speech` both load through it, each declaring its own port for installed packages. Speech becomes a reloadable catalog, and a listening session pins the catalog it started with.
-- **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the link step, the utilities sheet, the module route, the slot faces and `<Frame>`. `views` owns the schemas of every window point.
+- **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the link step, the utilities sheet, the module route, the slot faces and `<Frame>`. `views` owns the schemas of every window point but `themes`.
+- **`appearance` (server) and `app-appearance` (client)** own how Tagma looks: the `themes` point and its meaning check, Tagma's own theme as data, the person's theme settings, and painting every window ([[ca575591]]).
 - **`app-plugins` (client)** draws the screen. The Providers screen adds providers through the same install act.
+- **`app-keys` (client)** becomes the one keymap over every action, and a new client module draws the person's Shortcuts settings; plugins' actions and shortcuts are `views` points ([[ba083eb0]]).
 - **`@runlith/tagma`** gains the `/plugin`, `/ui` and `/testing` doors beside `/rules` and `/adapter/*`, and the plugin template ([[5067fa15]]).
 
 ## The Plugins screen
@@ -310,8 +315,8 @@ Performer checks, each through the same door a real caller uses.
 
 **What the person sees**
 - **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A change in the window build's manifest hash relinks it, as the link cache counts.
-- **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, and keeps the state colours' meanings.
-- **Shortcuts.** A shortcut on a chord the keymap leaves free opens the plugin's section, in a project where the plugin is enabled. A plugin claiming a chord Tagma uses is refused, and its card names the chord with Rebind.
+- **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, in every open window. One that moves a state colour out of its meaning fails its build and its install with the reason ([[ca575591]]).
+- **Shortcuts.** A shortcut on a chord the keymap leaves free opens the plugin's section, in a project where the plugin is enabled. A plugin's shortcut on a chord Tagma uses stays unbound, and its card names the chord with Rebind.
 - **Windows (step 10).** A shortcut opens a frameless, always-on-top window holding a grid of four threads on four providers.
 - **Providers.** A model provider and a speech provider install as plugins with no rebuild and appear in their catalogs. A built-in provider stands under "Built into Tagma", cannot be removed, and turns off only for the machine.
 - **The screen.**
