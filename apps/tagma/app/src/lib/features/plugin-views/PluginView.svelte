@@ -12,6 +12,7 @@
   import type { ViewDocument } from '../views/ViewBridge.js';
   import ViewFrame from '../views/ViewFrame.svelte';
   import { pluginHost } from './pluginHost.svelte.js';
+  import { ThreadTranscripts } from './ThreadTranscripts.js';
   import { ViewSets } from './ViewSets.svelte.js';
 
   type Props = {
@@ -33,10 +34,11 @@
   const live = Live.use();
   const sound = SoundChannel.use();
   const presence = ThreadPresence.use();
+  const transcripts = ThreadTranscripts.use();
   const sets = ViewSets.use();
   const links = ExternalLinks.use();
   const methods = TagmaMethods.use();
-  const owners = $derived({ door, live, sound, presence, shell: shell ?? appShell, sets, links, methods: methods.items });
+  const owners = $derived({ door, live, sound, presence, transcripts, shell: shell ?? appShell, sets, links, methods: methods.items });
 
   const project = $derived(projectId);
   const pluginId = $derived(plugin);

@@ -12,6 +12,8 @@ import { resourceSubscription } from '../views/resourceFeed.js';
 import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewMethod, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
 import type { TagmaMethod } from './methods.js';
 import { sectionOpening } from './sectionOpen.js';
+import type { TranscriptPort } from './ThreadTranscripts.js';
+import { transcriptMethods } from './transcriptHost.svelte.js';
 import type { ViewSets } from './ViewSets.svelte.js';
 
 type PluginMount = {
@@ -27,6 +29,7 @@ type PluginHostOwners = {
   readonly live: LiveConnection;
   readonly sound: SoundChannel;
   readonly presence: ThreadPresence;
+  readonly transcripts: TranscriptPort;
   readonly shell: ShellPort;
   readonly sets: ViewSets;
   readonly links: LinkPort;
@@ -128,7 +131,8 @@ const answered = <A extends { readonly status: string }>(answer: A): Extract<A, 
 };
 
 export function pluginHost(owners: PluginHostOwners, mount: PluginMount): ViewHost {
-  const { door, live, sound, presence, shell, sets, links, methods } = owners;
+  const { door, live, sound, presence, transcripts, shell, sets, links, methods } = owners;
+  const transcript = transcriptMethods(transcripts, mount.projectId);
   const lens = { project: String(mount.projectId) };
   const at = { plugin: mount.plugin, view: mount.view };
   const keyOf = (params: ViewParams): string => needed(params, 'key');
@@ -153,6 +157,9 @@ export function pluginHost(owners: PluginHostOwners, mount: PluginMount): ViewHo
     },
     thread: async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
     'thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
+    transcript: async (params, call) => transcript.transcript(needed(params, 'threadId'), call),
+    'transcript/older': async (params, call) => transcript.older(needed(params, 'threadId'), call),
+    'transcript/unwatch': async (params, call) => transcript.unwatch(needed(params, 'threadId'), call),
   };
   const tagma: readonly (readonly [string, ViewMethod])[] = [
     ...HOST_BRIDGE.map(({ id }) => [id, own[id]] as const),

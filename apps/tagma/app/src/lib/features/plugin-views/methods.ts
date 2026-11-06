@@ -1,4 +1,4 @@
-import { type BridgeMethod, capabilityOf, HOST_BRIDGE, THREAD_CHANGED } from '@tagma/server/views/contract/wire/bridge';
+import { type BridgeMethod, capabilityOf, HOST_BRIDGE } from '@tagma/server/views/contract/wire/bridge';
 import { Point } from '@runlith/layer/Point';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
@@ -16,11 +16,14 @@ export interface TagmaMethod {
 
 const HOSTED = new Set<string>(HOST_BRIDGE.flatMap(({ id }) => [`tagma/${id}`, capabilityOf(id)]));
 
+const SENT = new Set<string>(HOST_BRIDGE.flatMap(({ notifications }) => notifications));
+
 const admitsOf = ({ declaration }: TagmaMethod): string | null => {
   if (HOSTED.has(`tagma/${declaration.id}`) || HOSTED.has(capabilityOf(declaration.id))) {
     return `the plugin view host serves "${capabilityOf(declaration.id)}" itself`;
   }
-  return declaration.notifications.includes(THREAD_CHANGED) ? `the plugin view host sends "${THREAD_CHANGED}" itself` : null;
+  const sent = declaration.notifications.find((notification) => SENT.has(notification));
+  return sent === undefined ? null : `the plugin view host sends "${sent}" itself`;
 };
 
 export const TagmaMethods = Point.define<TagmaMethod>()('TagmaMethods', {

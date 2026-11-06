@@ -39,11 +39,15 @@ it.effect('a root without a method does not mention it, and the skill reads decl
   Effect.gen(function* () {
     const bare = withBridgeMethods([plugins], HOST_BRIDGE)[0]!;
     expect(bare.instructions(undefined)).not.toContain('tagma/echo');
-    expect(bare.references?.map(({ name }) => name)).toEqual(['example']);
+    const hosted = HOST_BRIDGE.flatMap((method) =>
+      'reference' in method ? [{ name: method.id, description: method.reference.title }] : [],
+    );
+    expect(bare.references).toEqual([{ name: 'example', description: 'A plugin' }, ...hosted]);
 
     const composed = withBridgeMethods([plugins], [...HOST_BRIDGE, echo])[0]!;
     expect(composed.references).toEqual([
       { name: 'example', description: 'A plugin' },
+      ...hosted,
       { name: 'echo', description: 'Echo in a view' },
     ]);
     expect(yield* composed.reference!('echo')).toBe('# Echo in a view\n\nEcho details.');

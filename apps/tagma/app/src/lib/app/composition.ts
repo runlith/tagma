@@ -33,6 +33,10 @@ import { PluginViewsLayer } from '$lib/features/plugin-views/layer.js';
 import { FloatingPanels } from '$lib/features/plugin-views/windows/FloatingPanels.svelte.js';
 import { NativeWindows } from '$lib/features/plugin-views/windows/NativeWindows.js';
 import { ViewWindows } from '$lib/features/plugin-views/windows/ViewWindows.js';
+import { ThreadTranscripts } from '$lib/features/plugin-views/ThreadTranscripts.js';
+import { ChatTranscripts } from '$lib/features/threads/ChatTranscripts.js';
+import { ThreadChats } from '$lib/features/threads/ThreadChats.js';
+import { ProductRecords } from '$lib/features/threads/native/records.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
@@ -201,6 +205,9 @@ export function appLayers(desktop: DesktopApi | undefined) {
     PluginViewsLayer,
     Layer.provide(ViewWindows, function* () {
       return (yield* Host).isDesktop ? new NativeWindows(bridged((bridge) => bridge.windows)()) : yield* FloatingPanels;
+    }),
+    Layer.provide(ThreadTranscripts, function* () {
+      return new ChatTranscripts(yield* ThreadChats, yield* Door, yield* ProductRecords);
     }),
     Layer.when(Host, (host) => host.isDesktop, DesktopLayer),
     //! A dropped file's own path reaches only programs on the same machine, so it stands for a desktop on a loopback server.

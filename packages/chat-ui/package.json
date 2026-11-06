@@ -71,6 +71,12 @@
       "svelte": "./src/ChatFold.svelte.ts",
       "default": "./src/ChatFold.svelte.ts"
     },
+    "./appended": {
+      "types": "./src/appended.ts",
+      "browser": "./src/appended.ts",
+      "svelte": "./src/appended.ts",
+      "default": "./src/appended.ts"
+    },
     "./ChatSurface.svelte": {
       "types": "./src/ChatSurface.svelte",
       "browser": "./src/ChatSurface.svelte",
