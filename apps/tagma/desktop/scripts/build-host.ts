@@ -64,6 +64,8 @@ const HELPER_ENTITLEMENTS: Readonly<Record<string, readonly string[]>> = {
   'Electron Helper (GPU).app': [UNTEAMED_LIBRARIES],
 };
 
+const ELECTRON_HELPER = /^Electron Helper(?: \((\w+)\))?\.app$/u;
+
 class Refused extends Error {
   constructor(readonly refusal: HostRefusal) {
     super(refusal.detail);
@@ -201,6 +203,7 @@ async function standApplication(fingerprint: string): Promise<void> {
     plistSet(plist, 'CFBundleShortVersionString', releaseNumber);
   }
   for (const [key, text] of Object.entries(USAGE)) plistSet(plist, key, text);
+  ownHelpers(target);
 
   embedAudio(target);
   embedInput(target);
@@ -227,6 +230,16 @@ async function unpackElectron(arch: string, into: string): Promise<void> {
     renameSync(join(unpacked, 'Electron.app'), into);
   } finally {
     rmSync(unpacked, { recursive: true, force: true });
+  }
+}
+
+function ownHelpers(target: string): void {
+  const frameworks = join(target, 'Contents', 'Frameworks');
+  for (const name of readdirSync(frameworks)) {
+    const helper = ELECTRON_HELPER.exec(name);
+    if (helper === null) continue;
+    const variant = helper[1] === undefined ? '' : `.${helper[1]}`;
+    plistSet(join(frameworks, name, 'Contents', 'Info.plist'), 'CFBundleIdentifier', `${CHANNEL.bundleId}.helper${variant}`);
   }
 }
 
