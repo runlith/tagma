@@ -82,6 +82,7 @@ import { SystemSettings } from '$lib/shared/SystemSettings.js';
 import { Theme } from '$lib/shared/Theme.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
+import { DesktopAppearance } from '$lib/shared/desktop/DesktopAppearance.js';
 import { DesktopBrowser } from '$lib/shared/desktop/DesktopBrowser.js';
 import { DesktopDictation } from '$lib/shared/desktop/DesktopDictation.js';
 import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
@@ -176,6 +177,16 @@ export function appLayers(desktop: DesktopApi | undefined) {
         bridged((bridge) => {
           if (bridge.updates === undefined) throw new Error('This desktop shell has no Check for Updates');
           return bridge.updates;
+        }),
+      ),
+    ),
+    Layer.when(
+      () => desktop?.appearance !== undefined,
+      Layer.provide(
+        DesktopAppearance,
+        bridged((bridge) => {
+          if (bridge.appearance === undefined) throw new Error('This desktop shell follows no appearance');
+          return bridge.appearance;
         }),
       ),
     ),

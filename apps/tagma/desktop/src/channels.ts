@@ -36,6 +36,10 @@ export const FOLDERS = {
   choose: 'folders:choose',
 } as const;
 
+export const APPEARANCE = {
+  follow: 'appearance:follow',
+} as const;
+
 export const BROWSER = {
   host: 'browser:host',
   show: 'browser:show',

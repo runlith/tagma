@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'electron';
 import type {
   DesktopApi,
+  DesktopAppearance,
   DesktopBrowser,
   DesktopDictation,
   DesktopFiles,
@@ -25,7 +26,7 @@ import type {
   SwipePhase,
   WindowKeys,
 } from './bridge.js';
-import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, KEYS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
+import { APPEARANCE, BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, KEYS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
 
 function isMainFrame(): boolean {
   try {
@@ -99,6 +100,10 @@ const folders: DesktopFolders = {
   choose: () => ipcRenderer.invoke(FOLDERS.choose) as Promise<string | null>,
 };
 
+const appearance: DesktopAppearance = {
+  follow: (look) => ipcRenderer.send(APPEARANCE.follow, look),
+};
+
 const browser: DesktopBrowser = {
   host: () => ipcRenderer.invoke(BROWSER.host) as Promise<string | null>,
   show: (shown, rect) => ipcRenderer.send(BROWSER.show, shown, rect),
@@ -148,6 +153,7 @@ const api: DesktopApi = {
   keys,
   files,
   updates,
+  appearance,
   ...(process.argv.includes(DEV_SURFACE_ARGUMENT) ? { surface } : {}),
 };
 

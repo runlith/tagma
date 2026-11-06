@@ -65,6 +65,12 @@ export interface DesktopFolders {
   choose(): Promise<string | null>;
 }
 
+export type NativeLook = 'system' | 'light' | 'dark';
+
+export interface DesktopAppearance {
+  follow(look: NativeLook): void;
+}
+
 export type BrowserIdentity = 'cleaned' | 'native';
 
 export type PageRect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
@@ -144,6 +150,8 @@ export interface DesktopApi {
   readonly files?: DesktopFiles;
   //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
   readonly updates?: DesktopUpdates;
+  //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
+  readonly appearance?: DesktopAppearance;
   //! Only a project window of a build from a checkout, opened on no named address, carries it.
   readonly surface?: DesktopSurface;
 }

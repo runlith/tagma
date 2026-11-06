@@ -6,6 +6,7 @@ import { flush } from '@runlith/testing/flush';
 import { afterEach, beforeAll, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { DesktopAppearance } from '$lib/shared/desktop/DesktopAppearance.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
@@ -70,17 +71,19 @@ afterEach(async () => {
 });
 
 function openWindow(world: ReturnType<typeof server>, storage = makeStorage()) {
+  const looks: string[] = [];
   const shell = mountShell(
     Layer.mergeAll(Appearance, Notices),
     Layer.mergeAll(
       Layer.of(Live, world.live as never),
       Layer.of(Door, world.door as never),
       Layer.of(Workspace, { contextProject: PROJECT, projects: [PROJECT] } as never),
+      Layer.of(DesktopAppearance, { follow: (look) => void looks.push(look) }),
     ),
     { storage },
   );
   apps.push(shell);
-  return { appearance: shell.get(Appearance), storage };
+  return { appearance: shell.get(Appearance), storage, looks };
 }
 
 test('a theme chosen in one window paints it in every window, and the first frame of the next start reads it', async () => {
@@ -101,6 +104,7 @@ test('a theme chosen in one window paints it in every window, and the first fram
   }
   expect(document.documentElement.classList.contains('dark')).toBe(true);
   expect(first.appearance.onlyLook).toBe('dark');
+  expect(first.looks).toEqual(['light', 'dark']);
 });
 
 test('a theme whose plugin leaves paints Tagma while the choice stands, and paints again when it returns', async () => {

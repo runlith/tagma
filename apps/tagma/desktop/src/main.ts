@@ -19,6 +19,7 @@ import { Globals } from './globals.js';
 import { Keys } from './keys.js';
 import { keptChords } from './kept.js';
 import { Swipes } from './swipe.js';
+import { Appearance } from './appearance.js';
 import { Folders } from './folders.js';
 import { ProjectWindows } from './projectWindows.js';
 import { ViewWindows } from './viewWindows.js';
@@ -432,6 +433,7 @@ app.whenReady().then(() => {
   dev?.install(projects);
   new ViewWindows(fronts, PRELOAD, projects).install();
   new Folders(fronts).install();
+  new Appearance(fronts).install();
   if (data !== null) serveBrowser(fronts, data, projects, keys);
   projects.create(surfaceUrl);
 

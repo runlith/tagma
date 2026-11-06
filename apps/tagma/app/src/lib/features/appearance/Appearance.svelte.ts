@@ -3,12 +3,14 @@ import { modeOf, TAGMA_THEME, THEME_MODES, type Theme as ThemeData, type ThemeMo
 import { declarationsOf, resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import { type AppearanceMode, appearanceMode, appearanceTheme } from '@tagma/server/appearance/contract/wire/settings';
 import type { WatchedSettings } from '@tagma/server/settings/contract/wire/feeds';
+import type { DesktopAppearance as Bridge } from '@tagma/desktop/bridge';
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Result, Schema } from 'effect';
 import { MediaQuery } from 'svelte/reactivity';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { DesktopAppearance } from '$lib/shared/desktop/DesktopAppearance.js';
 import type { CatalogEntry } from '$lib/features/settings/controls/catalogs.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import type { Look, ThemePort } from '$lib/shared/Theme.js';
@@ -30,7 +32,13 @@ const TAGMA_TITLE = 'Tagma';
 
 export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app' }) implements ThemePort {
   static *make() {
-    const appearance = new Appearance(yield* Door, yield* Workspace, yield* Notices, (yield* Platform).storage.local);
+    const appearance = new Appearance(
+      yield* Door,
+      yield* Workspace,
+      yield* Notices,
+      (yield* Platform).storage.local,
+      yield* DesktopAppearance.optional(),
+    );
     const live = yield* Live;
     const settings = live.hold(
       (client) => client['settings.watch']({ keys: [appearanceTheme.id, appearanceMode.id] }),
@@ -64,6 +72,7 @@ export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app
     private readonly workspace: Workspace,
     private readonly notices: Notices,
     private readonly storage: PlatformStorage,
+    private readonly desktop: Bridge | undefined,
   ) {
     super();
     this.look = { ...this.look, mode: this.mode };
@@ -148,6 +157,7 @@ export class Appearance extends Service<Appearance>()('Appearance', { tier: 'app
     const painting: Painting = { mode, css: theme === undefined ? '' : `:root{${declarationsOf(shown.tokens)}}`, chrome: shown.chrome };
     this.sheet ??= sheetOf(document);
     paintWith(document, this.sheet, painting, still);
+    this.desktop?.follow(choice === 'system' && this.onlyLook === null ? 'system' : mode);
     this.storage.setItem(PAINT_KEY, JSON.stringify(this.bootOf(theme, choice)));
     this.look = { id, mode, terminal: shown.terminal };
   }
