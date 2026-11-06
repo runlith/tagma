@@ -5,7 +5,7 @@ ord: 20
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "done"
   }
 sources:
   - kind: file
