@@ -4,6 +4,7 @@ import { app, BrowserWindow } from 'electron';
 import { Effect } from 'effect';
 import { Declaring } from '../../declaring.js';
 import { serveHost } from '../connection.js';
+import { probeFrame } from '../driven.js';
 import { BrowserHost } from '../host.js';
 import { cleanedAgent, hostIdIn } from '../identity.js';
 import { UNOCCLUDED } from '../placement.js';
@@ -54,7 +55,7 @@ void app.whenReady().then(() => {
         const process = `${pid}/${metric.creationTime}`;
         held.contents.emit('unresponsive');
         held.sample({ process, millis: 0 });
-        await root.executeJavaScript('0');
+        await probeFrame(held.contents);
         held.sample({ process, millis: 6_000 });
         await root.executeJavaScript("document.title = 'native-probe-fenced'; true");
       }
