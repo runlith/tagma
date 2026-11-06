@@ -102,7 +102,7 @@ The core under these is sound. Contribution points are declared by their owners 
 **Package.** A plugin in Tagma's format is a directory. It holds its sources, its own `package.json` with `@runlith/tagma` and its other dependencies, and the SDK's build output:
 - `tagma-plugin.json`;
 - `dist/process.js`, when the plugin has a process;
-- `dist/provider.js`, when it has a provider part;
+- `dist/providers.js`, when it has a provider part;
 - `dist/ui/`, holding Svelte sources and the plain chunks they import.
 
 The build output is committed. A collaborator, or an install from git, therefore needs nothing installed and runs nothing before Tagma reads the plugin. The scaffold marks `dist/**` and `tagma-plugin.json` as generated, merged as binary, in `.gitattributes`. Tagma's commit steps (format commands, inspections, the commit door) skip `.tagma-plugins/*/dist/` and the manifest. The manifest records a hash of the sources it was built from. When the sources move past it, the card reads "outdated", and Fix with an agent rebuilds the plugin.
@@ -161,13 +161,13 @@ The graph, threads, law and gates are never plugins: the product's guarantees st
 
 **Revision.** The process revision of an SDK-built plugin comes from the manifest and `process.entry`, judged by size and modification time, with content hashed in a worker. Views are keyed apart from it. A rebuild that changes the process restarts it once. One that changes only views republishes them without a restart, and Tagma recompiles only the files that changed ([[96ba6027]]).
 
-**Installed files.** `plugins` owns every installed directory, the leases on it, and the sweep. Each plugin revision is installed into `<data>/plugin-revisions/<id>/<revision>/`. Every holder registers its lease through a port of `plugins`: a process generation, a provider run, a view compile while it reads. The sweep honours all of them. An install runs in this order:
+**Installed files.** `plugins` owns every installed directory, the leases on it, and the sweep. A plugin's process and views run from its install root, `<data>/agent-plugins/<id>/`, which an update replaces whole. Its provider part is copied per revision into `<data>/plugin-revisions/<id>/<revision>/`, because ESM never unloads and a CLI hook imports from it on every event; the holders of a revision — a provider run, an ask, a CLI session — register through a port of `plugins`, and the sweep honours all of them ([[f70d7231]]). An install runs in this order:
 
 fetch → read → check against the points → settle the directory → write the record.
 
 Views compile after publication, never during install ([[96ba6027]]).
 
-At start, the records and the directories are reconciled. A plugin installed from a folder runs its process and views in place. Its provider part is copied per revision, because ESM never unloads. A person's own plugins live in `<data>/plugins/<id>/`.
+At start, the records and the directories are reconciled. A plugin installed from a folder runs its process and views in place. A person's own plugins live in `<data>/plugins/<id>/`.
 
 **Formats.** Each `plugin-formats/<format>` reads a directory into one plugin description. `plugin-formats/tagma` reads `tagma-plugin.json`. A directory carrying manifests for several clients is read in Tagma's format when that manifest is present. Since Tagma's format is the superset, reading it loses nothing. The other formats keep:
 - their `<plugin>-<name>` component names and collision rules;
@@ -290,7 +290,7 @@ By rule [[0528876d]], nothing old is carried over or read beside the new.
 5. **The window's module host:** Svelte views, `<Frame>`, the link step, the utilities sheet. MCP App windows move to the MCP client's module.
 6. **Depth 2** (child spec).
 7. **Depth 3** (child spec).
-8. **Providers through the one loader**, speech included.
+8. **Providers through the one loader**, speech included ([[f70d7231]]).
 9. **The SDK's stable release**, and Tagma's marketplace carrying plugins in Tagma's format.
 10. **Window entries:** plain, frameless and always-on-top windows a plugin declares, the shell's grants for them, and their floating panels on the web. Plugins use no new windows before this step (operator's decision, 2026-11-06).
 

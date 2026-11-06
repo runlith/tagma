@@ -122,7 +122,7 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
 3. **It bundles the handlers** and their dependencies into one `dist/process.js`, so installing from npm, git or a marketplace runs no `npm install` on the person's machine.
    - The build refuses native `.node` addons, and dynamic imports it cannot bundle.
    - Tagma runs the file on its own runtime (`process.execPath`) with `--no-install`. An import that slipped out of the bundle then fails loudly instead of being fetched.
-4. **It bundles a provider part** into `dist/provider.js`, against the host modules the in-server loader serves.
+4. **It bundles a provider part** into `dist/providers.js`, against the host modules the in-server loader serves ([[f70d7231]]).
 5. **It prepares the views** as the view graph `dist/ui/` ([[96ba6027]]).
    - **Files.** Every file the views reach is shipped as written: the plugin's own under their paths, each dependency's under `_modules/<package>/`. Host specifiers (`svelte`, `svelte/*`, `@runlith/tagma/ui`) stay bare.
    - **`graph.json`.** Every import each file writes, with the file it resolved to, and the Tailwind class candidates of the shipped files.
