@@ -22,7 +22,7 @@ it.effect('a republish withdraws what it replaces before registering, and a held
       const held = yield* points.hold(HELD);
       const told: (readonly string[] | undefined)[] = [];
       held.changed((plugin) => told.push(held.of(plugin)?.value));
-      let sole: string | null = null;
+      let sole = null as string | null;
       const seen: (readonly string[] | undefined)[] = [];
       yield* points.declare(SOLE, ({ value }) =>
         Effect.suspend(() => {
