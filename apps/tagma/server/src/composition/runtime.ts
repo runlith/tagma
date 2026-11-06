@@ -192,6 +192,7 @@ import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { pluginHost } from '../plugin-host/plugin-host.js';
 import { views } from '../views/views.js';
+import { appearance } from '../appearance/appearance.js';
 import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
 import { PluginViews, ViewSites } from '../views/contract/service/views.js';
@@ -700,7 +701,9 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 ),
               ),
             ),
-            Layer.provideMerge(closing('plugin views', views.lifetimes.installation)),
+            Layer.provideMerge(
+              Layer.merge(closing('plugin views', views.lifetimes.installation), closing('themes', appearance.lifetimes.installation)),
+            ),
             Layer.provideMerge(
               closing(
                 'plugin host',

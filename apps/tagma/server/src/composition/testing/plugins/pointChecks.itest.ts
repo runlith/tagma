@@ -34,6 +34,10 @@ const REFUSED: readonly { readonly contributes: Readonly<Record<string, unknown>
     reason: 'contributes.notify: the tool answer is offered to own',
   },
   { contributes: { tools: [tool('x'.repeat(60), 'agents')] }, reason: `contributes.tools: ${'x'.repeat(60)} named under` },
+  {
+    contributes: { themes: { swapped: { title: 'Swapped', dark: { signals: { failure: '#a3be8c' } } } } },
+    reason: "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
+  },
 ];
 
 it.live('a manifest whose points do not agree with each other refuses its install with the point and the reason', () =>

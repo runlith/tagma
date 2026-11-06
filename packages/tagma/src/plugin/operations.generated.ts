@@ -2664,6 +2664,7 @@ export type ExternalOperations = {
       readonly threads?: readonly string[];
       readonly selection?: {
         readonly ids?: readonly string[];
+        readonly plugin?: string;
         readonly title?: string;
         readonly of?: string;
         readonly reach?: 'children' | 'descendants' | 'tree';

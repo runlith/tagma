@@ -171,6 +171,11 @@ const REFUSED = [
     reason: 'contributes.surfaces: names the view nowhere, which contributes.views does not declare',
   },
   {
+    declared: "  themes: { swapped: { title: 'Swapped', dark: { signals: { failure: '#a3be8c' } } } },",
+    step: 'check',
+    reason: "contributes.themes: the theme swapped, dark: signals.failure #a3be8c reads as done: its hue 131° is outside failure's 322°–31°",
+  },
+  {
     declared:
       "  tools: {\n    loads: tool({ description: 'Load a module.', audience: 'agents', input: z.object({ name: z.string() }), run: async ({ name }) => String(require(name)) }),",
     step: 'bundle',

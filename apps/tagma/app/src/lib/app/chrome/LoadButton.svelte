@@ -2,7 +2,7 @@
   import Activity from '@lucide/svelte/icons/activity';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import type { HoverIntent } from '@runlith/primitives/popover.svelte';
-  import { loadInStatusBar } from '@tagma/server/settings/contract/wire/appearance';
+  import { loadInStatusBar } from '@tagma/server/appearance/contract/wire/settings';
   import * as Popover from '$lib/shared/ui/popover/index.js';
   import { cn } from '$lib/shared/utils.js';
   import { Readings } from '$lib/features/executions/load/Readings.svelte.js';

@@ -17,6 +17,7 @@ import { plugins } from '../plugins/plugins.js';
 import { pluginHost } from '../plugin-host/plugin-host.js';
 import { marketplaces } from '../marketplaces/marketplaces.js';
 import { views } from '../views/views.js';
+import { appearance } from '../appearance/appearance.js';
 import { secrets } from '../secrets/secrets.js';
 import { artifacts } from '../artifacts/artifacts.js';
 import { executions } from '../executions/executions.js';
@@ -66,6 +67,7 @@ export const CORE_MODULES = [
   pluginHost,
   marketplaces,
   views,
+  appearance,
   secrets,
   artifacts,
   executions,

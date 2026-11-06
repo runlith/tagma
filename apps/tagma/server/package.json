@@ -708,6 +708,11 @@
       "browser": "./src/plugins/contract/wire/settings.ts",
       "default": "./src/plugins/contract/wire/settings.ts"
     },
+    "./plugins/contract/wire/names": {
+      "types": "./src/plugins/contract/wire/names.ts",
+      "browser": "./src/plugins/contract/wire/names.ts",
+      "default": "./src/plugins/contract/wire/names.ts"
+    },
     "./marketplaces/contract/wire/rows": {
       "types": "./src/marketplaces/contract/wire/rows.ts",
       "browser": "./src/marketplaces/contract/wire/rows.ts",
@@ -1008,6 +1013,11 @@
       "browser": "./src/threads/contract/wire/tail.ts",
       "default": "./src/threads/contract/wire/tail.ts"
     },
+    "./threads/contract/wire/transcript": {
+      "types": "./src/threads/contract/wire/transcript.ts",
+      "browser": "./src/threads/contract/wire/transcript.ts",
+      "default": "./src/threads/contract/wire/transcript.ts"
+    },
     "./threads/contract/wire/presence": {
       "types": "./src/threads/contract/wire/presence.ts",
       "browser": "./src/threads/contract/wire/presence.ts",
@@ -1063,10 +1073,25 @@
       "node": "./src/socket/rpc.ts",
       "default": "./src/socket/rpc.ts"
     },
-    "./settings/contract/wire/appearance": {
-      "types": "./src/settings/contract/wire/appearance.ts",
-      "browser": "./src/settings/contract/wire/appearance.ts",
-      "default": "./src/settings/contract/wire/appearance.ts"
+    "./appearance/contract/wire/settings": {
+      "types": "./src/appearance/contract/wire/settings.ts",
+      "browser": "./src/appearance/contract/wire/settings.ts",
+      "default": "./src/appearance/contract/wire/settings.ts"
+    },
+    "./appearance/contract/wire/format": {
+      "types": "./src/appearance/contract/wire/format.ts",
+      "browser": "./src/appearance/contract/wire/format.ts",
+      "default": "./src/appearance/contract/wire/format.ts"
+    },
+    "./appearance/contract/wire/resolve": {
+      "types": "./src/appearance/contract/wire/resolve.ts",
+      "browser": "./src/appearance/contract/wire/resolve.ts",
+      "default": "./src/appearance/contract/wire/resolve.ts"
+    },
+    "./appearance/contract/wire/feeds": {
+      "types": "./src/appearance/contract/wire/feeds.ts",
+      "browser": "./src/appearance/contract/wire/feeds.ts",
+      "default": "./src/appearance/contract/wire/feeds.ts"
     },
     "./settings/contract/wire/links": {
       "types": "./src/settings/contract/wire/links.ts",
@@ -1383,6 +1408,16 @@
     "./app-state/contract/*": {
       "types": "./src/app-state/contract/*.ts",
       "bun": "./src/app-state/contract/*.ts",
+      "default": null
+    },
+    "./appearance/appearance": {
+      "types": "./src/appearance/appearance.ts",
+      "bun": "./src/appearance/appearance.ts",
+      "default": null
+    },
+    "./appearance/contract/*": {
+      "types": "./src/appearance/contract/*.ts",
+      "bun": "./src/appearance/contract/*.ts",
       "default": null
     },
     "./artifacts/*": {
@@ -2736,6 +2771,7 @@
     "@sanity/diff-match-patch": "catalog:",
     "@tagma/inspection": "workspace:*",
     "axe-core": "4.14.0",
+    "culori": "4.0.2",
     "devtools-protocol": "0.0.1720385",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
@@ -2750,6 +2786,7 @@
     "@runlith/e2e": "workspace:*",
     "@runlith/effect-test": "workspace:*",
     "@types/bun": "catalog:",
+    "@types/culori": "4.0.1",
     "@types/web-push": "3.6.4",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
     "electron": "catalog:",

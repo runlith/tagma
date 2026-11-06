@@ -536,7 +536,11 @@ export default defineConfig({
         },
         icons: ['@lucide/svelte'],
         literals: [
-          { path: 'apps/tagma/app/src/app.css', why: 'Lode token file: the one place theme colours and base lengths are defined.' },
+          { path: 'apps/tagma/app/src/app.css', why: 'Lode token file: the one place base lengths are defined.' },
+          {
+            path: 'apps/tagma/app/src/tokens.generated.css',
+            why: 'Tagma’s own theme, generated from the appearance module: the one place its colours are written.',
+          },
           { path: 'packages/chat-ui/src/theme.css', why: 'Package token contract: default colours other apps override.' },
           { path: 'apps/tagma/app/src/lib/shared/terminalThemes.ts', why: 'Terminal themes are colour data chosen by the user.' },
           {

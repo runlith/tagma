@@ -270,6 +270,26 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
     }),
   );
 
+  it.effect('settings.watch answers a person’s setting, then the write that changes it, and refuses a key a project sets', () =>
+    Effect.gen(function* () {
+      const { client, door } = yield* World;
+      const key = 'appearance.loadInStatusBar';
+      const frames = yield* Queue.make<unknown>();
+      yield* Effect.forkScoped(Stream.runForEach(client['settings.watch']({ keys: [key] }), (frame) => Queue.offer(frames, frame)));
+      const opening = (yield* Queue.take(frames)) as { values: Record<string, boolean> };
+      expect(Object.keys(opening.values)).toEqual([key]);
+      const written = !opening.values[key];
+      const at = `project=${yield* door.stealthProject()}`;
+      expect((yield* door.op('write_setting_layer', { scope: 'user', key, value: written }, at)).status).toBe(200);
+      yield* Effect.addFinalizer(() => Effect.orDie(door.op('write_setting_layer', { scope: 'user', key }, at)));
+      expect(yield* Queue.take(frames)).toEqual({ values: { [key]: written } });
+      const scoped = yield* Effect.flip(Stream.runCollect(client['settings.watch']({ keys: ['navigation.enabled'] })));
+      expect(scoped).toMatchObject({ code: 'setting-scope' });
+      const unknown = yield* Effect.flip(Stream.runCollect(client['settings.watch']({ keys: ['appearance.nothing'] })));
+      expect(unknown).toMatchObject({ code: 'unknown-setting' });
+    }),
+  );
+
   it.effect('a thread’s work feed opens on resync and names the blocks another writer changed in its copies', () =>
     Effect.gen(function* () {
       const { client, runtime } = yield* World;

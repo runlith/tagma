@@ -66,6 +66,138 @@ export type PluginPoints = {
     readonly title: string;
     readonly icon?: string;
   }[];
+  readonly themes: {
+    readonly [key: string]: {
+      readonly title: string;
+      readonly light?: {
+        readonly surfaces?: {
+          readonly chrome?: string;
+          readonly background?: string;
+          readonly field?: string;
+          readonly raised?: string;
+          readonly popover?: string;
+          readonly sunken?: string;
+          readonly muted?: string;
+          readonly accent?: string;
+        };
+        readonly text?: {
+          readonly foreground?: string;
+          readonly muted?: string;
+          readonly primary?: string;
+        };
+        readonly signals?: {
+          readonly failure?: string;
+          readonly stale?: string;
+          readonly work?: string;
+          readonly here?: string;
+          readonly done?: string;
+          readonly waiting?: string;
+          readonly change?: string;
+          readonly neutral?: string;
+        };
+        readonly syntax?: {
+          readonly text?: string;
+          readonly declaration?: string;
+          readonly property?: string;
+          readonly punctuation?: string;
+          readonly operator?: string;
+          readonly comment?: string;
+          readonly keyword?: string;
+          readonly string?: string;
+          readonly function?: string;
+          readonly type?: string;
+          readonly constant?: string;
+        };
+        readonly marks?: {
+          readonly project?: readonly string[];
+          readonly worktree?: readonly string[];
+        };
+        readonly terminal?: {
+          readonly black?: string;
+          readonly red?: string;
+          readonly green?: string;
+          readonly yellow?: string;
+          readonly blue?: string;
+          readonly magenta?: string;
+          readonly cyan?: string;
+          readonly white?: string;
+          readonly brightBlack?: string;
+          readonly brightRed?: string;
+          readonly brightGreen?: string;
+          readonly brightYellow?: string;
+          readonly brightBlue?: string;
+          readonly brightMagenta?: string;
+          readonly brightCyan?: string;
+          readonly brightWhite?: string;
+        };
+      };
+      readonly dark?: {
+        readonly surfaces?: {
+          readonly chrome?: string;
+          readonly background?: string;
+          readonly field?: string;
+          readonly raised?: string;
+          readonly popover?: string;
+          readonly sunken?: string;
+          readonly muted?: string;
+          readonly accent?: string;
+        };
+        readonly text?: {
+          readonly foreground?: string;
+          readonly muted?: string;
+          readonly primary?: string;
+        };
+        readonly signals?: {
+          readonly failure?: string;
+          readonly stale?: string;
+          readonly work?: string;
+          readonly here?: string;
+          readonly done?: string;
+          readonly waiting?: string;
+          readonly change?: string;
+          readonly neutral?: string;
+        };
+        readonly syntax?: {
+          readonly text?: string;
+          readonly declaration?: string;
+          readonly property?: string;
+          readonly punctuation?: string;
+          readonly operator?: string;
+          readonly comment?: string;
+          readonly keyword?: string;
+          readonly string?: string;
+          readonly function?: string;
+          readonly type?: string;
+          readonly constant?: string;
+        };
+        readonly marks?: {
+          readonly project?: readonly string[];
+          readonly worktree?: readonly string[];
+        };
+        readonly terminal?: {
+          readonly black?: string;
+          readonly red?: string;
+          readonly green?: string;
+          readonly yellow?: string;
+          readonly blue?: string;
+          readonly magenta?: string;
+          readonly cyan?: string;
+          readonly white?: string;
+          readonly brightBlack?: string;
+          readonly brightRed?: string;
+          readonly brightGreen?: string;
+          readonly brightYellow?: string;
+          readonly brightBlue?: string;
+          readonly brightMagenta?: string;
+          readonly brightCyan?: string;
+          readonly brightWhite?: string;
+        };
+      };
+    };
+  };
+  readonly threads: {
+    readonly listed?: boolean;
+  };
   readonly tools: readonly ({
     readonly name: string;
     readonly audience: 'agents' | 'own' | 'view' | 'tagma';
@@ -105,4 +237,4 @@ export type BuildVerdict = {
   readonly thread?: string;
 };
 
-export const POINT_NAMES = ['agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'surfaces', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];
+export const POINT_NAMES = ['agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

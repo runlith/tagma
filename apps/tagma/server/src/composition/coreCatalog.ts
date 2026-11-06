@@ -12,6 +12,7 @@ import { plugins } from '../plugins/contract/wire/module.js';
 import { pluginHost } from '../plugin-host/contract/wire/module.js';
 import { marketplaces } from '../marketplaces/contract/wire/module.js';
 import { views } from '../views/contract/wire/module.js';
+import { appearance } from '../appearance/contract/wire/module.js';
 import { secrets } from '../secrets/contract/wire/module.js';
 import { artifacts } from '../artifacts/contract/wire/module.js';
 import { executions } from '../executions/contract/wire/module.js';
@@ -54,6 +55,7 @@ export const CORE_CATALOG: readonly [
   typeof pluginHost,
   typeof marketplaces,
   typeof views,
+  typeof appearance,
   typeof secrets,
   typeof artifacts,
   typeof executions,
@@ -95,6 +97,7 @@ export const CORE_CATALOG: readonly [
   pluginHost,
   marketplaces,
   views,
+  appearance,
   secrets,
   artifacts,
   executions,
