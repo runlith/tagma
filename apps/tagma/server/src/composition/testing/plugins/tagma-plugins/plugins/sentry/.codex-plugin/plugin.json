@@ -4,7 +4,7 @@
   "description": "Investigate Sentry issues, events and releases.",
   "author": {
     "name": "Tagma",
-    "url": "https://tagma.dev"
+    "url": "https://tagma.app"
   },
   "homepage": "https://github.com/runlith/tagma-plugins",
   "repository": "https://github.com/runlith/tagma-plugins",

@@ -1,6 +1,6 @@
 # Tagma plugins
 
-Plugins for the services [Tagma](https://tagma.dev) connects to. Each plugin carries a skill on working with the service and the service's own remote MCP server, so an agent both reaches the service and knows how to work in it.
+Plugins for the services [Tagma](https://tagma.app) connects to. Each plugin carries a skill on working with the service and the service's own remote MCP server, so an agent both reaches the service and knows how to work in it.
 
 | Plugin | Service | MCP server |
 | --- | --- | --- |
