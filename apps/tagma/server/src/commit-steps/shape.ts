@@ -8,8 +8,8 @@ import { CommitTrees, WHOLE_TREE, type TreeReach } from '../workspace/contract/s
 import { Configs } from '../config/contract/service/configs.js';
 import { CONFIG_FILE, type FormatEntry } from '../config/contract/wire/config.js';
 import { candidatesOf, filtered, globbed, outsideGraph, selectorOf } from './selection.js';
-import { actorOf, type Entry, PROCESSES, reshapedBy, restored, runStep } from './running.js';
-import { derivationsFor, runDerivation } from './deriving.js';
+import { actorOf, type Entry, entriesAt, PROCESSES, reshapedBy, restored, runStep, shasOf } from './running.js';
+import { derivationEntries, derivationsFor, runDerivation } from './deriving.js';
 import { runGit } from '../platform/git/ownGit.js';
 
 const UNCHANGED = (ask: ShapeAsk, declaration: readonly string[]): Shaped => ({
@@ -55,16 +55,33 @@ export const makeCommitShape = Effect.gen(function* () {
         commonDir: ask.commonDir,
       });
       const declaration = config?.footprint ?? [CONFIG_FILE];
-      const declared = (config?.derive.length ?? 0) > 0 || (ask.derive?.length ?? 0) > 0;
+      const entries = derivationEntries(config?.derive ?? [], ask.derive ?? []);
+      const declared = entries.length > 0;
       if (!ask.skipping) need = ask.derivation === undefined ? undefined : yield* ask.derivation(declared);
       const steps = ask.skipping || ask.merging === true ? [] : (config?.format ?? []).filter((step) => step.command.on === 'commit');
+      const changed =
+        ask.skipping || !entries.some((entry) => entry.command.from !== undefined)
+          ? []
+          : (yield* runGit(git, 'commit-derived-inputs', [
+              '-C',
+              ask.root,
+              'diff-tree',
+              '-r',
+              '-z',
+              '--name-only',
+              '--no-renames',
+              ask.base,
+              ask.tree,
+            ]))
+              .split('\0')
+              .filter((path) => path !== '');
       const available =
-        need === undefined || !declared
+        !declared || (need === undefined && changed.length === 0)
           ? []
           : (yield* runGit(git, 'commit-derived-outputs', ['-C', ask.root, 'ls-tree', '-r', '--name-only', '-z', ask.tree]))
               .split('\0')
               .filter((path) => path !== '' && outsideGraph(path, graphDirectory));
-      const derivations = derivationsFor(need, config?.derive ?? [], ask.derive ?? [], available, graphDirectory);
+      const derivations = derivationsFor(need, entries, changed, available, graphDirectory);
       if (steps.length === 0 && derivations.length === 0) return UNCHANGED(ask, declaration);
       const candidates = steps.length === 0 ? [] : yield* candidatesOf(git, ask.root, ask.base, ask.tree, graphDirectory);
       const plans = steps.map((step) => ({ step, files: globbed(selectorOf(step.command), candidates) }));
@@ -109,20 +126,28 @@ export const makeCommitShape = Effect.gen(function* () {
             }
             phase = 'derive';
             const derived = new Set<string>();
+            const delivered = new Set<string>();
+            const taken = new Set<string>();
             for (const [at, plan] of derivations.entries())
               for (const path of yield* runDerivation(
                 { projectId: ask.projectId, git, road, pool, root: ask.root, place, act: ask.act, job: ask.job },
                 at,
                 plan,
                 graphDirectory,
-                derived,
-              ))
-                derived.add(path);
-            if (before.size === 0 && derived.size === 0) return UNCHANGED(ask, declaration);
+                taken,
+              )) {
+                taken.add(path);
+                (plan.delivered ? delivered : derived).add(path);
+              }
+            if (before.size === 0 && taken.size === 0) return UNCHANGED(ask, declaration);
+            const outputs = [...delivered].filter((path) => !before.has(path));
+            const was = yield* entriesAt(git, ask.root, ask.tree, outputs);
+            for (const path of outputs) if (!was.has(path)) derived.add(path);
+            const now = yield* shasOf(git, place, outputs);
             const tree = yield* trees.staged(git, place);
             return {
               tree,
-              reshaped: reshapedBy(before, final).filter((one) => !derived.has(one.path)),
+              reshaped: [...reshapedBy(before, final), ...reshapedBy(was, now)].filter((one) => !derived.has(one.path)),
               skipped: ask.skipping,
               declaration,
               derived: [...derived],

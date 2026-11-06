@@ -9,6 +9,9 @@ export const RepositoryPath = Schema.String.check(Schema.isPattern(/^(?!\/)(?!(?
 
 export const DeriveCommand = Schema.Struct({
   paths: Schema.NonEmptyArray(RepositoryPath).annotate(placeRole('value')),
+  from: Schema.optional(Schema.NonEmptyArray(RepositoryPath)).annotate({
+    description: 'The inputs the outputs are derived from: the command runs whenever a commit changes a path these globs match.',
+  }),
   run: Argv,
 });
 export type DeriveCommand = typeof DeriveCommand.Type;

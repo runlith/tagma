@@ -162,6 +162,41 @@ it.live('a landing without the formatting commands still regenerates a declared 
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
+it.live('a derivation with declared inputs regenerates and delivers its output whenever a commit changes them, and only then', () =>
+  Effect.gen(function* () {
+    const declaration = {
+      derive: {
+        artifact: {
+          paths: ['artifact.txt'],
+          from: ['input.txt'],
+          run: ['sh', '-c', 'echo ran >> .runs/count; cat input.txt > artifact.txt'],
+        },
+      },
+    };
+    const fixture = yield* nativeLanding({
+      '.gitignore': '.runs/\n',
+      'artifact.txt': 'base\n',
+      'input.txt': 'base\n',
+      'other.txt': 'base\n',
+      'tagma.config.ts': `export default ${JSON.stringify(declaration)};\n`,
+    });
+    yield* fixture.files.makeDirectory(join(fixture.root, '.runs'));
+    yield* fixture.files.writeFileString(join(fixture.root, '.runs/count'), '');
+    const actor = yield* fixture.born();
+    yield* fixture.write(actor.threadId, 'input.txt', 'changed\n');
+    expect(
+      yield* fixture.doors.atNative('submit_work', { subject: 'change the input alone', paths: ['input.txt'], tasks: [] }, actor),
+    ).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed' } } });
+    expect(yield* fixture.read('artifact.txt')).toBe('changed\n');
+    expect(yield* fixture.files.readFileString(join(fixture.root, 'artifact.txt'))).toBe('changed\n');
+    yield* fixture.write(actor.threadId, 'other.txt', 'unrelated\n');
+    expect(
+      yield* fixture.doors.atNative('submit_work', { subject: 'change no input', paths: ['other.txt'], tasks: [] }, actor),
+    ).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed' } } });
+    expect(yield* fixture.files.readFileString(join(fixture.root, '.runs/count'))).toBe('ran\n');
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
 it.live('a derivation reaches ignored dependencies of the whole checkout, not only those beside its outputs', () =>
   Effect.gen(function* () {
     const fixture = yield* nativeLanding({

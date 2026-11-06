@@ -7,27 +7,39 @@ import type { DeriveEntry } from '../config/contract/wire/config.js';
 import { actorOf, restored, type Running } from './running.js';
 import { outsideGraph, selectedPaths, selectionOf } from './selection.js';
 
-type DerivationPlan = { readonly key: string; readonly command: DeriveCommand; readonly paths: readonly string[] };
+type DerivationPlan = {
+  readonly key: string;
+  readonly command: DeriveCommand;
+  readonly paths: readonly string[];
+  readonly delivered: boolean;
+};
+
+export const derivationEntries = (declared: readonly DeriveEntry[], given: readonly DeriveCommand[]): readonly DeriveEntry[] => [
+  ...given.map((command, at) => ({ key: `caller-${at + 1}`, command })),
+  ...declared,
+];
+
+const touching = (from: readonly string[], paths: readonly string[]): boolean => selectedPaths(selectionOf(from, true), paths).length > 0;
 
 export const derivationsFor = (
   need: DerivationNeed | undefined,
-  declared: readonly DeriveEntry[],
-  given: readonly DeriveCommand[],
+  entries: readonly DeriveEntry[],
+  changed: readonly string[],
   available: readonly string[],
   graphDirectory: string,
 ): readonly DerivationPlan[] => {
-  if (need === undefined) return [];
-  const entries = [...given.map((command, at) => ({ key: `caller-${at + 1}`, command })), ...declared];
   const plans: DerivationPlan[] = [];
   const covered = new Set<string>();
   for (const entry of entries) {
+    const { from } = entry.command;
+    if (from === undefined ? need === undefined : !touching(from, changed)) continue;
     const names = new Set([...available, ...entry.command.paths.filter((path) => !/[?*\[\]{}!]/.test(path))]);
     const paths = selectedPaths(selectionOf(entry.command.paths, true), [...names]).filter(
       (path) => outsideGraph(path, graphDirectory) && !covered.has(path),
     );
     if (paths.length === 0 && !entry.command.paths.some((path) => /[?*\[\]{}]/.test(path))) continue;
     for (const path of paths) covered.add(path);
-    plans.push({ ...entry, paths });
+    plans.push({ ...entry, paths, delivered: from !== undefined && !touching(from, need?.omitted ?? []) });
   }
   return plans;
 };

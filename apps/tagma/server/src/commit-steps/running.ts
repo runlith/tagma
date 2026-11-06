@@ -80,7 +80,28 @@ const refusedBy = (step: FormatEntry, files: readonly string[], ending: ProgramE
 
 export type Entry = { readonly sha: string; readonly mode: ReshapeMode };
 
-const shasOf = Effect.fn('commitSteps.shasOf')(function* (git: Git['Service'], place: TreePlace, paths: readonly string[]) {
+export const entriesAt = Effect.fn('commitSteps.entriesAt')(function* (
+  git: Git['Service'],
+  root: string,
+  tree: string,
+  paths: readonly string[],
+) {
+  const entries = new Map<string, Entry>();
+  for (const cut of pathChunks(paths)) {
+    const listed = yield* runGit(git, 'commit-steps-tree-entries', ['-C', root, 'ls-tree', '-r', '-z', tree, '--', ...cut], {
+      env: { GIT_LITERAL_PATHSPECS: '1' },
+    });
+    for (const entry of listed.split('\0')) {
+      const tab = entry.indexOf('\t');
+      if (tab === -1) continue;
+      const [mode = '', , sha = ''] = entry.slice(0, tab).split(' ');
+      entries.set(entry.slice(tab + 1), { sha, mode: mode === '100755' ? '100755' : '100644' });
+    }
+  }
+  return entries;
+});
+
+export const shasOf = Effect.fn('commitSteps.shasOf')(function* (git: Git['Service'], place: TreePlace, paths: readonly string[]) {
   const shas = new Map<string, Entry>();
   for (const cut of pathChunks(paths)) {
     const listed = yield* runGit(git, 'commit-steps-shas', ['-C', place.dir, 'ls-files', '-s', '-z', '--', ...cut], {

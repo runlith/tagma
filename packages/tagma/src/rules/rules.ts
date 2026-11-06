@@ -52,6 +52,7 @@ export type FormatCommand = {
 
 export type DeriveCommand = {
   readonly paths: readonly string[];
+  readonly from?: readonly string[];
   readonly run: Argv;
 };
 

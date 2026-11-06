@@ -30,7 +30,8 @@ export const derivationOf = Effect.fn('prepared.derivation')(function* <Row exte
     ],
     { concurrency: 2 },
   );
-  const omitted = [...new Set(differences.flatMap((one) => one.split('\0').filter((path) => path !== '')))];
-  if ((yield* landing.fns.eligiblePaths(git, root, omitted)).length === 0) return undefined;
-  return { paths } satisfies DerivationNeed;
+  const differing = [...new Set(differences.flatMap((one) => one.split('\0').filter((path) => path !== '')))];
+  const omitted = yield* landing.fns.eligiblePaths(git, root, differing);
+  if (omitted.length === 0) return undefined;
+  return { paths, omitted } satisfies DerivationNeed;
 });

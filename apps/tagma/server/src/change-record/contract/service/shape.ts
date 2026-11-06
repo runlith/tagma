@@ -7,7 +7,7 @@ import type { Reshaped } from '../wire/reshape.js';
 import type { ShapeRefusal } from '../wire/shape.js';
 import type { DeriveCommand } from '../wire/derivation.js';
 
-export type DerivationNeed = { readonly paths: readonly string[] };
+export type DerivationNeed = { readonly paths: readonly string[]; readonly omitted: readonly string[] };
 
 export type ShapeAct = ActorRef;
 
