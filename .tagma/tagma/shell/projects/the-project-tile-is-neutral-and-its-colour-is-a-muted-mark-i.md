@@ -13,6 +13,8 @@ sources:
     ref: apps/tagma/app/src/lib/features/workspace/mark.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/Swatch.svelte
+  - kind: file
+    ref: apps/tagma/server/src/appearance/contract/wire/tagma.ts
 ---
 The previous eight project colours were a rainbow of the same lightness and saturation as the state colours, and on nearly the same tones: a red project read as a failure, a blue one as "waits for you", a green one as "done", orange and olive argued with the amber of work and the gold of "you are here". So the project tile is neutral — letters on backing, the current tile flooded with `--primary` like a light helm on a dark icon — and the project colour stands as a small tile in the corner (`Tile`; a group's tile carries one per member, in group order, along its top edge: past the few that fit the marks shrink to share that edge, so a group of any size stays inside its tile) or in a frame (`Swatch`). The tile with letters stands only in the dock, where there is no name beside it; in lists next to a name — `Swatch`: letters there repeat the name, and a mark in the corner of a 20 px tile overlapped them.
 

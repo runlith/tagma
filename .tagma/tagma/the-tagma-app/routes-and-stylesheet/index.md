@@ -62,4 +62,4 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/tokens.generated.css
 ---
-The address in the window is a SvelteKit route: project, graph, block, chat, checkout, journal, rules, calls, apps, settings, pairing and desktop windows are mounted by composition and their feature's view. The service worker and the app stylesheet with theme tokens, loaded by the root layout, live here too.
+The address in the window is a SvelteKit route: project, graph, block, chat, checkout, journal, rules, calls, apps, settings, pairing and desktop windows are mounted by composition and their feature's view. The service worker and the app stylesheet, loaded by the root layout, whose token values are generated from Tagma's own theme, live here too.

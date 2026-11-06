@@ -23,7 +23,7 @@ sources:
 
 **Behaviour.**
 - The theme is picked from the catalog separately for the window's dark and light mode; individual ANSI, text, background, cursor, and selection colors override on top of the theme.
-- Tagma Dark and Tagma Light are the defaults: the terminal background is the thread background color, the cursor and selection are the brand color, so the terminal in the bottom panel and in the feed does not stand out as a patch of foreign color.
+- "Same as the theme" is the default for both modes: the terminal takes the palette the person's window theme resolves to, so the terminal in the bottom panel and in the feed does not stand out as a patch of foreign color.
 - Font, weights, line height, ligatures, cursor look, blink and transparency, background transparency, active and inactive panel transparency, padding, and separator thickness and color apply to every open panel at once.
 - Font size is the starting size for each panel; each panel scales separately with keys.
 - Rendering goes through WebGL where available, falling back to DOM; the key sets the policy.

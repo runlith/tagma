@@ -73,11 +73,11 @@ A theme is data in the manifest, so it needs no process. `themes` maps a theme i
   - the terminal's background, text, cursor and selection: the variant's `background`, `foreground` and `here`, so the terminal never stands out from the thread (feature b84c2d57).
 - **Fixed at Tagma's values:** the web window buttons, the QR and pointer inks, the scrims, the `--tag-*`, `--speaker-*` and `--hand-*` hues, and all sizes, spacing, radii and fonts. Opening tags, speakers and hands later is pure addition.
 
-**One resolution function** (`resolve(theme, mode)` in `appearance/contract/wire/`) turns a variant into values: base, keys, derivations, and hex for the terminal. Its callers are the generator of Tagma's own stylesheet, the meaning check, and the window. No second copy of the derivations exists (rule 51c66cb6). Colour parsing, oklch→sRGB with gamut mapping, and WCAG contrast come from `culori`'s functional entry, inside one `colour.ts` beside it. The terminal's own parser and luminance in `executions/terminal/engineOptions.ts` move onto that module (rule dd380bf6).
+**One resolution function** (`resolve(theme, mode)` in `appearance/contract/wire/`) turns a variant into values: base, keys, derivations, and hex for the terminal. Its callers are the generator of Tagma's own stylesheet, the meaning check, and the window. No second copy of the derivations exists (rule 51c66cb6). Colour parsing, oklch→sRGB with gamut mapping, compositing over a ground and WCAG contrast come from `culori`'s functional entry, inside one `colour.ts` beside it. The terminal's own parser and luminance in the app's `features/executions/terminal/engineOptions.ts` move onto that module (rule dd380bf6).
 
 ## State colours keep their meaning
 
-The `themes` face's schema carries a filter. It judges every resolved variant, Tagma's base included, and refuses with the key, the value and what to change, for example: "`signals.failure` #a3be8c reads as done: its hue 129° is outside failure's 322°–31°". The criteria:
+The `themes` face carries the check (its `refuses`). It judges every variant merged over Tagma's base, and Tagma's base itself in a test, and refuses with the key, the value and what to change, for example: "`signals.failure` #a3be8c reads as done: its hue 129° is outside failure's 322°–31°". The criteria:
 1. **Each signal stays in its family's hue window (OKLCH).** Each window runs halfway to the neighbouring family's hue in Tagma's own theme:
 
    | Family | Window |
@@ -104,8 +104,8 @@ The windows leave room for a colour-blind-safe theme a plugin brings: done can m
 
 ## Tagma's own theme
 
-Tagma's look becomes data: `appearance/contract/wire/tagma.ts` holds both variants, every key in oklch, with the ANSI colours of today's Tagma terminal palettes.
-- **Generated stylesheet.** A generator writes `app/src/tokens.generated.css`, with `:root` for light and `.dark` for dark, every source, derived and fixed token. It runs through `resolve`, as `packages/tagma/kit/generated.ts` writes its files, and an itest fails while the file is stale. `app.css` imports it and keeps only `@theme inline`, the utilities and the base layer.
+Tagma's look becomes data: `appearance/contract/wire/tagma.ts` holds both variants, surfaces, text, signals, syntax and marks in oklch, and the ANSI colours of today's Tagma terminal palettes in their exact hex.
+- **Generated stylesheet.** The script `appearance/stylesheet.ts` writes `app/src/tokens.generated.css` through `resolve`: `:root` holds every light token, `.dark` the dark tokens that differ. `stylesheet.itest.ts` runs it with `--check` and fails while the file is stale; a test also passes Tagma's own theme through the check in both modes. `app.css` imports it and keeps only `--topbar`, `@theme inline`, the utilities and the base layer.
 - **No hand copy.** "Tagma Dark" and "Tagma Light" leave `TERMINAL_THEME_CATALOG`, and their hex is computed from the same oklch, so the copy explanation 1ec33fbf guards against drift no longer exists.
 - **The stands** (`packages/chat-ui/stand/tokens.css`, `packages/code-editor/stand/tokens.css`) are left as they are.
 
@@ -123,14 +123,14 @@ Tagma's look becomes data: `appearance/contract/wire/tagma.ts` holds both varian
 
 ## How a theme reaches each place
 
-**Two feeds**, so every window and device hears a change as it lands, with no polling. Both have callers `operator` and no project admission, so they are the same on the local and the remote door, and the client adds them to `USED` in `lib/wire/liveGroup.ts`:
+**Two feeds**, so every window and device hears a change as it lands, with no polling. Both have callers `operator` and no project admission, so they are the same on the local and the remote door; the client's live group takes them from the catalog:
 - **`settings.watch {keys}`**, owned by `settings`, for any setting that belongs to the person. The keymaps spec reads `shortcuts.bindings` from the same feed.
   - **It answers** only keys whose sole settable scope is `user`. Any other key refuses `setting-scope`, since its value depends on a project; an unknown id refuses `unknown-setting`.
-  - **Its events.** The first carries the effective value of every named key: the user layer over the default. Each later one carries the changed keys' values, fed by the existing `SettingChanges` port (`settings/contract/service/changes.ts`).
+  - **Its events.** The first carries the effective value of every named key: the user layer over the default; an empty list answers one empty event. Each later one carries the changed keys' values, fed by the setting's live changes. Values travel as JSON, encoded by the key's own schema.
   - **Its readers.** Each reader holds its own subscription through `Live`, which shares the socket, and decodes each value with the key's own schema from the wire that declares it.
 - **`appearance.subscribe`**, owned by `appearance`, for the catalog alone. Each event carries every offered theme as written, with its plugin and title. It is re-sent on a publication or a withdrawal.
 
-**The window.** `Appearance` (`features/appearance`, the new client module `app-appearance`, tier `app`) holds both feeds through `Live`: `settings.watch` over `appearance.theme` and `appearance.mode`, and `appearance.subscribe`. Its catalog is `tagma`, compiled in from the wire, followed by the offered themes. One effect resolves the theme and mode, and when the resolved theme differs from the last one:
+**The window.** `Appearance` (`features/appearance`, the new client module `app-appearance`, tier `app`) holds both feeds through `Live`: `settings.watch` over `appearance.theme` and `appearance.mode`, and `appearance.subscribe`. Its catalog is `tagma`, compiled in from the wire, followed by the offered themes. It paints nothing until both feeds have answered, so the boot paint stands meanwhile. Its own effect resolves the theme and mode, and when the resolved theme differs from the last one:
 1. writes the variant into one constructed stylesheet in `document.adoptedStyleSheets`, `:root{…}` (`replaceSync`; empty for `tagma`, since the generated sheet already holds it). Adopted sheets cascade after document sheets, so `:root` overrides both `:root` and `.dark` of the generated sheet;
 2. toggles `.dark` and `color-scheme`, which Tailwind's `dark:` variants still need, and keeps today's paint without transitions;
 3. sets the `theme-color` meta to the variant's `chrome`, for the phone's status bar;
@@ -149,7 +149,7 @@ Every reader's effect therefore runs after the paint, which removes the ordering
 
 **Code.** Highlighting and the editor need nothing: they read `--syntax-*` and the other tokens, and CSS switches them.
 
-**Graph canvas.** Its draw effect depends on `Theme.look`, so a theme change in the same mode redraws.
+**Graph canvas.** It reads the tokens on every animation frame it draws, so a theme change in the same mode redraws with nothing added.
 
 **Plugin views now** — HTML framed on the plugin's origin, and MCP App windows. `ViewFrame`'s effect depends on `Theme.look`, not `mode`, so every theme change re-sends `host-context-changed` with `theme` and the standard `styles.variables`. Those MCP Apps names are the contract a framed page reads. Tagma adds no variables of its own there.
 
@@ -162,7 +162,7 @@ Every reader's effect therefore runs after the paint, which removes the ordering
 ## Interface
 
 Following the design skill, the person meets the theme in four places:
-- **The rail menu.** The Theme submenu leaves `AppMenu.svelte` and becomes a `MenuParts` row of `app-appearance` (note 5c4b5666). It lists the themes as a radio, the current one with the gold check, then a separator and System, Light and Dark. For a one-variant theme, one `Note` line takes the mode's place: "Nord comes only in dark".
+- **The rail menu.** The Theme submenu leaves `AppMenu.svelte` and becomes a `MenuParts` row of `app-appearance` (note 5c4b5666). It lists the themes as a radio, the current one checked as a choice, then a separator and System, Light and Dark. For a one-variant theme, one `Note` line takes the mode's place: "Nord comes only in dark".
 - **The palette.** Each offered theme is an entry `app-appearance` contributes to `Actions`, the palette and keymap point of [[ba083eb0]] (today `PaletteActions` in `features/workspace/action.ts`). The entries read "Theme: Nord", and "Appearance: Light", "Appearance: Dark" and "Appearance: Same as the system". The theme entries leave `app/chrome/actions.ts`. A chord for any of them is the person's to bind there.
 - **Settings → Appearance.** The section moves to `app-appearance`.
   - The Theme row uses the existing catalog control with swatches: background, text, here, failure, work, done and waiting of the current mode. Its choices come from a `ChoiceSets` point that each owner fills. Today `features/settings/controls/catalogs.ts` holds the terminal set as a constant and models through `ModelChoices`; `SETTING_CHOICE_SETS` gains `theme`.
@@ -188,7 +188,7 @@ Following the design skill, the person meets the theme in four places:
   - the two keys and the `appearance` section;
   - the `appearance.subscribe` feed.
 
-  It imports `plugins` (the point registry), `settings` (key declarations), and `executions`' wire for the ANSI slot names. It changes when the person's choices about the look, or the token vocabulary, change. `views` keeps the window points that host plugin UI. Themes are not hosted UI, and Tagma's own look is no plugin view.
+  It imports `plugins` (the point registry) and the platform's setting and point declarations; the sixteen ANSI names are the terminal engine's own. It changes when the person's choices about the look, or the token vocabulary, change. `views` keeps the window points that host plugin UI. Themes are not hosted UI, and Tagma's own look is no plugin view.
 - **`settings` (server)** gains `settings.watch`, the one live read of the person's settings, shared with [[ba083eb0]].
 - **`app-appearance` (client, product, new)** owns the window's look:
   - `Appearance`, which fills `Theme`;
