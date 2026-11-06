@@ -2,7 +2,7 @@ import { Effect, Result } from 'effect';
 import type { PluginFaced } from '../platform/contract/service/contribution.js';
 import type { PluginFace } from '../platform/contract/wire/contribution.js';
 import { PluginPointRefused, PluginPoints, type PluginRegister } from './contract/service/points.js';
-import { contributionsRefusal } from './contract/wire/contributions.js';
+import { contributionOf, contributionsRefusal } from './contract/wire/contributions.js';
 
 type Declared = {
   readonly point: PluginFaced<any>;
@@ -60,6 +60,12 @@ export const makePoints = () => {
       return checked;
     },
     title: (name) => points.get(name)?.point.plugin.title,
+    entries: (name, value) => {
+      const face = faces.get(name);
+      if (face?.entries === undefined) return [];
+      const decoded = contributionOf(face, value);
+      return Result.isSuccess(decoded) && decoded.success !== undefined ? face.entries(decoded.success) : [];
+    },
     publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
       const entries = Object.entries(checked).flatMap(([name, value]) => {
         const declared = points.get(name);

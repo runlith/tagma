@@ -16,6 +16,9 @@ const codecOf = (face: PluginFace<any>): Schema.Codec<unknown, unknown> => {
   return codec;
 };
 
+export const contributionOf = (face: PluginFace<any>, raw: unknown): Result.Result<unknown, Schema.SchemaError> =>
+  Schema.decodeUnknownResult(codecOf(face))(raw, { onExcessProperty: 'error' });
+
 export const contributionsRefusal = (
   plugin: string,
   faces: PluginFaces,
@@ -29,7 +32,7 @@ export const contributionsRefusal = (
     );
   const checked: Record<string, unknown> = {};
   for (const [name, raw] of named) {
-    const decoded = Schema.decodeUnknownResult(codecOf(faces.get(name)!))(raw, { onExcessProperty: 'error' });
+    const decoded = contributionOf(faces.get(name)!, raw);
     if (Result.isFailure(decoded)) return Result.fail(`contributes.${name}: ${decoded.failure.message}`);
     if (decoded.success !== undefined) checked[name] = decoded.success;
   }

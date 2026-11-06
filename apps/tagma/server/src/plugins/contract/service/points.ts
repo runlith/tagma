@@ -1,6 +1,7 @@
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
 import { Context, Data, type Effect, type Result } from 'effect';
 import type { PluginFaced } from '../../../platform/contract/service/contribution.js';
+import type { ContributionEntry } from '../../../platform/contract/wire/contribution.js';
 import type { PluginChecked } from '../wire/contributions.js';
 
 export type PluginRef = {
@@ -35,6 +36,7 @@ export class PluginPoints extends Context.Service<
     declare<W>(point: PluginFaced<W>, register: PluginRegister<W>): Effect.Effect<() => void>;
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
     title(name: string): string | undefined;
+    entries(name: string, value: unknown): readonly ContributionEntry[];
     publish(plugin: PluginRef, checked: PluginChecked, caller: McpToolCaller): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}

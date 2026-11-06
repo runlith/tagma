@@ -30,7 +30,15 @@ export const PLUGIN_ROWS = {
     root: 'x'.repeat(160),
     enabled: true,
     everywhere: true,
-    components: Array.from({ length: 16 }, () => ({ kind: 'mcp-server', name: 'x'.repeat(40), detail: 'x'.repeat(80) })),
+    components: [
+      ...Array.from({ length: 16 }, () => ({ kind: 'mcp-server', name: 'x'.repeat(40), detail: 'x'.repeat(80) })),
+      {
+        kind: 'contribution',
+        name: 'x'.repeat(20),
+        title: 'x'.repeat(40),
+        entries: Array.from({ length: 8 }, () => ({ name: 'x'.repeat(40), title: 'x'.repeat(40) })),
+      },
+    ],
     ignored: Array.from({ length: 6 }, () => ({ component: 'x'.repeat(20), name: 'x'.repeat(30), reason: 'x'.repeat(80) })),
     options: Array.from({ length: 3 }, () => ({
       key: 'x'.repeat(20),

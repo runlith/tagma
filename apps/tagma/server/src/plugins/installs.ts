@@ -97,7 +97,7 @@ const shownOf = (read: Read, bound: Bound, points: PluginPoints['Service']) => (
   components: componentsOf(
     bound.loaded,
     new Map(read.package.agents.map((agent) => [componentName(read.id, agent.name), agent.dropped])),
-    points.title,
+    points,
   ),
   ignored: [...read.package.ignored, ...bound.skipped],
   options: optionRows(read.package, bound.options),

@@ -71,14 +71,16 @@
   let busy = $state<string | null>(null);
   let failed = $state<Told | undefined>(undefined);
 
-  async function act(doing: string, work: () => Promise<unknown>): Promise<void> {
+  async function act(doing: string, work: () => Promise<unknown>): Promise<boolean> {
     busy = doing;
     failed = undefined;
     try {
       await work();
       await onchanged();
+      return true;
     } catch (error: unknown) {
       failed = toldOf(error);
+      return false;
     } finally {
       busy = null;
     }
@@ -219,7 +221,7 @@
     {/if}
 
     <Keys plugin={row.id} />
-    <PluginThemes plugin={row.id} />
+    <PluginThemes plugin={row.id} components={row.components} runEverywhere={() => enable(true, 'user')} />
     <Gives components={row.components} ignored={row.ignored} options={[]} />
   </div>
 

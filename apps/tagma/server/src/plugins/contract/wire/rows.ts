@@ -57,6 +57,10 @@ export const pluginComponentSchema = Schema.Struct({
   title: Schema.optional(Schema.String).annotate({
     description: 'For a contribution, what its point gives a person, in the words of the point’s owner.',
   }),
+  entries: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.String, title: Schema.String }))).annotate({
+    description:
+      'For a contribution whose point lists what it holds, each entry by name and title, read from the manifest whether or not the plugin runs.',
+  }),
 });
 export type PluginComponent = typeof pluginComponentSchema.Type;
 

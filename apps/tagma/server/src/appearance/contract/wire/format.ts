@@ -138,6 +138,8 @@ export type Theme = typeof Theme.Type;
 export const ThemeEntries = Schema.Record(ThemeId, Theme);
 export type ThemeEntries = typeof ThemeEntries.Type;
 
+export const THEMES_POINT = 'themes';
+
 export type Palette = {
   readonly surfaces: { readonly [K in (typeof SURFACE_KEYS)[number]]: string };
   readonly text: { readonly [K in (typeof TEXT_KEYS)[number]]: string };

@@ -11,6 +11,7 @@ import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
 import { Appearance } from './Appearance.svelte.js';
+import PluginThemes from './PluginThemes.svelte';
 
 const PROJECT = { id: 1, name: 'one', kind: 'folder' };
 
@@ -83,7 +84,7 @@ function openWindow(world: ReturnType<typeof server>, storage = makeStorage()) {
     { storage },
   );
   apps.push(shell);
-  return { appearance: shell.get(Appearance), storage, looks };
+  return { appearance: shell.get(Appearance), storage, looks, shell };
 }
 
 test('a theme chosen in one window paints it in every window, and the first frame of the next start reads it', async () => {
@@ -105,6 +106,31 @@ test('a theme chosen in one window paints it in every window, and the first fram
   expect(document.documentElement.classList.contains('dark')).toBe(true);
   expect(first.appearance.onlyLook).toBe('dark');
   expect(first.looks).toEqual(['light', 'dark']);
+});
+
+test('Use on the theme of a plugin that runs nowhere runs the plugin everywhere, then paints the theme', async () => {
+  const world = server();
+  world.offer([]);
+  const { appearance, shell } = openWindow(world);
+  await flush();
+  let runs = 0;
+  const drawn = shell.draw(PluginThemes as never, {
+    plugin: 'nord',
+    components: [{ kind: 'contribution', name: 'themes', entries: [{ name: 'nord', title: 'Nord' }] }],
+    runEverywhere: async () => {
+      runs += 1;
+      world.offer([NORD]);
+      return true;
+    },
+  });
+  await flush();
+  drawn.querySelector<HTMLButtonElement>('[data-theme="nord.nord"] button')!.click();
+  await flush();
+
+  expect(runs).toBe(1);
+  expect(appearance.chosen).toBe('nord.nord');
+  expect(appearance.look.id).toBe('nord.nord');
+  expect(drawn.querySelector('[data-theme="nord.nord"] button')).toBeNull();
 });
 
 test('a theme whose plugin leaves paints Tagma while the choice stands, and paints again when it returns', async () => {

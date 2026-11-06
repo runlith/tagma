@@ -3,6 +3,7 @@ import type { PermissionSubject, Raised } from '@runlith/agent/permissions';
 import { mcpResolvingEnvKeys } from '@runlith/mcp/declaration';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { PluginLoaded } from './contract/service/plugins.js';
+import type { PluginPoints } from './contract/service/points.js';
 import type { PluginConsent } from './contract/wire/consent.js';
 import type { PluginComponent } from './contract/wire/rows.js';
 
@@ -39,15 +40,20 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
   return { subjects, raised };
 };
 
+const contributionComponent = (points: PluginPoints['Service'], point: string, value: unknown): PluginComponent => {
+  const entries = points.entries(point, value);
+  return { kind: 'contribution', name: point, title: points.title(point), ...(entries.length === 0 ? {} : { entries }) };
+};
+
 export const componentsOf = (
   loaded: PluginLoaded,
   dropped: ReadonlyMap<string, readonly string[]>,
-  pointTitle: (name: string) => string | undefined,
+  points: PluginPoints['Service'],
 ): readonly PluginComponent[] => {
   const mask = maskOf(loaded);
   return [
     ...(loaded.process === null ? [] : [{ kind: 'process', name: loaded.process.entry } satisfies PluginComponent]),
-    ...Object.keys(loaded.contributes).map((point): PluginComponent => ({ kind: 'contribution', name: point, title: pointTitle(point) })),
+    ...Object.entries(loaded.contributes).map(([point, value]) => contributionComponent(points, point, value)),
     ...loaded.skills.map((skill): PluginComponent => ({ kind: 'skill', name: skill.name })),
     ...loaded.commands.map((command): PluginComponent => ({ kind: 'command', name: command.name })),
     ...loaded.servers.map((server): PluginComponent => ({ kind: 'mcp-server', name: server.name, detail: mask(reachOf(server)) })),

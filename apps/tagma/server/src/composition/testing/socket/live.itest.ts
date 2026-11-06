@@ -291,7 +291,7 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
     }),
   );
 
-  it.effect('appearance.subscribe offers the theme of a plugin installed from a folder, and withdraws it when the plugin goes', () =>
+  it.effect('a theme plugin running nowhere lists its themes on its row, is offered once it runs, and is withdrawn when it goes', () =>
     Effect.gen(function* () {
       const { client, door } = yield* World;
       const at = `project=${yield* door.stealthProject()}`;
@@ -308,7 +308,14 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
       const root = yield* door.directory('nord');
       const themes = { nord: { title: 'Nord', dark: { surfaces: { background: 'oklch(0.16 0.015 250)' } } } };
       yield* Effect.promise(() => writePlugin(root, { id: 'nord', contributes: { themes } }));
-      expect((yield* door.op('install_plugin', { source: root }, at)).status).toBe(200);
+      const installed = (yield* door.op('install_plugin', { source: root, enabled: false }, at)).body as {
+        readonly plugin: { readonly enabled: boolean; readonly components: readonly unknown[] };
+      };
+      expect(installed.plugin.enabled).toBe(false);
+      expect(installed.plugin.components).toContainEqual(
+        expect.objectContaining({ kind: 'contribution', name: 'themes', entries: [{ name: 'nord', title: 'Nord' }] }),
+      );
+      expect((yield* door.op('enable_plugin', { id: 'nord', enabled: true, scope: 'user' }, at)).status).toBe(200);
       expect(yield* offered(true)).toMatchObject({ plugin: 'nord', theme: themes.nord });
       expect((yield* door.op('uninstall_plugin', { id: 'nord' }, at)).status).toBe(200);
       yield* offered(false);
