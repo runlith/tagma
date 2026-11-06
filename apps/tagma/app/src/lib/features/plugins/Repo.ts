@@ -13,6 +13,8 @@ const THREADS_SHOWN = 8;
 
 export type PluginTarget = { readonly projectId: number; readonly id: string };
 
+type ThreadsTarget = PluginTarget & { readonly cursor: string | null };
+
 export type PluginReach = { readonly enabled: boolean; readonly scope: SettableScope };
 
 export type EntryTarget = { readonly projectId: number; readonly marketplace: string; readonly entry: string };
@@ -51,14 +53,22 @@ export const PluginsRepo = Repo.define(
     }),
 
     threads: keyed({
-      loader: async ({ key, signal }: KeyedLoaderContext<PluginTarget>, door) => {
+      loader: async ({ key, signal }: KeyedLoaderContext<ThreadsTarget>, door) => {
         const answer = await door.perform(
           'list_threads',
-          { plugin: key.id, set: 'live', shape: 'facts', limit: THREADS_SHOWN },
+          {
+            plugin: key.id,
+            set: 'live',
+            shape: 'facts',
+            limit: THREADS_SHOWN,
+            ...(key.cursor === null ? {} : { cursor: key.cursor }),
+          },
           lens(key.projectId),
           { signal },
         );
-        return 'threads' in answer ? { threads: answer.threads, total: answer.total } : { threads: [], total: 0 };
+        return 'threads' in answer
+          ? { threads: answer.threads, total: answer.total, next: answer.cursor }
+          : { threads: [], total: 0, next: null };
       },
     }),
 

@@ -54,7 +54,6 @@
 
   const row = $derived(item.row);
   const asks = $derived(repo.asks.key({ projectId: project.id, id: row.id }));
-  const threads = $derived(repo.threads.key({ projectId: project.id, id: row.id }));
   const owned = $derived(secrets.sets.key({ projectId: project.id, owner: SECRET_OWNER }));
   const secretSet = $derived(owned.data?.find((set) => set.id === row.id));
   const optionsEntry = $derived(catalog?.entriesOf('plugins').find((entry) => entry.id === OPTIONS));
@@ -215,10 +214,8 @@
       </section>
     {/if}
 
-    {#if row.enabled}
-      {#if asks.data !== undefined}<Asked {...asks.data} />{/if}
-      {#if threads.data !== undefined}<Threads threads={threads.data.threads} total={threads.data.total} home={project.name} />{/if}
-    {/if}
+    {#if row.enabled && asks.data !== undefined}<Asked {...asks.data} />{/if}
+    <Threads projectId={project.id} plugin={row.id} home={project.name} />
 
     <Keys plugin={row.id} />
     <PluginThemes plugin={row.id} components={row.components} runEverywhere={() => enable(true, 'user')} />
