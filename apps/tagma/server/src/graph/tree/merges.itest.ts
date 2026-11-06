@@ -5,7 +5,7 @@ import { Git, gitLayer } from '@runlith/git/Git';
 import { layer } from '@runlith/effect-test';
 import { expect } from 'bun:test';
 import { kind, shared } from '@runlith/testbed/worlds';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { ownGitLayer } from '../../platform/git/ownGit.js';
 import { ShadowGit } from './shadow.js';
@@ -188,6 +188,20 @@ layer(template, { excludeTestServices: true })('graph merge recovery', (it) => {
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(base);
       yield* owner.restore();
       expect(yield* owner.read()).toEqual(pending);
+    }),
+  );
+
+  it.effect('moves a served-tree merge whose message is gone and names its incoming commit', () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const { shadow, tree, base, theirs } = yield* world();
+      yield* shadow.merge(tree, 'incoming', 'merge incoming');
+      yield* fs.remove(resolve(tree, yield* shadow.run('message', ['-C', tree, 'rev-parse', '--git-path', 'MERGE_MSG'])));
+      const owner = TreeMerges.at(shadow, tree);
+      yield* owner.restore();
+      expect(yield* owner.read()).toMatchObject({ branch: 'main', incoming: theirs, base, theirs });
+      expect(yield* shadow.mergeInProgress(tree)).toBe(false);
+      expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(base);
     }),
   );
 });

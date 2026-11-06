@@ -120,7 +120,11 @@ const mergesAt = (shadow: ShadowGit, treeRoot: string) => {
       const base = yield* shadow.run('recovery-base', ['-C', treeRoot, 'rev-parse', 'HEAD']);
       const theirs = yield* shadow.run('recovery-theirs', ['-C', treeRoot, 'rev-parse', 'MERGE_HEAD']);
       const messagePath = yield* shadow.run('recovery-message', ['-C', treeRoot, 'rev-parse', '--git-path', 'MERGE_MSG']);
-      const message = yield* io(() => readFile(resolve(treeRoot, messagePath), 'utf8'));
+      const message = yield* io(() =>
+        readFile(resolve(treeRoot, messagePath), 'utf8').catch((cause: NodeJS.ErrnoException) =>
+          cause.code === 'ENOENT' ? '' : Promise.reject(cause),
+        ),
+      );
       const id = crypto.randomUUID();
       record = {
         id,

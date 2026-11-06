@@ -67,7 +67,7 @@ it.live('storage moves commit checkout additions and removals only under the aut
     const removed = yield* nextCommit();
     expect(yield* world.op('set_project_storage', { ref: String(project), mode: 'stealth' })).toMatchObject({ status: 200 });
     const hidden = yield* world.runtime.pool.hold({ projectId: project });
-    const operation = yield* suiteGit(hidden.layout.treeRoot, 'rev-parse', '--git-path', 'MERGE_HEAD');
+    const operation = yield* suiteGit(hidden.layout.treeRoot, 'rev-parse', '--git-path', 'CHERRY_PICK_HEAD');
     yield* Effect.acquireRelease(files.writeFileString(operation, yield* suiteGit(hidden.layout.treeRoot, 'rev-parse', 'HEAD')), () =>
       Effect.orDie(files.remove(operation, { force: true })),
     );
