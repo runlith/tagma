@@ -104,13 +104,16 @@ it.live('a failed HEAD read preserves the healthy watcher and its observation un
       const tickets = watchTickets(3);
       const failed = yield* Deferred.make<void>();
       let unreadable = false;
+      let retried = false;
       const git = Git.of({
         run: (args, options) =>
           Effect.suspend(() => {
-            if (unreadable && args.some((arg) => arg.startsWith('HEAD^'))) {
+            const head = args.some((arg) => arg.startsWith('HEAD^'));
+            if (unreadable && head) {
               Deferred.doneUnsafe(failed, Effect.void);
               return Effect.fail(new GitUnavailable({ command: args, reason: 'HEAD reading resource unavailable' }));
             }
+            if (head) retried = true;
             return state.git.run(args, options);
           }),
         objects: state.git.objects,
@@ -125,7 +128,8 @@ it.live('a failed HEAD read preserves the healthy watcher and its observation un
         expect(tickets.standing().active).toBe(3);
         expect(Queue.takeUnsafe(subscriber.events)).toBeUndefined();
         unreadable = false;
-        yield* TestClock.adjust(2000);
+        retried = false;
+        yield* TestClock.adjust(2000).pipe(Effect.repeat({ until: () => retried }));
         yield* head(subscriber.events, state.second);
         yield* state.run(['update-ref', 'HEAD', state.first]);
         yield* head(subscriber.events, state.first);
