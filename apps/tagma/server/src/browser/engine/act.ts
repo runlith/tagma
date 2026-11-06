@@ -274,6 +274,17 @@ const focusKey = Effect.fnUntraced(function* (attached: Attached) {
   }
 });
 
+const FOCUS_FRAMES = 8;
+
+const focusMoved = Effect.fnUntraced(function* (attached: Attached, before: string) {
+  for (let frame = 0; frame < FOCUS_FRAMES; frame += 1) {
+    const at = yield* focusKey(attached);
+    if (at !== before) return at;
+    yield* attached.pictures.paint;
+  }
+  return before;
+});
+
 const select = Effect.fnUntraced(function* (
   state: Paged,
   attached: Attached,
@@ -318,19 +329,23 @@ const select = Effect.fnUntraced(function* (
         'choosing a native option without a unique keyboard prefix in the current key layout; choose it at the screen',
       );
     yield* reveal(attached, located);
-    let focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
+    const isFocused = call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
+    let at = yield* focusKey(attached);
+    let focused = yield* isFocused;
     if (focused) {
       yield* humanKey(attached, 'Tab');
+      at = yield* focusMoved(attached, at);
       yield* humanKey(attached, 'Shift+Tab');
-      focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
+      at = yield* focusMoved(attached, at);
+      focused = yield* isFocused;
     }
-    const seen = new Set<string>();
+    const seen = new Set<string>([at]);
     while (!focused) {
-      const at = yield* focusKey(attached);
-      if (seen.has(at)) break;
-      seen.add(at);
       yield* humanKey(attached, 'Tab');
-      focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
+      at = yield* focusMoved(attached, at);
+      focused = yield* isFocused;
+      if (focused || seen.has(at)) break;
+      seen.add(at);
     }
     if (!focused)
       return yield* inputMode(attached.profile, 'selecting a native control outside the keyboard focus order; choose it at the screen');
