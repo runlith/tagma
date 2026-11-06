@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { cp, lstat, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { cp, lstat, mkdir, readdir, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
@@ -108,13 +108,46 @@ const fitting = async (tree: string, path: string): Promise<boolean> => {
   return true;
 };
 
-const linked = async (root: string, tree: string, entry: string): Promise<void> => {
-  const directory = entry.endsWith('/');
-  const relative = bare(entry);
-  const link = join(tree, relative);
-  const target = join(root, relative);
-  await rm(link, { recursive: true, force: true });
-  await mkdir(dirname(link), { recursive: true });
+const MODULES = 'node_modules';
+
+const isScope = (name: string): boolean => name.startsWith('@') || name === '.bin';
+
+type Child =
+  | { readonly kind: 'plain'; readonly name: string; readonly directory: boolean }
+  | { readonly kind: 'workspace'; readonly name: string; readonly target: string; readonly directory: boolean }
+  | { readonly kind: 'scope'; readonly name: string; readonly scan: Scan };
+
+type Scan = { readonly holds: boolean; readonly children: readonly Child[] };
+
+const workspaceTarget = (root: string, inside: string, dir: string, text: string): string | null => {
+  const found = relative(root, resolve(root, dir, text));
+  if (found === '' || isAbsolute(found) || found === '..' || found.startsWith(`..${sep}`)) return null;
+  const path = found.split(sep).join('/');
+  return path === inside || path.startsWith(`${inside}/`) ? null : path;
+};
+
+const scanned = async (root: string, inside: string, dir: string, depth: number): Promise<Scan> => {
+  const listed = await readdir(join(root, dir), { withFileTypes: true }).catch(missing([]));
+  const children = await Promise.all(
+    listed.map(async (entry): Promise<Child> => {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isSymbolicLink()) {
+        const target = workspaceTarget(root, inside, dir, await readlink(join(root, path)));
+        if (target === null) return { kind: 'plain', name: entry.name, directory: false };
+        const standing = await stat(join(root, target)).catch(missing(null));
+        return { kind: 'workspace', name: entry.name, target, directory: standing?.isDirectory() ?? true };
+      }
+      if (depth === 0 && entry.isDirectory() && isScope(entry.name)) {
+        const scan = await scanned(root, inside, path, 1);
+        if (scan.holds) return { kind: 'scope', name: entry.name, scan };
+      }
+      return { kind: 'plain', name: entry.name, directory: entry.isDirectory() };
+    }),
+  );
+  return { holds: children.some((child) => child.kind !== 'plain'), children };
+};
+
+const placeLink = async (target: string, link: string, directory: boolean): Promise<void> => {
   if (directory) {
     await symlink(target, link, 'junction');
     return;
@@ -127,6 +160,30 @@ const linked = async (root: string, tree: string, entry: string): Promise<void> 
     },
   );
   if (!made) await cp(target, link, { force: true, verbatimSymlinks: true });
+};
+
+const populated = async (root: string, tree: string, dir: string, scan: Scan): Promise<void> => {
+  const made = join(tree, dir);
+  await mkdir(made, { recursive: true });
+  await Promise.all(
+    scan.children.map((child) => {
+      const path = `${dir}/${child.name}`;
+      if (child.kind === 'scope') return populated(root, tree, path, child.scan);
+      if (child.kind === 'workspace') return placeLink(join(tree, child.target), join(made, child.name), child.directory);
+      return placeLink(join(root, path), join(made, child.name), child.directory);
+    }),
+  );
+};
+
+const linked = async (root: string, tree: string, entry: string, whole: boolean): Promise<void> => {
+  const directory = entry.endsWith('/');
+  const path = bare(entry);
+  const link = join(tree, path);
+  await rm(link, { recursive: true, force: true });
+  await mkdir(dirname(link), { recursive: true });
+  const scan = directory && whole && basename(path) === MODULES ? await scanned(root, path, path, 0) : null;
+  if (scan?.holds === true) await populated(root, tree, path, scan);
+  else await placeLink(join(root, path), link, directory);
 };
 
 const unlinked = async (dir: string, work: string): Promise<void> => {
@@ -288,8 +345,9 @@ export const makeGitCommitTrees = Effect.fnUntraced(function* ({ base }: { reado
         await unlinked(dir, work);
         return standingOf(dir);
       });
-      if (reach._tag === 'nearby' && was !== 'full') yield* sparse(git, dir, place, tree, [...reach.paths, ...reach.uses], was);
-      else yield* whole(git, dir, place, tree, was);
+      const unfolded = reach._tag !== 'nearby' || was === 'full';
+      if (unfolded) yield* whole(git, dir, place, tree, was);
+      else yield* sparse(git, dir, place, tree, [...reach.paths, ...reach.uses], was);
       const ignored = yield* ignoredOf(git, root, reach);
       const tracked = yield* trackedOf(git, place, ignored.map(bare));
       const fit = yield* files('commit-tree-fit', () => Promise.all(ignored.map((entry) => fitting(work, bare(entry)))));
@@ -299,7 +357,7 @@ export const makeGitCommitTrees = Effect.fnUntraced(function* ({ base }: { reado
         await writeFile(join(dir, LINKS), entries.map((entry) => `${bare(entry)}\0`).join(''));
         await writeFile(join(dir, EXCLUDE), `${excludes}\n${entries.map((entry) => literal(bare(entry))).join('\n')}\n`);
       });
-      yield* Effect.forEach(entries, (entry) => files('commit-tree-link', () => linked(root, work, entry)), {
+      yield* Effect.forEach(entries, (entry) => files('commit-tree-link', () => linked(root, work, entry, unfolded)), {
         concurrency: LINKING,
         discard: true,
       });

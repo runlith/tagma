@@ -83,6 +83,50 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
     }),
   );
 
+  it.effect('a workspace link inside an ignored directory resolves to the commit tree, every other entry to the checkout', () =>
+    Effect.gen(function* () {
+      const git = yield* Git;
+      const files = yield* FileSystem.FileSystem;
+      const home = yield* files.makeTempDirectoryScoped({ prefix: 'commit-trees-' });
+      const root = join(home, 'workspace');
+      const at = (...path: string[]) => join(root, ...path);
+      yield* files.makeDirectory(at('packages', 'a', 'node_modules', '@scope'), { recursive: true });
+      yield* files.makeDirectory(at('packages', 'b'), { recursive: true });
+      yield* files.makeDirectory(at('node_modules', '@scope'), { recursive: true });
+      yield* files.makeDirectory(at('node_modules', '@third', 'one'), { recursive: true });
+      yield* files.makeDirectory(at('node_modules', 'other'), { recursive: true });
+      yield* run(root, 'init', '-q');
+      yield* files.writeFileString(at('.gitignore'), 'node_modules/\n');
+      yield* files.writeFileString(at('packages', 'a', 'index.txt'), 'a committed\n');
+      yield* files.writeFileString(at('packages', 'b', 'index.txt'), 'b committed\n');
+      yield* run(root, 'add', '-A');
+      yield* run(root, 'commit', '-q', '-m', 'workspace');
+      const tree = yield* run(root, 'rev-parse', 'HEAD^{tree}');
+      yield* files.writeFileString(at('packages', 'a', 'index.txt'), 'a uncommitted\n');
+      yield* files.writeFileString(at('node_modules', 'other', 'index.txt'), 'other\n');
+      yield* files.writeFileString(at('node_modules', '@third', 'one', 'index.txt'), 'one\n');
+      yield* files.symlink('../../packages/a', at('node_modules', '@scope', 'a'));
+      yield* files.symlink('../other', at('node_modules', '@scope', 'inside'));
+      yield* files.symlink('../../../b', at('packages', 'a', 'node_modules', '@scope', 'b'));
+      const trees = yield* makeGitCommitTrees({ base: join(home, 'workspace-trees') });
+      const read = (path: string) =>
+        trees.within(git, root, join(root, '.git'), tree, WHOLE_TREE, (place) => files.readFileString(join(place.dir, path)));
+      for (const _ of [1, 2]) {
+        expect(yield* read('node_modules/@scope/a/index.txt')).toBe('a committed\n');
+        expect(yield* read('packages/a/node_modules/@scope/b/index.txt')).toBe('b committed\n');
+        expect(yield* read('node_modules/other/index.txt')).toBe('other\n');
+        expect(yield* read('node_modules/@scope/inside/index.txt')).toBe('other\n');
+        expect(yield* read('node_modules/@third/one/index.txt')).toBe('one\n');
+      }
+      const linked = yield* trees.within(git, root, join(root, '.git'), tree, WHOLE_TREE, (place) =>
+        Effect.all([files.readLink(join(place.dir, 'node_modules', 'other')), files.readLink(join(place.dir, 'node_modules', '@third'))]),
+      );
+      expect(linked).toEqual([at('node_modules', 'other'), at('node_modules', '@third')]);
+      expect(yield* files.readFileString(at('packages', 'a', 'index.txt'))).toBe('a uncommitted\n');
+      expect(yield* files.readLink(at('node_modules', '@scope', 'a'))).toBe('../../packages/a');
+    }),
+  );
+
   it.effect("a tree whose last link list names paths under a linked directory is relinked without touching the checkout's files", () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
