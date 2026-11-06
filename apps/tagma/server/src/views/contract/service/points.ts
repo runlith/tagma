@@ -4,6 +4,8 @@ import {
   ACTIONS_FACE,
   type CommandEntries,
   COMMANDS_FACE,
+  COMPOSER_FACE,
+  type ComposerEntries,
   type LauncherEntries,
   LAUNCHERS_FACE,
   PANES_FACE,
@@ -20,6 +22,8 @@ import {
 export const VIEWS = new ContributionPoint<never, ViewEntries>('views/views', VIEWS_FACE);
 
 export const RESULTS = new ContributionPoint<never, ResultEntries>('views/results', RESULTS_FACE);
+
+export const COMPOSER = new ContributionPoint<never, ComposerEntries>('views/composer', COMPOSER_FACE);
 
 export const SURFACES = new ContributionPoint<never, SectionEntries>('views/surfaces', SURFACES_FACE);
 

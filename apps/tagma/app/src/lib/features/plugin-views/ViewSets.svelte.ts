@@ -8,9 +8,9 @@ import { type SheetPort, UtilitiesSheet } from './UtilitiesSheet.js';
 
 type ShownView = { readonly set: PluginViewSet; readonly view: PluginViewSet['views'][number] };
 
-const resultModules = (set: PluginViewSet): readonly string[] =>
-  set.results.flatMap((result) => {
-    const built = set.views.find((view) => view.id === result.view)?.module;
+const placedModules = (set: PluginViewSet): readonly string[] =>
+  [...set.results, ...set.composer].flatMap((placed) => {
+    const built = set.views.find((view) => view.id === placed.view)?.module;
     return built?.state === 'ready' ? [built.address] : [];
   });
 
@@ -41,7 +41,7 @@ export class ViewSets extends Service<ViewSets>()('ViewSets', { tier: 'project' 
         if (said !== this.said) {
           this.sets = event.plugins;
           this.enabled = event.enabled;
-          modules.preload(event.plugins.flatMap(resultModules));
+          modules.preload(event.plugins.flatMap(placedModules));
         }
         this.said = said;
         this.known = true;

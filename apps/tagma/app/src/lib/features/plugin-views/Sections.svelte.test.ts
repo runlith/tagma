@@ -27,6 +27,7 @@ const board = (projectId: number): PluginViewSet => ({
   title: 'Board',
   views: [{ id: 'main', module: { state: 'preparing' } }],
   results: [],
+  composer: [],
   surfaces: [{ view: 'main', title: `Board of ${projectId}`, icon: null }],
   panes: [],
   launchers: [],

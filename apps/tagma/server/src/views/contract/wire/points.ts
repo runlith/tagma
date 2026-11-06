@@ -55,6 +55,17 @@ export type ResultEntry = typeof ResultEntry.Type;
 export const ResultEntries = Schema.Array(ResultEntry).check(Schema.makeFilter(unique((entry: ResultEntry) => entry.tool, 'tool')));
 export type ResultEntries = typeof ResultEntries.Type;
 
+const ComposerEntry = Schema.Struct({
+  view: ViewId.annotate({
+    description:
+      'The view drawn above a thread’s composer in every thread of a project where the plugin runs, one of contributes.views; it receives { thread, draft, send }.',
+  }),
+});
+type ComposerEntry = typeof ComposerEntry.Type;
+
+export const ComposerEntries = Schema.Array(ComposerEntry).check(Schema.makeFilter(unique((entry: ComposerEntry) => entry.view, 'view')));
+export type ComposerEntries = typeof ComposerEntries.Type;
+
 export const SectionEntry = Schema.Struct({
   view: ViewId.annotate({ description: 'The view the section or pane shows, one of contributes.views.' }),
   title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40)).annotate({
@@ -175,6 +186,13 @@ export const RESULTS_FACE: PluginFace<ResultEntries> = {
       ? null
       : `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`;
   },
+};
+
+export const COMPOSER_FACE: PluginFace<ComposerEntries> = {
+  name: 'composer',
+  title: 'Parts of a thread’s composer',
+  schema: ComposerEntries,
+  refuses: viewsNamed,
 };
 
 export const SURFACES_FACE: PluginFace<SectionEntries> = {

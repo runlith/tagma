@@ -30,6 +30,7 @@ export const PluginViewSet = Schema.Struct({
   title: Schema.String,
   views: Schema.Array(ShownView),
   results: Schema.Array(PluginResult),
+  composer: Schema.Array(Schema.Struct({ view: ViewId })).annotate({ description: 'The views drawn above a thread’s composer.' }),
   surfaces: Schema.Array(ShownSection),
   panes: Schema.Array(ShownSection),
   launchers: Schema.Array(LauncherEntry),

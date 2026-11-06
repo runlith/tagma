@@ -49,6 +49,7 @@ import modeComposer from './mode.composer.svelte';
 import modelComposer from './model.composer.svelte';
 import pagesFeed from './pages.feed.svelte';
 import pinsFeed from './pins.feed.svelte';
+import pluginPartsComposer from './pluginParts.composer.svelte';
 import pluginsFeed from './plugins.feed.svelte';
 import * as nativeRecords from './productRecords.js';
 import quotaFeed from './quota.feed.svelte';
@@ -98,6 +99,7 @@ export const ThreadContributions = Layer.mergeAll(
     composer('lead', leadComposer),
     composer('mode', modeComposer),
     composer('model', modelComposer),
+    composer('pluginParts', pluginPartsComposer),
     composer('rewind', rewindComposer),
     composer('skills', skillsComposer),
     composer('team', teamComposer),

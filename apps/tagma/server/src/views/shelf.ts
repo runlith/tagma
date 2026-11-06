@@ -8,8 +8,8 @@ import { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { PluginTools } from '../plugin-host/contract/service/tools.js';
 import { pluginToolName } from '../plugin-host/contract/wire/audience.js';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
-import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
-import { PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
+import { type PluginContribution, PluginPoints, type PluginRef } from '../plugins/contract/service/points.js';
+import { COMPOSER, PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
 import { PluginViews, type ViewFailure, type ViewMount } from './contract/service/views.js';
 import type { ResultEntries, SectionEntry, ViewEntries } from './contract/wire/points.js';
 import type { PluginViewSet, PluginViewState, ShownSection, ViewRefusalCode } from './contract/wire/sets.js';
@@ -35,6 +35,11 @@ export const makeShelf = Effect.gen(function* () {
   const bump = () => {
     PubSub.publishUnsafe(moved, null);
   };
+  const parts = yield* (yield* PluginPoints).hold(COMPOSER);
+  yield* Effect.acquireRelease(
+    Effect.sync(() => parts.changed(bump)),
+    (unheard) => Effect.sync(unheard),
+  );
   const surfaces = makeSections({ point: SURFACES, changed: bump });
   const panes = makeSections({ point: PANES, changed: bump });
   const launchers = makeLaunchers({ changed: bump });
@@ -84,6 +89,7 @@ export const makeShelf = Effect.gen(function* () {
                 module: builds.moduleOf(id, view) ?? { state: 'preparing' as const },
               })),
               results: (results.get(id) ?? []).map((result) => ({ ...result, name: pluginToolName(id, result.tool) })),
+              composer: parts.of(id)?.value ?? [],
               surfaces: sectionsOf(id, surfaces.of(id)),
               panes: sectionsOf(id, panes.of(id)),
               launchers: launchers.of(id),

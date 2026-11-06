@@ -85,6 +85,21 @@ export type ToolFace<Plugin, Name extends keyof ToolsOf<Plugin> & string> = {
   readonly threadId: string;
 };
 
+export type ComposerFace = {
+  readonly thread: {
+    readonly id: string | null;
+    readonly projectId: number;
+    readonly status: 'idle' | 'working' | 'awaiting' | 'stalled' | null;
+  };
+  readonly draft: {
+    readonly text: string;
+    readonly setText: (text: string) => void;
+    readonly insert: (text: string) => void;
+    readonly attach: (files: readonly File[]) => Promise<void>;
+  };
+  readonly send: () => Promise<boolean>;
+};
+
 export type Resource = {
   readonly uri: string;
   readonly description?: string;

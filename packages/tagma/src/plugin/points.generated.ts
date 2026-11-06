@@ -67,6 +67,10 @@ export type PluginPoints = {
     /** An id of contributes.actions. The composer runs it with the thread and the words typed after the command, and its answer fills the draft. */
     readonly action: string;
   })[];
+  readonly composer: readonly {
+    /** The view drawn above a thread’s composer in every thread of a project where the plugin runs, one of contributes.views; it receives { thread, draft, send }. */
+    readonly view: string;
+  }[];
   readonly hooks: readonly ({
     /** When Tagma’s agent asks the hook. beforeTool: before a tool call runs; the hook may deny it, rewrite its input or add context. afterTool: after it ran; the hook may add context. beforeStep: when a message reaches the agent; the hook may block it or add context. beforeClose: before the agent ends its turn; a block keeps it working with the reason as its next instruction. threadStarted: on the first step of a new thread; the hook may add context. threadEnded: when the thread is archived or deleted. */
     readonly at: 'beforeTool' | 'afterTool' | 'beforeStep' | 'beforeClose' | 'threadStarted' | 'threadEnded';
@@ -372,4 +376,4 @@ export type ViewGraph = {
   readonly candidates: readonly string[];
 };
 
-export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'commands', 'hooks', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];
+export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'commands', 'composer', 'hooks', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];
