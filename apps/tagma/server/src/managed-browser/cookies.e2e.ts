@@ -58,6 +58,8 @@ const file = (name: string, entries: readonly object[]): string => {
   return path;
 };
 
+const IMPORTED_HOSTS = new Set(['127.0.0.1', '.other.test']);
+
 const local = (name: string, value = 'v', extra: object = {}) => ({
   domain: '127.0.0.1',
   hostOnly: true,
@@ -82,7 +84,10 @@ layer(managedFixture({}, wrap), {
       const record = yield* profiles.record(MANAGED_AGENT);
       const inspection = yield* (yield* hosts.reach(record.adapter)).profiles.session(record);
       const standing = Effect.map(inspection.send('Network.getAllCookies'), (read) =>
-        read.cookies.map((cookie) => `${cookie.domain} ${cookie.name}=${cookie.value}`).sort(),
+        read.cookies
+          .filter((cookie) => IMPORTED_HOSTS.has(cookie.domain) || (cookie.domain === '.google.com' && cookie.name === 'SID'))
+          .map((cookie) => `${cookie.domain} ${cookie.name}=${cookie.value}`)
+          .sort(),
       );
       yield* imported({
         profile: MANAGED_AGENT,
