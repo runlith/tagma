@@ -10,6 +10,8 @@ const OfferedTheme = Schema.Struct({
   theme: Theme,
 });
 
+export type OfferedTheme = typeof OfferedTheme.Type;
+
 const ThemeCatalog = Schema.Struct({ themes: Schema.Array(OfferedTheme) });
 export type ThemeCatalog = typeof ThemeCatalog.Type;
 

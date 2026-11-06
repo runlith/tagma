@@ -21,7 +21,7 @@ export const TopBarParts = Point.define<WindowPart>()('TopBarParts', declared);
 
 export const WindowParts = Point.define<WindowPart>()('WindowParts', declared);
 
-type MenuPlace = 'head' | 'go' | 'foot';
+type MenuPlace = 'head' | 'go' | 'view' | 'foot';
 
 interface MenuPart extends Shown<PartProps> {
   readonly id: string;

@@ -4,7 +4,7 @@
   import { Host } from '@runlith/layer/Host';
   import { untrack } from 'svelte';
   import { Platform } from '@runlith/layer/Platform';
-  import { Theme } from '$lib/shared/Theme.svelte.js';
+  import { Theme } from '$lib/shared/Theme.js';
   import { innerHeight, innerWidth } from 'svelte/reactivity/window';
   import Frame, { type FrameProtocol, tallest } from './Frame.svelte';
   import { hostStyles } from './hostStyles.js';
@@ -69,7 +69,7 @@
   $effect(() => {
     const made = bridge;
     const target = frame;
-    void theme.mode;
+    void theme.look;
     void innerHeight.current;
     void innerWidth.current;
     void ceiling;

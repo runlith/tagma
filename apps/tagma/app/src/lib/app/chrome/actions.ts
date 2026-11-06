@@ -1,15 +1,10 @@
 import CircleArrowUp from '@lucide/svelte/icons/circle-arrow-up';
 import FolderMinus from '@lucide/svelte/icons/folder-minus';
 import FolderPlus from '@lucide/svelte/icons/folder-plus';
-import Monitor from '@lucide/svelte/icons/monitor';
-import Moon from '@lucide/svelte/icons/moon';
 import PanelLeft from '@lucide/svelte/icons/panel-left';
-import Sun from '@lucide/svelte/icons/sun';
-import type { Component } from 'svelte';
 import { labelOf } from '$lib/features/workspace/mark.js';
 import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
 import type { Action, ActionList } from '$lib/features/workspace/action.js';
-import { Theme, type ThemeChoice } from '$lib/shared/Theme.svelte.js';
 import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
 import { Host } from '@runlith/layer/Host';
 import { Overlay } from '@runlith/primitives/Overlay.svelte';
@@ -72,16 +67,6 @@ const keys: readonly Action[] = [
   { id: 'tagma.hide', title: 'Hide and show Tagma', keys: [{ keys: 'Mod+Shift+L', global: true }], tabKeys: [] },
 ];
 
-const pick = (choice: ThemeChoice, title: string, icon: Component<{ class?: string }>): Action => ({
-  id: `theme.${choice}`,
-  order: 40,
-  title,
-  keywords: ['theme', 'appearance', 'colour', 'color', 'dark mode', 'light mode'],
-  icon,
-  note: (env) => (env.resolve(Theme).choice === choice ? 'current' : null),
-  run: (env) => env.resolve(Theme).choose(choice),
-});
-
 const update: Action = {
   id: 'tagma.update',
   order: 90,
@@ -141,8 +126,5 @@ export const actions: ActionList = [
       if (env.project !== null) env.resolve(ProjectRemoval).ask(env.project);
     },
   },
-  pick('system', 'Theme: System', Monitor),
-  pick('light', 'Theme: Light', Sun),
-  pick('dark', 'Theme: Dark', Moon),
   update,
 ];

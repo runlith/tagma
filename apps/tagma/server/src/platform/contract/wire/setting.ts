@@ -40,7 +40,7 @@ export type SettingColorSlot = { readonly key: string; readonly label: string; r
 
 export type SettingColorGroup = { readonly label: string; readonly slots: readonly SettingColorSlot[] };
 
-export const SETTING_CHOICE_SETS = ['terminal-theme', 'image-model'] as const;
+export const SETTING_CHOICE_SETS = ['theme', 'terminal-theme', 'image-model'] as const;
 export type SettingChoiceSet = (typeof SETTING_CHOICE_SETS)[number];
 
 export const AskChoice = Schema.Struct({

@@ -44,11 +44,11 @@ import { RulesLayer } from '$lib/features/rules/layer.js';
 import { PluginsLayer } from '$lib/features/plugins/layer.js';
 import { SecretsRepo } from '$lib/features/secrets/Repo.js';
 import { SettingsLayer } from '$lib/features/settings/layer.js';
-import { ModelChoices } from '$lib/features/settings/controls/catalogs.js';
+import { ChoiceSets } from '$lib/features/settings/controls/catalogs.js';
+import { Appearance } from '$lib/features/appearance/Appearance.svelte.js';
+import { AppearanceLayer } from '$lib/features/appearance/layer.js';
 import { ModelFields } from '$lib/features/settings/controls/modelField.js';
 import ModelField from '$lib/features/threads/native/ModelField.svelte';
-import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
-import { modelChoices } from '$lib/features/providers/choices.js';
 import { TerminalsLayer } from '$lib/features/executions/layer.js';
 import { LocalFiles } from '$lib/features/executions/terminal/LocalFiles.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
@@ -79,7 +79,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Platform } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
 import { SystemSettings } from '$lib/shared/SystemSettings.js';
-import { Theme } from '$lib/shared/Theme.svelte.js';
+import { Theme } from '$lib/shared/Theme.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { DesktopBrowser } from '$lib/shared/desktop/DesktopBrowser.js';
@@ -208,9 +208,10 @@ export function appLayers(desktop: DesktopApi | undefined) {
     PowerLayer,
     ShellLayer,
     TelemetryLayer,
-    Layer.provide(ModelChoices, function* () {
-      const catalog = yield* ProviderCatalog;
-      return { entries: (of) => modelChoices(catalog.models, of) };
+    ChoiceSets,
+    AppearanceLayer,
+    Layer.provide(Theme, function* () {
+      return yield* Appearance;
     }),
     PaletteRepo,
     McpLayer,
@@ -304,6 +305,5 @@ export function appLayers(desktop: DesktopApi | undefined) {
     FrameLayer,
     Cache.of({ defaultOptions: { queries: { retry: (count, error) => count < RETRIES && retriable(error) } } }),
     Overlays,
-    Theme,
   );
 }

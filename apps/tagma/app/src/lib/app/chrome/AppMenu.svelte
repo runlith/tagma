@@ -3,13 +3,11 @@
   import PanelLeft from '@lucide/svelte/icons/panel-left';
   import PanelTop from '@lucide/svelte/icons/panel-top';
   import Settings from '@lucide/svelte/icons/settings';
-  import SunMoon from '@lucide/svelte/icons/sun-moon';
   import UserRound from '@lucide/svelte/icons/user-round';
   import { AWAKE_MODES, type AwakeMode } from '@tagma/server/power/contract/wire/power';
   import { Router } from '@runlith/layer/Router';
   import PointView from '@runlith/layer/svelte/PointView.svelte';
   import type { Snippet } from 'svelte';
-  import { Theme, type ThemeChoice } from '$lib/shared/Theme.svelte.js';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { settingsHref } from '$lib/features/workspace/address.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -23,7 +21,6 @@
 
   const awake = Awake.use();
   const strip = ProjectStrip.use();
-  const theme = Theme.use();
   const router = Router.use();
   const keymap = Keymap.use();
   const parts = MenuParts.use();
@@ -38,12 +35,6 @@
     always: 'Always',
     off: 'Off',
   };
-
-  const THEMES: readonly { mode: ThemeChoice; label: string }[] = [
-    { mode: 'system', label: 'System' },
-    { mode: 'light', label: 'Light' },
-    { mode: 'dark', label: 'Dark' },
-  ];
 </script>
 
 {#snippet before(list: Snippet)}
@@ -72,18 +63,7 @@
     </DropdownMenu.Item>
     <PointView point={parts} props={{}} only={(part) => part.place === 'go'} />
     <DropdownMenu.Separator />
-    <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger icon={SunMoon} current={THEMES.find((option) => option.mode === theme.choice)?.label}>
-        Theme
-      </DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="min-w-36">
-        <DropdownMenu.RadioGroup value={theme.choice} onValueChange={(next) => theme.choose(next as ThemeChoice)}>
-          {#each THEMES as option (option.mode)}
-            <DropdownMenu.RadioItem value={option.mode} closeOnSelect={false}>{option.label}</DropdownMenu.RadioItem>
-          {/each}
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.SubContent>
-    </DropdownMenu.Sub>
+    <PointView point={parts} props={{}} only={(part) => part.place === 'view'} />
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger icon={Coffee} current={awake.standing === null ? null : AWAKE_LABEL[awake.standing.mode]}>
         Keep awake

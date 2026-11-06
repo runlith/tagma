@@ -15,6 +15,7 @@ import { TerminalViews } from './terminal/Views.svelte.js';
 import { TerminalTabs } from './terminal/Tabs.svelte.js';
 import { ExecutionsRepo } from './Repo.js';
 import { isLive } from './processes/lines.js';
+import { ChoiceSets } from '$lib/features/settings/controls/catalogs.js';
 import { SettingSections } from '$lib/features/settings/section.js';
 import { Actions } from '$lib/features/workspace/action.js';
 import { Panes } from '$lib/shared/panes/pane.js';
@@ -29,6 +30,7 @@ export const TerminalsLayer = Layer.mergeAll(
   ExecutionsRepo,
   SettingsRepo,
   TerminalAppearance,
+  ChoiceSets.contribute('executions', { of: 'terminal-theme', source: TerminalAppearance }),
   TerminalKeymap,
   TerminalOutput,
   TerminalRenderPolicy,

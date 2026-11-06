@@ -9,8 +9,10 @@ import type { SettingEntry } from '@tagma/server/settings/contract/wire/catalog'
 import type { ITheme, ITerminalOptions } from '@xterm/xterm';
 import { TerminalAppearance, type AppearancePane } from './Settings.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
+import { terminalThemeDark, terminalThemeLight } from '@tagma/server/executions/contract/wire/terminalAppearance';
+import { resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import { catalogTheme } from '$lib/shared/terminalThemes.js';
-import type { ThemeMode } from '$lib/shared/Theme.svelte.js';
+import type { Look, ThemeMode } from '$lib/shared/Theme.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 
 await loadCatalog();
@@ -87,12 +89,14 @@ async function appearance(
   return { owner, stop };
 }
 
-const theme: { mode: ThemeMode } = { mode: 'dark' };
+const lookOf = (mode: ThemeMode): Look => ({ id: 'tagma', mode, terminal: resolve(undefined, mode).terminal });
+
+const theme: { look: Look } = { look: lookOf('dark') };
 
 const close: (() => void)[] = [];
 afterEach(() => {
   for (const release of close.splice(0)) release();
-  theme.mode = 'dark';
+  theme.look = lookOf('dark');
 });
 
 test('two applies with an equal theme write options.theme once', async () => {
@@ -198,11 +202,20 @@ test('options() answers the engine input for the pane', async () => {
   expect(input.theme?.background).toBe(owner.theme().background);
 });
 
-test('composed theme follows the app surface into Tagma Light', async () => {
-  theme.mode = 'light';
+test('the terminal’s default palette is the window theme’s own terminal palette in the shown mode', async () => {
+  theme.look = { id: 'nord.nord', mode: 'light', terminal: { ...lookOf('light').terminal, background: '#eceff4', red: '#bf616a' } };
   const { owner, stop } = await appearance(() => catalog());
   close.push(stop);
-  expect(owner.theme().foreground).toBe(catalogTheme('Tagma Light')?.theme.foreground);
+  expect(owner.theme()).toMatchObject({ background: '#eceff4ff', red: '#bf616a' });
+});
+
+test('the terminal offers Same as the theme first, as both slots’ default, then palettes the catalogue holds', async () => {
+  const { owner, stop } = await appearance(() => catalog());
+  close.push(stop);
+  const [first, ...rest] = owner.entries;
+  expect(first).toMatchObject({ value: terminalThemeDark.fallback, label: 'Same as the theme' });
+  expect(terminalThemeLight.fallback).toBe(terminalThemeDark.fallback);
+  for (const entry of rest) expect(catalogTheme(entry.value), `${entry.value} is offered and not held`).toBeDefined();
 });
 
 test('the box stands in the page ground until the settings answer, and takes the composed fill after', async () => {

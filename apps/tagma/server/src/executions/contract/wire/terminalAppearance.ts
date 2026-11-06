@@ -74,8 +74,7 @@ export type TerminalMacOptionAsAlt = (typeof OPTION_AS_ALT)[number];
 export const SHORTCUT_POLICIES = ['app-first', 'terminal-first'] as const;
 export type TerminalShortcutPolicy = (typeof SHORTCUT_POLICIES)[number];
 
-export const DEFAULT_THEME_DARK = 'Tagma Dark';
-export const DEFAULT_THEME_LIGHT = 'Tagma Light';
+export const SAME_AS_THEME = 'theme';
 export const DEFAULT_DIVIDER_DARK = '#3f3f46';
 export const DEFAULT_DIVIDER_LIGHT = '#d4d4d8';
 
@@ -263,10 +262,11 @@ export const terminalThemeDark = settingKey({
   id: 'terminal.themeDark',
   order: 300,
   title: 'Dark theme',
-  description: 'Catalogue name used when the app is in dark mode, or when a separate light theme is off.',
+  description:
+    'Catalogue name used when the app is in dark mode, or when a separate light theme is off; `theme` takes the palette of the window’s theme.',
   schema: Schema.String.check(Schema.isMinLength(1)),
   control: { kind: 'catalog', of: 'terminal-theme' },
-  fallback: DEFAULT_THEME_DARK,
+  fallback: SAME_AS_THEME,
   scopes: TERMINAL_SCOPES,
   merge: 'replace',
 });
@@ -275,10 +275,11 @@ export const terminalThemeLight = settingKey({
   id: 'terminal.themeLight',
   order: 310,
   title: 'Light theme',
-  description: 'Catalogue name used when the app is in light mode and a separate light theme is on.',
+  description:
+    'Catalogue name used when the app is in light mode and a separate light theme is on; `theme` takes the palette of the window’s theme.',
   schema: Schema.String.check(Schema.isMinLength(1)),
   control: { kind: 'catalog', of: 'terminal-theme' },
-  fallback: DEFAULT_THEME_LIGHT,
+  fallback: SAME_AS_THEME,
   scopes: TERMINAL_SCOPES,
   merge: 'replace',
 });

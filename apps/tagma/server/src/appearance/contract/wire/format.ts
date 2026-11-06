@@ -130,7 +130,9 @@ export const Theme = Schema.Struct({
   title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40)).annotate({ description: 'What the theme picker calls it.' }),
   light: Schema.optionalKey(ThemeVariant),
   dark: Schema.optionalKey(ThemeVariant),
-}).check(Schema.makeFilter((theme) => (theme.light !== undefined || theme.dark !== undefined ? true : 'a theme brings a light or a dark look')));
+}).check(
+  Schema.makeFilter((theme) => (theme.light !== undefined || theme.dark !== undefined ? true : 'a theme brings a light or a dark look')),
+);
 export type Theme = typeof Theme.Type;
 
 export const ThemeEntries = Schema.Record(ThemeId, Theme);
@@ -148,3 +150,6 @@ export type Palette = {
 export const TAGMA_THEME = 'tagma';
 
 export const themeIdOf = (plugin: string, theme: string): string => `${plugin}.${theme}`;
+
+export const modeOf = (theme: Theme | undefined, wanted: ThemeMode): ThemeMode =>
+  theme === undefined || theme[wanted] !== undefined ? wanted : wanted === 'light' ? 'dark' : 'light';

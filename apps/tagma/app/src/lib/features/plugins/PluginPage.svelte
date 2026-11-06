@@ -20,6 +20,7 @@
   import Asked from '$lib/features/plugins/Asked.svelte';
   import Gives from '$lib/features/plugins/Gives.svelte';
   import Keys from '$lib/features/plugins/Keys.svelte';
+  import PluginThemes from '$lib/features/appearance/PluginThemes.svelte';
   import Threads from '$lib/features/plugins/Threads.svelte';
   import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
@@ -218,6 +219,7 @@
     {/if}
 
     <Keys plugin={row.id} />
+    <PluginThemes plugin={row.id} />
     <Gives components={row.components} ignored={row.ignored} options={[]} />
   </div>
 

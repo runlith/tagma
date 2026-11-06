@@ -4,8 +4,7 @@ import { untrack } from 'svelte';
 import {
   DEFAULT_DIVIDER_DARK,
   DEFAULT_DIVIDER_LIGHT,
-  DEFAULT_THEME_DARK,
-  DEFAULT_THEME_LIGHT,
+  SAME_AS_THEME,
   terminalActivePaneOpacity,
   terminalBackgroundOpacity,
   terminalColorOverrides,
@@ -49,10 +48,11 @@ import {
   terminalWordSeparator,
 } from '@tagma/server/executions/contract/wire/terminalBehavior';
 import type { SettingEntry as ServedEntry } from '@tagma/server/settings/contract/wire/catalog';
+import type { CatalogEntry, ChoiceSource } from '$lib/features/settings/controls/catalogs.js';
 import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
-import { catalogTheme } from '$lib/shared/terminalThemes.js';
-import { Theme } from '$lib/shared/Theme.svelte.js';
+import { catalogTheme, TERMINAL_THEME_CATALOG } from '$lib/shared/terminalThemes.js';
+import { type Look, Theme, type ThemePort } from '$lib/shared/Theme.js';
 import {
   ligaturesEnabled,
   terminalFontFamily as buildFontFamily,
@@ -93,9 +93,10 @@ const ZOOM_MIN_PX = 8;
 const ZOOM_MAX_PX = 32;
 const ZOOM_STEP_PX = 1;
 const HEX_COLOR = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const SWATCH_SLOTS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'] as const;
 const GROUND_FILL = 'var(--color-background)';
 
-export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalAppearance', { tier: 'app' }) {
+export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalAppearance', { tier: 'app' }) implements ChoiceSource {
   static *make() {
     return new TerminalAppearance(yield* SettingsRepo, yield* Workspace, yield* Theme);
   }
@@ -106,8 +107,9 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
   dividerColor = $state(DEFAULT_DIVIDER_DARK);
   titleTone = $state<TitleTone>('dark');
 
-  private entries: readonly ServedEntry[] = [];
+  private served: readonly ServedEntry[] = [];
   private surface: 'dark' | 'light' = 'dark';
+  private look: Look;
   private readonly panes = new Set<AppearancePane>();
   private readonly zoomByPane = new Map<string, number>();
   private readonly parkedMetrics = new WeakMap<AppearancePane, MetricOptions>();
@@ -117,15 +119,17 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
   constructor(
     private readonly repo: SettingsRepo,
     private readonly workspace: Workspace,
-    theme: Theme,
+    theme: ThemePort,
   ) {
     super();
-    this.surface = theme.mode;
+    this.look = $state(theme.look);
+    this.surface = theme.look.mode;
     $effect(() => {
-      const next = theme.mode;
+      const next = theme.look;
       untrack(() => {
-        if (next === this.surface) return;
-        this.surface = next;
+        if (next === this.look) return;
+        this.look = next;
+        this.surface = next.mode;
         this.applyAll();
       });
     });
@@ -186,14 +190,25 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
     };
   }
 
+  get entries(): readonly CatalogEntry[] {
+    return [
+      { value: SAME_AS_THEME, label: 'Same as the theme', group: 'Theme', swatches: SWATCH_SLOTS.map((slot) => this.look.terminal[slot] ?? '') },
+      ...TERMINAL_THEME_CATALOG.map((entry) => ({
+        value: entry.name,
+        label: entry.name,
+        group: entry.slot === 'dark' ? 'Dark' : 'Light',
+        swatches: SWATCH_SLOTS.flatMap((slot) => entry.theme[slot] ?? []),
+      })),
+    ];
+  }
+
   theme(): ITheme {
     const slot = this.slot();
     const name =
       slot === 'light'
         ? String(this.read(terminalThemeLight.id, terminalThemeLight.fallback))
         : String(this.read(terminalThemeDark.id, terminalThemeDark.fallback));
-    const fallbackName = slot === 'light' ? DEFAULT_THEME_LIGHT : DEFAULT_THEME_DARK;
-    const base = catalogTheme(name)?.theme ?? catalogTheme(fallbackName)?.theme ?? catalogTheme(DEFAULT_THEME_DARK)!.theme;
+    const base = (name === SAME_AS_THEME ? undefined : catalogTheme(name)?.theme) ?? this.look.terminal;
     return composeTheme(base, this.read(terminalColorOverrides.id, terminalColorOverrides.fallback), {
       background: this.read(terminalBackgroundOpacity.id, terminalBackgroundOpacity.fallback),
       cursor: this.read(terminalCursorOpacity.id, terminalCursorOpacity.fallback),
@@ -305,12 +320,12 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
   }
 
   private take(entries: readonly ServedEntry[]): void {
-    this.entries = entries;
+    this.served = entries;
     this.known = true;
   }
 
   private read<A>(id: string, fallback: A): A {
-    const entry = this.entries.find((row) => row.id === id);
+    const entry = this.served.find((row) => row.id === id);
     return entry === undefined ? fallback : (entry.value as A);
   }
 

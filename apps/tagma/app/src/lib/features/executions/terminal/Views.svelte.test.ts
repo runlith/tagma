@@ -3,6 +3,7 @@ import { FileOpener } from '$lib/features/checkout/files/FileOpener.svelte.js';
 import { PathRoads } from '$lib/features/checkout/PathRoads.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { EXECUTION_SETTING_KEYS as SETTING_KEYS } from '@tagma/server/executions/settings';
+import { resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import { Graph } from '@runlith/layer/Graph';
 import { Host } from '@runlith/layer/Host';
@@ -249,7 +250,7 @@ async function keyboard() {
         write: { data: undefined },
       } as never,
       { contextProject: { id: 1 } } as never,
-      { mode: 'dark' } as never,
+      { mode: 'dark', look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal } },
     );
     const graph = new Graph(
       Layer.mergeAll(

@@ -2,7 +2,7 @@ import { hexOf, withAlpha } from './colour.js';
 import { ANSI_KEYS, type Palette, type ThemeMode, type ThemeVariant } from './format.js';
 import { CHAT_TOKENS, ELEVATION_DARK, FIXED, HANDS, SPEAKERS, TAGMA, type Token } from './tagma.js';
 
-type TerminalPalette = { readonly [K in (typeof ANSI_KEYS)[number]]: string } & {
+export type TerminalPalette = { readonly [K in (typeof ANSI_KEYS)[number]]: string } & {
   readonly background: string;
   readonly foreground: string;
   readonly cursor: string;
@@ -131,6 +131,8 @@ export const resolve = (variant: ThemeVariant | undefined, mode: ThemeMode): Res
   const palette = paletteOf(variant, mode);
   return { mode, palette, tokens: tokensOf(palette, mode), terminal: terminalOf(palette, mode), chrome: hexOf(palette.surfaces.chrome) };
 };
+
+export const declarationsOf = (tokens: readonly Token[]): string => tokens.map(([name, value]) => `${name}:${value};`).join('');
 
 export const blockOf = (selector: string, tokens: readonly Token[]): string =>
   `${selector} {\n${tokens.map(([name, value]) => `  ${name}: ${value};`).join('\n')}\n}\n`;

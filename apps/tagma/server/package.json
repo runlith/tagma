@@ -1093,6 +1093,11 @@
       "browser": "./src/appearance/contract/wire/feeds.ts",
       "default": "./src/appearance/contract/wire/feeds.ts"
     },
+    "./appearance/contract/wire/colour": {
+      "types": "./src/appearance/contract/wire/colour.ts",
+      "browser": "./src/appearance/contract/wire/colour.ts",
+      "default": "./src/appearance/contract/wire/colour.ts"
+    },
     "./settings/contract/wire/links": {
       "types": "./src/settings/contract/wire/links.ts",
       "browser": "./src/settings/contract/wire/links.ts",

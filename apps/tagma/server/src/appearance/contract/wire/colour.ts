@@ -1,4 +1,17 @@
-import { formatHex, formatHex8, modeLrgb, modeOklab, modeOklch, modeRgb, toGamut, useMode, wcagContrast, type Oklch, type Rgb } from 'culori/fn';
+import {
+  formatHex,
+  formatHex8,
+  modeLrgb,
+  modeOklab,
+  modeOklch,
+  modeRgb,
+  parse,
+  toGamut,
+  useMode,
+  wcagContrast,
+  type Oklch,
+  type Rgb,
+} from 'culori/fn';
 
 useMode(modeLrgb);
 useMode(modeOklab);
@@ -34,7 +47,18 @@ export const hexOf = (value: string, alpha?: number): string => {
   return alpha === undefined ? formatHex(srgb) : formatHex8({ ...srgb, alpha });
 };
 
-export const contrastOf = (one: string, other: string): number => wcagContrast(toRgb(intoSrgb(parsed(one))), toRgb(intoSrgb(parsed(other))));
+export const contrastOf = (one: string, other: string): number =>
+  wcagContrast(toRgb(intoSrgb(parsed(one))), toRgb(intoSrgb(parsed(other))));
+
+export const opaqueOver = (colour: string | undefined, ground: string): string | null => {
+  const read = colour === undefined ? undefined : parse(colour.trim());
+  if (read === undefined) return null;
+  const top = toRgb(read);
+  const under = toRgb(parsed(ground));
+  const alpha = Math.min(1, Math.max(0, top.alpha ?? 1));
+  const blend = (above: number, below: number): number => above * alpha + below * (1 - alpha);
+  return formatHex(intoSrgb({ mode: 'rgb', r: blend(top.r, under.r), g: blend(top.g, under.g), b: blend(top.b, under.b) }));
+};
 
 const rounded = (value: number): string => String(Math.round(value * 10_000) / 10_000);
 

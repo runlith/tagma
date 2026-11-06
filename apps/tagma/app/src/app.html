@@ -14,10 +14,31 @@
     <title>Tagma</title>
     <script>
       {
-        const choice = localStorage.getItem('mode-watcher-mode');
-        const light = choice === 'light' || (choice !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
-        document.documentElement.classList.toggle('dark', !light);
-        document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+        let paint = null;
+        try {
+          paint = JSON.parse(localStorage.getItem('appearance.paint') ?? 'null');
+        } catch {}
+        const variants = paint?.variants ?? {};
+        const looks = Object.keys(variants);
+        const choice = paint?.choice ?? 'system';
+        const wanted = choice === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : choice;
+        const mode = looks.length === 1 ? looks[0] : wanted;
+        document.documentElement.classList.toggle('dark', mode === 'dark');
+        document.documentElement.style.colorScheme = mode;
+        const shown = variants[mode];
+        if (shown) {
+          if (shown.declarations) {
+            const style = document.createElement('style');
+            style.id = 'appearance-boot';
+            style.textContent = `:root:root{${shown.declarations}}`;
+            document.head.append(style);
+          }
+          for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.remove();
+          const meta = document.createElement('meta');
+          meta.name = 'theme-color';
+          meta.content = shown.chrome;
+          document.head.append(meta);
+        }
       }
     </script>
     %sveltekit.head%

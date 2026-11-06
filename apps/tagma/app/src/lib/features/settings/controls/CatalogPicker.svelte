@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { SettingChoiceSet } from '@tagma/server/platform/contract/wire/setting';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
-  import { catalogEntries, catalogGroups, ModelChoices } from '$lib/features/settings/controls/catalogs.js';
+  import { catalogGroups, ChoiceSets } from '$lib/features/settings/controls/catalogs.js';
+  import { App } from '@runlith/layer/svelte/App.svelte';
   import { rank } from '@runlith/search-text/match';
+  import { untrack } from 'svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import MatchText from '$lib/shared/MatchText.svelte';
   import * as Command from '$lib/shared/ui/command/index.js';
   import * as Popover from '$lib/shared/ui/popover/index.js';
+  import Swatches from './Swatches.svelte';
 
   const FILTER_FROM = 8;
 
@@ -29,8 +32,9 @@
   let open = $state(false);
   let query = $state('');
 
-  const choices = ModelChoices.use();
-  const entries = $derived(catalogEntries(of, choices));
+  const set = ChoiceSets.use().find(untrack(() => of));
+  const source = set === undefined ? undefined : App.current().resolve(set.source);
+  const entries = $derived(source?.entries ?? []);
   const ranked = $derived(rank(entries, query, (entry) => ({ name: entry.label, names: [entry.value] })));
   const groups = $derived(catalogGroups(ranked.map(({ item }) => item)));
   const marked = $derived(new Map(ranked.map(({ item, hit }) => [item.value, hit.positions])));
@@ -43,14 +47,6 @@
     onwrite(entry);
   }
 </script>
-
-{#snippet swatches(colours: readonly string[])}
-  <span class="flex shrink-0 overflow-hidden rounded-sm border border-vein">
-    {#each colours as colour, index (index)}
-      <span class="h-3.5 w-1.5" style="background-color: {colour}"></span>
-    {/each}
-  </span>
-{/snippet}
 
 <div class="grid w-full min-w-0 gap-1.5 @xl/settings:w-72">
   <Popover.Root
@@ -65,7 +61,7 @@
       {disabled}
     >
       {#if chosen}
-        {@render swatches(chosen.swatches)}
+        <Swatches colours={chosen.swatches} />
       {/if}
       <FadeText class="min-w-0 flex-1 text-left" text={chosen?.label ?? current} />
       <ChevronDown class="size-3 shrink-0 text-muted-foreground" />
@@ -83,7 +79,7 @@
             <Command.Group heading={group.label}>
               {#each group.entries as entry (entry.value)}
                 <Command.Item value={entry.value} data-checked={entry.value === current} onSelect={() => pick(entry.value)}>
-                  {@render swatches(entry.swatches)}
+                  <Swatches colours={entry.swatches} />
                   <FadeText class="flex-1 text-small"><MatchText text={entry.label} positions={marked.get(entry.value) ?? []} /></FadeText>
                   {#if entry.value === shipped}
                     <span class="eyebrow shrink-0 text-muted-foreground/70">Default</span>

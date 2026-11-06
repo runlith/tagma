@@ -4,6 +4,7 @@ import { ExecutionId, InstallationId } from '@runlith/executions/protocol/execut
 import { Host } from '@runlith/layer/Host';
 import { Scope } from '@runlith/layer/Scope';
 import { EXECUTION_SETTING_KEYS as SETTING_KEYS } from '@tagma/server/executions/settings';
+import { resolve } from '@tagma/server/appearance/contract/wire/resolve';
 import type { SettingEntry } from '@tagma/server/settings/contract/wire/catalog';
 import type {
   TerminalDecider,
@@ -374,7 +375,7 @@ async function paneOver(
     appearance = new TerminalAppearance(
       settingsStub as never,
       { contextProject: { id: ground.projectId } } as never,
-      { mode: 'dark' } as never,
+      { mode: 'dark', look: { id: 'tagma', mode: 'dark', terminal: resolve(undefined, 'dark').terminal } },
     );
     policy = new TerminalRenderPolicy(
       platform,

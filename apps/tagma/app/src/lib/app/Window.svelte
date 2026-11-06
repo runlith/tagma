@@ -16,21 +16,17 @@
   import Refused from './Refused.svelte';
   import TooltipHost from '$lib/shared/ui/tooltip/TooltipHost.svelte';
   import MentionGhost from '$lib/features/threads/MentionGhost.svelte';
-  import { Theme } from '$lib/shared/Theme.svelte.js';
   import { reachArtifacts } from './artifactLinks.js';
 
   let { Shell, refusal, children }: { Shell: Component<{ children: Snippet }>; refusal: AccessRefusal | null; children: Snippet } =
     $props();
 
   const door = Door.use();
-  const theme = Theme.use();
   const router = Router.use();
   const opening = Opening.use();
   const app = App.current();
 
   $effect(() => opening.attach(app));
-
-  $effect(() => theme.paint());
 
   $effect(() => {
     const onPageHide = () => {

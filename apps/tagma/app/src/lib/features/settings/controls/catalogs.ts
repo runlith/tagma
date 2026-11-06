@@ -1,6 +1,6 @@
 import type { SettingChoiceSet } from '@tagma/server/platform/contract/wire/setting';
-import { Service } from '@runlith/layer/key';
-import { TERMINAL_THEME_CATALOG } from '$lib/shared/terminalThemes.js';
+import type { KeyClass } from '@runlith/layer/key';
+import { Point } from '@runlith/layer/Point';
 
 export type CatalogEntry = {
   readonly value: string;
@@ -9,33 +9,13 @@ export type CatalogEntry = {
   readonly swatches: readonly string[];
 };
 
-export type ModelChoiceSet = Exclude<SettingChoiceSet, 'terminal-theme'>;
-
-export interface ChoicesPort {
-  entries(of: ModelChoiceSet): readonly CatalogEntry[];
+export interface ChoiceSource {
+  readonly entries: readonly CatalogEntry[];
 }
 
-export class ModelChoices extends Service<ChoicesPort>()('ModelChoices', { tier: 'app' }) {}
+export type ChoiceSet = { readonly of: SettingChoiceSet; readonly source: KeyClass<string, ChoiceSource> };
 
-const themes: readonly CatalogEntry[] = TERMINAL_THEME_CATALOG.map((entry) => ({
-  value: entry.name,
-  label: entry.name,
-  group: entry.slot === 'dark' ? 'Dark' : 'Light',
-  swatches: [
-    entry.theme.black,
-    entry.theme.red,
-    entry.theme.green,
-    entry.theme.yellow,
-    entry.theme.blue,
-    entry.theme.magenta,
-    entry.theme.cyan,
-    entry.theme.white,
-  ].filter((colour): colour is string => colour !== undefined),
-}));
-
-export function catalogEntries(of: SettingChoiceSet, models: ChoicesPort): readonly CatalogEntry[] {
-  return of === 'terminal-theme' ? themes : models.entries(of);
-}
+export const ChoiceSets = Point.define<ChoiceSet>()('ChoiceSets', { tier: 'app', key: (set) => set.of });
 
 export function catalogGroups(entries: readonly CatalogEntry[]): readonly { label: string; entries: readonly CatalogEntry[] }[] {
   const groups: { label: string; entries: CatalogEntry[] }[] = [];
