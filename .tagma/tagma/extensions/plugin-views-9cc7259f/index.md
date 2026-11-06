@@ -46,12 +46,10 @@ edges:
     to: 01a174f2-3d53-77eb-b835-34ca4f0a6d9b
   - kind: imports
     to: 01a174f2-3d5a-7431-8610-6fcfbbff045a
-  - kind: imports
-    to: 01a174f2-3d66-76d1-9288-c921d7074a11
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
 sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/plugin-views
 ---
-A plugin may contribute views, and the module embeds them in the window: plugin sections, panes and windows, their launchers and actions. The plugin's own interface renders inside the view frame.
+A plugin may contribute views, and the module mounts them in the window as modules the server compiled: plugin sections, panes and windows, tool cards, their launchers and actions. It owns the `@runlith/tagma/ui` door (`ui.ts`) with `useTagma()` and the per-mount client, the `ViewCapabilities` point other features add members to, and a view's preparing and failed states with **Fix with an agent**. Compiling views is the server's `views`; a site a view frames is the shared `Frame`'s.

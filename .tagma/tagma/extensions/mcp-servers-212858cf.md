@@ -48,4 +48,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/mcp
 ---
-The operator connects MCP servers to a project or to themselves, sees their state and opens their apps: section, declaration form, server card and MCP-app view.
+The operator connects MCP servers to a project or to themselves, sees their state and opens their apps: section, declaration form, server card, and the MCP App window, whose sandboxed frame, message bridge, host styles, parameters and tool notices this module owns.
