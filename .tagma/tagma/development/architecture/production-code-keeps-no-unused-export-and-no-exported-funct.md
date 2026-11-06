@@ -7953,19 +7953,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/service/plugins.ts#LoadedHook",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/service/reading.ts#PluginEntry",
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/service/reading.ts#Frontmatter",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/plugins/contract/wire/rows.ts#PLUGIN_HOOK_POINTS",
           "owner": "5a3bed29"
         },
         {

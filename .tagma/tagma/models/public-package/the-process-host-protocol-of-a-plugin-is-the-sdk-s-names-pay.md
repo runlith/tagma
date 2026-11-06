@@ -14,9 +14,9 @@ sources:
 Spec 5067fa15 gives the SDK the protocol between a plugin's process and the host. The SDK is also the lower module, so the shared names stand in `@runlith/tagma/plugin/protocol`, and `plugin-host` and the point owners import them rather than declaring their own. The shared names are:
 - the environment variables a process is started with;
 - the `_meta` key carrying the projects where the plugin is enabled;
-- the payloads of the calls Tagma makes: tick, ending, question, notification answer, build step.
+- the payloads of the calls Tagma makes: tick, ending, question, notification answer, build step, action, hook.
 
-The build step's verdict travels the other way, so the server owns it: `BuildVerdict` is printed from checkout-builds' `StepVerdict`, the schema the server decodes it with, into `/plugin/points` beside the point types.
+The build step's verdict and a hook's answer travel the other way, so the server owns them: `BuildVerdict` is printed from checkout-builds' `StepVerdict` and `HookAnswer` from plugins' `HookAnswer`, the schemas the server decodes them with, into `/plugin/points` beside the point types.
 
 The caller stays `@runlith/mcp`'s `McpCaller`, under `runlith/caller`, which Tagma's other MCP clients share.
 
@@ -24,11 +24,12 @@ The caller stays `@runlith/mcp`'s `McpCaller`, under `runlith/caller`, which Tag
 - `__schedule_<name>` for each schedule;
 - `__build_<name>` for each build step;
 - `__action_<name>` for each action;
+- `__hook_<name>` for each hook;
 - `__ended` for the thread-ending handler;
 - `__asked` for the thread-question handler;
 - `__notification` for the notification handler.
 
-The points name these tools, and the host treats them like any other tool. An author's tool may not start with `__`, so the two never collide. A build step answers its verdict as JSON text. An action answers nothing or a sentence the person sees as a notice; its `isError` makes `run_plugin_action` refuse `plugin-call-failed` with the handler's reason, and the action is not run again. The question handler answers nothing to take the question, or `ASKED_LEFT` (`leave()`) to hand it to the person; there `isError` also hands it to the person, for good, and is never delivered again. The schedule, ending and notification handlers answer nothing, and only `isError` tells the host to deliver again.
+The points name these tools, and the host treats them like any other tool. An author's tool may not start with `__`, so the two never collide. A build step answers its verdict as JSON text. A hook answers its verdict as structured content, the author's `rewrite` sent as the answer's `input`; an error or no answer within its timeout is a failure the runner passes over unless the hook blocks on failure. An action answers nothing or text the person sees as a notice, or as the draft from a command; its `isError` makes `run_plugin_action` refuse `plugin-call-failed` with the handler's reason, and the action is not run again. The question handler answers nothing to take the question, or `ASKED_LEFT` (`leave()`) to hand it to the person; there `isError` also hands it to the person, for good, and is never delivered again. The schedule, ending and notification handlers answer nothing, and only `isError` tells the host to deliver again.
 
 **What the runtime does that a hand-written process had to.**
 - It answers every failure as `isError`, a thrown `Refusal` with its reason, so a handler's error never becomes a protocol fault.

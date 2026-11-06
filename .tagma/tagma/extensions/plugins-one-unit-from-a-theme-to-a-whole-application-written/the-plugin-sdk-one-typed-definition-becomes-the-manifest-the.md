@@ -40,7 +40,7 @@ MCP, HTTP, `_meta` and the manifest's fields stay below the SDK, and an agent wr
 One module, `plugin.ts`, exports one definition. Only `id` and `title` are required.
 
 ```ts
-import { definePlugin, tool, schedule, view, hook, deny } from '@runlith/tagma/plugin';
+import { definePlugin, tool, schedule, view, hook } from '@runlith/tagma/plugin';
 import { z } from 'zod';
 
 export default definePlugin({
@@ -62,7 +62,7 @@ export default definePlugin({
   sections: [{ view: 'mrs', title: 'Merge requests', icon: './ui/icon.svg' }],
   shortcuts: [{ keys: 'Mod+Alt+G', action: 'section:mrs' }],
   schedules: { poll: schedule({ every: '1m', run: async (tick, ctx) => syncBoards(ctx) }) },
-  hooks: [hook({ at: 'beforeTool', match: { tool: 'bash' }, run: async (call) => (risky(call) ? deny('…') : undefined) })],
+  hooks: { shell: hook({ at: 'beforeTool', match: 'bash', run: async (call) => (risky(call) ? { deny: '…' } : undefined) }) },
 });
 ```
 
@@ -71,11 +71,11 @@ export default definePlugin({
 | Field | Owner |
 |---|---|
 | `tools`, `resources`, `resident` | `plugin-host` |
-| `skills`, `commands` (prompt commands), `options` | `plugins` |
+| `skills`, `options` | `plugins` |
 | `mcpServers` | `mcp`, through its port for contributors |
 | `agents` | `native-harness` |
 | `secrets` | `secrets` |
-| `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts`, `actions` | `views` |
+| `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts`, `actions`, `commands` (prompt commands) | `views` |
 | `themes` | `appearance` ([[ca575591]]) |
 | `schedules` | `schedule` |
 | `notifications` | `notify` |

@@ -192,7 +192,7 @@ This comes after the window's module host, step 5 of [[d2b5f488]].
 This also comes after step 5. Each slot's owner declares a face for plugins, in place of `SlotOwners`.
 - **Composer parts:** a `composer` point of `views`. A member gets `{thread: {id, projectId, status}, draft: {text, setText, insert, attach}, send}`.
 - **Tool cards:** the existing `results` point, drawn as a Svelte view. A card for one of its plugin's own tools gets `{name, input, output, state: running | done | refused, threadId}`. It lands in step 5 of [[d2b5f488]], with the frames it replaces ([[96ba6027]]).
-- **Prompt commands:** the `commands` point of `plugins`. A command is text from the manifest, or one of the plugin's actions ([[ba083eb0]]). The composer runs the action through `run_plugin_action`, extended with `{threadId, args}`, and its text answer fills the draft. One handled point therefore serves a key, the palette and a slash command.
+- **Prompt commands:** the `commands` point of `views`, beside `actions`, whose ids its check reads; `plugins` sits below `views` and could not. A command is text from the manifest, or one of the plugin's actions ([[ba083eb0]]), and it rides the `views.actions` feed in its plugin's set. The composer runs the action through `run_plugin_action`, extended with `{threadId, args}`, and its text answer fills the draft. One handled point therefore serves a key, the palette and a slash command.
 - **Pins:** the `pins` point, unchanged.
 
 Every slot keeps three rules:
@@ -234,7 +234,7 @@ A plugin writes no feed entries. Entries decode only installed kinds, which [[a0
 - `native-harness`: `external: 'own'` on `set_thread_model`.
 - `providers`: `ask_model`, `read_model_menu`, the ask setting, and the caller on the ask activity.
 - `plugins`: the `hooks` point, tool hooks in the per-project reading, and the runner's tool handler.
-- `views`: the `composer` point, `results` as a Svelte tool card, and the `transcript` bridge methods.
+- `views`: the `composer` and `commands` points, `{threadId, args}` on `run_plugin_action`, `results` as a Svelte tool card, and the `transcript` bridge methods.
 - `plugin-host`: unchanged. Handler tools are tools, and deliveries are demands.
 
 **Packages:**
