@@ -110,7 +110,9 @@ identity: publishing the same path again replaces the page at the same URL and k
 version; a different path claims a new URL. A revision, a fix or a variant the reader asked to see in
 place of the page goes to the same path, so the reader keeps one URL for it; only a separate page
 gets a new path. The pages this server hosts are listed at the root of the artifact port, and
-\`tagma artifacts\` lists them in a terminal.
+\`tagma artifacts\` lists them in a terminal. When the user wants a page gone, call
+\`remove_artifact\` with its \`id\`: the page leaves the listing with every version and video it kept,
+and its URL stops opening; a later publish of the same path starts the page over.
 
 The user sees each publication in this thread as a card: the page itself, playing in a player when
 it declares a timeline, with a link and a way to open it beside the thread. So do not repeat the URL

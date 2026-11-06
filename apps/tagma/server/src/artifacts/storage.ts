@@ -30,7 +30,7 @@ import {
 } from '../platform/lock/versionedDirectories.js';
 import { pruneVersions } from '../platform/lock/versionLeases.js';
 import type { Draft, KeptVideo, PageVideos, PublishPage, ShelfKey, ShelfPage, ShelfSelection } from './contract/service/shelf.js';
-import type { CompactionFailure, Published, SelectionUpdate } from './protocol.js';
+import type { CompactionFailure, Published, SelectionUpdate, Withdrawn } from './protocol.js';
 import { Selection } from './selection.js';
 import {
   ARTIFACT_ID,
@@ -163,8 +163,32 @@ export class VersionedShelf {
       kept,
       timelineProblem: declared.problem,
       updates,
-      maintenance: compacts(settled.confirmed, settled.live, this.compactAt) ? { records: settled.confirmed, live: settled.live } : null,
+      maintenance: this.maintenance(settled),
     };
+  }
+
+  remove(id: string): Withdrawn {
+    const home = join(this.root, id);
+    if (!ARTIFACT_ID.test(id) || !existsSync(home)) {
+      throw new GateRefusal('artifact-unknown', `the shelf holds no page ${id}`, ['list_artifacts — the pages on the shelf and their ids']);
+    }
+    let head = this.opened();
+    let prev = this.sidecar(id, head.epoch);
+    if (prev === 'broken' || (prev === null && currentVersion(home) !== null)) {
+      head = this.rebuild();
+      prev = this.sidecar(id, head.epoch);
+    }
+    const removal = { versions: versionCount(home), videos: this.videos(id).kept.length };
+    rmSync(home, { recursive: true, force: true });
+    const settled = typeof prev === 'number' ? this.saveHead({ ...head, live: head.live - 1 }) : head;
+    const updates: SelectionUpdate[] = [];
+    for (const [followed, selected] of this.following)
+      if (selected.withdraw(id)) updates.push({ id: followed, value: selected.snapshot() });
+    return { removal, updates, maintenance: this.maintenance(settled) };
+  }
+
+  private maintenance(settled: Head): Published['maintenance'] {
+    return compacts(settled.confirmed, settled.live, this.compactAt) ? { records: settled.confirmed, live: settled.live } : null;
   }
 
   draft(path: string): Draft {

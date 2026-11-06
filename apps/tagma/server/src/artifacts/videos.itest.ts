@@ -8,8 +8,12 @@ import { ArtifactStore, ShelfPlace } from './contract/service/shelf.js';
 import { Videos } from './contract/service/videos.js';
 import type { Video } from './contract/wire/artifacts.js';
 import { TIMELINE_ELEMENT } from './contract/wire/timeline.js';
+import { ARTIFACT_PAIRS } from './operations.js';
 import { versionedShelf } from './shelf.js';
 import { makeVideos } from './videos.js';
+
+const REMOVE = ARTIFACT_PAIRS.remove_artifact.body;
+const LIST = ARTIFACT_PAIRS.list_artifacts.body;
 
 const PAGE = `<!doctype html><title>Motion</title><script type="application/json" id="${TIMELINE_ELEMENT}">{"v":1,"duration":1,"fps":30,"width":320,"height":180}</script>`;
 
@@ -116,6 +120,43 @@ layer(world, { excludeTestServices: true })('video exports', (it) => {
       yield* until(record.id, (made) => !made.some((video) => video.scale === 2));
       expect((yield* files.readDirectory(version)).filter((name) => name.startsWith('video-'))).toEqual(['video-30-1x.mp4']);
       expect((yield* Effect.flip(videos.cancel(doubled.video.job))).code).toBe('video-unknown');
+    }),
+  );
+
+  it.effect('remove_artifact drops the page with its versions and videos, stops its exports and leaves a consistent shelf', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const { root, origin } = yield* ShelfPlace;
+      const { gate } = yield* Reels;
+      const videos = yield* Videos;
+      const store = yield* ArtifactStore;
+      const as = { actor: { kind: 'operator' }, files: null } as const;
+      yield* files.writeFileString(join(root, 'doomed.html'), PAGE);
+      yield* files.writeFileString(join(root, 'kept.html'), '<title>Kept</title>');
+      const doomed = (yield* store.publish({ path: join(root, 'doomed.html'), thread: 'thread' })).record;
+      yield* store.publish({ path: join(root, 'doomed.html'), thread: 'thread' });
+      const kept = (yield* store.publish({ path: join(root, 'kept.html'), thread: 'thread' })).record;
+      yield* Deferred.succeed(gate(1), undefined);
+      yield* videos.export({ page: doomed.id, scale: 1 });
+      yield* until(doomed.id, (made) => made.some((video) => video.state === 'ready'));
+      const going = yield* videos.export({ page: doomed.id, scale: 2 });
+      yield* until(doomed.id, (made) => made.some((video) => video.scale === 2 && video.frames > 0));
+
+      const removed = yield* REMOVE.execute({ page: doomed.id }, undefined, as);
+      expect(removed).toEqual({ status: 'removed', page: doomed.id, versions: 2, videos: 1 });
+      expect((yield* Effect.flip(videos.cancel(going.video.job))).code).toBe('video-unknown');
+      expect(yield* files.exists(join(root, 'artifacts', doomed.id))).toBe(false);
+      expect(yield* store.page(doomed.id)).toBeNull();
+      const listed = yield* LIST.execute({}, undefined, as);
+      if (listed.status !== 'listed') return yield* Effect.die('list_artifacts answered outside its listed shape');
+      const ids = listed.artifacts.map((row) => row.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(doomed.id);
+      const reopened = yield* versionedShelf(join(root, 'artifacts'), origin);
+      const rows = yield* reopened.list({ limit: 10 });
+      expect(rows.rows.map((row) => row.record.id)).toEqual(ids);
+      expect(rows.total).toBe(listed.total);
+      expect((yield* Effect.flip(REMOVE.execute({ page: doomed.id }, undefined, as))).code).toBe('artifact-unknown');
     }),
   );
 });

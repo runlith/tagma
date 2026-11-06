@@ -4,7 +4,7 @@ import { eventReason, workerGone } from '@runlith/utils/worker';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { ArtifactStore } from './contract/service/shelf.js';
 import { ARTIFACT_ID, type ShelfState, type ThreadPages, VIDEO_FILE } from './contract/wire/artifacts.js';
-import type { ShelfAsk, ShelfJob, ShelfJobs, ShelfMessage, ShelfReply, ShelfRequest } from './protocol.js';
+import type { Published, SelectionUpdate, ShelfAsk, ShelfJob, ShelfJobs, ShelfMessage, ShelfReply, ShelfRequest } from './protocol.js';
 
 type Following = { readonly id: number; readonly moved: PubSub.PubSub<Exit.Exit<ThreadPages>>; users: number };
 
@@ -194,39 +194,51 @@ export const versionedShelf = Effect.fn('ArtifactStore.make')(function* (root: s
     yield* PubSub.shutdown(group.moved);
   }, changes.withPermit);
 
+  const announce = Effect.fnUntraced(function* (updates: readonly SelectionUpdate[], id: string, state: ShelfState) {
+    const groups = new Map([...following.values()].map((group) => [group.id, group]));
+    for (const update of updates) {
+      const group = groups.get(update.id);
+      if (group !== undefined) yield* PubSub.publish(group.moved, Exit.succeed(update.value));
+    }
+    const watched = watching.get(id);
+    if (watched !== undefined) yield* PubSub.publish(watched.moved, Exit.succeed(state));
+  });
+
+  const compact = (maintenance: NonNullable<Published['maintenance']>, after: 'published' | 'removed') =>
+    ask('maintain', null).pipe(
+      Effect.withSpan('artifacts.compact', { attributes: maintenance }),
+      Effect.matchCauseEffect({
+        onFailure: (cause) =>
+          Effect.logWarning(`the page was ${after}, but order compaction did not finish; the next read or open restores the index`, cause),
+        onSuccess: (failure) =>
+          failure === null
+            ? Effect.void
+            : Effect.logWarning(
+                failure.recovered
+                  ? `artifact order compaction failed after the page was ${after}; the index was rebuilt in its place`
+                  : `artifact order compaction failed after the page was ${after}, and so did the rebuild; the next read or open rebuilds it`,
+                failure.failure,
+              ),
+      }),
+    );
+
   return ArtifactStore.of({
     publish: Effect.fn('ArtifactStore.publish')(
       function* (input) {
         const published = yield* ask('publish', { ...input, path: resolve(input.path) });
-        const groups = new Map([...following.values()].map((group) => [group.id, group]));
-        for (const update of published.updates) {
-          const group = groups.get(update.id);
-          if (group !== undefined) yield* PubSub.publish(group.moved, Exit.succeed(update.value));
-        }
-        const watched = watching.get(published.record.id);
-        if (watched !== undefined) yield* PubSub.publish(watched.moved, Exit.succeed({ current: published.record, kept: published.kept }));
-        if (published.maintenance !== null) {
-          yield* ask('maintain', null).pipe(
-            Effect.withSpan('artifacts.compact', { attributes: published.maintenance }),
-            Effect.matchCauseEffect({
-              onFailure: (cause) =>
-                Effect.logWarning(
-                  'the page was published, but order compaction did not finish; the next read or open restores the index',
-                  cause,
-                ),
-              onSuccess: (failure) =>
-                failure === null
-                  ? Effect.void
-                  : Effect.logWarning(
-                      failure.recovered
-                        ? 'artifact order compaction failed after the page was published; the index was rebuilt in its place'
-                        : 'artifact order compaction failed after the page was published, and so did the rebuild; the next read or open rebuilds it',
-                      failure.failure,
-                    ),
-            }),
-          );
-        }
+        yield* announce(published.updates, published.record.id, { current: published.record, kept: published.kept });
+        if (published.maintenance !== null) yield* compact(published.maintenance, 'published');
         return { record: published.record, timelineProblem: published.timelineProblem };
+      },
+      changes.withPermit,
+      Effect.uninterruptible,
+    ),
+    remove: Effect.fn('ArtifactStore.remove')(
+      function* (id) {
+        const withdrawn = yield* ask('remove', id);
+        yield* announce(withdrawn.updates, id, { current: null, kept: [] });
+        if (withdrawn.maintenance !== null) yield* compact(withdrawn.maintenance, 'removed');
+        return withdrawn.removal;
       },
       changes.withPermit,
       Effect.uninterruptible,

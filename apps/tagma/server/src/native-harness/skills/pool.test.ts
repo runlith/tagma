@@ -9,6 +9,7 @@ const unused = () => Effect.die('the shelf is not read by the skill catalog');
 
 const shelf = ArtifactStore.of({
   publish: unused,
+  remove: unused,
   draft: unused,
   list: unused,
   page: unused,

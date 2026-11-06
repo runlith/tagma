@@ -12,6 +12,7 @@ export class Videos extends Context.Service<
   {
     export(ask: VideoAsk): Effect.Effect<Exported, GateRefusal<'artifact-unknown' | 'no-timeline' | 'disk-full' | FilmRefusal>>;
     cancel(job: string): Effect.Effect<void, GateRefusal<'video-unknown'>>;
+    drop(page: string): Effect.Effect<void>;
     follow(page: string): Stream.Stream<readonly Video[]>;
   }
 >()('tagma/artifacts/Videos') {}

@@ -11,6 +11,8 @@ const execute = (store: VersionedShelf, request: ShelfRequest): ShelfJobs[ShelfJ
   switch (request.kind) {
     case 'publish':
       return store.publish(request.input, () => Effect.runSync(Clock.currentTimeMillis));
+    case 'remove':
+      return store.remove(request.input);
     case 'draft':
       return store.draft(request.input);
     case 'list':

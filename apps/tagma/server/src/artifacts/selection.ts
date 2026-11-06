@@ -126,6 +126,15 @@ export class Selection {
     return true;
   }
 
+  withdraw(id: string): boolean {
+    const member = this.members.get(id);
+    if (member === undefined) return false;
+    this.heap.order();
+    if (member.entry !== null) this.heap.remove(member.entry.index);
+    this.members.delete(id);
+    return true;
+  }
+
   snapshot(): ThreadPages {
     this.heap.order();
     const pages: ThreadPage[] = [];

@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import type { GateRefusal } from '../platform/contract/wire/refusal.js';
-import type { Draft, PageVideos, PublishPage, ShelfSelection, ShelfPage } from './contract/service/shelf.js';
+import type { Draft, PageVideos, PublishPage, Removal, ShelfSelection, ShelfPage } from './contract/service/shelf.js';
 import type { ArtifactPage, ArtifactRecord, ShelfState, ThreadPages } from './contract/wire/artifacts.js';
 
 export type CompactionFailure = { readonly recovered: boolean; readonly failure: string };
@@ -15,7 +15,18 @@ export type Published = {
   readonly maintenance: { readonly records: number; readonly live: number } | null;
 };
 
+export type Withdrawn = {
+  readonly removal: Removal;
+  readonly updates: readonly SelectionUpdate[];
+  readonly maintenance: { readonly records: number; readonly live: number } | null;
+};
+
 export type ShelfJobs = {
+  readonly remove: {
+    readonly input: string;
+    readonly output: Withdrawn;
+    readonly error: GateRefusal<'artifact-unknown'>;
+  };
   readonly publish: {
     readonly input: PublishPage;
     readonly output: Published;

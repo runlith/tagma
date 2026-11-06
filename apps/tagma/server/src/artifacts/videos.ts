@@ -272,6 +272,11 @@ export const makeVideos = Effect.gen(function* () {
       }
       yield* FiberMap.remove(fibers, job);
     }),
+    drop: Effect.fn('Videos.drop')(function* (page) {
+      for (const job of [...jobs.values()]) if (job.page === page) yield* FiberMap.remove(fibers, job.id);
+      failed.delete(page);
+      yield* settle(page);
+    }),
     follow: (page) =>
       Stream.unwrap(
         Effect.map(

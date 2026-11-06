@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
 import { ArtifactStore } from './contract/service/shelf.js';
+import { Videos } from './contract/service/videos.js';
 import { readShelfCursor, shelfCursor } from './cursor.js';
 import { FRAME_PAIRS } from './frames.js';
 import { VIDEO_PAIRS } from './video.js';
@@ -26,6 +27,16 @@ const fitting = (rows: readonly { readonly record: ArtifactRecord }[]): number =
 export const ARTIFACT_PAIRS = {
   ...FRAME_PAIRS,
   ...VIDEO_PAIRS,
+  remove_artifact: pair(
+    OPS.remove_artifact,
+    body(OPS.remove_artifact, {
+      execute: Effect.fnUntraced(function* (asked) {
+        yield* (yield* Videos).drop(asked.page);
+        const removal = yield* (yield* ArtifactStore).remove(asked.page);
+        return { status: 'removed' as const, page: asked.page, versions: removal.versions, videos: removal.videos };
+      }),
+    }),
+  ),
   list_artifacts: pair(
     OPS.list_artifacts,
     body(OPS.list_artifacts, {

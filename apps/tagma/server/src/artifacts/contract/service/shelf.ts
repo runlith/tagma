@@ -38,6 +38,8 @@ export type KeptVideo = {
 
 export type PageVideos = { readonly kept: readonly KeptVideo[]; readonly parts: readonly string[] };
 
+export type Removal = { readonly versions: number; readonly videos: number };
+
 export type ShelfPage = {
   readonly rows: readonly { readonly record: ArtifactRecord; readonly key: ShelfKey }[];
   readonly total: number;
@@ -56,6 +58,7 @@ export class ArtifactStore extends Context.Service<
   ArtifactStore,
   {
     publish(input: PublishPage): Effect.Effect<Publication, GateRefusal<'no-such-page' | 'empty-page' | 'artifact-index-unavailable'>>;
+    remove(id: string): Effect.Effect<Removal, GateRefusal<'artifact-unknown'>>;
     draft(path: string): Effect.Effect<Draft, GateRefusal<'no-such-page' | 'empty-page'>>;
     list(request: ShelfSelection): Effect.Effect<ShelfPage, GateRefusal<'cursor-stale'>>;
     page(id: string, version?: string): Effect.Effect<ArtifactPage | null>;
