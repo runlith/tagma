@@ -17,5 +17,7 @@ export class PluginTools extends Context.Service<
   PluginTools,
   {
     of(projectId: number): Effect.Effect<ProjectTools, PluginsUnreadable>;
+    failed(plugin: string): boolean;
+    followFailed(listener: (plugin: string) => void): () => void;
   }
 >()('tagma/plugin-host/PluginTools') {}

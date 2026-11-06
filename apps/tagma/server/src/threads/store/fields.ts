@@ -1,7 +1,20 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
-export const ENTRY_FIELDS = ['id', 'type', 'runId', 'toolCallId', 'role', 'text', 'status', 'generation', 'action', 'questionId'] as const;
+export const ENTRY_FIELDS = [
+  'id',
+  'type',
+  'runId',
+  'toolCallId',
+  'role',
+  'text',
+  'status',
+  'generation',
+  'action',
+  'questionId',
+  'approver',
+  'declinedBy',
+] as const;
 
 export type EntryField = (typeof ENTRY_FIELDS)[number];
 

@@ -557,6 +557,7 @@ export const ThreadQuestionEntry = Schema.Struct({
   outcome: Schema.optional(ThreadQuestionCleared),
   action: Schema.optional(Schema.Struct({ key: Schema.String, operation: Schema.String })),
   approver: Schema.optional(Schema.String),
+  declinedBy: Schema.optional(Schema.String),
   timeoutMs: Schema.optional(Schema.NullOr(Schema.Number)),
   decision: Schema.optional(Schema.Struct({ by: Schema.optional(Schema.String), note: Schema.optional(Schema.String) })),
   route: Schema.optional(Schema.String),

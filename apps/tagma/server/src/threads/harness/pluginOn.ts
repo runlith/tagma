@@ -3,14 +3,20 @@ import type { EndingInput } from '@runlith/tagma/plugin/protocol';
 import { Effect } from 'effect';
 import { ContributionPoint } from '../../platform/contract/service/contribution.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
-import type { PluginContribution, PluginRegister } from '../../plugins/contract/service/points.js';
+import { type PluginContribution, PluginPoints } from '../../plugins/contract/service/points.js';
 import { ENDED_REASON, ON_FACE, PLUGIN_BINDING, type ThreadOn } from '../contract/wire/pluginEndings.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 
-export const ON = new ContributionPoint<never, ThreadOn>('threads/endings', ON_FACE);
+const ON = new ContributionPoint<never, ThreadOn>('threads/on', ON_FACE);
 
-export type OnHook = { readonly tool: string; readonly contribution: PluginContribution<ThreadOn> };
+type OnHook = { readonly tool: string; readonly contribution: PluginContribution<ThreadOn> };
+
+export type PluginOn = {
+  readonly recipient: ThreadEventRecipient;
+  readonly asking: (plugin: string) => OnHook | undefined;
+  readonly changed: (listener: (plugin: string) => void) => () => void;
+};
 
 const broke = (message: string) => new ThreadCallBroke({ cause: new Error(message) });
 
@@ -18,13 +24,17 @@ const pluginOf = (thread: ThreadSummary): string | undefined => thread.bindings[
 
 export const makePluginOn = Effect.gen(function* () {
   const host = yield* PluginHost;
-  const ended = new Map<string, OnHook>();
-  const asked = new Map<string, OnHook>();
-  const askingChanged = new Set<(plugin: string) => void>();
+  const held = yield* (yield* PluginPoints).hold(ON);
+
+  const hookOf = (plugin: string, tool: (on: ThreadOn) => string | undefined): OnHook | undefined => {
+    const contribution = held.of(plugin);
+    const named = contribution === undefined ? undefined : tool(contribution.value);
+    return contribution === undefined || named === undefined ? undefined : { tool: named, contribution };
+  };
 
   const awaited = Effect.fnUntraced(function* (plugin: string, runId: string) {
     const pending = yield* Effect.mapError(host.pending(plugin), (cause) => new ThreadCallBroke({ cause }));
-    const hook = ended.get(plugin);
+    const hook = hookOf(plugin, (on) => on.ended);
     if (hook !== undefined || !pending) return hook;
     return yield* broke(`${plugin} has not published its contributions yet; the ending of ${runId} is delivered once it has`);
   });
@@ -34,7 +44,7 @@ export const makePluginOn = Effect.gen(function* () {
     const { thread, run } = event;
     const plugin = pluginOf(thread);
     if (plugin === undefined) return;
-    const hook = ended.get(plugin) ?? (yield* awaited(plugin, run.runId));
+    const hook = hookOf(plugin, (on) => on.ended) ?? (yield* awaited(plugin, run.runId));
     if (hook === undefined) return;
     const answer = yield* hook.contribution.caller
       .call(
@@ -47,42 +57,14 @@ export const makePluginOn = Effect.gen(function* () {
     if ('isError' in answer && answer.isError === true) return yield* broke(`${plugin} answered the ending of ${run.runId} with an error`);
   });
 
-  const held = (hooks: Map<string, OnHook>, plugin: string, hook: OnHook | undefined, changed: boolean): (() => void) => {
-    if (hook === undefined) return () => undefined;
-    hooks.set(plugin, hook);
-    if (changed) for (const listener of askingChanged) listener(plugin);
-    return () => {
-      if (hooks.get(plugin) !== hook) return;
-      hooks.delete(plugin);
-      if (changed) for (const listener of askingChanged) listener(plugin);
-    };
-  };
-
-  const register: PluginRegister<ThreadOn> = (contribution) =>
-    Effect.sync(() => {
-      const { plugin, value } = contribution;
-      const onEnded = held(ended, plugin.id, value.ended === undefined ? undefined : { tool: value.ended, contribution }, false);
-      const onAsked = held(asked, plugin.id, value.asked === undefined ? undefined : { tool: value.asked, contribution }, true);
-      return () => {
-        onEnded();
-        onAsked();
-      };
-    });
-
-  const recipient: ThreadEventRecipient = {
-    name: 'plugin endings',
-    takes: ['ended'],
-    follows: (thread) => Effect.succeed(pluginOf(thread) !== undefined),
-    handle: deliver,
-  };
-
   return {
-    register,
-    recipient,
-    asking: (plugin: string): OnHook | undefined => asked.get(plugin),
-    followAsking: (listener: (plugin: string) => void): (() => void) => {
-      askingChanged.add(listener);
-      return () => askingChanged.delete(listener);
+    recipient: {
+      name: 'plugin endings',
+      takes: ['ended'],
+      follows: (thread) => Effect.succeed(pluginOf(thread) !== undefined),
+      handle: deliver,
     },
-  };
+    asking: (plugin) => hookOf(plugin, (on) => on.asked),
+    changed: held.changed,
+  } satisfies PluginOn;
 });

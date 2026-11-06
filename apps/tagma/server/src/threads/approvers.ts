@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, FiberSet, Stream } from 'effect';
+import { Cause, Effect, Exit, FiberSet } from 'effect';
 import { eq, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { AgentHarness } from '@runlith/agent/thread/AgentHarness';
@@ -26,9 +26,8 @@ import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { among } from '../platform/store/rows.js';
 import { approves as approvesKey } from './contract/wire/settings.js';
 import type { PluginQuestions } from './harness/pluginQuestions.js';
-import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
 import { PLUGIN_BINDING } from './contract/wire/pluginEndings.js';
-import type { ThreadSummary } from './list/summary.js';
+import type { ThreadMetadata } from './list/store.js';
 
 type ApproversPort = NonNullable<ThreadHost['approvers']>;
 
@@ -60,34 +59,39 @@ export const readApproves = Effect.fnUntraced(function* (
   return { own: null, effective: yield* settings.value(approvesKey, projectId, unit), setAt: null, origin: 'setting' } as const;
 });
 
-export const followRoutes = Effect.fnUntraced(function* (
-  harness: AgentHarness,
-  owners: { readonly lookup: ThreadLookup['Service']; readonly followAsking: (listener: (plugin: string) => void) => () => void },
-) {
+export const openQuestions = (db: MachineStore['Service']['db']) =>
+  db
+    .select({
+      id: sql<string>`${threadEntry.threadId}`.as('id'),
+      approver: sql<string | null>`${entryField(threadEntry.entry, 'approver')}`.as('approver'),
+      declined: sql<string | null>`${entryField(threadEntry.entry, 'declinedBy')}`.as('declined'),
+    })
+    .from(sql`${threadEntry} indexed by ${sql.identifier(ENTRY_OPEN_QUESTION_INDEX)}`)
+    .where(sql`${threadEntry.type} = 'question' and ${entryField(threadEntry.entry, 'status')} = 'open'`)
+    .union(
+      db
+        .select({
+          id: sql<string>`${thread.id}`.as('id'),
+          approver: sql<string | null>`${entryField(thread.pendingInteraction, 'approver')}`.as('approver'),
+          declined: sql<string | null>`${entryField(thread.pendingInteraction, 'declinedBy')}`.as('declined'),
+        })
+        .from(sql`${thread} indexed by ${sql.identifier(THREAD_OPEN_QUESTION_INDEX)}`)
+        .where(sql`${entryField(thread.pendingInteraction, 'status')} = 'open'`),
+    )
+    .as('open_questions');
+
+export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) {
   const changes = yield* SettingChanges;
-  const enabled = yield* EnabledPlugins;
   const records = yield* ThreadRecords;
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const parent = alias(threadRecord, 'approving_parent');
-  const openQuestions = () =>
-    db
-      .select({ id: sql<string>`${threadEntry.threadId}`.as('id') })
-      .from(sql`${threadEntry} indexed by ${sql.identifier(ENTRY_OPEN_QUESTION_INDEX)}`)
-      .where(sql`${threadEntry.type} = 'question' and ${entryField(threadEntry.entry, 'status')} = 'open'`)
-      .union(
-        db
-          .select({ id: sql<string>`${thread.id}`.as('id') })
-          .from(sql`${thread} indexed by ${sql.identifier(THREAD_OPEN_QUESTION_INDEX)}`)
-          .where(sql`${entryField(thread.pendingInteraction, 'status')} = 'open'`),
-      )
-      .as('open_questions');
   const reroute = Effect.fn('threads.rerouteApprovals')(function* (projectId: number | null) {
-    const open = openQuestions();
+    const open = openQuestions(db);
     const standing = yield* units.read((unit) =>
       unit.run(
         db
-          .select({ id: open.id })
+          .selectDistinct({ id: open.id })
           .from(open)
           .innerJoin(threadRecord, eq(threadRecord.id, open.id))
           .innerJoin(parent, eq(parent.id, threadRecord.parentId))
@@ -98,11 +102,11 @@ export const followRoutes = Effect.fnUntraced(function* (
   });
   const rerouteShelved = Effect.fn('threads.rerouteShelved')(function* (threadIds: readonly string[]) {
     if (threadIds.length === 0) return;
-    const open = openQuestions();
+    const open = openQuestions(db);
     const standing = yield* units.read((unit) =>
       unit.run(
         db
-          .select({ id: open.id })
+          .selectDistinct({ id: open.id })
           .from(open)
           .innerJoin(threadRecord, eq(threadRecord.id, open.id))
           .where(sql`${threadRecord.id} in ${among(threadIds)} or ${threadRecord.parentId} in ${among(threadIds)}`),
@@ -123,26 +127,6 @@ export const followRoutes = Effect.fnUntraced(function* (
     ),
   );
   yield* Effect.addFinalizer(() => Effect.sync(unshelve));
-  const rerouteBound = Effect.fn('threads.reroutePluginQuestions')(function* (bound: (thread: ThreadSummary) => boolean) {
-    const open = openQuestions();
-    const standing = yield* units.read((unit) => unit.run(db.select({ id: open.id }).from(open)));
-    for (const { id } of standing) {
-      const thread = yield* owners.lookup.summary(id);
-      if (thread !== undefined && bound(thread)) yield* harness.runs.questions().reroute(id);
-    }
-  });
-  const unrouted = (cause: Cause.Cause<unknown>) => Effect.logWarning('a plugin change left questions on their former route', { cause });
-  const unask = owners.followAsking((plugin) =>
-    runFork(rerouteBound((thread) => thread.bindings[PLUGIN_BINDING] === plugin).pipe(Effect.catchCause(unrouted))),
-  );
-  yield* Effect.addFinalizer(() => Effect.sync(unask));
-  yield* Effect.forkScoped(
-    Stream.runForEach(enabled.changes, (projectId) =>
-      rerouteBound(
-        (thread) => thread.bindings[PLUGIN_BINDING] !== undefined && (projectId === null || thread.projectId === projectId),
-      ).pipe(Effect.catchCause(unrouted)),
-    ),
-  );
 });
 
 export type ApprovalDelivery = (
@@ -188,62 +172,71 @@ const noticeText = (notice: ApprovalNotice): string =>
 
 export type ApproverStanding = {
   readonly approver: string | null;
-  readonly why: Exclude<ApproverWhy, 'parent-owns' | 'owner'>;
+  readonly why: Exclude<ApproverWhy, 'parent-owns' | 'owner' | 'owner-away'>;
   readonly grant: ReadonlySet<string>;
 };
 
 export type StandingOf = (threadId: string, unit?: Unit<'machine'>) => Effect.Effect<ApproverStanding, StoreFailure | ThreadPortFailure>;
+
+type StandingFrom = (
+  child: ThreadMetadata | undefined,
+  unit?: Unit<'machine'>,
+) => Effect.Effect<ApproverStanding, StoreFailure | ThreadPortFailure>;
+
+const standingFrom = (lookup: ThreadLookup['Service'], mandate: ThreadMandate['Service'], settings: Settings['Service']): StandingFrom => {
+  const none = (why: ApproverStanding['why'], grant: ReadonlySet<string> = new Set()): ApproverStanding => ({
+    approver: null,
+    why,
+    grant,
+  });
+  return Effect.fnUntraced(function* (child, unit) {
+    if (child === undefined || child.parentThreadId === null) return none('no-parent');
+    if (yield* mandate.takenOver(child.id, unit)) return none('taken-over');
+    const parent = yield* lookup.find(child.parentThreadId, OPERATOR_PRINCIPAL, unit);
+    if (parent === undefined || parent.archivedAt != null) return none('no-parent');
+    const grant = new Set((yield* readApproves(mandate, settings, parent.id, parent.projectId, unit)).effective);
+    return grant.size === 0 ? none('no-grant', grant) : { approver: parent.id, why: 'parent', grant };
+  });
+};
 
 export function approverStanding(
   lookup: ThreadLookup['Service'],
   mandate: ThreadMandate['Service'],
   settings: Settings['Service'],
 ): StandingOf {
-  const none = (why: ApproverStanding['why'], grant: ReadonlySet<string> = new Set()): ApproverStanding => ({
-    approver: null,
-    why,
-    grant,
-  });
-  return Effect.fnUntraced(function* (threadId, unit) {
-    const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL, unit);
-    if (child === undefined || child.parentThreadId === null) return none('no-parent');
-    if (yield* mandate.takenOver(threadId, unit)) return none('taken-over');
-    const parent = yield* lookup.find(child.parentThreadId, OPERATOR_PRINCIPAL, unit);
-    if (parent === undefined || parent.archivedAt != null) return none('no-parent');
-    const grant = new Set((yield* readApproves(mandate, settings, parent.id, parent.projectId, unit)).effective);
-    return grant.size === 0 ? none('no-grant', grant) : { approver: parent.id, why: 'parent', grant };
-  });
+  const from = standingFrom(lookup, mandate, settings);
+  return (threadId, unit) => Effect.flatMap(lookup.find(threadId, OPERATOR_PRINCIPAL, unit), (child) => from(child, unit));
 }
 
 export function threadApprovers(
-  standingOf: StandingOf,
   lookup: ThreadLookup['Service'],
   mandate: ThreadMandate['Service'],
   settings: Settings['Service'],
   delivery: () => ApprovalDelivery | null,
   plugins: PluginQuestions,
 ): ApproversPort {
-  const parentOf = Effect.fnUntraced(function* (threadId: string) {
-    const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL);
+  const standing = standingFrom(lookup, mandate, settings);
+  const parentOf = Effect.fnUntraced(function* (child: ThreadMetadata | undefined) {
     const parent = child?.parentThreadId == null ? undefined : yield* lookup.find(child.parentThreadId, OPERATOR_PRINCIPAL);
     return parent === undefined || parent.archivedAt != null
       ? ({ approver: null, why: 'no-parent' } as const)
       : ({ approver: parent.id, why: 'parent-owns' } as const);
   });
-  const routed = (threadId: string, asked: Parameters<ApproversPort['route']>[1]) =>
-    asked.length > 0 && asked.every((one) => one.parent === true)
-      ? parentOf(threadId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })))
-      : Effect.map(standingOf(threadId), ({ approver, why, grant }): ApproverRoute => {
-          if (approver === null) return { approver: null, why };
-          return grantCovers(grant, asked) ? { approver, why } : { approver: null, why: 'no-grant' };
-        }).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-  const route: ApproversPort['route'] = (threadId, asked, questionId) =>
-    asked.length === 0
-      ? routed(threadId, asked)
-      : plugins.owner(threadId, questionId).pipe(
-          Effect.mapError((cause) => new ThreadCallBroke({ cause })),
-          Effect.flatMap((approver) => (approver === null ? routed(threadId, asked) : Effect.succeed({ approver, why: 'owner' } as const))),
-        );
+  const route: ApproversPort['route'] = Effect.fnUntraced(
+    function* (threadId: string, asked: Parameters<ApproversPort['route']>[1]): Effect.fn.Return<ApproverRoute, unknown> {
+      const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL);
+      if (asked.length > 0 && asked.every((one) => one.parent === true)) return yield* parentOf(child);
+      const plugin = child?.bindings[PLUGIN_BINDING];
+      if (child !== undefined && plugin !== undefined && asked.length > 0) {
+        const owner = yield* plugins.owner(plugin, child.projectId);
+        return owner === null ? { approver: null, why: 'owner-away' } : { approver: owner, why: 'owner' };
+      }
+      const { approver, why, grant } = yield* standing(child);
+      if (approver === null) return { approver: null, why };
+      return grantCovers(grant, asked) ? { approver, why } : { approver: null, why: 'no-grant' };
+    },
+    Effect.mapError((cause) => new ThreadCallBroke({ cause })),
+  );
   return {
     route,
     grantOf: Effect.fnUntraced(

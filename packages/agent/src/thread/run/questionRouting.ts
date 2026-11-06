@@ -9,10 +9,11 @@ export const routedTo = Effect.fnUntraced(function* (
   threadId: string,
   entry: ThreadQuestionEntry,
 ): Effect.fn.Return<ThreadQuestionEntry, ThreadBorderFailed> {
+  const { approver: _kept, ...rest } = entry;
+  if (entry.declinedBy !== undefined) return rest;
   const asked = askedActionsOf(entry);
   if (asked.length === 0) return entry;
-  const route = yield* approvers.route(threadId, asked, entry.questionId);
-  const { approver: _kept, ...rest } = entry;
+  const route = yield* approvers.route(threadId, asked);
   return route.approver === null ? rest : { ...rest, approver: route.approver };
 });
 

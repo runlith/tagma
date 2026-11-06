@@ -10,6 +10,7 @@ export const FIXTURE_PROGRAM = resolve(import.meta.dir, '../../../plugin-host/te
 export type FixturePlugin = {
   readonly id: string;
   readonly title?: string;
+  readonly resident?: boolean;
   readonly contributes?: Readonly<Record<string, unknown>>;
 };
 
@@ -21,7 +22,9 @@ export const installedFixture = Effect.fnUntraced(function* (
   const { id } = plugin;
   const folder = yield* world.directory(`${id}-plugin`);
   const contributes = { tools: fixtureEntries({}), ...plugin.contributes };
-  yield* Effect.promise(() => writePlugin(folder, { id, title: plugin.title, program: FIXTURE_PROGRAM, contributes }));
+  yield* Effect.promise(() =>
+    writePlugin(folder, { id, title: plugin.title, program: FIXTURE_PROGRAM, resident: plugin.resident, contributes }),
+  );
   const answer = yield* world.op('install_plugin', { source: folder }, `project=${projectId}`);
   expect(answer.body).toMatchObject({ plugin: { id, enabled: true } });
   yield* Effect.addFinalizer(() => world.op('uninstall_plugin', { id }, `project=${projectId}`).pipe(Effect.orDie));

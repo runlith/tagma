@@ -131,8 +131,22 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     path: 'apps/tagma/server/src/threads/harness/pluginQuestions.ts',
     symbol: 'makePluginQuestions.ask',
     form: 'catchCause',
+    site: '411e5e56',
+    why: 'A delivery that fails is handled by its meaning: the plugin could not be asked, so the question is handed to the person for good.',
+  },
+  {
+    path: 'apps/tagma/server/src/threads/harness/pluginQuestions.ts',
+    symbol: 'makePluginQuestions.ask',
+    form: 'catchCause',
     site: '49cecffc',
-    why: 'The question is already marked left; the hand-back reroute runs in a forked fiber outside the question lock, and its failure is logged while the question keeps the plugin as approver until the thread is rerouted again.',
+    why: 'The hand-back runs in a forked fiber outside the question lock; when its decline cannot be written the failure is logged and the question keeps the plugin as approver, which the person can still answer from the thread.',
+  },
+  {
+    path: 'apps/tagma/server/src/threads/harness/pluginQuestions.ts',
+    symbol: 'makePluginQuestions.follow',
+    form: 'catchCause',
+    site: 'e4d2fe48',
+    why: 'The plugin change already stands; the reroute runs in a forked fiber, and a failure is logged while those questions keep their former route until the next change of that plugin reroutes them.',
   },
   {
     path: 'apps/tagma/server/src/change-record/record/stamping.ts',

@@ -1,7 +1,13 @@
 import { Effect, Result } from 'effect';
 import type { PluginFaced } from '../platform/contract/service/contribution.js';
 import type { PluginFace } from '../platform/contract/wire/contribution.js';
-import { PluginPointRefused, PluginPoints, type PluginRegister } from './contract/service/points.js';
+import {
+  type HeldContributions,
+  type PluginContribution,
+  PluginPointRefused,
+  PluginPoints,
+  type PluginRegister,
+} from './contract/service/points.js';
 import { contributionOf, contributionsRefusal } from './contract/wire/contributions.js';
 
 type Declared = {
@@ -34,21 +40,50 @@ export const makePoints = () => {
     };
   };
 
+  const declare = Effect.fnUntraced(function* <W>(point: PluginFaced<W>, register: PluginRegister<W>) {
+    const { name } = point.plugin;
+    const standing = points.get(name);
+    if (standing !== undefined) {
+      return yield* Effect.die(new Error(`the plugin point ${name} is declared by ${standing.point.id} and again by ${point.id}`));
+    }
+    const declared: Declared = { point, register };
+    points.set(name, declared);
+    faces.set(name, point.plugin);
+    return () => {
+      if (points.get(name) !== declared) return;
+      points.delete(name);
+      faces.delete(name);
+    };
+  });
+
   return PluginPoints.of({
-    declare: Effect.fnUntraced(function* (point, register) {
-      const { name } = point.plugin;
-      const standing = points.get(name);
-      if (standing !== undefined) {
-        return yield* Effect.die(new Error(`the plugin point ${name} is declared by ${standing.point.id} and again by ${point.id}`));
-      }
-      const declared: Declared = { point, register };
-      points.set(name, declared);
-      faces.set(name, point.plugin);
-      return () => {
-        if (points.get(name) !== declared) return;
-        points.delete(name);
-        faces.delete(name);
+    declare,
+    hold: Effect.fnUntraced(function* <W>(point: PluginFaced<W>) {
+      const held = new Map<string, PluginContribution<W>>();
+      const listeners = new Set<(plugin: string) => void>();
+      const told = (plugin: string): void => {
+        for (const listener of listeners) listener(plugin);
       };
+      const register: PluginRegister<W> = (contribution) =>
+        Effect.sync(() => {
+          const { id } = contribution.plugin;
+          held.set(id, contribution);
+          told(id);
+          return () => {
+            if (held.get(id) !== contribution) return;
+            held.delete(id);
+            told(id);
+          };
+        });
+      yield* Effect.acquireRelease(declare(point, register), (withdraw) => Effect.sync(withdraw));
+      return {
+        of: (plugin) => held.get(plugin),
+        all: () => held,
+        changed: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      } satisfies HeldContributions<W>;
     }),
     check: (plugin, contributes) => {
       const checked = contributionsRefusal(plugin, faces, contributes);

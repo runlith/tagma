@@ -44,6 +44,7 @@ export const makeOffers = Effect.gen(function* () {
   const enabledPlugins = yield* EnabledPlugins;
   const offers = new Map<string, Offered>();
   const broken = new Set<string>();
+  const breaking = new Set<(plugin: string) => void>();
   const assembled = new Map<number, Assembled>();
   let revision = 0;
 
@@ -119,6 +120,11 @@ export const makeOffers = Effect.gen(function* () {
           own: (plugin: string) => (enabled().includes(plugin) ? catalogOf(plugin, 'own', projectId) : {}),
           view: (plugin: string) => (enabled().includes(plugin) ? (offers.get(plugin)?.audiences.get('view') ?? []) : []),
         })),
+      failed: (plugin) => broken.has(plugin),
+      followFailed: (listener) => {
+        breaking.add(listener);
+        return () => breaking.delete(listener);
+      },
     }),
     register,
     broken: (plugin: string, now: boolean): void => {
@@ -126,6 +132,7 @@ export const makeOffers = Effect.gen(function* () {
       if (now) broken.add(plugin);
       else broken.delete(plugin);
       revision += 1;
+      for (const listener of breaking) listener(plugin);
     },
   };
 });

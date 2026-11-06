@@ -19,7 +19,7 @@ export const ThreadOn = Schema.Struct({
   asked: Schema.optional(
     HandlerTool.annotate({
       description:
-        'The tool, named in contributes.tools with audience tagma, that takes the questions of threads bound to this plugin while it runs in their project, with { threadId, questionId, summary, prompts, deadlineAt }; prompts is null for a confirmation. Such a question leaves the person’s attention; the plugin answers it with answer_question. An error, no answer, or the answer { "question": "left" } hands it back to the person at once. A question may arrive again after a restart, so it is idempotent by questionId.',
+        'The tool, named in contributes.tools with audience tagma, that takes the questions of threads bound to this plugin while it runs in their project, with { threadId, questionId, summary, prompts, deadlineAt }; prompts is null for a confirmation. Such a question leaves the person’s attention; the plugin answers it with answer_question. An error, no answer, or the answer { "question": "left" } hands it to the person for good. While the plugin is switched off or its process has failed, its questions stand with the person, and they arrive again once it runs, and after a server restart, so it is idempotent by questionId.',
     }),
   ),
 });

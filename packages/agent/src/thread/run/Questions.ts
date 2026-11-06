@@ -110,6 +110,11 @@ export class Questions extends Context.Service<
       readonly caller: string;
       readonly note?: string;
     }): Effect.Effect<'decided' | 'not-the-approver' | 'unknown', ThreadBorderFailed>;
+    decline(request: {
+      readonly threadId: string;
+      readonly questionId: string;
+      readonly caller: string;
+    }): Effect.Effect<'declined' | 'not-the-approver' | 'unknown', ThreadBorderFailed>;
     reroute(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
     holds(threadId: string, questionId: string): Effect.Effect<boolean, ThreadBorderFailed>;
     close(threadId: string, runId: string, reason: string): Effect.Effect<void, ThreadBorderFailed>;
@@ -540,6 +545,18 @@ export const questionsLayer = Layer.effectContext(
           return 'decided' as const;
         }),
       );
+    const decline: Context.Service.Shape<typeof Questions>['decline'] = (request) =>
+      locked(
+        request.threadId,
+        Effect.gen(function* () {
+          const { runId, entry } = yield* located(request.threadId, request.questionId);
+          if (entry === null || entry.status !== 'open') return 'unknown' as const;
+          if (entry.approver !== request.caller) return 'not-the-approver' as const;
+          const { approver: _left, ...rest } = entry;
+          yield* rewritten(request.threadId, runId, { ...rest, declinedBy: request.caller }, 'declined');
+          return 'declined' as const;
+        }),
+      );
     const reroute = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
       locked(
         threadId,
@@ -563,6 +580,7 @@ export const questionsLayer = Layer.effectContext(
     const questions = Questions.of({
       approve,
       decide,
+      decline,
       reroute,
       ask: Effect.fnUntraced(function* (asking) {
         const found = yield* posed(asking);
