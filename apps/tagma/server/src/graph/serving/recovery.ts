@@ -188,7 +188,9 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
       const here = yield* at(aim);
       yield* writableAt(here);
       const isolated = (merges: TreeMerges) =>
-        here.assignment.withPermit(here.permit(refused(Effect.andThen(merges.restore(), merges.finish()))));
+        here.assignment.withPermit(
+          here.permit(refused(Effect.andThen(merges.restore(), merges.finish(here.team === null ? 'tree' : 'forest')))),
+        );
       if (here.team === null) return yield* isolated(here.merges);
       const merges = here.merges;
       const pending = merges === null ? null : yield* here.permit(refused(Effect.andThen(merges.restore(), merges.read())));

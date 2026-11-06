@@ -76,20 +76,20 @@ layer(template, { excludeTestServices: true })('graph merge recovery', (it) => {
           [3, block('incoming knowledge')],
         ]),
       );
-      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish('tree'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       expect(yield* reopened.read()).toEqual(pending);
       yield* fs.writeFileString(join(pending.path, 'rule.md'), block('current and incoming knowledge'));
       yield* fs.writeFileString(join(pending.path, 'format.json'), '<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> incoming\n');
-      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish('tree'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       yield* fs.writeFileString(join(pending.path, 'format.json'), '{}\n');
       const added = block('new target knowledge', '0198c3d4-7b2a-7f00-8000-3f9ac2b41e7b');
       yield* fs.writeFileString(join(tree, 'new.md'), added);
       const advanced = yield* shadow.commitAct(tree, 'target advanced');
       if (advanced === null) return yield* Effect.fail('target commit missing');
-      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish('tree'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(advanced);
       yield* shadow.merge(pending.path, advanced, 'include the new target');
-      const finished = yield* reopened.finish();
+      const finished = yield* reopened.finish('tree');
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(finished.commit);
       expect(yield* shadow.run('ancestry', ['--git-dir', shadow.gitDir, 'merge-base', theirs, finished.commit])).toBe(theirs);
       expect(yield* shadow.run('ancestry', ['--git-dir', shadow.gitDir, 'merge-base', advanced, finished.commit])).toBe(advanced);
@@ -132,6 +132,37 @@ layer(template, { excludeTestServices: true })('graph merge recovery', (it) => {
       const pending = yield* owner.read();
       expect(pending).toMatchObject({ branch: 'main', incoming: 'incoming', base, theirs, conflicts: ['rule.md'] });
       expect(pending?.id).not.toBe('cut');
+    }),
+  );
+
+  it.effect("finishes the recovery of a team project's stealth forest, whose blocks stand under their parents' uuid directories", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: 'graph-forest-' });
+      const shadow = yield* ShadowGit.open(join(root, 'graph.git'), yield* Git, NO_SIDE);
+      const tree = join(root, 'tree');
+      const parent = '0198c3d4-7b2a-7f00-8000-3f9ac2b41e00';
+      const file = join(tree, parent, 'rule.md');
+      yield* shadow.attach(tree, 'main');
+      yield* fs.makeDirectory(join(tree, parent), { recursive: true });
+      yield* fs.writeFileString(file, block('base'));
+      yield* shadow.commitAct(tree, 'base');
+      yield* shadow.branch('incoming', 'main');
+      const incoming = join(root, 'incoming');
+      yield* shadow.attach(incoming, 'incoming');
+      yield* fs.writeFileString(join(incoming, parent, 'rule.md'), block('incoming knowledge'));
+      yield* shadow.commitAct(incoming, 'incoming');
+      yield* shadow.retire(incoming);
+      yield* fs.writeFileString(file, block('current knowledge'));
+      yield* shadow.commitAct(tree, 'current');
+      const owner = TreeMerges.at(shadow, tree);
+      expect(yield* owner.merge('incoming')).toEqual({ merged: null, conflicts: [`${parent}/rule.md`] });
+      const pending = yield* owner.read();
+      if (pending === null) return yield* Effect.fail('missing recovery');
+      yield* fs.writeFileString(join(pending.path, parent, 'rule.md'), block('current and incoming knowledge'));
+      const finished = yield* owner.finish('forest');
+      expect(finished.resolved).toEqual([`${parent}/rule.md`]);
+      expect(yield* fs.readFileString(file)).toBe(block('current and incoming knowledge'));
     }),
   );
 

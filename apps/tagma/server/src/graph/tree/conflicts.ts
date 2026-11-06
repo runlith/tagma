@@ -75,7 +75,7 @@ export const validateMerge = Effect.fn('graph.validateMerge')(function* (
     if (sides.ids.length > 0 && !sides.ids.includes(block.frontmatter.id))
       return yield* invalid({ message: `the resolution carries id ${block.frontmatter.id}, which neither side holds${sides.unreadable}` });
   }
-  yield* validateTree(treeRoot).pipe(
+  yield* validateTree(treeRoot, 'tree').pipe(
     Effect.mapError(
       (failure) =>
         new GateRefusal('files', `${failure.path}: ${failure.message}`, [

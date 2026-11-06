@@ -5,7 +5,7 @@ import { Clock, Effect, Schema } from 'effect';
 import { OwnGitFailed } from '../../platform/git/ownGit.js';
 import { graphRecoverySchema, type GraphRecovery } from '../contract/wire/recovery.js';
 import { canon, type ShadowGit } from './shadow.js';
-import { validateTree } from './validation.js';
+import { type TreeShape, validateTree } from './validation.js';
 import { FORMAT_FILE, TREE_MERGES } from '../contract/wire/storage.js';
 import { readMarker } from './marker.js';
 
@@ -218,13 +218,13 @@ const mergesAt = (shadow: ShadowGit, treeRoot: string) => {
       if (outcome.merged === null) yield* save({ ...record, conflicts: outcome.conflicts });
       return outcome;
     }),
-    finish: Effect.fnUntraced(function* () {
+    finish: Effect.fnUntraced(function* (shape: TreeShape) {
       const record = yield* recordAt(file);
       if (record === null || record.conflicts === null) return yield* failed('no graph merge awaits recovery');
       const resolved = record.conflicts;
       const marker = yield* readMarker(join(record.path, FORMAT_FILE));
       if (marker.kind === 'unreadable' || marker.kind === 'unwritten') return yield* failed(`${FORMAT_FILE}: ${marker.reason}`);
-      yield* validateTree(record.path).pipe(
+      yield* validateTree(record.path, shape).pipe(
         Effect.mapError(
           (cause) =>
             new OwnGitFailed({

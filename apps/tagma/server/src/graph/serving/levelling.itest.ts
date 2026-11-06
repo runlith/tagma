@@ -121,7 +121,7 @@ layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSy
                   : block,
               ),
             );
-            yield* recovery.finish();
+            yield* recovery.finish('tree');
             yield* pool.releaseProject(row.id);
             yield* writeBlockTree(
               feature.treeRoot,
