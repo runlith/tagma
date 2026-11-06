@@ -75,7 +75,7 @@ Every key that does something a person can name runs an action by its id; no key
 
   An action bound to a region is not listed in the palette.
 - **Handlers.** A place that serves an action differently by focus registers a handler for it: `Keymap.handle(id, run)`, latest first, a handler declining with false. The action's own `run` comes last. The palette runs the same chain. So the ⌘W chain of [[85824838]] is the `tab.close` action, with handlers from the browser page, the terminal pane and the file tabs. `DesktopTabKeys` stops pressing chords, and ⌘\ is the one `column.toggle` action.
-- **Not actions.** Keys that type, move a caret or a selection, or confirm or dismiss the focused widget stay with their widget: Enter, arrows, Escape closing a popover, Tab in the palette, the code editor's own keys, and the terminal's byte encodings (⌘← as `^A`, Shift+Enter as CSI).
+- **Not actions.** Keys that type, move a caret or a selection, or confirm or dismiss the focused widget stay with their widget: Enter, arrows, Escape closing a popover, Tab in the palette, the code editor's own keys, and the terminal's byte encodings (⌘← as `^A`, Shift+Enter as CSI). The project strip's ⌃` recents switcher stays the strip's own gesture too: it is caught by key position (`Backquote`, `IntlBackslash`), which the logical-first matcher would lose on the Russian layout and ISO keyboards, and it ends on ⌃'s release.
 
 ### One table, four layers
 

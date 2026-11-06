@@ -20,7 +20,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/channel.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/setup/switch.ts
+    ref: apps/tagma/server/src/installation/setup/stopping.ts
 ---
 **Value.** The user can keep a plain and a developer Tagma with different data, without pointing hooks and MCP at the wrong one.
 

@@ -10,7 +10,8 @@ fields:
         "at": "."
       }
     ],
-    "id": "fresh-world"
+    "id": "fresh-world",
+    "kind": "product"
   }
 edges:
   - kind: imports

@@ -10,7 +10,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/server.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/setup/switch.ts
+    ref: apps/tagma/server/src/installation/setup/stopping.ts
 ---
 A regular exit closes the writers. A writer held by stuck work would hold the exit just as long — up to the 15-minute wait ceiling. So the signal arms a process deadline: a server that has not closed within it exits without finishing closing. SQLite keeps only committed data, and on restart the successor takes the data directory as soon as the predecessor has exited.
 

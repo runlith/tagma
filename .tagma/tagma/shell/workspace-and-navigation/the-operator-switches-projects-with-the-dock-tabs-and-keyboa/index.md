@@ -27,6 +27,8 @@ sources:
     ref: apps/tagma/app/src/lib/features/projects/Strip.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/projects/TabRow.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/projects/actions.ts
 ---
 **Value.** The operator keeps several projects before their eyes, switches them with one press, and notices working or waiting agents before moving.
 
@@ -34,4 +36,4 @@ sources:
 
 **Behaviour.** A visited project joins one shared model of set and order. Dragging changes the order, removing from the bar neither unregisters nor moves off the current project. Set, order, look and recents live on the server and follow the operator to every window and device; only the projects a window itself visited since it opened are its own. Pulse comes from the server; the dock also shows activity of projects past the scroll edge. Hovering pre-readies the move's code without opening the project's data.
 
-**Limits.** The bar appears only with several plain projects. Numeric chords and the recents switcher are on desktop macOS; browser keeps the bar and the palette. Opening a separate window uses the desktop-host capability.
+**Limits.** The bar appears only with several plain projects. The numeric chords (⌘1–⌘8 and ⌘9 for the last place) and the ⌃` recents switcher are on desktop macOS; browser keeps the bar and the palette. The numeric chords are shortcuts the operator rebinds in Settings → Shortcuts; ⌃` is caught by key position so it works on any layout, and is not rebindable. Opening a separate window uses the desktop-host capability.

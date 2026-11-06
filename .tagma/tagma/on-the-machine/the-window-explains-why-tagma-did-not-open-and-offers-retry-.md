@@ -1,6 +1,6 @@
 ---
 id: 01a14c05-71a7-71c8-88a1-ee546656e4ff
-title: The window explains why Tagma did not open, and offers retry, switch or a report
+title: The window explains why Tagma did not open, and offers retry or a report
 ord: 27
 tags: ["feature"]
 fields:
@@ -22,7 +22,7 @@ sources:
 ---
 **Value.** A missing or broken server does not leave the person before an empty window: state and available action are visible.
 
-**How.** The desktop's built-in waiting page; retry, channel switching and report saving on it.
+**How.** The desktop's built-in waiting page; retry and report saving on it.
 
 **Behaviour.** The window tells apart installation, launch, another active channel, someone else's answer at the address, a start failure and an unfinished data return. A live launch is not declared failed just because of duration; after an actual exit the saved reason is read. An already open surface keeps being watched and goes through launch again if the server disappears. A server that itself reported a stuck writer is taken down and raised again by the window, warning of interrupted agents.
 
