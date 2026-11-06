@@ -67,6 +67,7 @@ type DoorParams = {
   readonly drivers?: readonly DriverId[];
   readonly artifactOrigin?: string;
   readonly sandboxPort?: number;
+  readonly surfacePath?: string;
   readonly logins?: LoginsParams;
 };
 
@@ -214,6 +215,7 @@ const built = Effect.fnUntraced(
         attachmentsPath: join(data, 'attachments'),
         artifactOrigin: options.artifactOrigin,
         sandboxPort: options.sandboxPort,
+        surfacePath: options.surfacePath,
         localOrigin: DOOR_ORIGIN,
         sourcePath: serverPath,
         codePath: options.codePath,
@@ -349,6 +351,7 @@ const paramsOf = (options: WorldOptions): DoorParams => ({
   drivers: options.drivers,
   artifactOrigin: options.artifactOrigin,
   sandboxPort: options.sandboxPort,
+  surfacePath: options.surfacePath,
   logins: options.logins,
 });
 

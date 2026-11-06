@@ -5,7 +5,7 @@ import type { EnabledPlugins, HostedPlugins, PluginDigests, PluginFaults, Plugin
 import { PluginPoints } from '../plugins/contract/service/points.js';
 import { makeActions } from './actions.js';
 import { PluginActions } from './contract/service/actions.js';
-import { ViewFiles, type ViewPlaces } from './contract/service/places.js';
+import { ViewFiles, type ViewPlaces, type WindowStyles } from './contract/service/places.js';
 import { PluginViews, ViewStorage } from './contract/service/views.js';
 import { makeShelf } from './shelf.js';
 import { makeValues } from './storage.js';
@@ -22,6 +22,7 @@ export const viewsLayer: Layer.Layer<
   | PluginDigests
   | PluginFaults
   | ViewPlaces
+  | WindowStyles
   | FileSystem.FileSystem
 > = Layer.effectContext(
   Effect.gen(function* () {

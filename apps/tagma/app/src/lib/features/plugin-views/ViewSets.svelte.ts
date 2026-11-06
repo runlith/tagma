@@ -4,6 +4,7 @@ import { Service } from '@runlith/layer/key';
 import { ProjectRung, type ProjectAim } from '$lib/features/workspace/ProjectRung.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { PluginModules } from './PluginModules.js';
+import { type SheetPort, UtilitiesSheet } from './UtilitiesSheet.js';
 
 type ShownView = { readonly set: PluginViewSet; readonly view: PluginViewSet['views'][number] };
 
@@ -15,7 +16,7 @@ const resultModules = (set: PluginViewSet): readonly string[] =>
 
 export class ViewSets extends Service<ViewSets>()('ViewSets', { tier: 'project' }) {
   static *make() {
-    return new ViewSets(yield* ProjectRung.Current, yield* Live, yield* PluginModules, yield* Scope);
+    return new ViewSets(yield* ProjectRung.Current, yield* Live, yield* PluginModules, yield* UtilitiesSheet, yield* Scope);
   }
 
   sets = $state.raw<readonly PluginViewSet[]>([]);
@@ -28,12 +29,14 @@ export class ViewSets extends Service<ViewSets>()('ViewSets', { tier: 'project' 
     readonly aim: ProjectAim,
     live: LiveConnection,
     modules: PluginModules,
+    sheet: SheetPort,
     scope: Scope,
   ) {
     super();
     const feed = live.hold(
       (client) => client['views.subscribe']({ projectId: aim.projectId }),
       (event) => {
+        sheet.show(event.sheet);
         const said = JSON.stringify(event);
         if (said !== this.said) {
           this.sets = event.plugins;

@@ -39,6 +39,11 @@ export const names: Builtin<'names', NamesParams> = {
       F4: {
         allowances: [
           {
+            lines: 706,
+            path: 'apps/tagma/server/src/composition/runtime.ts',
+            why: "One subject: composing the server's runtime: every module's layer with the places, ports and fillers composition alone knows, in the one order their lifetimes and dependencies need.",
+          },
+          {
             lines: 728,
             path: 'apps/tagma/server/src/mcp/serverPool.ts',
             why: 'One subject: the project MCP pool lifecycle; declaration reconciliation, sign-in readers and the contributed sign-ins they keep, secret redaction, app calls and which pools stand open share its session ownership and scope.',

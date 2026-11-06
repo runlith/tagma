@@ -3,10 +3,13 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, extname, join, relative, resolve } from 'node:path';
 import { type CompiledCache, graphFiles, svelteFiles, type ViewFailure } from '@runlith/tagma/plugin/bundling';
+import { optimize } from '@tailwindcss/node';
 import { compile, compileModule, VERSION } from 'svelte/compiler';
 import svelte from 'svelte/package.json' with { type: 'json' };
+import { compile as compileStyles } from 'tailwindcss';
 import { viewCompileOptions, viewModuleOptions } from '../contract/wire/compile.js';
 import { hostModules } from '../contract/wire/host.js';
+import { stylesheetKey, utilitiesSource } from '../contract/wire/utilities.js';
 import { type CompileAnswer, type CompileAsk, type CompiledIndex, INDEX_FILE } from './compile.js';
 
 declare const self: Worker;
@@ -37,7 +40,25 @@ const shortHash = (bytes: Uint8Array): string => createHash('sha256').update(byt
 
 const logged = (logs: readonly unknown[]): string => logs.map((log) => String(log)).join('\n') || 'the bundler answered no reason';
 
-const views = async (ask: CompileAsk): Promise<CompileAnswer> => {
+const sheet = async (ask: Extract<CompileAsk, { kind: 'sheet' }>): Promise<CompileAnswer> => {
+  const { entry, candidates, stylesheets } = ask.utilities;
+  const styles = await compileStyles(utilitiesSource(entry), {
+    base: '.',
+    loadStylesheet: async (id, base) => {
+      const recorded = stylesheets[stylesheetKey(id, base)];
+      if (recorded === undefined) throw new Error(`the window's styles record no stylesheet ${id} from ${base}`);
+      return recorded;
+    },
+  });
+  const { code } = optimize(styles.build([...candidates, ...ask.candidates]), { minify: true });
+  const staging = `${ask.out}.${process.pid}-${ask.id}.partial`;
+  await mkdir(join(ask.out, '..'), { recursive: true });
+  await writeFile(staging, code);
+  await rename(staging, ask.out);
+  return { id: ask.id, ok: true, kind: 'sheet' };
+};
+
+const views = async (ask: Extract<CompileAsk, { kind: 'views' }>): Promise<CompileAnswer> => {
   const staging = `${ask.out}.${process.pid}-${ask.id}.partial`;
   await rm(staging, { recursive: true, force: true });
   const failures: ViewFailure[] = [];
@@ -90,7 +111,7 @@ const views = async (ask: CompileAsk): Promise<CompileAnswer> => {
   await writeFile(join(staging, INDEX_FILE), JSON.stringify(index));
   await mkdir(join(ask.out, '..'), { recursive: true });
   await rename(staging, ask.out).catch(async () => rm(staging, { recursive: true, force: true }));
-  return { id: ask.id, ok: true, index };
+  return { id: ask.id, ok: true, kind: 'views', index };
 };
 
 let queue: Promise<void> = Promise.resolve();
@@ -98,7 +119,7 @@ let queue: Promise<void> = Promise.resolve();
 self.onmessage = (event: MessageEvent<CompileAsk>) => {
   const ask = event.data;
   queue = queue.then(() =>
-    views(ask).then(
+    (ask.kind === 'views' ? views(ask) : sheet(ask)).then(
       (answer) => self.postMessage(answer),
       (error: unknown) =>
         self.postMessage({

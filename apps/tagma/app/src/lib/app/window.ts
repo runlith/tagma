@@ -1,5 +1,6 @@
 import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
+import { Platform } from '@runlith/layer/Platform';
 import { browserPlatform } from '@runlith/layer/Platform/browser';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { storedShell } from '$lib/features/shell/shell.js';
@@ -10,6 +11,7 @@ import { dev } from '$app/environment';
 import { updated } from '$app/state';
 import { appLayers } from './composition.js';
 import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
+import { adoptedSheet, UtilitiesSheet, unshownSheet } from '$lib/features/plugin-views/UtilitiesSheet.js';
 import { FileSaver } from '$lib/shared/FileSaver.js';
 import type { BrowserPlatform } from './hostOs.js';
 import { hostOf } from './host.js';
@@ -42,6 +44,16 @@ export const WINDOW = Layer.mergeAll(
   Layer.of(FileSaver, { save: saveInBrowser }),
   Layer.of(ClientBuild, { behind: () => updated.check() }),
   Layer.of(ServiceWorkers, new BrowserWorkers(dev ? 'module' : 'classic')),
+  Layer.provide(UtilitiesSheet, function* () {
+    if (dev) return unshownSheet;
+    const platform = yield* Platform;
+    const origin = yield* ServerOrigin;
+    return adoptedSheet(async (address) => {
+      const answer = await platform.fetch(new URL(address, origin.http));
+      if (!answer.ok) throw new Error(`${address} answered ${answer.status}`);
+      return answer.text();
+    });
+  }),
   Host.of(hostOf(desktop?.operatingSystem, liveBrowser(), storedShell(browserPlatform().storage.local), touchScreen(), installedApp())),
   ServerOrigin.of(window.location.origin),
 );

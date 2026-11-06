@@ -114,7 +114,7 @@ export const makeShelf = Effect.gen(function* () {
               Stream.mapEffect(() =>
                 Effect.map(enabledPlugins.held(projectId), (held): PluginViewState => {
                   const enabled = held();
-                  return { plugins: setsOf(enabled), enabled, sheet: null };
+                  return { plugins: setsOf(enabled), enabled, sheet: builds.sheet() };
                 }),
               ),
               Stream.changesWith((left, right) => JSON.stringify(left) === JSON.stringify(right)),

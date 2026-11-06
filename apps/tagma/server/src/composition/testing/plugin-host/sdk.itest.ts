@@ -26,7 +26,7 @@ import { Schedules } from '../../../schedule/contract/service/schedules.js';
 import { schedule } from '../../../schedule/schedule.js';
 import { memorySecretsLayer } from '../../../secrets/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
-import { ViewPlaces } from '../../../views/contract/service/places.js';
+import { ViewPlaces, WindowStyles } from '../../../views/contract/service/places.js';
 import { views as viewsModule } from '../../../views/views.js';
 import { buildSteps } from '../../buildSteps.js';
 import { ticks } from '../../ticks.js';
@@ -78,7 +78,10 @@ const clocked = (home: string) =>
   Layer.mergeAll(
     schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks)),
     buildSteps,
-    viewsModule.lifetimes.installation.pipe(Layer.provide(Layer.succeed(ViewPlaces, { home: join(home, 'views') }))),
+    viewsModule.lifetimes.installation.pipe(
+      Layer.provide(Layer.succeed(ViewPlaces, { home: join(home, 'views') })),
+      Layer.provide(Layer.succeed(WindowStyles, { utilities: null })),
+    ),
   ).pipe(
     Layer.provideMerge(
       pluginHost.lifetimes.installation.pipe(

@@ -194,7 +194,8 @@ import { views } from '../views/views.js';
 import { appearance } from '../appearance/appearance.js';
 import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
-import { ViewPlaces } from '../views/contract/service/places.js';
+import { ViewPlaces, WindowStyles } from '../views/contract/service/places.js';
+import { UTILITIES_FILE } from '../views/contract/wire/utilities.js';
 import { PluginViews } from '../views/contract/service/views.js';
 import { HostPlace, PLUGIN_QUIET, PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { machineStoreLayer } from '../installation/registry/restore.js';
@@ -353,6 +354,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     sender?: Sender['Service'];
     pluginServer?: string;
     localOrigin?: string;
+    surfacePath?: string;
     adapters?: readonly AdapterSource[];
     userEnvironment?: UserEnvironment['Service'];
     accountCli?: AccountCli['Service'];
@@ -699,6 +701,11 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                   'plugin views',
                   views.lifetimes.installation.pipe(
                     Layer.provide(Layer.succeed(ViewPlaces, { home: join(dataPath ?? pluginsHome, 'views') })),
+                    Layer.provide(
+                      Layer.succeed(WindowStyles, {
+                        utilities: options.surfacePath === undefined ? null : join(options.surfacePath, UTILITIES_FILE),
+                      }),
+                    ),
                     Layer.provide(BunFileSystem.layer),
                   ),
                 ),

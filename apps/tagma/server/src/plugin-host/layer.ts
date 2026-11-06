@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schedule, Semaphore, Stream } from 'effect';
+import { Context, Deferred, Effect, Layer, Schedule, Semaphore, Stream } from 'effect';
 import { EnabledPlugins, HostedPlugins, PluginProcesses } from '../plugins/contract/service/plugins.js';
 import { PluginPoints } from '../plugins/contract/service/points.js';
 import { HostPlace, PluginHost } from './contract/service/supervision.js';
@@ -22,6 +22,7 @@ export const pluginHostLayer: Layer.Layer<
     yield* Effect.acquireRelease(points.declare(TOOLS, offers.register), (withdraw) => Effect.sync(withdraw));
     const supervisor = yield* makeSupervisor({ points, hosted, offers });
     const serial = yield* Semaphore.make(1);
+    const firstPass = yield* Deferred.make<void>();
     yield* Effect.acquireRelease(
       (yield* PluginProcesses).register({ reading: supervisor.reading, stopped: (id) => serial.withPermit(supervisor.stop(id)) }),
       (withdraw) => Effect.sync(withdraw),
@@ -64,7 +65,9 @@ export const pluginHostLayer: Layer.Layer<
             scope,
           );
           yield* settled;
+          yield* Deferred.succeed(firstPass, undefined);
         }),
+        started: Deferred.await(firstPass),
         reading: supervisor.reading,
         hosts: supervisor.hosts,
         title: supervisor.title,

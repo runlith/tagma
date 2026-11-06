@@ -19,3 +19,5 @@ export const MODULES_PATH = '/api/views/modules';
 export const SHEET_PATH = '/api/views/sheet';
 
 export const moduleAddress = (plugin: string, key: string, file: string): string => `${MODULES_PATH}/${plugin}/${key}/${file}`;
+
+export const sheetAddress = (file: string): string => `${SHEET_PATH}/${file}`;

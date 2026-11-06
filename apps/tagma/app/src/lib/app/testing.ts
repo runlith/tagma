@@ -30,6 +30,7 @@ import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
 import { TEST_ORIGIN } from '$lib/wire/testing.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
+import { UtilitiesSheet, unshownSheet } from '$lib/features/plugin-views/UtilitiesSheet.js';
 import { FileSaver } from '$lib/shared/FileSaver.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { AppState, type AppStateStorage } from '$lib/features/workspace/AppState.js';
@@ -119,6 +120,7 @@ export function mountShell(
     ServerOrigin.of(TEST_ORIGIN),
     Layer.of(ExternalLinks, { open: (url) => void opened.push(url) }),
     Layer.of(FileSaver, { save: () => undefined }),
+    Layer.of(UtilitiesSheet, unshownSheet),
     boot as never,
   );
   const graph = mountApp(Layer.mergeAll(manifest as never, Overlays, Topics, testAddressing) as never, world as never, {

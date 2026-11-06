@@ -16,6 +16,7 @@ export class PluginHost extends Context.Service<
   PluginHost,
   {
     start(): Effect.Effect<void>;
+    readonly started: Effect.Effect<void>;
     reading(id: string): PluginProcessRow | undefined;
     hosts(id: string): boolean;
     title(id: string): string | null;

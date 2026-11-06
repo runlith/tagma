@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Context, Effect, Queue, Stream } from 'effect';
 import { makeDoorWorld } from '../../composition/testing/doorFixture.js';
@@ -9,6 +10,7 @@ import type { PluginRow } from '../../plugins/contract/wire/rows.js';
 import { ViewFiles } from '../contract/service/places.js';
 import type { ViewModule } from '../contract/wire/modules.js';
 import type { PluginViewState } from '../contract/wire/sets.js';
+import { stylesheetKey, UTILITIES_FILE, type WindowUtilities } from '../contract/wire/utilities.js';
 
 const SERVER = resolve(import.meta.dir, '../../../../../../packages/mcp/test/mcpAppServer.ts');
 const object = { type: 'object' };
@@ -38,8 +40,24 @@ const shipped = (root: string, component: string, hash: string) =>
     await writePlugin(root, { id: 'board', title: 'Board', program: SERVER, contributes, build: { hash, sources: [] } });
   });
 
-const setup = Effect.fnUntraced(function* (component: string) {
-  const world = yield* makeDoorWorld({ own: 'it installs a plugin for the machine' });
+const recorded = (id: string, base: string, path: string, content: string) => [stylesheetKey(id, base), { path, base, content }];
+
+const surfaceOf = (root: string) =>
+  Effect.promise(async () => {
+    await mkdir(join(root, '_app/host'), { recursive: true });
+    const utilities: WindowUtilities = {
+      entry: './app.css',
+      candidates: ['px-3'],
+      stylesheets: Object.fromEntries([
+        recorded('./app.css', '.', 'app.css', '@theme { --spacing: 0.25rem; }'),
+        recorded('tailwindcss/utilities.css', '.', 'utilities.css', '@tailwind utilities;'),
+      ]),
+    };
+    await writeFile(join(root, UTILITIES_FILE), JSON.stringify(utilities));
+  });
+
+const setup = Effect.fnUntraced(function* (component: string, surfacePath?: string) {
+  const world = yield* makeDoorWorld({ own: 'it installs a plugin for the machine', surfacePath });
   const projectId = yield* world.stealthProject();
   const scope = `project=${projectId}`;
   const root = yield* world.directory('board-plugin');
@@ -60,8 +78,14 @@ const setup = Effect.fnUntraced(function* (component: string) {
       if (built.state === 'ready' && built.address !== before) return { address: built.address, set };
     }
   });
+  const sheet = Effect.fnUntraced(function* (holds: (address: string | null) => boolean) {
+    for (;;) {
+      const state = yield* Queue.take(states);
+      if (holds(state.sheet)) return state.sheet;
+    }
+  });
   yield* world.op('install_plugin', { source: root }, scope);
-  return { world, projectId, scope, root, module, ready, mount: { projectId, plugin: 'board', view: 'board' } };
+  return { world, projectId, scope, root, module, ready, sheet, mount: { projectId, plugin: 'board', view: 'board' } };
 });
 
 const revisionOf = (answer: { readonly structuredContent?: unknown }) =>
@@ -98,6 +122,24 @@ it.live('a view the compiler refuses reads failed with the file, faults the plug
     const caller = { kind: 'operator' as const, projectId, view: 'board' };
     expect(revisionOf(yield* world.runtime.views.call(mount, 'refresh', {}, caller))).toBe(1);
   }),
+);
+
+it.live(
+  'the utilities sheet holds a plugin’s own class beside the window’s in the utilities layer, and goes once no plugin brings one',
+  () =>
+    Effect.gen(function* () {
+      const surface = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'views-surface-')));
+      yield* surfaceOf(surface);
+      const { world, scope, sheet } = yield* setup('<p class="p-2">board</p>', surface);
+      const address = (yield* sheet((standing) => standing !== null))!;
+      expect((yield* world.call(address)).status).toBe(200);
+      expect((yield* world.call('/api/views/candidates')).body).toEqual({ candidates: ['p-2'] });
+      const files = Context.get(world.runtime.door, ViewFiles);
+      const css = yield* Effect.promise(() => readFile(files.sheet(address.split('/').at(-1)!), 'utf8'));
+      expect(css).toMatch(/@layer utilities\{[^]*\.p-2\{[^]*\.px-3\{/u);
+      yield* world.op('enable_plugin', { id: 'board', enabled: false }, scope);
+      expect(yield* sheet((standing) => standing === null)).toBeNull();
+    }),
 );
 
 it.live('publishing the same views again compiles nothing', () =>

@@ -463,6 +463,7 @@ export const serve = async (build: Build): Promise<void> => {
             hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
             pluginServer: `http://${LOOPBACK_HOST}:${port}`,
             localOrigin: HttpServer.formatAddress(Context.get(localContext, HttpServer.HttpServer).address),
+            surfacePath: surfaceRoot(dataPath, standing),
             marketplaces: SHIPPED_PRESETS,
             commitGate:
               installation === undefined

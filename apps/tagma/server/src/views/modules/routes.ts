@@ -4,6 +4,7 @@ import { HttpServerResponse } from 'effect/http';
 import { route } from '../../platform/contract/service/route.js';
 import { ViewFiles } from '../contract/service/places.js';
 import { MODULES_PATH, SHEET_PATH } from '../contract/wire/modules.js';
+import { CANDIDATES_PATH, type Candidates } from '../contract/wire/utilities.js';
 
 const PART = /^(?!\.{1,2}$)[A-Za-z0-9_@.+-]+$/u;
 
@@ -50,6 +51,18 @@ export const VIEW_ROUTES = [
         const asked = parts(params.file);
         return served(asked === null ? null : files.sheet(asked[0]!));
       };
+    },
+  }),
+  route<ViewFiles>({
+    path: CANDIDATES_PATH,
+    handler: (door) => {
+      const files = Context.get(door, ViewFiles);
+      return () =>
+        Effect.succeed(
+          HttpServerResponse.jsonUnsafe({ candidates: files.candidates() } satisfies Candidates, {
+            headers: { 'cache-control': 'no-store' },
+          }),
+        );
     },
   }),
 ];

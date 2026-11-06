@@ -6,8 +6,11 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { serverPort, surfaceDevPort } from '@tagma/server/installation/contract/wire/ports';
 import { CHANNEL } from '@tagma/server/composition/developer/channel';
 import { hostFile, hostModules as hostSpecifiers, UI_MODULE } from '@tagma/server/views/contract/wire/host';
+import { Candidates, CANDIDATES_PATH, UTILITIES_FILE, type WindowUtilities } from '@tagma/server/views/contract/wire/utilities';
 import { browserGuard } from '@runlith/vite-browser-guard/browserGuard';
+import { Schema } from 'effect';
 import { surfaceOut } from '../surfaceOut.js';
+import { inlineSources, sourceLines, windowUtilities } from './windowUtilities.js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, defaultClientConditions, defaultServerConditions, type Plugin, type Rollup, type UserConfig } from 'vite';
@@ -40,7 +43,7 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
       ...(sources.length === 0 ? [] : [rootSources(sources)]),
       browserGuard(),
       tailwindcss(),
-      hostModules(),
+      hostModules(backendPort, sources),
       sveltekit(),
       surfaceVersion(options.version),
       ...(maps === null && inputs === null ? [] : [releaseRecord(maps, inputs, options.clientInputsOnly ?? false)]),
@@ -76,10 +79,7 @@ function rootRuntime(runtime: string): Plugin {
 }
 
 function rootSources(sources: readonly string[]): Plugin {
-  const scanned = sources.flatMap((source) => {
-    const path = relative(dirname(STYLES), source);
-    return [`@source "${path}/**/*.svelte";`, `@source "${path}/**/*.ts";`];
-  });
+  const scanned = sourceLines(STYLES, sources);
   return {
     name: 'tagma-root-sources',
     enforce: 'pre',
@@ -92,7 +92,13 @@ function rootSources(sources: readonly string[]): Plugin {
   };
 }
 
-function hostModules(): Plugin {
+async function liveCandidates(backendPort: number): Promise<readonly string[]> {
+  const response = await fetch(`http://127.0.0.1:${backendPort}${CANDIDATES_PATH}`, { signal: AbortSignal.timeout(3000) });
+  if (!response.ok) throw new Error(`answered ${response.status}`);
+  return Schema.decodeUnknownSync(Candidates)(await response.json()).candidates;
+}
+
+function hostModules(backendPort: number, sources: readonly string[]): Plugin {
   const svelte = JSON.parse(readFileSync(createRequire(import.meta.url).resolve('svelte/package.json'), 'utf8')) as {
     readonly exports: Readonly<Record<string, unknown>>;
   };
@@ -101,10 +107,44 @@ function hostModules(): Plugin {
   const shims = new Map(specifiers.map((specifier) => [`/${hostFile(specifier)}`, specifier]));
   process.env[HOST_MODULES_ENV] = JSON.stringify({ imports: Object.fromEntries([...shims].map(([path, specifier]) => [specifier, path])) });
   let building = false;
+  let utilities: Promise<WindowUtilities> | null = null;
   return {
     name: 'tagma-host-modules',
     configResolved(config) {
       building = config.command === 'build';
+    },
+    transform: {
+      order: 'pre',
+      filter: { id: /\.css(?:\?|$)/u },
+      async handler(code, id) {
+        if (building || id.split('?')[0] !== STYLES) return null;
+        let candidates: readonly string[];
+        try {
+          candidates = await liveCandidates(backendPort);
+        } catch (error) {
+          this.warn(
+            `the Tagma server on port ${backendPort} gave no plugin view candidates: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return null;
+        }
+        const inline = inlineSources(candidates);
+        if (inline.dropped > 0)
+          this.warn(`${inline.dropped} plugin view candidates hold braces or both quote marks, which @source inline cannot carry`);
+        return inline.css === '' ? null : `${code}\n${inline.css}\n`;
+      },
+    },
+    closeBundle: {
+      order: 'post',
+      async handler() {
+        if (!building) return;
+        const out = resolve(APP, surfaceOut());
+        if (!existsSync(join(out, 'index.html'))) return;
+        utilities ??= windowUtilities(APP, STYLES, sources);
+        const file = join(out, UTILITIES_FILE);
+        const record = JSON.stringify(await utilities);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, record);
+      },
     },
     buildStart() {
       if (!building || this.environment.name !== 'client') return;
