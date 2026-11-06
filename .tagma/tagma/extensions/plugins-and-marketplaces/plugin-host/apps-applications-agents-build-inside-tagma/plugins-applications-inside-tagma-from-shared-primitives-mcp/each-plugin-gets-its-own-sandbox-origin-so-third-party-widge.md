@@ -13,7 +13,7 @@ edges:
     to: 01a1227f-7522-78e3-a658-79b7a0a16218
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/ViewFrame.svelte
+    ref: apps/tagma/app/src/lib/features/mcp/ViewFrame.svelte
   - kind: file
     ref: apps/tagma/server/src/mcp/sandbox.ts
   - kind: file

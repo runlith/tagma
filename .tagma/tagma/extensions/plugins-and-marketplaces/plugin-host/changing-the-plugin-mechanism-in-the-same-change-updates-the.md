@@ -17,10 +17,6 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/speech/viewSpeech.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/params.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/views/ViewBridge.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/http/operations.ts
   - kind: file
     ref: apps/tagma/server/src/composition/outcomes.ts
@@ -66,5 +62,7 @@ sources:
     ref: apps/tagma/server/src/composition/buildSteps.ts
   - kind: file
     ref: apps/tagma/server/src/checkout-builds/contract/wire/steps.ts
+  - kind: dir
+    ref: packages/tagma/src/plugin
 ---
-Covers everything a plugin author sees: `tagma-plugin.json` and its points, options and secrets, the process with its environment and the caller in `_meta` of its calls, the view bridge and `tagma/*` methods, the operations open to a plugin process, a plugin's threads, agents, endings, schedules, notifications and build steps. The skill describes the mechanism as it stands now — without history and without what is gone.
+Covers everything a plugin author sees: `tagma-plugin.json` and its points, options and secrets, the process with its environment and the caller in `_meta` of its calls, Svelte views with `@runlith/tagma/ui`, `useTagma()` and the capabilities other modules contribute to it, the operations open to a plugin process, a plugin's threads, agents, endings, schedules, notifications and build steps. The skill describes the mechanism as it stands now — without history and without what is gone.

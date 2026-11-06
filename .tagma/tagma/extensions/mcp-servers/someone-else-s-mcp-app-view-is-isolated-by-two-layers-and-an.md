@@ -8,7 +8,7 @@ edges:
     to: 01a1231d-99c0-74e1-9e30-779efe94e581
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/views
+    ref: apps/tagma/app/src/lib/features/mcp
   - kind: file
     ref: apps/tagma/server/src/composition/http/local.ts
   - kind: file

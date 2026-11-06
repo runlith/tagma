@@ -18,25 +18,23 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09753f44cbc
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/plugin-views/pluginHost.svelte.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/views/ViewFrame.svelte
-  - kind: file
     ref: apps/tagma/server/src/views/contract/wire/operations.ts
   - kind: file
     ref: apps/tagma/server/src/views/shelf.ts
   - kind: file
     ref: apps/tagma/server/src/views/storage.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/plugin-views/client.svelte.ts
 ---
 **Value.** A plugin view is a live application, not a picture: the operator presses buttons in it, and the view calls the plugin's process, reads its data with updates, remembers its own state, and leads the operator to the thread.
 
-**How.** The view bridge over the MCP Apps protocol and `tagma/*` methods; below it the operator operations `call_plugin_tool`, `read_plugin_resource`, `read_view_storage`, `write_view_storage`, and a live subscription on the process resource.
+**How.** `useTagma()` in the view's component, a client the window builds per mount; below it the operator operations `call_plugin_tool`, `read_plugin_resource`, `read_view_storage`, `write_view_storage`, and a live subscription on the process resource.
 
 **Behaviour.**
 - A view calls only `view`-audience tools of its own plugin, enabled in the project; the process gets the caller as "the operator from this view and thread".
 - Resource reads and subscriptions carry the project and view: one process for all projects decides itself whether to give a project's resource. A subscription outlives a process restart and fall.
 - View storage is server-side key-value, shared by all of the plugin's views, projects and devices, with a bounded value size.
-- A view opens a thread, its own section or a pane only on the operator's click inside the view; it sees what the thread does (see [[94567243]]); it speaks and listens through the server speech.
-- The bridge takes plugin, thread and key from the mount, not from the view's messages.
+- A view opens a thread, its own section or a pane; it sees what the thread does (see [[94567243]]); it speaks and listens through the server speech.
+- The client takes plugin, view, thread and key from the mount, never from the view's own code.
 
-**Limits.** A view does not act in Tagma beyond these methods.
+**Limits.** A view acts in Tagma only through what `useTagma()` offers.

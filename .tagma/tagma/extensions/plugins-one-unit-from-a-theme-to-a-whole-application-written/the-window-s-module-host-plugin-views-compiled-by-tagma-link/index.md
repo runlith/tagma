@@ -22,7 +22,7 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/plugin-views
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/views
+    ref: apps/tagma/app/src/lib/features/mcp
   - kind: file
     ref: apps/tagma/app/scripts/surfaceConfig.ts
   - kind: file

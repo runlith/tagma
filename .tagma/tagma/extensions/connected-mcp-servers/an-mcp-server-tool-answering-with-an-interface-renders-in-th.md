@@ -18,7 +18,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/native/mcpApps.feed.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/ViewBridge.ts
+    ref: apps/tagma/app/src/lib/features/mcp/ViewBridge.ts
   - kind: file
     ref: apps/tagma/server/src/mcp/sandbox.ts
   - kind: file

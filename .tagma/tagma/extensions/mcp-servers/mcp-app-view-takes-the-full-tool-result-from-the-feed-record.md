@@ -10,7 +10,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/mcp/hostStyles.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/toolNotices.ts
+    ref: apps/tagma/app/src/lib/features/mcp/toolNotices.ts
   - kind: symbol
     ref: packages/mcp/src/mcpToolCatalog.ts
     symbol: mcpViewResult

@@ -17,7 +17,7 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/executions/load
   - kind: file
-    ref: apps/tagma/app/src/lib/features/views/Frame.svelte
+    ref: apps/tagma/app/src/lib/shared/frame/Frame.svelte
   - kind: file
     ref: apps/tagma/desktop/src/declared.ts
 ---
