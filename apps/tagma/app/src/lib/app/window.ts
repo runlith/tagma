@@ -45,7 +45,7 @@ export const WINDOW = Layer.mergeAll(
   Layer.of(ClientBuild, { behind: () => updated.check() }),
   Layer.of(ServiceWorkers, new BrowserWorkers(dev ? 'module' : 'classic')),
   Layer.provide(UtilitiesSheet, function* () {
-    if (dev) return unshownSheet;
+    if (import.meta.hot !== undefined) return unshownSheet;
     const platform = yield* Platform;
     const origin = yield* ServerOrigin;
     return adoptedSheet(async (address) => {

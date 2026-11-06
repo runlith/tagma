@@ -46,7 +46,12 @@ const built = Effect.fnUntraced(
     const server = Context.get(listener, HttpServer.HttpServer);
     if (server.address._tag === 'UnixPathAddress') return yield* Effect.die(new Error('the e2e world requires a loopback TCP listener'));
     const origin = `http://127.0.0.1:${server.address.port}`;
-    const world = yield* makeDoorWorld({ artifactOrigin: origin, sandboxPort: server.address.port, logins: params?.logins });
+    const world = yield* makeDoorWorld({
+      artifactOrigin: origin,
+      sandboxPort: server.address.port,
+      surfacePath: appDist,
+      logins: params?.logins,
+    });
     if (params === null) {
       yield* world.lend({ models: scriptedModel() });
       const bootstrap = Effect.fn('testing.E2eWorld.bootstrap')(function* (id: string, input: unknown) {
