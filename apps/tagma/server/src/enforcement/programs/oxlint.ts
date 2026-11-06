@@ -8,7 +8,7 @@ import type { TerminalActor } from '../../executions/contract/wire/terminals.js'
 import type { JudgeLane } from '../workers/asks.js';
 import { InspectionFailed } from '../workers/inspectionLanes.js';
 import type { Checker } from './checker.js';
-import { reachFiles, scratchDir, treeFile, writeInto } from './layout.js';
+import { reachSubjects, scratchDir, treeFile, writeInto } from './layout.js';
 import { requireVersion } from './version.js';
 
 export type OxlintLaunch = {
@@ -24,7 +24,7 @@ export type OxlintLaunch = {
 const failed = (reason: string) => new InspectionFailed({ cause: 'program', reason: `oxlint: ${reason}` });
 
 const wholeSide = (launch: OxlintLaunch, tree: string) =>
-  reachFiles(
+  reachSubjects(
     launch.root,
     tree,
     [...new Set(launch.input.keys.flatMap((key) => key.reach.places))],

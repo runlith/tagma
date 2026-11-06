@@ -1,6 +1,6 @@
 import type { Git } from '@runlith/git/Git';
 import { Effect } from 'effect';
-import { GENERATED_ATTRIBUTE, markedGenerated } from '../platform/git/generated.js';
+import { GENERATED_ATTRIBUTE, markedGenerated } from '../platform/git/generatedAttribute.js';
 import { runGit, type OwnGitFailed } from '../platform/git/ownGit.js';
 import type { TreePlace } from '../workspace/contract/service/commitTrees.js';
 import type { FormatCommand } from '../config/contract/wire/config.js';

@@ -6,6 +6,7 @@ import type { ProgramAnswer, ProgramInvocation, ProgramKey, ProgramResult, Progr
 import type { Answer, Program, Reading, Side } from '@runlith/tagma/rules';
 import * as rules from '@runlith/tagma/rules';
 import * as effect from '@runlith/tagma/rules/effect';
+import { generatedAnswer, generatedQuestion } from '../../platform/git/generatedAttribute.js';
 
 const input: ProgramInvocation = JSON.parse(await Bun.stdin.text());
 const module = process.argv[2];
@@ -28,8 +29,8 @@ function failed(failure: string): never {
   said({ readings: [], failure });
 }
 
-const git = (args: readonly string[]): Buffer | null => {
-  const ran = spawnSync('git', ['-C', input.root, ...args], { maxBuffer: 1024 * 1024 * 1024 });
+const git = (args: readonly string[], stdin?: string): Buffer | null => {
+  const ran = spawnSync('git', ['-C', input.root, ...args], { maxBuffer: 1024 * 1024 * 1024, input: stdin });
   if (ran.error !== undefined) failed(`git could not run: ${ran.error.message}`);
   return ran.status === 0 ? ran.stdout : null;
 };
@@ -83,8 +84,13 @@ const listing = (commit: string): readonly string[] => {
       const entry = /^(\d+) blob [0-9a-f]+\t([\s\S]+)$/u.exec(row);
       return entry !== null && SOURCE_MODES.has(entry[1]!) ? [entry[2]!] : [];
     });
-  listed.set(commit, paths);
-  return paths;
+  const { args, stdin } = generatedQuestion(paths, commit);
+  const marked = paths.length === 0 ? '' : git(args, stdin);
+  if (marked === null) failed(`git could not read which files of ${commit} are generated`);
+  const generated = generatedAnswer(marked.toString());
+  const subjects = paths.filter((path) => !generated.has(path));
+  listed.set(commit, subjects);
+  return subjects;
 };
 
 const sideOf = (side: ProgramSide, key: ProgramKey): Side => {

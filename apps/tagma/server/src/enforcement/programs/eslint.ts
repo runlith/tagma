@@ -6,7 +6,7 @@ import type { ProgramRoad } from '../../executions/contract/service/programs.js'
 import { InspectionFailed } from '../workers/inspectionLanes.js';
 import { type Checker, PRELOAD } from './checker.js';
 import type { FilesLaunch, FilesRunner } from './filesRunner.js';
-import { type LaidFile, reachFiles, scratchDir, treeFile, writeInto } from './layout.js';
+import { type LaidFile, reachSubjects, scratchDir, treeFile, writeInto } from './layout.js';
 import { PRELOAD_ROOT, PRELOAD_TREE } from './loading.js';
 
 const failed = (reason: string) => new InspectionFailed({ cause: 'program', reason: `eslint: ${reason}` });
@@ -29,7 +29,7 @@ const laidSides = Effect.fn('enforcement.program.eslint.sides')(function* (launc
     sides.push({
       side: side.side,
       whole: true,
-      files: yield* reachFiles(launch.root, tree, places, (path) => lintable(path) && reached(path), failed),
+      files: yield* reachSubjects(launch.root, tree, places, (path) => lintable(path) && reached(path), failed),
     });
   }
   return sides;

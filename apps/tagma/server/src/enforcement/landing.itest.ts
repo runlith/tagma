@@ -69,13 +69,14 @@ layer(landingFixture(), { excludeTestServices: true })('landing gates', (it) => 
       ),
   );
 
-  it.effect('a file the judged tree marks linguist-generated is judged by no rule, so a crossing in it lands', () =>
+  it.effect('a file the judged tree marks linguist-generated is judged by no rule, so a crossing in it lands and never becomes debt', () =>
     withLanding((gate) =>
       Effect.gen(function* () {
         yield* gate.wrote(MINE, '.gitattributes', 'src/core/built.ts linguist-generated=true\n');
         yield* gate.wrote(MINE, 'src/core/built.ts', "import { main } from '../app/main';\nexport const built = main;\n");
         const receipt = gate.landed(yield* gate.submit(MINE));
         expect(receipt.committed).toEqual(['.gitattributes', 'src/core/built.ts']);
+        expect((yield* gate.enforced(MINE, { blockId: gate.rule, strictness: 'gate' })).escaped).toBe(0);
       }),
     ),
   );
