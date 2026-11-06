@@ -7,7 +7,7 @@ description: Use before deciding, changing, mocking up or reviewing anything a p
 
 A tagma is a Byzantine guard unit, a body "set in order": the product is a formation of agents under one operator. The sign is a helmet with a crest of square plates; the first plate leads in gold, the rest stand in rank. The interface keeps that order: every form means one thing, signals are few so each one is read, every mark moves in step, and gold stands only where the reader is. A case no rule names is decided by asking what the thing is in this grammar, never by what another app does.
 
-The values live in `apps/tagma/app/src/app.css` (tokens) and `packages/chat-ui/src/theme.css` (the chat's tokens, mapped onto the app's in `app.css`). The reasons live in the graph, in explanations sourced to the code they govern; they arrive when you read that code. This skill is the map and the grammar; read the source for the value.
+The colour values live in Tagma's own theme, `apps/tagma/server/src/appearance/contract/wire/tagma.ts`, which `bun apps/tagma/server/src/appearance/stylesheet.ts` generates into `apps/tagma/app/src/tokens.generated.css`; a person's plugin theme repaints the same tokens. `apps/tagma/app/src/app.css` holds the rest of the tokens and the Tailwind mapping, and `packages/chat-ui/src/theme.css` the chat's tokens, mapped onto the app's in `app.css`. The reasons live in the graph, in explanations sourced to the code they govern; they arrive when you read that code. This skill is the map and the grammar; read the source for the value.
 
 ## The grammar
 
@@ -23,7 +23,7 @@ Ask what the thing is, then draw it so:
 ## Color and surfaces
 
 - Surfaces and text carry no hue: the dark theme is a neutral near-black (explanation f671eb5f). Color in the window is only gold, the state colors, the muted marks of projects and worktrees and the muted roles of syntax highlighting, so any color is a signal and every color means one thing.
-- Code is colored by role, never by a vendor theme: the highlighter's theme (`packages/highlight/src/theme.ts`) paints each token `var(--syntax-<role>)`, and the `--syntax-*` tokens in `app.css` hold the values for both themes, each hue at least 21° from every state hue, below the state chroma, no gold (explanation 412bbac1). The editor's caret, focused selection and current search match are gold; other matches are neutral.
+- Code is colored by role, never by a vendor theme: the highlighter's theme (`packages/highlight/src/theme.ts`) paints each token `var(--syntax-<role>)`, and the `--syntax-*` tokens of Tagma's theme hold the values for light and dark, each hue at least 21° from every state hue, below the state chroma, no gold (explanation 412bbac1). The editor's caret, focused selection and current search match are gold; other matches are neutral.
 - Project and worktree hues are muted (chroma 0.06 dark, 0.07 light) and stand at least 21° from every state hue (explanations f0e82349, 646a9782). A project's tile is neutral; its color is a small mark in a corner or frame. A new color token obeys the same distance, or it will read as a state.
 - Surfaces: `chrome`, `background`, `field`, `raised`, `popover`, `sunken`. Selection and chips are the overlays `bg-hover` and `bg-selected`. A popover separates from the window by a step of lightness and a border, not a grey fill. A control floating over moving content — the jump-to-latest tile over the feed (`JumpToLatest`), the graph's controls over its canvas — may be translucent with a light blur; panels, menus and popovers are opaque.
 - Elevation: `shadow-raised`, `shadow-float`. Text: `text-meta`, `-small`, `-ui`, `-body`, `-page`, `-title` (`text-badge` only for a count on an icon); Geist and Geist Mono.
@@ -59,7 +59,7 @@ Ask what the thing is, then draw it so:
 
 ## Order of work
 
-1. Read `app.css` and the components of the screen being changed; `read_owners` on the place gives its graph owner, and its explanations arrive as you read the code.
+1. Read `app.css`, Tagma's theme (`tagma.ts`) and the components of the screen being changed; `read_owners` on the place gives its graph owner, and its explanations arrive as you read the code.
 2. Name what each new thing is in the grammar above, and find the component or mark that already draws it.
 3. A change the operator wants to see first is a mockup (rule 95258760): the whole screen in its surroundings, built from Tagma's own tokens, fonts, icons and components, both themes, with its states and edges and one recommendation. Publish it with the artifacts skill.
 4. Build with tokens only; `check_rules` runs the token rule (55b5437b) before the commit gate does. The `·`, fade and hover-action rules have no check: read your diff for them.
