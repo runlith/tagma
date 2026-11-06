@@ -43,5 +43,6 @@ const transcriptEventSchema = Schema.Union([
   Schema.Struct({ type: Schema.tag('entry'), threadId, entry: transcriptEntrySchema }),
   Schema.Struct({ type: Schema.tag('removed'), threadId, ids: Schema.Array(Schema.String) }),
   Schema.Struct({ type: Schema.tag('tail'), threadId, tail: transcriptTailSchema }),
+  Schema.Struct({ type: Schema.tag('failed'), threadId, reason: Schema.String }),
 ]).pipe(Schema.toTaggedUnion('type'));
 export type TranscriptEvent = typeof transcriptEventSchema.Type;
