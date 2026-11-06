@@ -9,6 +9,7 @@ import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { Hosts } from '../browser/contract/service/hosts.js';
 import { Pages } from '../browser/contract/service/pages.js';
 import { Profiles } from '../browser/contract/service/profiles.js';
+import { Screencast } from '../browser/contract/service/screencast.js';
 import { type PageId, type ProfileId } from '../browser/contract/wire/ids.js';
 import { agentIn, browserWorld, calling, OPERATOR, PAGE, refIn, refusalOf, Seeded, type Served } from '../browser/testing/world.js';
 import { MANAGED_AGENT } from './adapter.js';
@@ -63,6 +64,10 @@ const server: Bun.Server<undefined> = Bun.serve({
         #cover::after { content: 'Cover'; position: absolute; inset: 0; }
       </style><button id="subscription" aria-expanded="false" onclick="this.setAttribute('aria-expanded', 'true')">How do I pause or cancel my Premium subscription?</button><div id="cover"></div>`);
     if (path === '/second') return html('<title>Second</title><h1>Second page</h1>');
+    if (path === '/moving')
+      return html(`<title>Moving</title><p id="tick" style="font-size:48px">0</p><button onclick="document.getElementById('list').append(document.createElement('li'))">Add</button><ul id="list"></ul><script>
+        let n = 0; const tick = () => { document.getElementById('tick').textContent = ++n < 60 ? String(n) : 'Ticked'; document.body.style.background = n % 2 ? '#fff' : '#eee'; requestAnimationFrame(tick); }; tick();
+      </script>`);
     return new Response('ok');
   },
 });
@@ -100,25 +105,63 @@ const windowsOf = Effect.fnUntraced(function* (profile: ProfileId) {
 }, Effect.scoped);
 
 const IDENTITY = 'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation';
-const WINDOWS = 'a shown profile holds one window per open page and no other, from its launch on';
+const TABS = 'a shown profile holds its pages as tabs of one window, and opens a window again once every page closed';
+const BEHIND = 'an agent drives a background tab of a shown profile, and its viewers see it move';
 if (chromeInstalled && !headed()) {
   notRun(IDENTITY.replace('%s', SHOWN), 'headed');
-  notRun(WINDOWS, 'headed');
+  notRun(TABS, 'headed');
+  notRun(BEHIND, 'headed');
 }
 const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED, ...(headed() ? [SHOWN] : [])] : [MANAGED_AGENT];
 const fixture = managedFixture();
 
+const openShown = (path: string) =>
+  calling(PAGE.open_page.body.execute({ url: at(path), profile: SHOWN }, undefined, agent)).pipe(Effect.map((opened) => opened.page.id));
+
 layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
-  if (chromeInstalled && headed())
-    it.effect(WINDOWS, () =>
+  if (chromeInstalled && headed()) {
+    it.effect(TABS, () =>
       Effect.gen(function* () {
-        const open = (path: string) => calling(PAGE.open_page.body.execute({ url: at(path), profile: SHOWN }, undefined, agent));
-        yield* open('/second');
+        const first = yield* openShown('/second');
         expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/second')], windows: 1 });
-        yield* open('/labels');
-        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/labels'), at('/second')], windows: 2 });
+        const second = yield* openShown('/labels');
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/labels'), at('/second')], windows: 1 });
+        for (const page of [first, second]) yield* calling(PAGE.close_page.body.execute({ page }, undefined, agent));
+        const again = yield* openShown('/second');
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/second')], windows: 1 });
+        yield* calling(PAGE.close_page.body.execute({ page: again }, undefined, agent));
       }),
     );
+
+    it.effect(BEHIND, () =>
+      Effect.gen(function* () {
+        const front = yield* openShown('/second');
+        const page = yield* openShown('/moving');
+        const pages = yield* Pages;
+        yield* Effect.addFinalizer(() => Effect.andThen(pages.close(page), pages.close(front)).pipe(Effect.orDie));
+        expect(yield* evaluate(page, 'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))')).toBe(
+          true,
+        );
+        yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'Ticked', timeoutMs: 10_000 }, undefined, agent));
+        const frames = yield* (yield* Screencast).watch(page, { width: 400, height: 300, scale: 1, layout: true }).pipe(
+          Stream.filter((event) => event.type === 'frame'),
+          Stream.take(3),
+          Stream.runCollect,
+        );
+        expect(new Set(frames.map((frame) => (frame.type === 'frame' ? frame.data : ''))).size).toBeGreaterThan(1);
+        const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
+        yield* calling(
+          PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', ref: refIn(shot.text, /button "Add"/) }] }, undefined, agent),
+        );
+        expect(yield* evaluate(page, 'document.querySelectorAll("li").length')).toBe(1);
+        const captured = yield* calling(PAGE.capture_page.body.execute({ page }, undefined, agent));
+        expect(captured.status === 'captured' && captured.bytes > 0).toBe(true);
+        const navigated = yield* calling(PAGE.navigate_page.body.execute({ page, url: at('/second') }, undefined, agent));
+        expect(navigated.page.url).toBe(at('/second'));
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: [at('/second'), at('/second')], windows: 1 });
+      }),
+    );
+  }
 
   it.effect.each(PROFILES)(IDENTITY, (profile) =>
     Effect.gen(function* () {

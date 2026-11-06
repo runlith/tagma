@@ -15,7 +15,7 @@ export const ManagedDocument = Schema.Struct({
     .pipe(Schema.withDecodingDefaultKey(Effect.succeed('hidden' as const)))
     .annotate({
       description:
-        'How the browser runs: `hidden` without a window, `shown` as an ordinary windowed browser on this machine, each page in its own window. Sites that refuse headless browsers, Google sign-in among them, need `shown` on `installed-chrome`. Absent: `hidden`.',
+        'How the browser runs: `hidden` without a window, `shown` as an ordinary windowed browser on this machine, its pages tabs of one window. Sites that refuse headless browsers, Google sign-in among them, need `shown` on `installed-chrome`. Absent: `hidden`.',
     }),
 });
 export type ManagedDocument = typeof ManagedDocument.Type;

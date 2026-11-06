@@ -30,11 +30,11 @@ const HIDDEN: Params<'Target.createTarget'> = { url: 'about:blank', hidden: true
 
 const WINDOWED: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: true };
 
-const BEHIND: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: true, background: true };
+const BEHIND: Params<'Target.createTarget'> = { url: 'about:blank', background: true };
 
 const TAB: Params<'Target.createTarget'> = { url: 'about:blank', newWindow: false };
 
-export const pageTarget = (window: WindowMode): Params<'Target.createTarget'> => (window === 'shown' ? WINDOWED : TAB);
+export const pageTarget = (window: WindowMode): Params<'Target.createTarget'> => (window === 'shown' ? BEHIND : TAB);
 
 const heldTarget = Effect.fnUntraced(function* (browser: Browser, opening: Params<'Target.createTarget'>) {
   yield* Effect.acquireRelease(
