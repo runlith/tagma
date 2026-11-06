@@ -1853,6 +1853,11 @@
       "bun": "./src/external-harnesses/titles.ts",
       "default": null
     },
+    "./fresh-world/*": {
+      "types": "./src/fresh-world/*.ts",
+      "bun": "./src/fresh-world/*.ts",
+      "default": null
+    },
     "./graph/*": {
       "types": "./src/graph/*.ts",
       "bun": "./src/graph/*.ts",
