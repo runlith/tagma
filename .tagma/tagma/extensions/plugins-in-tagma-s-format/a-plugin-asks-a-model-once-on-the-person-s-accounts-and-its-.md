@@ -20,7 +20,7 @@ sources:
 ---
 **Value.** A plugin that needs a model's judgement once — grade a sentence, sort a note, write a title — gets it without starting a thread, and the person sees what it spent.
 
-**How.** The plugin's process calls `ctx.models.ask(prompt, {schema})`; behind it the external operations `ask_model` and `read_model_menu`. The model is the person's choice in `ask.model`, or one the plugin names from the menu. The plugin's card in Plugins shows what its asks spent.
+**How.** The plugin's process calls `ctx.models.ask(prompt, {schema})`; behind it the external operations `ask_model` and `read_model_menu`. The model is the person's choice in `ask.model`, or one the plugin names from the menu. `read_model_menu` answers the menu agents read through `read_models` — by provider, each model's reasoning rungs, operator-only mark with the rung each lowers to, and switches with their values — both rendered from one projection in the model catalog (`textMenu`), so a plugin learns the switch values `set_thread_model` takes. The plugin's card in Plugins shows what its asks spent.
 
 **Behaviour.**
 - With a Standard Schema (zod, ArkType, Valibot) the SDK sends its JSON Schema and parses the answer with it, so the author gets a typed value; an answer off the shape throws.

@@ -24,8 +24,6 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/views/contract/wire/operations.ts
   - kind: file
-    ref: apps/tagma/server/src/views/files.ts
-  - kind: file
     ref: apps/tagma/server/src/views/shelf.ts
   - kind: file
     ref: apps/tagma/server/src/views/storage.ts
@@ -39,6 +37,6 @@ sources:
 - Resource reads and subscriptions carry the project and view: one process for all projects decides itself whether to give a project's resource. A subscription outlives a process restart and fall.
 - View storage is server-side key-value, shared by all of the plugin's views, projects and devices, with a bounded value size.
 - A view opens a thread, its own section or a pane only on the operator's click inside the view; it sees what the thread does (see [[94567243]]); it speaks and listens through the server speech.
-- The bridge takes plugin, thread and key from the mount, not from the view's messages. A view is a plain page on the plugin's own origin, so it embeds others' widgets (a video player), while the origin difference holds the isolation.
+- The bridge takes plugin, thread and key from the mount, not from the view's messages.
 
-**Limits.** A view does not act in Tagma beyond these methods. A browser that does not resolve `*.localhost` names (part of Safari) shows no views and says so. Cookies set by a view script through the remote door are seen by all plugins: there sites differ only by port.
+**Limits.** A view does not act in Tagma beyond these methods.

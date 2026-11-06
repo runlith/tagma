@@ -31,7 +31,7 @@ sources:
 **Behaviour.**
 - JPEG frames stream; several viewers of one page share a single stream, quality is the minimum requested, and each viewer sets its own pace.
 - Input: mouse, wheel, keys, typed text through IME, touch as tap and scroll, copy and paste through the clipboard; a keyboard button on the phone.
-- The page lays out to the viewer's area; a page with a native desktop view keeps its size.
+- A managed page in fast mode lays out to the viewer's area; human-mode pages and pages with native desktop views keep their native size.
 - A page file picker opens the viewer's file picker; files go to the page.
 - On the phone — back, reload, downloads, and dialog answers.
 
