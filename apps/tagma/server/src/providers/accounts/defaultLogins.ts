@@ -24,7 +24,13 @@ export const makeDefaultLoginBook = Effect.gen(function* () {
   const readings = new WeakMap<CliHarnessProvider, Reading>();
   const places = new WeakMap<CliHarnessProvider, string | null>();
   const locks = new WeakMap<CliHarnessProvider, Map<string | null, Semaphore.Semaphore>>();
-  let revision = 0;
+  const moved = yield* PubSub.sliding<void>({ capacity: 1, replay: 1 });
+  const pending = new Set<string>();
+  const announce = (provider: string) =>
+    Effect.andThen(
+      Effect.sync(() => pending.add(provider)),
+      PubSub.publish(moved, undefined),
+    );
   const directoryOf = (registration: CliHarnessProvider) => places.get(registration) ?? null;
   const stored = (registration: CliHarnessProvider, directory = directoryOf(registration)) =>
     Effect.map(rows.of(registration.id), (held) => held.find((row) => row.directory === directory) ?? null).pipe(
@@ -33,7 +39,7 @@ export const makeDefaultLoginBook = Effect.gen(function* () {
   const keep = Effect.fnUntraced(function* (registration: CliHarnessProvider, row: DirectoryAccount, previous: DirectoryAccount | null) {
     if (previous !== null && JSON.stringify(previous) === JSON.stringify(row)) return previous;
     yield* rows.keep(registration.id, row);
-    revision += 1;
+    yield* announce(registration.id);
     return row;
   });
   const readStatus = Effect.fn('DefaultLogins.read')(
@@ -112,11 +118,20 @@ export const makeDefaultLoginBook = Effect.gen(function* () {
     observe: (registration: CliHarnessProvider, directory?: string | null) => carried(registration, false, directory),
     directoryOf,
     place: (registration: CliHarnessProvider, directory: string | null) => places.set(registration, directory),
-    revision: () => revision,
+    announce,
     ready: Effect.void as Effect.Effect<void>,
     settled: Effect.succeed(true),
     focus: Effect.void as Effect.Effect<void>,
-    changes: Stream.empty as Stream.Stream<string>,
+    changes: Stream.fromPubSub(moved).pipe(
+      Stream.mapEffect(() =>
+        Effect.sync(() => {
+          const providers = [...pending];
+          pending.clear();
+          return providers;
+        }),
+      ),
+      Stream.flatMap((providers) => Stream.fromIterable(providers)),
+    ),
   };
 });
 export type DefaultLoginBook = Effect.Success<typeof makeDefaultLoginBook>;
@@ -139,8 +154,6 @@ export const defaultLoginsLayer = Layer.effect(
     const watcher = watching.value;
     const scope = yield* Effect.scope;
     const ready = yield* Deferred.make<void>();
-    const moved = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1, replay: 1 }), PubSub.shutdown);
-    const pending = new Set<string>();
     const declaring = () =>
       registry
         .current()
@@ -159,17 +172,13 @@ export const defaultLoginsLayer = Layer.effect(
       directory = book.directoryOf(provider),
       changed = false,
     ) {
-      const before = book.revision();
       const answer = yield* book.observe(provider, directory);
       if (directory === book.directoryOf(provider)) {
         observed.add(provider.id);
         if (answer?.signed && answer.problem == null) signed.add(provider.id);
         else signed.delete(provider.id);
       }
-      if (changed || book.revision() !== before) {
-        pending.add(provider.id);
-        yield* PubSub.publish(moved, undefined);
-      }
+      if (changed) yield* book.announce(provider.id);
       if (answer?.problem?.kind === 'unreadable')
         yield* Effect.logWarning('the CLI login observation is unreadable', { provider: provider.id, reason: answer.problem.reason });
     });
@@ -410,16 +419,6 @@ export const defaultLoginsLayer = Layer.effect(
           onSuccess: () => Effect.void,
         }),
         Effect.withSpan('DefaultLogins.focus'),
-      ),
-      changes: Stream.fromPubSub(moved).pipe(
-        Stream.mapEffect(() =>
-          Effect.sync(() => {
-            const providers = [...pending];
-            pending.clear();
-            return providers;
-          }),
-        ),
-        Stream.flatMap((providers) => Stream.fromIterable(providers)),
       ),
     };
   }),

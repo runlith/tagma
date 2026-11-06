@@ -11,7 +11,7 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { StoredCredential } from '@runlith/llm/oauth/credential';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
-import { Context, Deferred, Effect, Fiber, Schema, Stream } from 'effect';
+import { Context, Deferred, Effect, Fiber, Option, Schema, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { CliLoginUnreadable } from '@runlith/llm/oauth/cliStore';
 import { HarnessDirectories, makeHarnessDirectoryStore } from '../accounts/harnessRows.js';
@@ -292,6 +292,35 @@ it.live('Codex directory accounts read their auth.json and an unchanged rejected
     renews = false;
     expect(yield* Effect.flip(tokens.recoverAccessToken('openai-oauth', ONE, fresh))).toMatchObject({ kind: 'reconnect' });
     expect(yield* own.accounts('openai-oauth')).toEqual([]);
+  }),
+);
+
+it.live('a borrowed read that discovers its lender login announces the lender', () =>
+  Effect.gen(function* () {
+    const directories = makeHarnessDirectoryStore({ home: join(home, 'announced-rows'), machine: 'machine' });
+    const cli: AccountCli['Service'] = {
+      installed: () => Effect.succeed({ _tag: 'Found' } as const),
+      changes: Stream.empty,
+      run: () => Effect.succeed({ stdout: '', stderr: 'Logged in using ChatGPT\n', code: 0 }),
+      login: () => Effect.never,
+      ended: () => Effect.never,
+      stop: () => Effect.die('borrowing credentials cancels no login terminal'),
+    };
+    const logins = yield* Effect.provide(
+      makeDefaultLoginBook,
+      Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, cli)),
+    );
+    const tokens = makeBorrowingTokens({
+      own: testTokens(join(home, 'announced-own.json')),
+      catalog: () => providerCatalogOf(openai(host)),
+      directories,
+      cli,
+      now: () => NOW,
+      options: { renew: true, logins },
+    });
+    yield* tokens.held('openai-oauth');
+    expect(yield* directories.of('codex')).toMatchObject([{ directory: null, signed: true }]);
+    expect(yield* Stream.runHead(logins.changes)).toEqual(Option.some('codex'));
   }),
 );
 
