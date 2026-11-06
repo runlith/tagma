@@ -28,7 +28,7 @@ sources:
 ---
 **Value.** A plugin inside Tagma — a CRM, a trading desk, a tracker bridge, a game — an agent writes as a directory in the project and runs with no deploy and no Tagma change.
 
-**How.** A directory in the project's `.tagma-plugins/<id>/` holding a plugin written against `@runlith/tagma/plugin`, whose `tagma-plugin build` writes `tagma-plugin.json` and the bundled `dist/process.js`. The agent installs it from that folder (`install_plugin`, read in place), runs or stops it per project or in every project (`enable_plugin`), removes it (`uninstall_plugin`), and reads its state (`read_plugins`, whose row carries the process). The Plugins screen lists it beside the other formats' plugins with its process state. The built-in `plugins` skill explains to an agent how to write, build and debug one.
+**How.** A directory in the project's `.tagma-plugins/<id>/`, which `create_plugin` starts from the SDK's template, holding a plugin written against `@runlith/tagma/plugin`, whose `tagma-plugin build` writes `tagma-plugin.json` and the bundled `dist/process.js`; both are committed and marked generated, so no commit step rewrites or judges them. The agent installs it from that folder (`install_plugin`, read in place), runs or stops it per project or in every project (`enable_plugin`), removes it (`uninstall_plugin`), and reads its state (`read_plugins`, whose row carries the process). The Plugins screen lists it beside the other formats' plugins with its process state. The built-in `plugins` skill explains to an agent how to write, build and debug one.
 
 **Behaviour.**
 - The manifest carries the id, title, version, options, an optional process entry and contributions by points, each tool with its description and input schema. A plugin without a process is views and agents only.
@@ -37,6 +37,7 @@ sources:
 - One process per machine serves all projects and is told, on every call, the projects where the plugin is enabled. Uninstalling stops it everywhere and drops its secrets; neither its folder nor its data is touched.
 - A rebuild — a new manifest or entry module — or an option change restarts a running process once; editing `ui/` does not. A restart waits for started calls, new ones wait for the next process. A crashed process comes back on the next demand after an increasing delay, a resident one by itself. A bad manifest after an edit keeps the old declaration working.
 - A process whose tool list differs from its manifest is refused with the difference named, and its tools are offered to no agent until it starts cleanly.
+- A source edited after the last build makes the row read outdated, and the card says the plugin still runs the earlier version.
 - The process runs on Tagma's own runtime with no package install and no `.env` loading; it gets the server address, its caller address, a data directory and its options in env, and calls those Tagma operations that are open to an outside caller.
 - The process runs as the operator's OS user; installing names the module it runs for the operator's consent.
 
