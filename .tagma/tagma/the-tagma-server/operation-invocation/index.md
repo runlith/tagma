@@ -99,6 +99,10 @@ edges:
     to: 01a0fd8b-bf12-7d39-abd6-b5ffc43d3272
   - kind: imports
     to: 01a10c61-1e17-72d3-b0d5-117293a21200
+  - kind: imports
+    to: 01a1231f-29af-74c6-9e71-e4a62243eda2
+  - kind: imports
+    to: 01a18921-8504-7058-9d53-62c5e9aa47fc
 sources:
   - kind: dir
     ref: apps/tagma/server/src/invocation
