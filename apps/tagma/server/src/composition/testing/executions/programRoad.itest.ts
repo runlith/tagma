@@ -202,7 +202,7 @@ describe('the program road over a live execution host', () => {
           road.run({
             projectId,
             actor: { _tag: 'Thread', threadId: thread, projectId },
-            argv: ['/bin/sh', '-c', `sleep 60 & echo $! > ${pidfile}; wait`],
+            argv: ['/bin/sh', '-c', `sleep 60 & echo $! > ${pidfile}.part && mv ${pidfile}.part ${pidfile}; wait`],
             cwd: checkout,
             stdin: '',
             operation: `commit-step/stest/${crypto.randomUUID()}`,
