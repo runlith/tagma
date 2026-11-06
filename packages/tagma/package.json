@@ -107,6 +107,11 @@
       "types": "./src/plugin/protocol.ts",
       "default": "./src/plugin/protocol.ts"
     },
+    "./plugin/value": {
+      "types": "./src/plugin/value.ts",
+      "browser": "./src/plugin/value.ts",
+      "default": "./src/plugin/value.ts"
+    },
     "./plugin/points": {
       "types": "./src/plugin/points.generated.ts",
       "default": "./src/plugin/points.generated.ts"
