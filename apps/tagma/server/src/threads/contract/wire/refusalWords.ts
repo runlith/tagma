@@ -80,6 +80,7 @@ export const REFUSAL_WORDS = {
   'placement-unreadable': 'Thread placement unreadable',
   'query-too-short': 'Search words too short',
   'plugin-thread-mismatch': 'Thread not bound to this plugin',
+  'binding-reserved': 'Binding written by Tagma',
   'read-failed': 'Reading failed',
   'read-inaccessible': 'Reading cannot be opened',
   'read-not-retained': 'Reading could not be kept',

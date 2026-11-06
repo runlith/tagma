@@ -67,6 +67,7 @@ export const pluginHostLayer: Layer.Layer<
           yield* settled;
         }),
         reading: supervisor.reading,
+        hosts: supervisor.hosts,
         pending: (id) => Effect.map(hosted.roots(), (roots) => roots.has(id) && !supervisor.standing(id)),
         call: supervisor.call,
         callAdmitted: supervisor.callAdmitted,

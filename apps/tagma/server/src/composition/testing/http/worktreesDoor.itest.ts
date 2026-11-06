@@ -8,6 +8,7 @@ import type { WorktreeIntent } from '../../../worktrees/contract/wire/creation.j
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { DoorFixture, doorFixture } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
+import { installedFixture } from '../plugin-host/installed.js';
 
 layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: true })('worktrees HTTP door', (it) => {
   it.effect('a listed repository prepares one checkout and replays its creation without moving the project', () =>
@@ -56,6 +57,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       const projectId = yield* world.stealthProject(root);
       yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
       yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
+      yield* installedFixture(world, projectId, 'core-pin');
       const op = (id: string, input: unknown, headers?: Readonly<Record<string, string>>) =>
         world.op(id, input, `project=${projectId}`, headers);
       const repository = ((yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer).repositories[0]!;

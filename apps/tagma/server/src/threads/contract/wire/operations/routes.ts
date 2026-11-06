@@ -98,7 +98,7 @@ export const ROUTE_OPERATIONS = {
       'Open a thread without a first turn — a root thread of this project, or a child of another thread with its opening task. A root born on a block of work opens its first turn on it; work a holder can take, it first takes in its own name the way claim_block would, and a spec it starts on without taking.',
     input: threadCreateSchema,
     answer: arms({ loaded: { snapshot: threadWireSnapshotPayloadSchema.fields.snapshot } }),
-    refusals: [...BIRTH_REFUSALS, ...SPAWN_REFUSALS, ...WORK_BIRTH_REFUSALS],
+    refusals: [...BIRTH_REFUSALS, ...SPAWN_REFUSALS, ...WORK_BIRTH_REFUSALS, 'binding-reserved'],
     subjects: () => [],
     raises: (_input, birth?: { readonly asked: readonly Raised[] }) => birth?.asked ?? [],
     confirmation: () => ({ summary: 'Open a thread?' }),

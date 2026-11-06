@@ -1,8 +1,5 @@
 import { Effect } from 'effect';
-import { OPERATOR_PRINCIPAL, threadIdOf } from '../../platform/contract/wire/actor.js';
-import { ThreadLookup } from '../contract/service/reads.js';
-import { PLUGIN_CALLER_PREFIX } from '../../plugins/contract/wire/names.js';
-import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import { threadIdOf } from '../../platform/contract/wire/actor.js';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { body, pair, type RefusalOf } from '../../platform/contract/service/body.js';
@@ -152,30 +149,6 @@ export const ACT_PAIRS = {
       }),
       execute: Effect.fnUntraced(function* (input, _terms: ArchiveTerms, caller) {
         const call = yield* yield* CurrentProject;
-        if (caller.actor.kind === 'external') {
-          const plugin = caller.actor.name.startsWith(PLUGIN_CALLER_PREFIX) ? caller.actor.name.slice(PLUGIN_CALLER_PREFIX.length) : '';
-          if (plugin === '') {
-            return yield* new GateRefusal('external-refused', 'Archiving externally requires a plugin caller.', [
-              `call as ${PLUGIN_CALLER_PREFIX}<id>, or ask the operator to archive the thread`,
-            ]);
-          }
-          const target = yield* answering('archive_thread', (yield* ThreadLookup).find(input.threadId, OPERATOR_PRINCIPAL));
-          if (target === undefined) {
-            return yield* new GateRefusal('not-found', `No thread ${input.threadId} stands in this project.`, [
-              "read the project's thread list",
-            ]);
-          }
-          if (target.projectId !== call.project.id) {
-            return yield* new GateRefusal('foreign-project', `Thread ${input.threadId} stands in project ${target.projectId}.`, [
-              `call archive_thread in project ${target.projectId}`,
-            ]);
-          }
-          if (target.bindings[PLUGIN_BINDING] !== plugin) {
-            return yield* new GateRefusal('plugin-thread-mismatch', `Thread ${input.threadId} is not bound to plugin ${plugin}.`, [
-              `archive a thread whose bindings.plugin names ${plugin}, or ask the operator to archive this thread`,
-            ]);
-          }
-        }
         const row =
           (input.archived ?? true)
             ? yield* answering('archive_thread', (yield* ThreadTurns).archive(input.threadId, call.project.id, caller.actor))

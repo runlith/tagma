@@ -28,7 +28,7 @@ const storage = Layer.unwrap(
   ),
 );
 
-const poker: Caller = { actor: { kind: 'external', name: 'plugin:poker' }, files: null };
+const poker: Caller = { actor: { kind: 'external', name: 'plugin:poker', plugin: 'poker' }, files: null };
 const operator: Caller = { actor: { kind: 'operator' }, files: null };
 
 const question = { text: 'Raise to 40?', options: ['Yes', 'No'] };
@@ -137,7 +137,13 @@ it.effect(
         expect(yield* Effect.flip(answer(notifications, asking.id, 'Maybe'))).toMatchObject({ code: 'bad-answer' });
         expect(yield* Effect.flip(send(notifications, { title: 'Hello' }, operator))).toMatchObject({ code: 'sender-required' });
         expect(
-          yield* Effect.flip(send(notifications, { title: 'Hello' }, { actor: { kind: 'external', name: 'plugin:unknown' }, files: null })),
+          yield* Effect.flip(
+            send(
+              notifications,
+              { title: 'Hello' },
+              { actor: { kind: 'external', name: 'plugin:unknown', plugin: 'unknown' }, files: null },
+            ),
+          ),
         ).toMatchObject({ code: 'sender-required' });
         expect(yield* Effect.flip(dismiss(notifications, 'unknown'))).toMatchObject({ code: 'not-found' });
 
@@ -231,7 +237,7 @@ it.effect(
   () =>
     world(
       Effect.gen(function* () {
-        const crm: Caller = { actor: { kind: 'external', name: 'plugin:crm' }, files: null };
+        const crm: Caller = { actor: { kind: 'external', name: 'plugin:crm', plugin: 'crm' }, files: null };
         const first = yield* boot(() => Effect.void);
         const seen = yield* watch(first.notifications);
         expect(yield* Queue.take(seen)).toEqual({ _tag: 'all', rows: [] });
@@ -284,7 +290,11 @@ it.effect(
         expect(yield* send(notifications, { title: 'Issue 7', key: 'issue-7' })).toMatchObject({ id: sends[0]!.id, repeated: true });
         expect(yield* Effect.flip(send(notifications, { title: 'Issue 8', key: 'issue-8' }))).toMatchObject({ code: 'too-many-open' });
         expect(
-          yield* send(notifications, { title: 'another sender' }, { actor: { kind: 'external', name: 'plugin:crm' }, files: null }),
+          yield* send(
+            notifications,
+            { title: 'another sender' },
+            { actor: { kind: 'external', name: 'plugin:crm', plugin: 'crm' }, files: null },
+          ),
         ).toMatchObject({ repeated: false });
       }),
     ),

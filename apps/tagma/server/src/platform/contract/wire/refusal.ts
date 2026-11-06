@@ -72,6 +72,7 @@ export type CallerRefusal =
   | 'thread-required'
   | 'session-unproven'
   | 'external-refused'
+  | 'plugin-not-enabled'
   | 'world-unavailable'
   | 'files'
   | 'global-missing'
@@ -133,6 +134,7 @@ const FIELD_REFUSAL = {
   'thread-required': 'Only a thread can do this',
   'session-unproven': 'Session not recognized',
   'external-refused': 'Not open to external callers',
+  'plugin-not-enabled': 'Plugin does not run here',
   'world-unavailable': 'Environment unavailable',
   files: 'Files could not be read',
   'global-missing': 'Shared graph missing',

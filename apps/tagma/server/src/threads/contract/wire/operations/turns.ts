@@ -161,8 +161,9 @@ export const TURN_OPERATIONS = {
   }),
   answer_question: operation('answer_question', {
     approval: ASKS_IN_REVIEW,
-    ...socketAct,
+    ...operatorAct,
     graph: 'none',
+    external: 'own',
     meaning: "Answer the question a thread's run is waiting on; a run opens over the answer.",
     input: Schema.Struct({ threadId: ThreadId, ...threadQuestionAnswerSchema.fields }),
     answer: arms({
@@ -188,8 +189,9 @@ export const TURN_OPERATIONS = {
   }),
   stop_run: operation('stop_run', {
     approval: ASKS_IN_REVIEW,
-    ...socketAct,
+    ...operatorAct,
     graph: 'none',
+    external: 'own',
     meaning:
       'Stop the run going on a thread, or withdraw the turn it took when the thread can. `runId` names the run the caller expects: another run going answers `run-mismatch` with it. A run another server process owns answers `requested`: that owner stops it.',
     input: Schema.Struct({ threadId: ThreadId, ...threadStopSchema.fields }),

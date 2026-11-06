@@ -235,7 +235,7 @@ export const THREAD_OPERATIONS = {
   continue_thread: operation('continue_thread', {
     approval: ASKS_IN_REVIEW,
     graph: 'none',
-    external: true,
+    external: 'own',
     doors: { socket: true, http: true },
     tool: { capability: 'threads' },
     callers: 'any',
@@ -259,7 +259,7 @@ export const THREAD_OPERATIONS = {
   restart_thread: operation('restart_thread', {
     approval: ASKS_IN_REVIEW,
     graph: 'none',
-    external: true,
+    external: 'own',
     doors: { socket: true, http: true },
     tool: { capability: 'threads' },
     callers: 'any',
@@ -350,7 +350,7 @@ The same \`operationKey\` with the same move answers what that move reached; the
   }),
 
   archive_thread: operation('archive_thread', {
-    external: true,
+    external: 'own',
     approval: {
       ...ASKS_IN_REVIEW,
       when: [{ condition: OUTSIDE_SUBTREE, asksFrom: 'trust', timeout: Duration.minutes(10) }, OWN_LINEAGE, THREAD_RUNNING],

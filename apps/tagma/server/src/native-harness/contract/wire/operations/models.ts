@@ -105,6 +105,7 @@ export const MODEL_OPERATIONS = {
     approval: ASKS_IN_REVIEW,
     ...operatorOnly,
     doors: { http: 'perform', socket: true },
+    external: 'own',
     meaning: "Move one thread's next runs onto another model, reasoning rung, switches or account.",
     grammar:
       'A run already going keeps the model it opened with. A model another harness serves — Claude over ACP — moves the thread onto that harness, and a native model moves it back; the thread keeps its history and its feed. A move a going turn holds back answers at once with the pick as the thread’s model: the server stops that turn at its next step, moves the thread and continues the turn there, and words sent meanwhile run on the new model. A later pick replaces one still waiting. A CLI agent of its own stays on its own provider row. An omitted `account` keeps the thread’s own where the provider still holds it.',

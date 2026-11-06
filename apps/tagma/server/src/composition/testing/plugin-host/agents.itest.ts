@@ -114,12 +114,7 @@ const ended = (runId: string) => Effect.map(journalOf(), (lines) => lines.some((
 
 const player = Effect.fnUntraced(function* () {
   const { world, account, scope } = yield* Table;
-  const created = yield* world.op(
-    'create_thread',
-    { title: 'north', account, type: 'fixture.player', bindings: { plugin: 'fixture' } },
-    scope,
-    PLUGIN,
-  );
+  const created = yield* world.op('create_thread', { title: 'north', account, type: 'fixture.player' }, scope, PLUGIN);
   expect(created.status).toBe(200);
   return (created.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
 });
@@ -173,12 +168,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       });
       const table = yield* world.op('create_thread', { title: 'table', account, approvalMode: 'review' }, scope, PLUGIN);
       const tableId = (table.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
-      const seat = yield* world.op(
-        'create_thread',
-        { parent: tableId, task: '', type: 'fixture.player', bindings: { plugin: 'fixture' } },
-        scope,
-        PLUGIN,
-      );
+      const seat = yield* world.op('create_thread', { parent: tableId, task: '', type: 'fixture.player' }, scope, PLUGIN);
       const seatId = (seat.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
       const harness = Context.get(world.runtime.owners, ThreadHarness);
       expect((yield* harness.reads.snapshot(tableId)).thread.authority.mode).toBe('review');

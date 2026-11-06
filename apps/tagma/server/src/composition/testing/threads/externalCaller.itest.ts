@@ -9,9 +9,11 @@ import { ProviderRegistry } from '../../../providers/contract/service/registry.j
 import { threadWireSnapshotPayloadSchema } from '../../../threads/contract/wire/snapshot.js';
 import { TURN_OPERATIONS } from '../../../threads/contract/wire/operations/turns.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
+import { installedFixture } from '../plugin-host/installed.js';
 
 const DEALER = { 'x-tagma-caller': 'dealer' } as const;
 const PLUGIN = { 'x-tagma-caller': 'plugin:poker' } as const;
+const OTHER = { 'x-tagma-caller': 'plugin:other' } as const;
 const decodeSnapshot = Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchema);
 const decodeStart = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer));
 const decodeStatuses = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.read_statuses.answer));
@@ -29,6 +31,8 @@ const setup = Effect.gen(function* () {
   const projectId = yield* world.plainProject();
   const elsewhere = yield* world.plainProject();
   yield* projectLeaving(world, projectId, elsewhere);
+  yield* installedFixture(world, projectId, 'poker');
+  yield* installedFixture(world, projectId, 'other');
   const catalog = yield* Context.get(world.runtime.owners, ProviderRegistry).catalog;
   return { world, account, projectId, elsewhere, catalog };
 });
@@ -53,14 +57,16 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
   it.effect('a plugin owns its bound root and child through idle birth, running archive and restoration', () =>
     Effect.gen(function* () {
       const { world, projectId, account } = yield* World;
+      const reserved = yield* op('create_thread', { title: 'poker player', account, bindings: { plugin: 'other' } }, PLUGIN);
+      expect(reserved).toMatchObject({ status: 409, body: { code: 'binding-reserved' } });
       const bindings = { plugin: 'poker', poker: 'table-1/north' };
-      const created = yield* op('create_thread', { title: 'poker player', account, bindings }, PLUGIN);
+      const created = yield* op('create_thread', { title: 'poker player', account, bindings: { poker: 'table-1/north' } }, PLUGIN);
       expect(created.status).toBe(200);
       const { snapshot } = yield* decodeSnapshot(created.body);
       expect(snapshot).toMatchObject({ activeRun: null, latestRun: null });
       expect(yield* listOf(world.runtime.owners).row(snapshot.thread.id)).toMatchObject({ projectId, bindings, parentThreadId: null });
-      const childBindings = { plugin: 'other', poker: 'table-1/south' };
-      const child = yield* op('create_thread', { parent: snapshot.thread.id, task: '', bindings: childBindings }, PLUGIN);
+      const childBindings = { plugin: 'poker', poker: 'table-1/south' };
+      const child = yield* op('create_thread', { parent: snapshot.thread.id, task: '', bindings: { poker: 'table-1/south' } }, PLUGIN);
       expect(child.status).toBe(200);
       const childId = (yield* decodeSnapshot(child.body)).snapshot.thread.id;
       expect(yield* listOf(world.runtime.owners).row(childId)).toMatchObject({
@@ -175,7 +181,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       Effect.gen(function* () {
         const { world, account, elsewhere } = yield* World;
         const { thread: unbound } = yield* born();
-        const created = yield* op('create_thread', { account, bindings: { plugin: 'other' } }, PLUGIN);
+        const created = yield* op('create_thread', { account }, OTHER);
         expect(created.status).toBe(200);
         const otherId = (yield* decodeSnapshot(created.body)).snapshot.thread.id;
         for (const threadId of [unbound.id, otherId]) {
@@ -195,9 +201,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
           expect(refused.status).toBe(409);
           expect(refused.body).toMatchObject({ code: 'external-refused' });
         }
-        const foreign = yield* world.op('archive_thread', { threadId: otherId }, `project=${elsewhere}`, {
-          'x-tagma-caller': 'plugin:other',
-        });
+        const foreign = yield* world.op('archive_thread', { threadId: otherId }, `project=${elsewhere}`, OTHER);
         expect(foreign.status).toBe(409);
         expect(foreign.body).toMatchObject({ code: 'place-mismatch' });
         const missing = yield* op('archive_thread', { threadId: 'no-such-thread' }, PLUGIN);
@@ -205,6 +209,35 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
         expect(missing.body).toMatchObject({ code: 'not-found' });
         expect((yield* listOf(world.runtime.owners).row(otherId))?.archivedAt).toBeNull();
       }),
+  );
+
+  it.effect('a plugin is refused where it does not run, and stops over HTTP the run of a thread it owns but not of one it does not', () =>
+    Effect.gen(function* () {
+      const { world, account, elsewhere } = yield* World;
+      for (const [scope, caller] of [
+        [`project=${elsewhere}`, PLUGIN],
+        [undefined, { 'x-tagma-caller': 'plugin:absent' }],
+      ] as const) {
+        const refused =
+          scope === undefined
+            ? yield* op('create_thread', { account }, caller)
+            : yield* world.op('create_thread', { account }, scope, caller);
+        expect(refused).toMatchObject({ status: 409, body: { code: 'plugin-not-enabled' } });
+      }
+      const created = yield* op('create_thread', { account, bindings: { poker: 'stop' } }, PLUGIN);
+      const own = (yield* decodeSnapshot(created.body)).snapshot.thread.id;
+      const { thread: person } = yield* born();
+      const runs = [yield* started(own, 'stop-own'), yield* started(person.id, 'stop-person')];
+      expect(yield* op('stop_run', { threadId: person.id }, PLUGIN)).toMatchObject({
+        status: 409,
+        body: { code: 'plugin-thread-mismatch' },
+      });
+      expect(yield* op('stop_run', { threadId: own }, PLUGIN)).toMatchObject({ status: 200, body: { status: 'stopped', runId: runs[0] } });
+      expect((yield* op('read_statuses', { threads: [person.id], limit: 1 }, PLUGIN)).body).toMatchObject({
+        rows: [{ status: { runId: runs[1] } }],
+      });
+      yield* turnsOf(world.runtime.owners).stop(person.id, (yield* World).projectId, runs[1]!);
+    }),
   );
 
   it.effect('an external caller wakes once by key and reads the stopped run through status and endings', () =>

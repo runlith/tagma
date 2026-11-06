@@ -16,7 +16,10 @@ const threadBirthFields = {
   scopeName: Schema.optional(Schema.String),
   account: Schema.optional(Schema.String),
   switches: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  bindings: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  bindings: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description:
+      'Keys an outside program files the thread under. `plugin` is Tagma’s own: written from the plugin that creates the thread, refused here.',
+  }),
   approvalMode: Schema.optional(AgentApprovalMode),
   delegation: Schema.optional(Schema.Boolean),
   team: Schema.optional(TeamLayer).annotate({

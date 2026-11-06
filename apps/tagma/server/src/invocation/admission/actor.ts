@@ -72,7 +72,7 @@ export const operationCaller = Effect.fn('invocation.operationCaller')(function*
   const actor: Actor =
     identity.session === null
       ? identity.external !== undefined
-        ? { kind: 'external', name: identity.external }
+        ? { kind: 'external', name: identity.external.name, plugin: identity.external.plugin }
         : device === null
           ? { kind: 'operator' }
           : { kind: 'operator', deviceId: device }

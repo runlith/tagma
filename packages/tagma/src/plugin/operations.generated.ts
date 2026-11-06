@@ -82,6 +82,28 @@ export type ExternalOperations = {
       readonly status: 'answered';
     };
   };
+  readonly answer_question: {
+    readonly input: {
+      readonly threadId: string;
+      readonly questionId: string;
+      readonly answers: readonly {
+        readonly questionId: string;
+        readonly values: readonly string[];
+        readonly annotation?: {
+          readonly notes?: string;
+          readonly preview?: string;
+        };
+      }[];
+      readonly key?: string;
+    };
+    readonly answer: {
+      readonly runId: string;
+      readonly status: 'started';
+    } | {
+      readonly runId: string;
+      readonly status: 'already-running';
+    };
+  };
   readonly archive_thread: {
     readonly input: {
       readonly threadId: string;
@@ -3432,6 +3454,1384 @@ export type ExternalOperations = {
       readonly status: 'sent';
     };
   };
+  readonly set_thread_model: {
+    readonly input: {
+      readonly threadId: string;
+      readonly provider: string;
+      readonly model: string;
+      readonly reasoning: string | null;
+      readonly account?: string | null;
+      readonly switches: {
+        readonly [key: string]: string;
+      };
+    };
+    readonly answer: {
+      readonly snapshot: {
+        readonly thread: {
+          readonly id: string;
+          readonly ownerId: string;
+          readonly agentId: string;
+          readonly parentThreadId: string | null;
+          readonly spawnedByRunId: string | null;
+          readonly bornOf?: {
+            readonly by: string;
+            readonly step: number;
+            readonly ask?: true;
+          } | null;
+          readonly spawnRootId: string;
+          readonly name: string | null;
+          readonly authority: {
+            readonly mode: string;
+            readonly bypassFrom: string | null;
+          };
+          readonly plain: boolean;
+          readonly profile: {
+            readonly id: string;
+            readonly overlay: {
+              readonly baseAgentId: string;
+              readonly description: string;
+              readonly instructions?: string;
+              readonly tools?: readonly string[];
+              readonly model?: {
+                readonly provider?: string;
+                readonly model?: string | null;
+                readonly reasoning?: string | null;
+              };
+              readonly prompt?: string;
+              readonly sections?: readonly ({
+                readonly drop: string;
+              } | {
+                readonly keep: readonly string[];
+              } | {
+                readonly replace: string;
+                readonly text: string;
+              } | {
+                readonly add: string;
+                readonly before: string;
+                readonly text: string;
+              } | {
+                readonly add: string;
+                readonly after: string;
+                readonly text: string;
+              } | {
+                readonly edit: string;
+                readonly find: string;
+                readonly with: string;
+              })[];
+              readonly capabilities?: readonly string[];
+              readonly runtimeSources?: readonly string[];
+              readonly audience?: string;
+              readonly budget?: {
+                readonly prompt?: number;
+                readonly steps?: number;
+                readonly seconds?: number;
+              };
+              readonly id: string;
+            };
+          } | null;
+          readonly budgetTokens: number | null;
+          readonly hostKind: string | null;
+          readonly hostId: string | null;
+          readonly account: string | null;
+          readonly provider: string;
+          readonly model: string | null;
+          readonly reasoning: string | null;
+          readonly switches: {
+            readonly [key: string]: string;
+          };
+          readonly transport: {
+            readonly adapter: string;
+            readonly profile: string | null;
+            readonly agent: string | null;
+          };
+          readonly capabilities: {
+            readonly messaging: boolean;
+            readonly judgedModel: boolean;
+            readonly steer: 'step' | 'none';
+            readonly withdraw: boolean;
+            readonly history: 'journal' | 'session' | 'none';
+            readonly copies?: {
+              readonly whole: 'vendor' | 'record' | 'none';
+              readonly point: 'vendor' | 'record' | 'none';
+            };
+            readonly compaction: 'core' | 'session' | 'foreign' | 'vendor' | 'none';
+            readonly toolCatalog?: 'turn' | 'dispatch';
+            readonly modelMove: 'live' | 'relaunch' | 'pinned';
+            readonly openings: 'core' | 'core-and-observed';
+            readonly pictures: boolean;
+            readonly web: 'vendor' | 'none';
+            readonly law: 'every-call' | 'asked-calls' | null;
+            readonly touch: 'reads-and-writes' | 'writes' | null;
+            readonly authorship: 'recorded' | 'observed' | null;
+            readonly callEnvelopeMs: number | null;
+            readonly screen: boolean;
+            readonly continue: boolean;
+            readonly feed: 'full' | 'turns';
+            readonly usage: 'measured' | 'partial' | 'none';
+            readonly aside: 'request' | 'session' | 'none';
+          };
+          readonly unread?: readonly ('transport' | 'capabilities' | 'authority')[];
+          readonly status: 'idle' | 'running' | 'failed';
+          readonly failureReason: string | null;
+          readonly contextReading: {
+            readonly usage: {
+              readonly inputTokens?: number;
+              readonly outputTokens?: number;
+              readonly nonCachedInputTokens?: number;
+              readonly cacheReadInputTokens?: number;
+              readonly cacheWriteInputTokens?: number;
+              readonly reasoningTokens?: number;
+              readonly totalTokens?: number;
+              readonly providerMetadata?: {
+                readonly [key: string]: {
+                  readonly [key: string]: unknown;
+                };
+              };
+            };
+            readonly contextWindow: number | null;
+            readonly inputLimit?: number | null;
+            readonly footprint?: {
+              readonly messages: number;
+              readonly messageDigest: string;
+              readonly promptDigest: string;
+              readonly toolDigests: readonly string[];
+            };
+            readonly attempt?: number;
+            readonly historyMessages?: number;
+            readonly runId: string;
+            readonly stepNumber: number;
+            readonly provider: string | null;
+            readonly model: string | null;
+            readonly account?: string;
+            readonly reasoning?: string | null;
+            readonly measuredAt: string;
+            readonly sentAt?: string;
+            readonly cache?: {
+              readonly ttlSeconds: number | null;
+            };
+            readonly stale: boolean;
+            readonly staleBy?: 'rewind';
+          } | null;
+          readonly createdBy: string | null;
+          readonly createdAt: string;
+          readonly updatedAt: string;
+          readonly projectId: number | null;
+          readonly title: string;
+          readonly parent?: {
+            readonly id: string;
+            readonly projectId: number;
+            readonly title: string;
+          };
+          readonly detachedFrom?: {
+            readonly id: string;
+            readonly projectId: number;
+            readonly title: string;
+          };
+          readonly cacheWarmth: {
+            readonly state: 'warm' | 'likely' | 'cold' | 'unknown';
+            readonly heldTokens: number | null;
+            readonly basis: 'promise' | 'local' | 'prior' | 'none';
+            readonly expiresAt: string | null;
+            readonly gap: '<1m' | '1–5m' | '5–15m' | '15–30m' | '30–60m' | '1–2h' | '>2h' | null;
+            readonly warmShare: number | null;
+            readonly sample: number | null;
+            readonly oldestAt: string | null;
+            readonly invalidatedBy: 'compaction' | 'rewind' | 'selection' | 'account' | 'reasoning' | null;
+          } | null;
+          readonly harness: {
+            readonly name: string;
+            readonly presentation: {
+              readonly label: string;
+              readonly iconProvider: string | null;
+              readonly mark: string | null;
+              readonly install: string | null;
+              readonly modelProvider: string | null;
+              readonly terminal: boolean;
+              readonly acp: boolean;
+              readonly hosted: boolean;
+              readonly sharedSessions: boolean;
+            };
+            readonly transport: 'terminal' | 'acp' | null;
+            readonly agent: string | null;
+            readonly provider: string;
+            readonly capabilities: {
+              readonly messaging: boolean;
+              readonly judgedModel: boolean;
+              readonly steer: 'step' | 'none';
+              readonly withdraw: boolean;
+              readonly history: 'journal' | 'session' | 'none';
+              readonly copies?: {
+                readonly whole: 'vendor' | 'record' | 'none';
+                readonly point: 'vendor' | 'record' | 'none';
+              };
+              readonly compaction: 'core' | 'session' | 'foreign' | 'vendor' | 'none';
+              readonly toolCatalog?: 'turn' | 'dispatch';
+              readonly modelMove: 'live' | 'relaunch' | 'pinned';
+              readonly openings: 'core' | 'core-and-observed';
+              readonly pictures: boolean;
+              readonly web: 'vendor' | 'none';
+              readonly law: 'every-call' | 'asked-calls' | null;
+              readonly touch: 'reads-and-writes' | 'writes' | null;
+              readonly authorship: 'recorded' | 'observed' | null;
+              readonly callEnvelopeMs: number | null;
+              readonly screen: boolean;
+              readonly continue: boolean;
+              readonly feed: 'full' | 'turns';
+              readonly usage: 'measured' | 'partial' | 'none';
+              readonly aside: 'request' | 'session' | 'none';
+            };
+            readonly unread?: readonly ('transport' | 'capabilities' | 'authority')[];
+            readonly model: string | null;
+            readonly effort: string | null;
+            readonly asked: {
+              readonly model: string;
+              readonly reasoning: string | null;
+            } | null;
+            readonly execution: {
+              readonly execution: string;
+              readonly incarnation: number;
+            } | null;
+            readonly process: {
+              readonly id: string;
+              readonly state: 'starting' | 'running' | 'stopping' | 'uncertain' | 'ended';
+              readonly startedAt: string;
+              readonly origin?: 'launched' | 'adopted';
+              readonly failure?: string;
+            } | null;
+            readonly observation: {
+              readonly binding: {
+                readonly sessionId: string | null;
+                readonly execution: {
+                  readonly execution: string;
+                  readonly incarnation: number;
+                } | null;
+                readonly rootKey: string | null;
+                readonly workKey?: string;
+              };
+              readonly revision: number;
+              readonly metadata: {
+                readonly model: {
+                  readonly _tag: 'NotRead';
+                } | {
+                  readonly _tag: 'Value';
+                  readonly value: string;
+                  readonly claim: 'configured' | 'serving' | 'last-recorded';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Absent';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unsupported';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unreadable';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                  readonly reason: string;
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  } | null;
+                } | {
+                  readonly _tag: 'Stale';
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  };
+                };
+                readonly effort: {
+                  readonly _tag: 'NotRead';
+                } | {
+                  readonly _tag: 'Value';
+                  readonly value: string;
+                  readonly claim: 'configured' | 'serving' | 'last-recorded';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Absent';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unsupported';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unreadable';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                  readonly reason: string;
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  } | null;
+                } | {
+                  readonly _tag: 'Stale';
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  };
+                };
+                readonly title: {
+                  readonly _tag: 'NotRead';
+                } | {
+                  readonly _tag: 'Value';
+                  readonly value: string;
+                  readonly claim: 'configured' | 'serving' | 'last-recorded';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Absent';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unsupported';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                } | {
+                  readonly _tag: 'Unreadable';
+                  readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol';
+                  readonly scope: {
+                    readonly rootKey: string | null;
+                    readonly turnId: string | null;
+                  };
+                  readonly observedAt: string;
+                  readonly reason: string;
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  } | null;
+                } | {
+                  readonly _tag: 'Stale';
+                  readonly lastKnown: {
+                    readonly value: string;
+                    readonly claim: 'configured' | 'serving' | 'last-recorded' | null;
+                    readonly source: 'hook' | 'vendor-record' | 'transcript' | 'session-store' | 'terminal' | 'protocol' | null;
+                    readonly scope: {
+                      readonly rootKey: string | null;
+                      readonly turnId: string | null;
+                    } | null;
+                    readonly observedAt: string | null;
+                    readonly why: 'unproven-source' | 'refused-evidence' | 'authority-lapsed' | 'refresh-failed';
+                  };
+                };
+              };
+              readonly diagnostics: readonly ({
+                readonly cause: 'session-ended' | 'session-stopping' | 'turn-mismatch' | 'stale-execution' | 'execution-unproven' | 'root-unproven' | 'work-unproven' | 'foreign-root' | 'stale-revision' | 'stale-evidence' | 'child-event' | 'question-standing' | 'answer-unread' | 'submit-unconfirmed' | 'cli-background' | 'words-unproven' | 'words-dropped' | 'history-seeded';
+                readonly at: string;
+                readonly detail: string;
+              })[];
+              readonly through?: string;
+            };
+          } | null;
+          readonly cli: {
+            readonly name: string;
+            readonly presentation: {
+              readonly label: string;
+              readonly iconProvider: string | null;
+              readonly mark: string | null;
+              readonly install: string | null;
+              readonly modelProvider: string | null;
+              readonly terminal: boolean;
+              readonly acp: boolean;
+              readonly hosted: boolean;
+              readonly sharedSessions: boolean;
+            };
+          } | null;
+          readonly processAccount: string | null;
+          readonly delegation: {
+            readonly own: boolean | null;
+            readonly allowed: boolean;
+            readonly setAt: string | null;
+          };
+          readonly approving: {
+            readonly approver: string | null;
+            readonly why: 'taken-over' | 'parent' | 'no-grant' | 'no-parent';
+            readonly takenOver: boolean;
+            readonly approves: {
+              readonly own: readonly string[] | null;
+              readonly effective: readonly string[];
+              readonly origin: 'own' | 'lineage' | 'setting';
+              readonly setAt: string | null;
+            };
+          };
+          readonly spawnDepth: {
+            readonly current: number;
+            readonly maximum: number;
+            readonly remaining: number;
+          };
+          readonly place: {
+            readonly rootId: string;
+            readonly branch: string | null;
+          } | null;
+          readonly recap: {
+            readonly summary: string;
+            readonly next: string | null;
+            readonly status: 'current' | 'stale' | 'void';
+            readonly basis: {
+              readonly position: number;
+              readonly entryId: string;
+              readonly runId: string;
+              readonly journalHead: number;
+              readonly generatedAt: string;
+              readonly provider: string;
+              readonly model: string;
+            };
+          } | null;
+          readonly recapAttempt: {
+            readonly state: 'writing';
+            readonly entryId: string;
+          } | {
+            readonly state: 'refused';
+            readonly entryId: string;
+            readonly code: string;
+            readonly reason: string;
+            readonly unblock: readonly string[];
+          } | null;
+          readonly pins: readonly {
+            readonly plugin: string;
+            readonly view: string;
+            readonly key: string;
+          }[];
+          readonly modes: readonly {
+            readonly id: string;
+            readonly label: string;
+            readonly description: string;
+            readonly icon: string;
+            readonly strictness: number;
+            readonly elevated?: true;
+          }[];
+        };
+        readonly activeRun: {
+          readonly id: string;
+          readonly threadId: string;
+          readonly status: 'running' | 'completed' | 'failed' | 'aborted' | 'cut' | 'withdrawn';
+          readonly kind: 'turn' | 'keep-warm' | 'compaction';
+          readonly ownerId: string;
+          readonly account: string | null;
+          readonly provider: string | null;
+          readonly model: string | null;
+          readonly reasoning: string | null;
+          readonly switches: {
+            readonly [key: string]: string;
+          };
+          readonly progress: {
+            readonly stage: 'starting' | 'running' | 'streaming' | 'compacting' | 'resuming' | 'awaiting-question' | 'completed' | 'failed' | 'aborted' | 'cut' | null;
+            readonly message: string | null;
+            readonly halt?: {
+              readonly reason: string;
+            };
+            readonly phase?: {
+              readonly phase: 'opening' | 'preparing' | 'calling' | 'reasoning' | 'writing' | 'tools' | 'compacting' | 'retrying';
+              readonly since: number;
+              readonly waiting?: {
+                readonly reason: string;
+                readonly place: string | null;
+              };
+            };
+          };
+          readonly usage: {
+            readonly inputTokens?: number;
+            readonly outputTokens?: number;
+            readonly nonCachedInputTokens?: number;
+            readonly cacheReadInputTokens?: number;
+            readonly cacheWriteInputTokens?: number;
+            readonly reasoningTokens?: number;
+            readonly totalTokens?: number;
+            readonly providerMetadata?: {
+              readonly [key: string]: {
+                readonly [key: string]: unknown;
+              };
+            };
+          } | null;
+          readonly failureReason: string | null;
+          readonly failure: {
+            readonly provider: string | null;
+            readonly account: string | null;
+            readonly stage: string;
+            readonly type: string;
+            readonly httpStatus?: number;
+            readonly retryable: boolean | null;
+            readonly modelStarted: boolean | null;
+            readonly contextOverflow?: boolean;
+            readonly detail?: string;
+            readonly rateLimit?: {
+              readonly retryAfterMs?: number;
+              readonly limit?: {
+                readonly [key: string]: string;
+              };
+              readonly remaining?: {
+                readonly [key: string]: string;
+              };
+              readonly reset?: {
+                readonly [key: string]: string;
+              };
+            };
+            readonly reason?: {
+              readonly family: 'invalid-request' | 'no-route' | 'auth' | 'rate-limit' | 'quota' | 'content-policy' | 'overloaded' | 'refused' | 'torn-stream' | 'non-json-answer' | 'socket-closed' | 'clean-eof-no-finish' | 'blank-error' | 'invalid-output' | 'stalled' | 'dns' | 'tls' | 'reset' | 'connect-timeout' | 'unknown';
+              readonly status?: number;
+              readonly upstreamRequestId?: string;
+              readonly attempt?: number;
+              readonly elapsedMs?: number;
+              readonly bytesRead?: number;
+              readonly lastEvent?: {
+                readonly type?: string;
+                readonly count: number;
+              };
+              readonly excerpt?: string;
+              readonly idleMs?: number;
+              readonly host?: string;
+              readonly cause?: readonly {
+                readonly tag: string;
+                readonly message: string;
+                readonly code?: string;
+              }[];
+              readonly kind?: string;
+              readonly said?: string;
+            };
+            readonly retry?: {
+              readonly stop: 'exhausted' | 'not-retryable';
+              readonly attempts: number;
+              readonly retries: number;
+              readonly limit: number;
+            } | {
+              readonly stop: 'delay-limit';
+              readonly attempts: number;
+              readonly retries: number;
+              readonly limit: number;
+              readonly retryAfterMs: number;
+              readonly ceilingMs: number;
+            };
+            readonly stack?: string;
+            readonly record: {
+              readonly threadId: string;
+              readonly runId: string;
+              readonly entryId: string;
+            };
+          } | null;
+          readonly settledBy: 'reader' | 'parent' | 'agent' | 'model' | null;
+          readonly settledNotification: {
+            readonly id: string;
+            readonly startedAt: string;
+            readonly finishedAt: string | null;
+            readonly phase: 'publication' | 'subscriber' | 'confirmation';
+            readonly subscriber: string | null;
+            readonly delivered: readonly string[];
+            readonly exhaustedAt: string | null;
+            readonly lastFailure: {
+              readonly attemptId: string | null;
+              readonly at: string;
+              readonly phase: 'publication' | 'subscriber' | 'confirmation';
+              readonly subscriber: string | null;
+              readonly cause: readonly ({
+                readonly kind: 'failure' | 'defect' | 'interruption';
+                readonly tag: string | null;
+                readonly port: string | null;
+                readonly message: string;
+                readonly detail: string;
+                readonly fiberId: number | null;
+              })[];
+            } | null;
+            readonly observationFailure: {
+              readonly attemptId: string | null;
+              readonly at: string;
+              readonly phase: 'publication' | 'subscriber' | 'confirmation';
+              readonly subscriber: string | null;
+              readonly cause: readonly ({
+                readonly kind: 'failure' | 'defect' | 'interruption';
+                readonly tag: string | null;
+                readonly port: string | null;
+                readonly message: string;
+                readonly detail: string;
+                readonly fiberId: number | null;
+              })[];
+            } | null;
+          } | null;
+          readonly createdAt: string;
+          readonly startedAt: string;
+          readonly heartbeatAt: string;
+          readonly finishedAt: string | null;
+          readonly updatedAt: string;
+        } | null;
+        readonly latestRun: {
+          readonly id: string;
+          readonly threadId: string;
+          readonly status: 'running' | 'completed' | 'failed' | 'aborted' | 'cut' | 'withdrawn';
+          readonly kind: 'turn' | 'keep-warm' | 'compaction';
+          readonly ownerId: string;
+          readonly account: string | null;
+          readonly provider: string | null;
+          readonly model: string | null;
+          readonly reasoning: string | null;
+          readonly switches: {
+            readonly [key: string]: string;
+          };
+          readonly progress: {
+            readonly stage: 'starting' | 'running' | 'streaming' | 'compacting' | 'resuming' | 'awaiting-question' | 'completed' | 'failed' | 'aborted' | 'cut' | null;
+            readonly message: string | null;
+            readonly halt?: {
+              readonly reason: string;
+            };
+            readonly phase?: {
+              readonly phase: 'opening' | 'preparing' | 'calling' | 'reasoning' | 'writing' | 'tools' | 'compacting' | 'retrying';
+              readonly since: number;
+              readonly waiting?: {
+                readonly reason: string;
+                readonly place: string | null;
+              };
+            };
+          };
+          readonly usage: {
+            readonly inputTokens?: number;
+            readonly outputTokens?: number;
+            readonly nonCachedInputTokens?: number;
+            readonly cacheReadInputTokens?: number;
+            readonly cacheWriteInputTokens?: number;
+            readonly reasoningTokens?: number;
+            readonly totalTokens?: number;
+            readonly providerMetadata?: {
+              readonly [key: string]: {
+                readonly [key: string]: unknown;
+              };
+            };
+          } | null;
+          readonly failureReason: string | null;
+          readonly failure: {
+            readonly provider: string | null;
+            readonly account: string | null;
+            readonly stage: string;
+            readonly type: string;
+            readonly httpStatus?: number;
+            readonly retryable: boolean | null;
+            readonly modelStarted: boolean | null;
+            readonly contextOverflow?: boolean;
+            readonly detail?: string;
+            readonly rateLimit?: {
+              readonly retryAfterMs?: number;
+              readonly limit?: {
+                readonly [key: string]: string;
+              };
+              readonly remaining?: {
+                readonly [key: string]: string;
+              };
+              readonly reset?: {
+                readonly [key: string]: string;
+              };
+            };
+            readonly reason?: {
+              readonly family: 'invalid-request' | 'no-route' | 'auth' | 'rate-limit' | 'quota' | 'content-policy' | 'overloaded' | 'refused' | 'torn-stream' | 'non-json-answer' | 'socket-closed' | 'clean-eof-no-finish' | 'blank-error' | 'invalid-output' | 'stalled' | 'dns' | 'tls' | 'reset' | 'connect-timeout' | 'unknown';
+              readonly status?: number;
+              readonly upstreamRequestId?: string;
+              readonly attempt?: number;
+              readonly elapsedMs?: number;
+              readonly bytesRead?: number;
+              readonly lastEvent?: {
+                readonly type?: string;
+                readonly count: number;
+              };
+              readonly excerpt?: string;
+              readonly idleMs?: number;
+              readonly host?: string;
+              readonly cause?: readonly {
+                readonly tag: string;
+                readonly message: string;
+                readonly code?: string;
+              }[];
+              readonly kind?: string;
+              readonly said?: string;
+            };
+            readonly retry?: {
+              readonly stop: 'exhausted' | 'not-retryable';
+              readonly attempts: number;
+              readonly retries: number;
+              readonly limit: number;
+            } | {
+              readonly stop: 'delay-limit';
+              readonly attempts: number;
+              readonly retries: number;
+              readonly limit: number;
+              readonly retryAfterMs: number;
+              readonly ceilingMs: number;
+            };
+            readonly stack?: string;
+            readonly record: {
+              readonly threadId: string;
+              readonly runId: string;
+              readonly entryId: string;
+            };
+          } | null;
+          readonly settledBy: 'reader' | 'parent' | 'agent' | 'model' | null;
+          readonly settledNotification: {
+            readonly id: string;
+            readonly startedAt: string;
+            readonly finishedAt: string | null;
+            readonly phase: 'publication' | 'subscriber' | 'confirmation';
+            readonly subscriber: string | null;
+            readonly delivered: readonly string[];
+            readonly exhaustedAt: string | null;
+            readonly lastFailure: {
+              readonly attemptId: string | null;
+              readonly at: string;
+              readonly phase: 'publication' | 'subscriber' | 'confirmation';
+              readonly subscriber: string | null;
+              readonly cause: readonly ({
+                readonly kind: 'failure' | 'defect' | 'interruption';
+                readonly tag: string | null;
+                readonly port: string | null;
+                readonly message: string;
+                readonly detail: string;
+                readonly fiberId: number | null;
+              })[];
+            } | null;
+            readonly observationFailure: {
+              readonly attemptId: string | null;
+              readonly at: string;
+              readonly phase: 'publication' | 'subscriber' | 'confirmation';
+              readonly subscriber: string | null;
+              readonly cause: readonly ({
+                readonly kind: 'failure' | 'defect' | 'interruption';
+                readonly tag: string | null;
+                readonly port: string | null;
+                readonly message: string;
+                readonly detail: string;
+                readonly fiberId: number | null;
+              })[];
+            } | null;
+          } | null;
+          readonly createdAt: string;
+          readonly startedAt: string;
+          readonly heartbeatAt: string;
+          readonly finishedAt: string | null;
+          readonly updatedAt: string;
+        } | null;
+        readonly pendingInput: {
+          readonly queued: readonly ({
+            readonly id: string;
+            readonly runId: string;
+            readonly kind?: 'compaction';
+            readonly text: string;
+            readonly keep?: string;
+            readonly summarizer?: {
+              readonly provider: string;
+              readonly model: string;
+              readonly reasoning?: string | null;
+            };
+            readonly attachments?: readonly {
+              readonly id: string;
+              readonly mime: string;
+              readonly url: string;
+              readonly filename?: string;
+            }[];
+            readonly from?: string;
+            readonly senderThreadId?: string;
+            readonly senderProjectId?: number;
+            readonly intent?: string;
+            readonly notice?: {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'ran' | 'compacted' | 'cooled';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'model-changed';
+              readonly from: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly to: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'tasks';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'call-ending';
+              readonly runId: string;
+              readonly toolCallId: string;
+              readonly tool: string;
+              readonly outcome: 'completed' | 'failed' | 'stopped' | 'interrupted';
+              readonly threads: readonly ({
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              })[];
+              readonly guides?: readonly ({
+                readonly text: string;
+                readonly hook: 'beforeStep' | 'beforeTool' | 'afterTool' | 'beforeClose';
+                readonly ruleId?: string;
+                readonly state?: {
+                  readonly [key: string]: unknown;
+                };
+                readonly batchKey?: string;
+                readonly covers?: readonly string[];
+                readonly retell?: false;
+                readonly toolName?: string;
+                readonly toolCallId?: string;
+                readonly taskId?: string;
+              })[];
+            } | {
+              readonly kind: 'command-ending';
+              readonly execution: string;
+              readonly incarnation: number;
+              readonly label?: string;
+              readonly command: string | null;
+              readonly ending: 'completed' | 'stopped' | 'expired' | 'unknown';
+              readonly exit: {
+                readonly kind: 'code';
+                readonly code: number;
+              } | {
+                readonly kind: 'signal';
+                readonly signal: string;
+              } | null;
+              readonly tail: string | null;
+            } | {
+              readonly kind: 'thread-event';
+              readonly thread: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'rested' | 'failed' | 'stalled' | 'awaiting' | 'addresses-human' | 'stopped' | 'committed' | 'task-closed';
+              readonly wakes: boolean;
+              readonly forOperator?: boolean;
+            };
+            readonly occurredAt: string;
+          })[];
+          readonly steers: readonly ({
+            readonly id: string;
+            readonly runId: string;
+            readonly kind?: 'compaction';
+            readonly text: string;
+            readonly keep?: string;
+            readonly summarizer?: {
+              readonly provider: string;
+              readonly model: string;
+              readonly reasoning?: string | null;
+            };
+            readonly attachments?: readonly {
+              readonly id: string;
+              readonly mime: string;
+              readonly url: string;
+              readonly filename?: string;
+            }[];
+            readonly from?: string;
+            readonly senderThreadId?: string;
+            readonly senderProjectId?: number;
+            readonly intent?: string;
+            readonly notice?: {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'ran' | 'compacted' | 'cooled';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'model-changed';
+              readonly from: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly to: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'tasks';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'call-ending';
+              readonly runId: string;
+              readonly toolCallId: string;
+              readonly tool: string;
+              readonly outcome: 'completed' | 'failed' | 'stopped' | 'interrupted';
+              readonly threads: readonly ({
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              })[];
+              readonly guides?: readonly ({
+                readonly text: string;
+                readonly hook: 'beforeStep' | 'beforeTool' | 'afterTool' | 'beforeClose';
+                readonly ruleId?: string;
+                readonly state?: {
+                  readonly [key: string]: unknown;
+                };
+                readonly batchKey?: string;
+                readonly covers?: readonly string[];
+                readonly retell?: false;
+                readonly toolName?: string;
+                readonly toolCallId?: string;
+                readonly taskId?: string;
+              })[];
+            } | {
+              readonly kind: 'command-ending';
+              readonly execution: string;
+              readonly incarnation: number;
+              readonly label?: string;
+              readonly command: string | null;
+              readonly ending: 'completed' | 'stopped' | 'expired' | 'unknown';
+              readonly exit: {
+                readonly kind: 'code';
+                readonly code: number;
+              } | {
+                readonly kind: 'signal';
+                readonly signal: string;
+              } | null;
+              readonly tail: string | null;
+            } | {
+              readonly kind: 'thread-event';
+              readonly thread: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'rested' | 'failed' | 'stalled' | 'awaiting' | 'addresses-human' | 'stopped' | 'committed' | 'task-closed';
+              readonly wakes: boolean;
+              readonly forOperator?: boolean;
+            };
+            readonly occurredAt: string;
+          })[];
+          readonly arrived?: readonly ({
+            readonly type: 'signal';
+            readonly id: string;
+            readonly runId?: string;
+            readonly signalType: string;
+            readonly addressee: 'reader' | 'transport';
+            readonly text: string;
+            readonly title?: string;
+            readonly senderThreadId?: string;
+            readonly senderProjectId?: number;
+            readonly notice?: {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'ran' | 'compacted' | 'cooled';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'model-changed';
+              readonly from: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly to: {
+                readonly provider: string;
+                readonly model: string | null;
+                readonly reasoning: string | null;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'tasks';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'call-ending';
+              readonly runId: string;
+              readonly toolCallId: string;
+              readonly tool: string;
+              readonly outcome: 'completed' | 'failed' | 'stopped' | 'interrupted';
+              readonly threads: readonly ({
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              })[];
+              readonly guides?: readonly ({
+                readonly text: string;
+                readonly hook: 'beforeStep' | 'beforeTool' | 'afterTool' | 'beforeClose';
+                readonly ruleId?: string;
+                readonly state?: {
+                  readonly [key: string]: unknown;
+                };
+                readonly batchKey?: string;
+                readonly covers?: readonly string[];
+                readonly retell?: false;
+                readonly toolName?: string;
+                readonly toolCallId?: string;
+                readonly taskId?: string;
+              })[];
+            } | {
+              readonly kind: 'command-ending';
+              readonly execution: string;
+              readonly incarnation: number;
+              readonly label?: string;
+              readonly command: string | null;
+              readonly ending: 'completed' | 'stopped' | 'expired' | 'unknown';
+              readonly exit: {
+                readonly kind: 'code';
+                readonly code: number;
+              } | {
+                readonly kind: 'signal';
+                readonly signal: string;
+              } | null;
+              readonly tail: string | null;
+            } | {
+              readonly kind: 'thread-event';
+              readonly thread: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'rested' | 'failed' | 'stalled' | 'awaiting' | 'addresses-human' | 'stopped' | 'committed' | 'task-closed';
+              readonly wakes: boolean;
+              readonly forOperator?: boolean;
+            };
+            readonly attachments?: readonly {
+              readonly mime: string;
+              readonly url: string;
+              readonly filename?: string;
+            }[];
+            readonly unconfirmed?: true;
+            readonly occurredAt?: string;
+            readonly rewound?: {
+              readonly by: string;
+              readonly scope: 'from' | 'turn';
+            };
+          })[];
+        };
+        readonly status: {
+          readonly threadId: string;
+          readonly runId: string | null;
+          readonly life: 'idle' | 'working' | 'awaiting' | 'stalled';
+          readonly stage: 'starting' | 'running' | 'streaming' | 'compacting' | 'resuming' | 'awaiting-question' | 'completed' | 'failed' | 'aborted' | 'cut' | null;
+          readonly openQuestions: readonly string[];
+          readonly since: string | null;
+          readonly ownership?: 'held' | 'stale-evidence' | 'recovering';
+          readonly halt?: {
+            readonly reason: string;
+          };
+          readonly ending?: {
+            readonly runId: string;
+            readonly status: 'completed' | 'failed' | 'aborted' | 'cut' | 'withdrawn';
+            readonly stoppedBy: 'reader' | 'parent' | 'agent' | 'model' | null;
+            readonly failureReason: string | null;
+            readonly finishedAt: string;
+            readonly notification: 'confirmed' | 'claimed' | 'retry-wait' | 'notification-exhausted';
+            readonly words?: {
+              readonly text: string;
+              readonly attachments?: readonly {
+                readonly mime: string;
+                readonly url: string;
+                readonly filename?: string;
+              }[];
+            };
+          };
+          readonly launchBlocked?: true;
+          readonly wordsWait?: 'archived' | 'launch-refused' | 'words-unsettled' | 'composer-draft';
+          readonly receipts: readonly ({
+            readonly key: string;
+            readonly status: 'queued' | 'steered';
+            readonly runId: string;
+            readonly itemId: string;
+            readonly occurredAt: string;
+          })[];
+        };
+        readonly now: string;
+        readonly contextLimit: {
+          readonly window: number;
+          readonly compaction: {
+            readonly at: number;
+            readonly strategy: 'percent' | 'reserve-output';
+            readonly share: number | null;
+            readonly source: 'override' | 'row' | 'global';
+          } | null;
+        } | null;
+        readonly transcript: readonly unknown[];
+        readonly before: number | null;
+        readonly open: readonly ({
+          readonly entry: unknown;
+          readonly from: number;
+        } | unknown)[];
+        readonly progress: {
+          readonly phase: {
+            readonly phase: 'opening' | 'preparing' | 'calling' | 'reasoning' | 'writing' | 'tools' | 'compacting' | 'retrying';
+            readonly since: number;
+            readonly waiting?: {
+              readonly reason: string;
+              readonly place: string | null;
+            };
+          } | null;
+          readonly estimate: {
+            readonly stepNumber: number;
+            readonly tokens: number;
+            readonly contextWindow: number | null;
+          } | null;
+        } | null;
+      };
+      readonly status: 'loaded';
+    };
+  };
   readonly snapshot_page: {
     readonly input: {
       readonly project?: string | number;
@@ -3637,6 +5037,25 @@ export type ExternalOperations = {
       };
       readonly acted: boolean;
       readonly status: 'queued';
+    };
+  };
+  readonly stop_run: {
+    readonly input: {
+      readonly threadId: string;
+      readonly runId?: string;
+      readonly withdraw?: boolean;
+    };
+    readonly answer: {
+      readonly runId: string;
+      readonly status: 'stopped';
+    } | {
+      readonly runId: string;
+      readonly status: 'requested';
+    } | {
+      readonly status: 'nothing-running';
+    } | {
+      readonly runId: string;
+      readonly status: 'run-mismatch';
     };
   };
   readonly trace_page: {

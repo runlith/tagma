@@ -25,6 +25,7 @@ import {
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { isHarnessName } from '../../threads/contract/wire/harness/names.js';
+import { pluginOfCaller } from '../../plugins/contract/wire/names.js';
 import type { MachineContext } from '../../graph/serving/machine.js';
 import type { CallWorld } from '../contract/service/admission.js';
 
@@ -41,7 +42,7 @@ export type CallIdentity = {
   readonly session: SessionRef | null;
   readonly native: NativeIdentity | null;
   readonly world: CallWorld['Service'];
-  readonly external?: string;
+  readonly external?: { readonly name: string; readonly plugin: string | null };
 };
 
 export const worldOf = (hostKind: string | null): CallWorld['Service'] => (hostKind === null ? 'checkout' : 'elsewhere');
@@ -171,7 +172,12 @@ export const identityOf = Effect.fnUntraced(function* (
   const header = headers[SESSION_HEADER]?.trim();
   if (!header) {
     const external = headers[CALLER_HEADER]?.trim();
-    return { session: null, native: null, world: 'checkout', external: external || undefined };
+    return {
+      session: null,
+      native: null,
+      world: 'checkout',
+      external: external ? { name: external, plugin: pluginOfCaller(external) } : undefined,
+    };
   }
   const parsed = parseSessionToken(header);
   if (parsed === null) {

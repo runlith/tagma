@@ -48,7 +48,7 @@ export type Actor =
       readonly session: SessionRef;
       readonly projectId: number | null;
     }
-  | { readonly kind: 'external'; readonly name: string };
+  | { readonly kind: 'external'; readonly name: string; readonly plugin: string | null };
 
 export type ActorRef =
   | { readonly kind: 'operator' }

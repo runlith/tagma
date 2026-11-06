@@ -16,6 +16,12 @@ export const pluginIdOf = (name: string): string => name.replaceAll('.', '-');
 
 export const componentName = (plugin: string, name: string): string => `${plugin}-${name}`;
 
-export const PLUGIN_CALLER_PREFIX = 'plugin:';
+const PLUGIN_CALLER_PREFIX = 'plugin:';
 
 export const pluginCaller = (id: string): string => `${PLUGIN_CALLER_PREFIX}${id}`;
+
+export const pluginOfCaller = (name: string): string | null => {
+  if (!name.startsWith(PLUGIN_CALLER_PREFIX)) return null;
+  const id = name.slice(PLUGIN_CALLER_PREFIX.length);
+  return id.length <= 64 && PLUGIN_ID_PATTERN.test(id) ? id : null;
+};

@@ -87,7 +87,7 @@ const decoded = Effect.fnUntraced(function* (catalog: OperationCatalog['Service'
   const id = catalog.registry.named(named);
   if (id === null) return yield* unknownOperation(named);
   const entry: Operation = catalog.registry.entry(id);
-  if ((yield* CurrentCaller).actor.kind === 'external' && entry.external !== true) return yield* externalRefusal(id, entry.meaning);
+  if ((yield* CurrentCaller).actor.kind === 'external' && entry.external === undefined) return yield* externalRefusal(id, entry.meaning);
   if (socketOnly(catalog.registry, id)) return yield* channelRefusal(id);
   return { id, input: yield* decoders.get(id)!(withoutDoorFields(payload, DOOR_FIELDS)) };
 });

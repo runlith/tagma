@@ -77,7 +77,7 @@ type OperationShape = GraphUse & {
   readonly approval: Approval;
   readonly raises?: (input: any, prepared: any, actor: Actor) => readonly Raised[];
   readonly mutates?: true;
-  readonly external?: true;
+  readonly external?: true | 'own';
   readonly checks?: 'tree';
   readonly negative?: (answer: unknown) => boolean;
   readonly answer?: Schema.Top;

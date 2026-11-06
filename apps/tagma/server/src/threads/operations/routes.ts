@@ -34,6 +34,7 @@ import { GraphRecoveries } from '../../graph/contract/service/recovery.js';
 import { ThreadTurns } from '../turns/acts.js';
 import { admitCallerOf } from '../turns/caller.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
+import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
 
 const workTask = (name: string, title: string, taken: boolean) =>
   taken
@@ -178,8 +179,16 @@ export const ROUTE_PAIRS: { readonly [K in RouteOperationId]: OperationPair<(typ
                 'create with a non-blank title, or without one from the operator surface',
               ]);
             }
+            if (input.bindings?.[PLUGIN_BINDING] !== undefined) {
+              return yield* new GateRefusal(
+                'binding-reserved',
+                `bindings.${PLUGIN_BINDING} is written by Tagma from the plugin that calls`,
+                [`drop ${PLUGIN_BINDING} from bindings: a thread a plugin creates is bound to it`],
+              );
+            }
             const createdBySessionId = yield* (yield* MachineWriters).signedId();
             const actor = caller.actor;
+            const plugin = actor.kind === 'external' ? actor.plugin : null;
             if (createdBySessionId !== null && title === undefined && input.parent === undefined) {
               return yield* new GateRefusal('title-required', 'a thread born of an agent carries a name the operator can read', [
                 'name it at creation: {"title": "<what this worker is for>"}',
@@ -192,7 +201,7 @@ export const ROUTE_PAIRS: { readonly [K in RouteOperationId]: OperationPair<(typ
               parent: input.parent,
               task: input.task,
               host: input.host,
-              bindings: input.bindings,
+              bindings: plugin === null ? input.bindings : { ...input.bindings, [PLUGIN_BINDING]: plugin },
               worktree: input.worktree,
               base: input.base,
               worktreeName: input.worktreeName,

@@ -37,7 +37,7 @@ const admitted = (named: string, caller: Caller, right: boolean): Effect.Effect<
     const id = catalog.registry.named(named);
     if (id === null) return Effect.die(new Error(`No operation is registered as ${named}.`));
     const entry = catalog.registry.entry(id);
-    const callers = admitCallers(id, entry.callers, entry.meaning, caller, entry.external === true);
+    const callers = admitCallers(id, entry.callers, entry.meaning, caller, entry.external !== undefined);
     return right ? Effect.andThen(callers, admitRight(id, entry.right, entry.effect === 'read' ? 'read' : 'write')) : callers;
   });
 

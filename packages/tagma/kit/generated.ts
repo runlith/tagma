@@ -23,7 +23,7 @@ type Located = { readonly name: string; readonly file: string; readonly binding:
 
 type OperationShape = {
   readonly id: string;
-  readonly external?: true;
+  readonly external?: true | 'own';
   readonly input: Schema.Top;
   readonly answer: Schema.Top;
 };
@@ -214,7 +214,7 @@ const operationsText = async (): Promise<string> => {
       if (typeof load !== 'function') continue;
       const { declarations } = (await load()) as { readonly declarations: Readonly<Record<string, unknown>> };
       for (const declaration of Object.values(declarations))
-        if (isOperation(declaration) && declaration.external === true) external.set(declaration.id, declaration);
+        if (isOperation(declaration) && declaration.external !== undefined) external.set(declaration.id, declaration);
     }
   }
   const indent = (text: string) => text.replaceAll('\n', '\n    ');

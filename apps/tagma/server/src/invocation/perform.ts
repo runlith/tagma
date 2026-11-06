@@ -26,6 +26,7 @@ import { onPlace, callServices, PlacedCall } from './admission/services.js';
 import { addressedThread, operationFacts, placedContext } from './admission/place.js';
 import { judged } from './approval.js';
 import { admitCaller, admitOperation } from './admission/callers.js';
+import { admitPlugin } from './admission/plugin.js';
 import { callDefected, caused, type CallStand } from './cause.js';
 import { WorkPlaces } from '../threads/contract/service/working.js';
 import { NativeStorage } from '../threads/contract/service/engine.js';
@@ -163,6 +164,7 @@ const contextAt = Effect.fn('invocation.contextAt')(function* <Input, Prepared, 
   if (selected.place?.root !== site.place?.root) context = Context.merge(context, yield* owners(site.caller, selected.place, site.world));
   const complete = Context.merge(context, callServices(selected));
   yield* Effect.provide(admitOperation(bound.id, site.caller), complete);
+  yield* Effect.provide(admitPlugin(bound.id, entry, input, site.caller), complete);
   const places = Context.getOrUndefined(complete, WorkPlaces);
   const actor = site.caller.actor;
   const place = Context.get(complete, CallPlace);
