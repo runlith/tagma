@@ -1,7 +1,7 @@
 import type { Component } from 'svelte';
 import { mount, unmount } from 'svelte';
 import { Failure } from '@runlith/layer/Failure';
-import { Host } from '@runlith/layer/Host';
+import { Host, type HostInput } from '@runlith/layer/Host';
 import type { KeyClass } from '@runlith/layer/key';
 import { Layer, type LayerLike } from '@runlith/layer/Layer';
 import type { MountedApp } from '@runlith/layer/App';
@@ -106,7 +106,7 @@ export type TestApp = {
 export function mountShell(
   manifest: LayerLike,
   boot: LayerLike = Layer.mergeAll(),
-  options: { at?: GraphAim | undefined; thread?: ThreadAim | undefined; storage?: PlatformStorage; router?: Router } = {},
+  options: { at?: GraphAim | undefined; thread?: ThreadAim | undefined; storage?: PlatformStorage; router?: Router; host?: HostInput } = {},
 ): TestApp {
   const at = 'at' in options ? options.at : testAim;
   const storage = options.storage ?? makeStorage();
@@ -115,7 +115,7 @@ export function mountShell(
     Layer.of(Platform, makePlatform({ local: storage })),
     Layer.of(AppState, readyState(storage)),
     Layer.of(Router, options.router ?? makeRouter()),
-    Host.tab(),
+    Host.of(options.host ?? { kind: 'tab' }),
     ServerOrigin.of(TEST_ORIGIN),
     Layer.of(ExternalLinks, { open: (url) => void opened.push(url) }),
     Layer.of(FileSaver, { save: () => undefined }),
