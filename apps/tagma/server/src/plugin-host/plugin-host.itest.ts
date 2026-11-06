@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Context, Effect, Exit, Fiber, Layer, Schedule, Scope } from 'effect';
+import { Clock, Context, Effect, Exit, Fiber, Layer, Schedule, Scope } from 'effect';
 import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
 import { FileWatcher } from '../platform/contract/service/watch.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
@@ -114,19 +114,50 @@ it.live('a process whose tool list differs from its manifest is refused, named, 
   }),
 );
 
-it.live('a process that ends before it answers waits idle behind its backoff with its tools offered, and a later call starts it', () =>
+it.live(
+  'a process that ends before it answers waits idle behind its backoff with its tools offered, calls meanwhile wait for the gate and start it once, and a later call starts it',
+  () =>
+    Effect.gen(function* () {
+      const world = yield* hostWorld({ prefix: 'host-unstarted-' });
+      const { host, projectId, tools, said, until } = world;
+      yield* world.install(yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS }));
+      yield* until(() => host.reading('fixture')?.state === 'idle');
+      const refusing = join(world.data('fixture'), 'refuse');
+      const journal = join(world.data('fixture'), 'journal');
+      const failed = Effect.map(Effect.flip(host.call('fixture', 'look', {}, {})), (failure) => failure._tag);
+      yield* Effect.promise(() => writeFile(refusing, ''));
+      const before = yield* Clock.currentTimeMillis;
+      expect(yield* failed).toBe('McpConnectFailed');
+      expect(host.reading('fixture')).toMatchObject({ state: 'idle', restarts: 1 });
+      expect(Object.keys((yield* tools.of(projectId)).agents())).toEqual(['plugin__fixture__look']);
+      expect(yield* Effect.all([failed, failed, failed], { concurrency: 'unbounded' })).toEqual([
+        'McpConnectFailed',
+        'McpConnectFailed',
+        'McpConnectFailed',
+      ]);
+      expect((yield* Clock.currentTimeMillis) - before).toBeGreaterThanOrEqual(1_000);
+      expect((yield* lines(journal)).map((line) => line.split(' ')[0])).toEqual(['refused', 'refused']);
+      expect(host.reading('fixture')).toMatchObject({ state: 'idle', restarts: 2 });
+      yield* Effect.promise(() => rm(refusing));
+      expect(yield* said('look')).toStartWith('look ');
+    }),
+);
+
+it.live('a call made while a quiet process is being stopped waits for it to end and starts the next one', () =>
   Effect.gen(function* () {
-    const world = yield* hostWorld({ prefix: 'host-unstarted-' });
-    const { host, projectId, tools, said, until } = world;
-    yield* world.install(yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS }));
+    const world = yield* hostWorld({ prefix: 'host-stopping-', quiet: '300 millis' });
+    const { host, said, until } = world;
+    const ending = join(yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'plugins-stopping-'))), 'journal');
+    const linger = [{ key: 'LINGER', title: 'Linger', description: 'Where the process notes how it was ended.', default: ending }];
+    yield* world.install(yield* world.place('fixture', { program: FIXTURE, options: linger, contributes: TOOLS }));
     yield* until(() => host.reading('fixture')?.state === 'idle');
-    const refusing = join(world.data('fixture'), 'refuse');
-    yield* Effect.promise(() => writeFile(refusing, ''));
-    expect(yield* Effect.flip(host.call('fixture', 'look', {}, {}))).toMatchObject({ _tag: 'McpConnectFailed' });
-    expect(host.reading('fixture')).toMatchObject({ state: 'idle', restarts: 1 });
-    expect(Object.keys((yield* tools.of(projectId)).agents())).toEqual(['plugin__fixture__look']);
-    yield* Effect.promise(() => rm(refusing));
-    expect(yield* said('look')).toStartWith('look ');
+    const first = yield* said('pid');
+    yield* until(() => existsSync(ending));
+    expect(yield* lines(ending)).toEqual([`eof ${first}`]);
+    const second = yield* said('pid');
+    expect(second).not.toBe(first);
+    expect(alive(Number(first))).toBe(false);
+    expect(yield* lines(join(world.data('fixture'), 'journal'))).toEqual([`start ${first}`, `exit ${first}`, `start ${second}`]);
   }),
 );
 

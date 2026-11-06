@@ -313,27 +313,30 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     if (!standing.process.resident) yield* detached(FiberMap.run(quiets, slot.id, quieted(slot, generation)));
   });
 
+  const unstarted = (slot: Slot) =>
+    new McpConnectFailed({ server: slot.id, transport: 'stdio', reason: slot.failure ?? 'its process did not start' });
+
   const opened = Effect.fn('PluginHost.open')(
-    function* (slot: Slot): Effect.fn.Return<void, McpNotConnected | McpConnectFailed> {
+    function* (slot: Slot, restarts: number): Effect.fn.Return<void, McpNotConnected | McpConnectFailed> {
       if (slots.get(slot.id) !== slot) return yield* notConnected(slot);
       const live = slot.live;
       if (live !== null && alive(live)) return;
       const standing = slot.standing;
       if (standing === null || standing.process === null) return yield* notConnected(slot);
+      if (slot.restarts !== restarts) return yield* unstarted(slot);
       const process = standing.process;
       yield* moved(slot, launched(slot, { ...standing, process }));
-      if (slot.live === null) {
-        return yield* new McpConnectFailed({ server: slot.id, transport: 'stdio', reason: slot.failure ?? 'its process did not start' });
-      }
+      if (slot.live === null) return yield* unstarted(slot);
     },
     Effect.uninterruptible,
     (work, slot) => slot.lock.withPermit(work),
   );
 
   const woken = Effect.fnUntraced(function* (slot: Slot) {
+    const restarts = slot.restarts;
     const wait = slot.gate - (yield* Clock.currentTimeMillis);
     if (wait > 0) yield* Effect.sleep(wait);
-    yield* opened(slot);
+    yield* opened(slot, restarts);
   });
 
   const retired = Effect.fnUntraced(function* (slot: Slot) {
