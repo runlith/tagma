@@ -11,9 +11,6 @@ fields:
       },
       {
         "at": "views.ts"
-      },
-      {
-        "at": "files.ts"
       }
     ],
     "id": "views",

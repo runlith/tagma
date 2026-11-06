@@ -42,4 +42,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/shared
 ---
-Here is what many features need and none owns: `ui` components (buttons, menus, dialogs, popovers), the `Theme` port the appearance feature fills, fading text, file and agent icons, seams, drag and drop, and the desktop and browser bridges that composition fills. No domain knowledge lives here: it lives in the features.
+Here is what many features need and none owns: `ui` components (buttons, menus, dialogs, popovers), the `Theme` port the appearance feature fills, fading text, file and agent icons, seams, drag and drop, `Frame` — the one iframe for pages, MCP App windows and the sites a plugin's view embeds —, and the desktop and browser bridges that composition fills. No domain knowledge lives here: it lives in the features.

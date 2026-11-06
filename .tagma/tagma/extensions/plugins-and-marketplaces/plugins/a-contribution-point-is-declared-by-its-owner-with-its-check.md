@@ -23,6 +23,7 @@ A contribution point belongs to the owner of what a plugin writes into, not to `
 - the schema;
 - the keys a contribution occupies (`claims` — two plugins on one key refuse, naming the holder);
 - what a contribution holds by name (`entries` — each `{name, title}`, the themes of `themes`), which the plugin's row lists from its manifest whether or not the plugin runs, so a card can offer what a plugin running nowhere brings;
+- what a contribution asks of the person's devices (`uses` — one phrase, or null), which becomes the `detail` of the plugin's contribution line and so reaches the card before the plugin is added, as `views` says "Uses camera and microphone" when a view frames a site with `<Frame media>`;
 - what it asks of the rest of the manifest: `refuses(value, {plugin, sibling})` for a check against another point (a view `views` does not declare), and `calls(value)` for the tools it names for Tagma to call, which the face that `serves` tools — plugin-host's `tools` — answers for (audience `tagma`). `calls` keeps a point owner below plugin-host free of a dependency on it.
 
 A plugin-only point's typed face is `never`. When assembling its layer the owner binds the face to its `register`, which only registers and returns a disposer, through `PluginPoints.declare(point, register)`. Keys are taken in one synchronous step before the first `register`, so two plugins published at once do not take one key.

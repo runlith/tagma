@@ -32,4 +32,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/views
 ---
-An app and an MCP server draw their interface in an isolated frame, and the module owns that frame: message bridge to the view, host styles, parameters, frame parking between shows, and tool notifications.
+An app and an MCP server draw their interface in an isolated frame, and the module owns that frame: message bridge to the view, host styles, parameters, and tool notifications.
