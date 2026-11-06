@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
 import { ready } from '../../../builtins.node';
-import { UNBOUNDED } from '../../../core/node/budget';
+import { unbounded } from '../../../core/node/budget';
 import type { CallServicesParams } from './declaration';
 import { callServices } from './implementation';
 
@@ -31,7 +31,7 @@ const tree = (texts: Record<string, string>): Tree => ({
 
 const judged = (texts: Record<string, string>, change: Partial<CallServicesParams> = {}) =>
   callServices
-    .read(params(change), tree(texts), Object.keys(texts), ADAPTERS, UNBOUNDED)
+    .read(params(change), tree(texts), Object.keys(texts), ADAPTERS, unbounded())
     .violations.map(({ fingerprint, line }) => `${fingerprint} @${line}`);
 
 const HEAD = [
@@ -66,7 +66,7 @@ describe('callServices: provision sites', () => {
 
   it('names in its fix the places allowed to provide the tag', () => {
     const texts = { 'src/door/a.ts': file('export const three = Layer.succeed(CallerWorkspace, null);') };
-    expect(callServices.read(params(), tree(texts), Object.keys(texts), ADAPTERS, UNBOUNDED).violations.map(({ fix }) => fix)).toEqual([
+    expect(callServices.read(params(), tree(texts), Object.keys(texts), ADAPTERS, unbounded()).violations.map(({ fix }) => fix)).toEqual([
       "Provide `CallerWorkspace` only in `invocation/`: hand this call's facts to the code there instead of providing it here.",
     ]);
   });

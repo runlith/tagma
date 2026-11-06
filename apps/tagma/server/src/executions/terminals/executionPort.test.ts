@@ -7,6 +7,7 @@ import type { Executions } from '@runlith/executions/Executions';
 import type { ExecutionFeed } from '@runlith/executions/ExecutionFeed';
 import { ExecutionId, InstallationId, HostRequestKey, type ExecutionState } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
+import { ProjectRootsUnavailable } from '../../workspace/contract/wire/coverage.js';
 import { TerminalRefused, TerminalUnavailable } from '../contract/wire/refusals.js';
 import type { HostConnection } from '../host/connection.js';
 import { makeTerminalExecutions, type CommandAdmitter } from './executionPort.js';
@@ -127,6 +128,23 @@ it.effect('a floor refusal crosses the port under the host tag its reason owns, 
 
     const identity = yield* startRefusedBy(new TerminalRefused({ reason: 'ineligible', message: 'not placeable' }));
     expect(identity.started._tag === 'Refused' ? identity.started.refusal._tag : '').toBe('Unauthorized');
+  }),
+);
+
+it.effect('a tool spawn whose project roots cannot be read crosses as unavailability, never as an authorization refusal', () =>
+  Effect.gen(function* () {
+    const operation = { installation, operation: HostRequestKey.make('op-roots') };
+    const terminals = {
+      target: () =>
+        Effect.fail(
+          new ProjectRootsUnavailable({ projectId: 1, reason: 'registry', message: 'Git could not list the checkouts of /repo' }),
+        ),
+    } as unknown as Terminals['Service'];
+    const owner = yield* portOver(terminals, {} as unknown as HostConnection, admitted);
+    const failure = yield* Effect.flip(owner.start(operation, launch));
+
+    expect(failure).toMatchObject({ _tag: 'HostRefused', refusal: { _tag: 'HostUnavailable' } });
+    expect(failure._tag === 'HostRefused' ? failure.refusal.reason : '').toContain('Git could not list the checkouts of /repo');
   }),
 );
 

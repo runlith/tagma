@@ -25,6 +25,7 @@ import type { Channel } from '../installation/contract/wire/channel.js';
 import { directoryLeased } from '../platform/lock/directoryLease.js';
 import { reachLine, writeLauncher } from '../installation/setup/launcher.js';
 import { steppedBackAlone } from '../installation/cli/stepBack.js';
+import { readOnlyWarning } from '../installation/voice/status.js';
 import { installRelease, type Weigh } from './install.js';
 import { weighedByServer } from './successor.js';
 import { BACK } from './offers.js';
@@ -153,6 +154,8 @@ const moved = Effect.fnUntraced(function* (
   if (chosen === null) return yield* Console.log(next.standing.said.map((part) => part.text).join(''));
   const named = [...next.offers, ...(next.back === null ? [] : [next.back])].find((one) => one.id === chosen);
   if (named !== undefined && !o.json) yield* Console.log(offerLine(named));
+  const warned = named === undefined ? null : readOnlyWarning(named);
+  if (warned !== null && !o.json) yield* Console.log(warned);
   const started = yield* begin(cli, chosen, then);
   if (!o.json) yield* Console.log(`${started.title} ${started.target} — output in ${started.log}`);
   yield* followed(cli, started, state.server.pid, o.json, state.restart.record?.id);

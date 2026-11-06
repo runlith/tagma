@@ -28,6 +28,8 @@ export const stateLines = (about: string): readonly string[] => [
   ...(['ran', 'compacted', 'cooled'] as const).map((event) => `${AGENT_CHILD_UPDATE_SIGNAL_TYPE}:${about}:${event}:`),
 ];
 
+export const deletedLineKey = (recipient: string): string => `deleted:${recipient}`;
+
 export const makeEventLines = ({
   inbox,
   outputs,
@@ -48,6 +50,8 @@ export const makeEventLines = ({
       Effect.gen(function* () {
         const id = `${line.type}:${line.about}:${line.key}`;
         if ((yield* inbox.receipt(id)) !== undefined) return;
+        const deletion = `${AGENT_CHILD_UPDATE_SIGNAL_TYPE}:${line.about}:${deletedLineKey(line.subscriberId)}`;
+        if (id !== deletion && (yield* inbox.receipt(deletion)) !== undefined) return;
         const handle = harness().threads.handle(line.subscriberId, OPERATOR_PRINCIPAL);
         const unread = (yield* inbox.pending(line.subscriberId)).filter(
           (item) => item.kind === 'signal' && item.state === 'queued' && line.replaces.some((start) => item.id.startsWith(start)),

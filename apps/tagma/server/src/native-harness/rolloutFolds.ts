@@ -21,6 +21,8 @@ import { frozen, type FoldRow, type NativeFolds } from '../threads/journal/rollo
 import { RestedWork } from './transcript/restedWork.js';
 
 const INSERT_ROWS = 8_000;
+
+const RETURNED = writes('rollout.native.returned', [threadEntry, threadHistoryItem]);
 const BODY_IDS = 500;
 
 const INSERTED = {
@@ -187,6 +189,13 @@ export const makeNativeFolds = Effect.gen(function* () {
     digest: (files, form) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.digest(kinds, files, form)),
     carry: (files, ask) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.carry(kinds, files, ask)),
     layers: (files) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.layers(kinds, files)),
+    returned: {
+      writes: RETURNED,
+      columns: [
+        { table: 'thread_entry', column: 'entry', thread: 'thread_id', record: 'entry' },
+        { table: 'thread_history_item', column: 'message', thread: 'thread_id', record: 'message' },
+      ],
+    },
     writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),
   } satisfies NativeFolds;
 });

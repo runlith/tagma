@@ -5,6 +5,7 @@ import { APPROVAL, lifecycleWorld, started } from '@runlith/agent/thread/conform
 import type { ThreadStateChange } from '@runlith/agent/thread/state';
 import { openThreadStore } from '../../composition/testing/storageHarness.js';
 import { sql } from 'drizzle-orm';
+import { Usage } from '@runlith/llm/schema/events';
 import { Clock, Effect, Layer, Tracer } from 'effect';
 import { SCOPED_RUN } from '../row.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
@@ -40,6 +41,36 @@ it.live('a beat commits as one program and answers its owner’s stop requests a
       },
     ]);
   }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+it.live('a run whose stored facts are not JSON is beaten, staged and claimed for its notice as one whose facts stand as none', () =>
+  Effect.gen(function* () {
+    const { storage, db } = yield* openThreadStore();
+    const world = yield* lifecycleWorld(() => Effect.succeed(storage));
+    const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
+    const torn = '{"oops":';
+    yield* db.run(sql`update thread_run set stop_request = ${torn}, progress = ${torn} where id = ${run.id}`);
+    const at = new Date((yield* Clock.currentTimeMillis) + 60_000);
+    expect(yield* world.lifecycle.beat([run], at)).toEqual([]);
+    yield* world.runs.writeProgress(run.id, { stage: 'running', message: 'again' }, at);
+    expect((yield* world.runs.runById(run.id))?.progress).toMatchObject({ stage: 'running', message: 'again' });
+    expect(yield* world.runs.parkRun(run.id, { stage: 'awaiting-question', message: null }, at)).toBe('parked');
+
+    yield* db.run(sql`update thread_run set usage = ${torn} where id = ${run.id}`);
+    yield* world.runs.addUsage(run.id, new Usage({ totalTokens: 7 }), at);
+    expect((yield* world.runs.runById(run.id))?.usage).toBeNull();
+
+    yield* db.run(
+      sql`update thread_run set status = 'failed', finished_at = ${at.getTime()}, failure = ${torn}, settled_notification = ${torn} where id = ${run.id}`,
+    );
+    const { claims } = yield* world.runs.claimSettledForNotification({
+      heartbeatBefore: new Date(at.getTime() + 1),
+      now: at,
+      limit: 8,
+      maxAttempts: 3,
+    });
+    expect(claims).toMatchObject([{ id: run.id, failure: null, settledNotification: { id: expect.any(String) } }]);
+  }),
 );
 
 const MINUTE = 60_000;

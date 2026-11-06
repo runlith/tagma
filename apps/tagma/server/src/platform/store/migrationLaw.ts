@@ -1,17 +1,51 @@
+import { Database } from 'bun:sqlite';
+import { Result, Schema } from 'effect';
 import { isKeyword, isMark, nameOf, schemaStatement, statementTarget, tokenize } from './statementTarget.js';
+
+export const ASIDE_FILE = 'aside.json';
+
+export const AsideDeclared = Schema.Struct({
+  tables: Schema.optionalKey(Schema.NonEmptyArray(Schema.NonEmptyString)),
+  derived: Schema.optionalKey(Schema.NonEmptyArray(Schema.NonEmptyString)),
+  moved: Schema.optionalKey(Schema.Boolean),
+});
 
 export type MigrationIssue = { readonly table: string | null; readonly statement: string; readonly reason: string };
 
 const UNRETURNED = {
   renamed: 'a renamed table leaves the build before without the rows it reads under the old name',
-  column: 'a renamed or dropped column comes back empty to the build before',
+  column: 'a renamed column comes back empty to the build before',
+  droppedColumn: 'a dropped column comes back empty to the build before',
   dropped: 'a dropped table comes back empty to the build before',
   written: 'rows rewritten here reach the build before in a shape it never wrote',
   unresolved: 'the statement cannot be judged',
 } as const;
 
-export const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssue[] => {
+const DROPPING: ReadonlySet<string> = new Set([UNRETURNED.dropped, UNRETURNED.droppedColumn]);
+
+type Renamed = { readonly tables: ReadonlySet<string>; readonly columns: ReadonlyMap<string, ReadonlySet<string>> };
+
+const renamedIn = (statements: readonly string[]): Renamed => {
+  const tables = new Set<string>();
+  const columns = new Map<string, Set<string>>();
+  for (const statement of statements) {
+    const tokens = tokenize(statement);
+    if (!isKeyword(tokens[0], 'alter') || !isKeyword(tokens[1], 'table')) continue;
+    const table = nameOf(tokens[2])?.toLowerCase();
+    const rename = tokens.findIndex((token) => isKeyword(token, 'rename'));
+    if (table === undefined || rename < 0) continue;
+    if (isKeyword(tokens[rename + 1], 'to')) tables.add(table);
+    else {
+      const old = nameOf(tokens[rename + (isKeyword(tokens[rename + 1], 'column') ? 2 : 1)])?.toLowerCase();
+      if (old !== undefined) columns.set(table, new Set([...(columns.get(table) ?? []), old]));
+    }
+  }
+  return { tables, columns };
+};
+
+const unreturnedIssues = (statements: readonly string[]): readonly MigrationIssue[] => {
   const created = new Set<string>();
+  const added = new Map<string, Set<string>>();
   const dropped = new Map<string, string>();
   const issues: MigrationIssue[] = [];
   const issue = (table: string | null, statement: string, reason: keyof typeof UNRETURNED) =>
@@ -19,7 +53,11 @@ export const unreturnedIssues = (statements: readonly string[]): readonly Migrat
   for (const statement of statements) {
     const target = statementTarget(statement);
     if (target.kind === 'write') {
-      if (!created.has(target.table.toLowerCase())) issue(target.table, statement, 'written');
+      const table = target.table.toLowerCase();
+      const columns = target.columns;
+      const backfilled =
+        target.verb === 'update' && columns !== 'all' && [...columns].every((column) => added.get(table)?.has(column) === true);
+      if (!created.has(table) && !backfilled) issue(target.table, statement, 'written');
       continue;
     }
     const shape = schemaStatement(statement);
@@ -30,7 +68,8 @@ export const unreturnedIssues = (statements: readonly string[]): readonly Migrat
       tokens.some((token) => isKeyword(token, 'rename') || isKeyword(token, 'drop'));
     if (shape.kind === 'unresolved' && columnChange) {
       const table = nameOf(tokens[2]);
-      if (table === null || !created.has(table.toLowerCase())) issue(table, statement, 'column');
+      const dropping = tokens.some((token) => isKeyword(token, 'drop'));
+      if (table === null || !created.has(table.toLowerCase())) issue(table, statement, dropping ? 'droppedColumn' : 'column');
     } else if (shape.kind === 'unresolved') issue(null, statement, 'unresolved');
     else if (shape.kind === 'create-table') created.add(shape.table.toLowerCase());
     else if (shape.kind === 'drop-table') {
@@ -43,11 +82,173 @@ export const unreturnedIssues = (statements: readonly string[]): readonly Migrat
         if (!created.delete(table)) issue(shape.table, statement, 'renamed');
         created.add(to);
         dropped.delete(to);
-      } else if (shape.addedColumn === null && !created.has(table)) issue(shape.table, statement, 'column');
+      } else if (shape.addedColumn !== null) added.set(table, new Set([...(added.get(table) ?? []), shape.addedColumn.toLowerCase()]));
+      else if (!created.has(table))
+        issue(shape.table, statement, tokens.some((token) => isKeyword(token, 'drop')) ? 'droppedColumn' : 'column');
     }
   }
   for (const [table, statement] of dropped) issue(table, statement, 'dropped');
   return issues;
+};
+
+type ChainedMigration = { readonly name: string; readonly sql: string; readonly back: string | null; readonly aside: string | null };
+
+export type StepBackLoss = {
+  readonly migration: string;
+  readonly file: 'migration' | 'back' | 'aside';
+  readonly fingerprint: string;
+  readonly message: string;
+};
+
+const statementsOf = (text: string): string[] => text.split('--> statement-breakpoint').filter((one) => one.trim() !== '');
+
+type Shape = ReadonlyMap<string, ReadonlySet<string>>;
+
+const shapeOf = (db: Database): Shape =>
+  new Map(
+    db
+      .query<{ name: string }, []>(
+        `select name from pragma_table_list where schema = 'main' and type = 'table' and name not like 'sqlite_%'`,
+      )
+      .all()
+      .map(({ name }) => [
+        name.toLowerCase(),
+        new Set(
+          db
+            .query<{ name: string }, [string]>('select name from pragma_table_info(?)')
+            .all(name)
+            .map((column) => column.name.toLowerCase()),
+        ),
+      ]),
+  );
+
+const keylessOf = (db: Database): ReadonlySet<string> =>
+  new Set(
+    db
+      .query<{ name: string }, []>(
+        `select list.name from pragma_table_list as list where list.schema = 'main' and list.type = 'table' and list.name not like 'sqlite_%'
+         and not exists (select 1 from pragma_table_info(list.name) as info where info.pk > 0)`,
+      )
+      .all()
+      .map(({ name }) => name.toLowerCase()),
+  );
+
+type Dropped = { readonly table: string; readonly columns: readonly string[] | null };
+
+const droppedBy = (before: Shape, after: Shape, statements: readonly string[]): readonly Dropped[] => {
+  const renamed = renamedIn(statements);
+  return [...before].flatMap(([table, columns]): Dropped[] => {
+    if (renamed.tables.has(table)) return [];
+    const standing = after.get(table);
+    if (standing === undefined) return [{ table, columns: null }];
+    const gone = [...columns].filter((column) => !standing.has(column) && renamed.columns.get(table)?.has(column) !== true);
+    return gone.length === 0 ? [] : [{ table, columns: gone }];
+  });
+};
+
+const decodeAside = Schema.decodeUnknownResult(Schema.fromJsonString(AsideDeclared));
+
+const reasonOf = (failure: unknown): string => (failure instanceof Error ? failure.message : String(failure));
+
+const backed = (db: Database, back: string): { readonly shape: Shape } | { readonly failure: string } => {
+  db.run('SAVEPOINT judged_back');
+  try {
+    for (const statement of statementsOf(back)) db.run(statement);
+    return { shape: shapeOf(db) };
+  } catch (failure) {
+    return { failure: reasonOf(failure) };
+  } finally {
+    db.run('ROLLBACK TO judged_back');
+    db.run('RELEASE judged_back');
+  }
+};
+
+const unrenamed = (before: Shape, after: Shape, statements: readonly string[]): readonly string[] => {
+  const renamed = renamedIn(statements);
+  const tables = [...renamed.tables].filter((table) => before.has(table) && !after.has(table));
+  const columns = [...renamed.columns].flatMap(([table, names]) =>
+    before.has(table)
+      ? [...names].filter((name) => before.get(table)!.has(name) && after.get(table)?.has(name) !== true).map((name) => `${table}.${name}`)
+      : [],
+  );
+  return [...tables, ...columns];
+};
+
+export const stepBackLosses = (chain: readonly ChainedMigration[], judged: ReadonlySet<string>): readonly StepBackLoss[] => {
+  const losses: StepBackLoss[] = [];
+  const db = new Database(':memory:');
+  let at = chain[0]?.name ?? '';
+  try {
+    db.run('PRAGMA foreign_keys = OFF');
+    for (const migration of chain) {
+      at = migration.name;
+      const statements = statementsOf(migration.sql);
+      const before = judged.has(migration.name) ? shapeOf(db) : null;
+      const keyless = before === null ? null : keylessOf(db);
+      for (const statement of statements) db.run(statement);
+      if (before === null || keyless === null) continue;
+      const loss = (file: StepBackLoss['file'], fingerprint: string, message: string) =>
+        losses.push({ migration: migration.name, file, fingerprint, message });
+      if (migration.back === null) {
+        for (const issue of unreturnedIssues(statements).filter((one) => !DROPPING.has(one.reason)))
+          loss(
+            'migration',
+            `back ${issue.table ?? 'unresolved'} ${issue.statement.trim()}`,
+            `${issue.table ?? 'unknown target'}: ${issue.reason}, and no back.sql stands beside it to return it: ${issue.statement.trim()}`,
+          );
+      } else {
+        const ran = backed(db, migration.back);
+        if ('failure' in ran)
+          loss(
+            'back',
+            `back script ${ran.failure}`,
+            `back.sql does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${ran.failure}`,
+          );
+        else
+          for (const name of unrenamed(before, ran.shape, statements))
+            loss(
+              'back',
+              `back leaves ${name} renamed`,
+              `${name}: the migration renames it and back.sql does not name it back, so a step back would bring it back empty`,
+            );
+      }
+      const read = migration.aside === null ? null : decodeAside(migration.aside);
+      if (read !== null && Result.isFailure(read)) {
+        loss('aside', 'aside unread', `${ASIDE_FILE} does not read, so it keeps nothing: ${String(read.failure)}`);
+        continue;
+      }
+      const declared = read?.success;
+      const copied = new Set((declared?.tables ?? []).map((table) => table.toLowerCase()));
+      const kept = new Set([...copied, ...(declared?.derived ?? []).map((table) => table.toLowerCase())]);
+      for (const drop of droppedBy(before, shapeOf(db), statements)) {
+        if (drop.columns !== null && copied.has(drop.table) && keyless.has(drop.table)) {
+          loss(
+            'aside',
+            `keyless ${drop.table} ${drop.columns.join(',')}`,
+            `${drop.table}: the migration drops ${drop.columns.join(', ')} and ${ASIDE_FILE} keeps the table, but it has no primary key to put them back on their rows by, so a step back would bring them back empty`,
+          );
+          continue;
+        }
+        if (kept.has(drop.table)) continue;
+        const what = drop.columns === null ? 'the migration drops the table' : `the migration drops ${drop.columns.join(', ')}`;
+        loss(
+          'migration',
+          `drops ${drop.table}${drop.columns === null ? '' : ` ${drop.columns.join(',')}`}`,
+          `${drop.table}: ${what}, and no ${ASIDE_FILE} beside it keeps the table or names it derived, so a step back would bring it back empty`,
+        );
+      }
+    }
+  } catch (failure) {
+    losses.push({
+      migration: at,
+      file: 'migration',
+      fingerprint: 'chain unapplied',
+      message: `the chain does not apply in memory past this migration, so what its judged migrations lose cannot be told: ${reasonOf(failure)}`,
+    });
+  } finally {
+    db.close();
+  }
+  return losses;
 };
 
 export const migrationIssues = (statement: string, history: ReadonlySet<string>): readonly MigrationIssue[] => {

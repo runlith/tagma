@@ -12,6 +12,7 @@ import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { NATIVE_HARNESS, type HarnessId } from '../../platform/contract/wire/session.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { threadRecord } from '../../thread-record/store/table.js';
@@ -275,7 +276,7 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
     lagging: Effect.fn('HarnessMoves.lagging')(function* (provider, account) {
       const lagged = sql`json_extract(${externalSession.facet}, '$.session.account.provider') = ${provider} and json_extract(${externalSession.facet}, '$.session.account.key') != ${account}`;
       const unbound = sql`json_extract(${externalSession.facet}, '$.session.state') = 'starting' and json_extract(${externalSession.facet}, '$.session.account') is null`;
-      const limited = sql`exists (select 1 from ${threadRun} as latest where latest.id = (select r.id from ${threadRun} as r where r.thread_id = ${externalSession.id} order by r.created_at desc limit 1) and latest.status = 'failed' and json_extract(latest.failure, '$.reason.family') = 'rate-limit')`;
+      const limited = sql`exists (select 1 from ${threadRun} as latest where latest.id = (select r.id from ${threadRun} as r where r.thread_id = ${externalSession.id} order by r.created_at desc limit 1) and latest.status = 'failed' and ${readableField(sql.raw('latest.failure'), '$.reason.family')} = 'rate-limit')`;
       const rows = yield* units.read((unit) =>
         unit.run(
           db
@@ -288,8 +289,8 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
                 isNull(threadRecord.archivedAt),
                 isNull(thread.account),
                 eq(thread.provider, provider),
-                sql`json_extract(${thread.transport}, '$.adapter') = 'acp'`,
-                sql`json_extract(${thread.transport}, '$.agent') is not null`,
+                sql`${readableField(thread.transport, '$.adapter')} = 'acp'`,
+                sql`${readableField(thread.transport, '$.agent')} is not null`,
                 or(and(recoverableSession(externalSession.facet), or(lagged, unbound)), and(lagged, limited)),
               ),
             )

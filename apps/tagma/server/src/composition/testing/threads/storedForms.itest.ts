@@ -9,6 +9,8 @@ import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { and, eq, sql } from 'drizzle-orm';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
+import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
+import { grantFor } from '../../../platform/testing/grants.js';
 import { ThreadFeeds } from '../../../threads/contract/service/feeds.js';
 import { threadsFeedEventSchema } from '../../../threads/contract/wire/list.js';
 import { threadWireFeedEventSchema } from '../../../threads/contract/wire/snapshot.js';
@@ -293,6 +295,51 @@ it.live('a thread whose authority, transport, capabilities or birth does not rea
       reason: expect.stringContaining('did not read'),
     });
     expect((yield* world.op('delete_thread', { threadId: damaged.transport }, project)).body).toMatchObject({ status: 'deleted' });
+  }).pipe(Effect.scoped, Effect.provide(fixture)),
+);
+
+it.live('text that is not JSON in a thread fact reads as a fact this build cannot read, in the list, the thread and the directory', () =>
+  Effect.gen(function* () {
+    const world = yield* DoorFixture;
+    const projectId = yield* world.stealthProject();
+    yield* projectLeaving(world, projectId);
+    const { db } = Context.get(world.runtime.graph, MachineStore);
+    const born = Effect.map(birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null }), (made) => made.thread.id);
+    const torn = '{"oops":';
+    const damaged = { authority: yield* born, transport: yield* born, bornOf: yield* born, reading: yield* born, ended: yield* born };
+    const live = yield* born;
+    yield* db.run(sql`update thread_mandate set authority = ${torn} where id = ${damaged.authority}`);
+    yield* db.run(sql`update native_thread set transport = ${torn} where id = ${damaged.transport}`);
+    yield* db.run(sql`update thread set born_of = ${torn} where id = ${damaged.bornOf}`);
+    yield* db.run(sql`update native_thread set context_reading = ${torn} where id = ${damaged.reading}`);
+    const finishedAt = new Date(yield* Clock.currentTimeMillis);
+    yield* db.insert(threadRun()).values([
+      { id: `${damaged.ended}:run`, threadId: damaged.ended, ownerId: 'operator', status: 'failed', finishedAt },
+      { id: `${live}:run`, threadId: live, ownerId: 'operator', status: 'running' },
+    ]);
+    yield* db.run(
+      sql`update thread_run set failure = ${torn}, stream_tail = ${torn}, usage = ${torn}, progress = ${torn} where id = ${`${damaged.ended}:run`}`,
+    );
+    yield* db.run(sql`update thread_run set progress = ${torn} where id = ${`${live}:run`}`);
+
+    const frame = yield* Stream.runHead(Context.get(world.runtime.owners, ThreadFeeds)['threads.subscribe']({ projectId }));
+    const listed = Option.getOrThrow(frame);
+    expect(listed.type === 'list' ? listed.rows.map((row) => row.id).toSorted() : []).toEqual([...Object.values(damaged), live].toSorted());
+    yield* Schema.encodeEffect(threadsFeedEventSchema)(listed);
+
+    expect((yield* snapshotOf(projectId, damaged.authority))?.thread.unread).toEqual(['authority']);
+    expect((yield* snapshotOf(projectId, damaged.transport))?.thread.unread).toEqual(['transport']);
+    expect((yield* snapshotOf(projectId, damaged.bornOf))?.thread.bornOf).toBeNull();
+    expect((yield* snapshotOf(projectId, damaged.reading))?.thread.contextReading).toBeNull();
+    expect(yield* snapshotOf(projectId, damaged.ended)).not.toBeNull();
+    expect(yield* snapshotOf(projectId, live)).not.toBeNull();
+    expect(yield* toldOf(damaged.bornOf)).toEqual([expect.stringContaining('born-of cannot be read')]);
+    expect(yield* toldOf(damaged.transport)).toContainEqual(expect.stringContaining('transport binding cannot be read'));
+
+    const agents = yield* world.op('list_agents', { limit: 139 }, `project=${projectId}`, { [GRANT_HEADER]: grantFor(live) });
+    expect(JSON.stringify(agents.body)).toContain(damaged.transport);
+    expect(yield* toldOf(live)).toContainEqual(expect.stringContaining('run progress cannot be read'));
+    yield* db.run(sql`update thread_run set status = 'cut', finished_at = ${finishedAt.getTime()} where id = ${`${live}:run`}`);
   }).pipe(Effect.scoped, Effect.provide(fixture)),
 );
 

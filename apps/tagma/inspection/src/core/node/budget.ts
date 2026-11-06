@@ -1,4 +1,5 @@
-import type { Envelope } from '../rule';
+import type { Applied, Envelope } from '../rule';
+import { selects } from './implementations';
 import { ruleOf } from './registry';
 
 const MIB = 1024 * 1024;
@@ -25,7 +26,7 @@ export type Budget = {
   readonly source?: (id: string, bytes: number) => void;
 };
 
-export const UNBOUNDED: Budget = { take: () => undefined };
+export const unbounded = (): Budget => ({ take: () => undefined });
 
 export const ASK_FLOOR_MS = 10_000;
 export const ASK_CAP_MS = 120_000;
@@ -42,9 +43,9 @@ export type Calibration = {
   readonly probeMib: number;
 };
 
-export const isCalibratedBuiltin = (builtin: string): boolean => ruleOf(builtin).calibrated === true;
+const isCalibratedBuiltin = (builtin: string): boolean => ruleOf(builtin).calibrated === true;
 
-export const probeOf = (first: Iterable<string>, rest: Iterable<string>, size: (path: string) => number | undefined): readonly string[] => {
+const probeOf = (first: Iterable<string>, rest: Iterable<string>, size: (path: string) => number | undefined): readonly string[] => {
   const kept = new Set<string>();
   let bytes = 0;
   for (const paths of [first, rest]) {
@@ -66,10 +67,7 @@ export type ProbeSide = {
   readonly size: (path: string) => number | undefined;
 };
 
-export const spreadProbe = (
-  paths: readonly string[],
-  sides: readonly ProbeSide[],
-): { readonly held: readonly (readonly string[])[]; readonly files: number; readonly bytes: number } => {
+const spreadProbe = (paths: readonly string[], sides: readonly ProbeSide[]): Probe => {
   const taken = new Set<string>();
   let files = 0;
   let bytes = 0;
@@ -108,7 +106,7 @@ const sampled = (calibration: Calibration, files: number, bytes: number): boolea
 export const askMsOf = (calibration: Calibration, files: number, bytes: number): number =>
   sampled(calibration, files, bytes) ? Math.min(ASK_FLOOR_MS + inputCostOf(calibration, files, bytes), ASK_CAP_MS) : ASK_CAP_MS;
 
-export const fitsCalibration = (calibration: Calibration, files: number, bytes: number): boolean =>
+const fitsCalibration = (calibration: Calibration, files: number, bytes: number): boolean =>
   sampled(calibration, files, bytes) && inputCostOf(calibration, files, bytes) <= ASK_BUDGET_MS + 1e-9;
 
 export const calibratedEnvelopeOf = (calibration: Calibration): Envelope => ({
@@ -149,19 +147,6 @@ const counting = (refusal: (files: number, bytes: number) => EnvelopeExceeded | 
   };
 };
 
-export const calibratedBudgetOf = (builtin: string, calibration: Calibration): Budget =>
-  counting((files, bytes) =>
-    fitsCalibration(calibration, files, bytes)
-      ? undefined
-      : new EnvelopeExceeded(
-          builtin,
-          files,
-          bytes,
-          calibratedEnvelopeOf(calibration),
-          calibratedMessage(builtin, files, bytes, calibration),
-        ),
-  );
-
 const envelopedBudgetOf = (builtin: string, envelope: Envelope, detail?: (files: number, bytes: number) => string): Budget =>
   counting((files, bytes) =>
     files <= envelope.files && bytes <= envelope.mib * MIB
@@ -171,14 +156,68 @@ const envelopedBudgetOf = (builtin: string, envelope: Envelope, detail?: (files:
 
 const probeEnvelope: Envelope = { files: PROBE_MAX_FILES, mib: PROBE_MAX_BYTES / MIB };
 
-export const budgetOf = (builtin: string, envelope: Envelope | undefined, calibration?: Calibration): Budget => {
-  if (calibration !== undefined) return calibratedBudgetOf(builtin, calibration);
-  if (envelope !== undefined) return envelopedBudgetOf(builtin, envelope);
-  if (!isCalibratedBuiltin(builtin)) return UNBOUNDED;
+export const budgetOf = (builtin: string, calibration: Calibration | undefined): Budget => {
+  if (calibration !== undefined)
+    return counting((files, bytes) =>
+      fitsCalibration(calibration, files, bytes)
+        ? undefined
+        : new EnvelopeExceeded(
+            builtin,
+            files,
+            bytes,
+            calibratedEnvelopeOf(calibration),
+            calibratedMessage(builtin, files, bytes, calibration),
+          ),
+    );
+  const rule = ruleOf(builtin);
+  if (rule.envelope !== undefined) return envelopedBudgetOf(builtin, rule.envelope);
+  if (rule.calibrated !== true) return unbounded();
   return envelopedBudgetOf(
     builtin,
     probeEnvelope,
     (files, bytes) =>
       `${builtin} is not judged: it has not been calibrated in this judgement, so the reading is bounded by its probe (${probeEnvelope.files} files, ${probeEnvelope.mib.toFixed(1)} MiB) — it reaches ${files} files and ${(bytes / MIB).toFixed(1)} MiB, never judged clean`,
   );
+};
+
+export type Subject = { readonly files: number; readonly bytes: number };
+
+export const subjectOf = (paths: readonly string[], sides: readonly ProbeSide[]): Subject => {
+  let files = 0;
+  let bytes = 0;
+  for (const side of sides)
+    for (const path of new Set(paths)) {
+      if (side.object(path) === undefined) continue;
+      files += 1;
+      bytes += side.size(path) ?? 0;
+    }
+  return { files, bytes };
+};
+
+export const admit = (builtin: string, calibration: Calibration | undefined, subject: Subject): void =>
+  budgetOf(builtin, calibration).take(subject.files, subject.bytes);
+
+export type Probe = { readonly held: readonly (readonly string[])[]; readonly files: number; readonly bytes: number };
+
+export type Calibrating =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'known'; readonly calibration: Calibration }
+  | { readonly kind: 'probe'; readonly probe: Probe };
+
+export const calibratingOf = (
+  inspection: Applied,
+  paths: readonly string[],
+  sides: readonly ProbeSide[],
+  listed: Iterable<string>,
+  known: Calibration | undefined,
+): Calibrating => {
+  if (!isCalibratedBuiltin(inspection.builtin)) return { kind: 'none' };
+  const subject = subjectOf(paths, sides);
+  if (known !== undefined && fitsCalibration(known, subject.files, subject.bytes)) return { kind: 'known', calibration: known };
+  const rest = function* (): Iterable<string> {
+    for (const path of listed) if (selects(inspection, path)) yield path;
+  };
+  const kept = probeOf(paths, rest(), (path) => sides.reduce((sum, side) => sum + (side.size(path) ?? 0), 0));
+  const probe = spreadProbe(kept, sides);
+  return probe.files === 0 ? { kind: 'none' } : { kind: 'probe', probe };
 };

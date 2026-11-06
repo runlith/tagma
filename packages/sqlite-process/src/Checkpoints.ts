@@ -15,7 +15,7 @@ export class Checkpoints {
   private readonly waiting = new Set<string>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private driver: ProcessChannel | undefined;
-  private running: { readonly filename: string; readonly id: number } | undefined;
+  private running: { readonly filename: string; readonly id: number; readonly ended: PromiseWithResolvers<void> } | undefined;
   private next = 0;
 
   constructor(
@@ -42,6 +42,7 @@ export class Checkpoints {
           announce: () => {
             if (this.driver === driver) {
               this.driver = undefined;
+              this.running?.ended.resolve();
               this.running = undefined;
             }
             this.fail(reason);
@@ -74,13 +75,14 @@ export class Checkpoints {
         this.waiting.delete(owner.filename);
         clearTimeout(this.timers.get(owner.filename));
         this.timers.delete(owner.filename);
+        const pass = this.running;
+        if (pass?.filename === owner.filename) await pass.ended.promise;
       }
     }
     if (this.owners.size > 0) return;
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
     this.waiting.clear();
-    this.running = undefined;
     if (this.keeping()) return;
     await this.close();
   }
@@ -125,12 +127,14 @@ export class Checkpoints {
     this.waiting.delete(filename);
     if (!this.has(filename)) return this.drive();
     const id = ++this.next;
-    this.running = { filename, id };
+    const pass = { filename, id, ended: Promise.withResolvers<void>() };
+    this.running = pass;
     const durable = [...this.files.get(filename)!].some((owner) => this.owners.get(owner)!.durable);
     try {
       this.driver.send({ _tag: 'Checkpoint', id, filename, durable });
     } catch (cause) {
       this.running = undefined;
+      pass.ended.resolve();
       this.refused(filename, 'Sending the WAL checkpoint pass', thrownShapeOf(cause));
     }
   }
@@ -138,8 +142,9 @@ export class Checkpoints {
   private receive(said: SqliteSaid): void {
     if (said._tag === 'Maintaining') return;
     if (this.running === undefined || said.id !== this.running.id) return;
-    const { filename } = this.running;
+    const { filename, ended } = this.running;
     this.running = undefined;
+    ended.resolve();
     if (said._tag === 'Failed') this.refused(filename, PASS, said.thrown);
     else if (said._tag !== 'Checkpointed') this.refused(filename, PASS, thrownShapeOf(new Error(`it answered ${said._tag}`)));
     else if (said.log > said.copied) this.defer(filename);

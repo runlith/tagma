@@ -102,11 +102,8 @@ it.live(
         value: {
           submitted: {
             status: 'landed',
-            committed: ['host.ts', 'server.ts', 'succession.ts'],
-            carried: [
-              { path: 'host.ts', holders: [peer.threadId] },
-              { path: 'succession.ts', holders: [peer.threadId] },
-            ],
+            committed: ['host.ts', 'server.ts'],
+            carried: [{ path: 'host.ts', holders: [peer.threadId] }],
           },
         },
       });
@@ -319,7 +316,7 @@ it.live(
       yield* write(caller.threadId, 'list.ts', list + 'export const peek = (batch: Batch) => batch.map;\n');
       expect(yield* doors.atNative('submit_work', { subject: 'read a peer member', paths: ['list.ts'] }, caller)).toMatchObject({
         class: 'answer',
-        value: { submitted: { status: 'landed', committed: ['ask.ts', 'batch.ts', 'list.ts', 'rows.ts'] } },
+        value: { submitted: { status: 'landed', committed: ['batch.ts', 'list.ts'] } },
       });
     }).pipe(Effect.provide(BunFileSystem.layer)),
 );

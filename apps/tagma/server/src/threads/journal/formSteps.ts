@@ -1,4 +1,10 @@
-import { type ThreadFormBase, ThreadFormRefused, type ThreadFormRecord, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
+import {
+  type ThreadFormBase,
+  type ThreadFormForms,
+  ThreadFormRefused,
+  type ThreadFormRecord,
+  type ThreadFormStep,
+} from '@runlith/agent/transcript/kinds';
 import { sql, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { ENTRY_FIELDS, MESSAGE_FIELDS, PAYLOAD_FIELDS } from '../store/fields.js';
@@ -34,10 +40,10 @@ const valueAt = (held: Held, path: string): string | undefined => {
   return at === undefined ? undefined : JSON.stringify(at);
 };
 
-const guarded = (step: ThreadFormStep): ThreadFormStep => {
+const guardedForms = (name: string, declared: ThreadFormForms): ThreadFormForms => {
   const forms: Partial<Record<ThreadFormRecord, (held: Held) => Held | null>> = {};
   for (const record of RECORDS) {
-    const form = step[record];
+    const form = declared[record];
     if (form === undefined) continue;
     forms[record] = (held) => {
       const next = form(held);
@@ -45,15 +51,22 @@ const guarded = (step: ThreadFormStep): ThreadFormStep => {
       const moved = STABLE[record].find((path) => valueAt(held, path) !== valueAt(next, path));
       if (moved !== undefined) {
         throw new ThreadFormRefused({
-          step: step.name,
+          step: name,
           issue: `it changes ${moved}, which queries over many threads read; that change is a schema change of the history table`,
         });
       }
       return next;
     };
   }
-  return { name: step.name, samples: step.samples, ...forms };
+  return forms;
 };
+
+const guarded = (step: ThreadFormStep): ThreadFormStep => ({
+  name: step.name,
+  samples: step.samples,
+  ...guardedForms(step.name, step),
+  back: step.back === undefined ? undefined : { ...guardedForms(step.name, step.back), holds: step.back.holds },
+});
 
 export const JOURNAL_BASE: ThreadFormBase | null = null;
 

@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { chunk } from '@runlith/utils/collection';
 import { rowsPerStatement } from '../../platform/store/binds.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import type { HolderState } from '../../graph/contract/wire/holders.js';
 import { Clock, Effect } from 'effect';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -93,7 +94,7 @@ export const makeEventReads = Effect.gen(function* () {
                 and(
                   isNull(recordFacts.archivedAt),
                   isNull(recordFacts.runningRunId),
-                  sql`unixepoch(json_extract(${thread.contextReading}, '$.measuredAt')) + json_extract(${thread.contextReading}, '$.cache.ttlSeconds') > ${Math.floor(now / 1_000)}`,
+                  sql`unixepoch(${readableField(thread.contextReading, '$.measuredAt')}) + ${readableField(thread.contextReading, '$.cache.ttlSeconds')} > ${Math.floor(now / 1_000)}`,
                 ),
               ),
           ),

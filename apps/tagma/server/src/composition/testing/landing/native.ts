@@ -18,6 +18,7 @@ import { holdThreads } from '../threadScope.js';
 type Options = {
   readonly tools?: readonly string[];
   readonly models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
+  readonly own?: string;
 };
 
 class RepositorySeed extends Context.Service<RepositorySeed, { readonly root: string }>()('testing/LandingRepositorySeed') {}
@@ -38,7 +39,7 @@ export const seedRepository = Effect.fn('landing.seedRepository')(function* (roo
 });
 
 export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Record<string, string>>, options: Options = {}) {
-  const world = yield* makeDoorWorld({ models: options.models });
+  const world = yield* makeDoorWorld({ models: options.models, own: options.own });
   yield* holdThreads(world);
   const files = yield* FileSystem.FileSystem;
   const root = yield* files.realPath(yield* world.directory('checkout'));

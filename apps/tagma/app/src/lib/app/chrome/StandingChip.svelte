@@ -316,6 +316,7 @@
 
   const rows = $derived((next?.offers ?? []).map(rowOf));
   const backRow = $derived(next?.back === null || next?.back === undefined ? null : rowOf(next.back));
+  const readOnly = $derived(backRow?.offer.readOnlyGraphs ?? []);
   const whys = $derived(
     [...rows, ...(backRow === null ? [] : [backRow])].flatMap((row) => (row.offer.why === null ? [] : [row.offer.why])),
   );
@@ -589,6 +590,12 @@
               {@render offerRow(backRow, Undo2, 'Step back', false)}
             {/if}
           </div>
+          {#if readOnly.length > 0}
+            <p class="px-1 text-small text-status-in-work" data-standing-read-only>
+              Stepping back leaves {readOnly.join(', ')} read-only: {readOnly.length === 1 ? 'its graph uses' : 'their graphs use'} a newer format
+              than the version before reads.
+            </p>
+          {/if}
           {#if whys.length > 0}
             <Told told={{ text: '', details: whys }} class="px-1" />
           {/if}

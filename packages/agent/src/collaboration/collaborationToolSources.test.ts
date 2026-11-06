@@ -16,6 +16,7 @@ const root = { id: 'root', ownerId: 'owner-1', parentThreadId: null } as ThreadR
 const threads = Threads.of({
   find: (id) => Effect.succeed(id === root.id ? ({ id, principal: root.ownerId } as ThreadRecord) : null),
   named: unused,
+  deleted: unused,
   lineage: unused,
   list: unused,
   watch: unused,

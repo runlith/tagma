@@ -415,6 +415,7 @@ export const nativeThreadsLayer: Layer.Layer<
           Effect.map((row) => (row ? record(row) : null)),
           Effect.mapError(storageFailed('threads.named')),
         ),
+      deleted: () => Effect.succeed(null),
       lineage: Effect.fnUntraced(
         function* (threadId, principal) {
           const ancestors: ThreadRecord[] = [];

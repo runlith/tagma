@@ -354,6 +354,7 @@ const stepBackNext = Schema.Struct({
   from: Schema.String,
   to: Schema.String,
   carried: Schema.Boolean,
+  journals: Schema.optional(Schema.Struct({ starts: Schema.Number, returned: Schema.Boolean })),
   failed: Schema.optional(
     Schema.Struct({
       detail: Schema.String,

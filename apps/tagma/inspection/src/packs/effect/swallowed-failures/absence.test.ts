@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
-import { UNBOUNDED } from '../../../core/node/budget';
+import { unbounded } from '../../../core/node/budget';
 import { type Form, type SwallowedFailuresParams } from './declaration';
 import { swallowedFailures } from './implementation';
 
@@ -15,7 +15,7 @@ const judge = (body: string, allow: SwallowedFailuresParams['allow'] = [], impor
     read: () => text,
     mentions: (words) => new Set(words.some((word) => text.includes(word)) ? [path] : []),
   };
-  return swallowedFailures.read({ ...params, allow }, tree, [path], ADAPTERS, UNBOUNDED);
+  return swallowedFailures.read({ ...params, allow }, tree, [path], ADAPTERS, unbounded());
 };
 
 const cases: readonly { form: Form; bad: string; good: string }[] = [

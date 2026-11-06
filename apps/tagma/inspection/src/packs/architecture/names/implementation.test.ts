@@ -3,7 +3,7 @@ import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Inspection, Params } from '../../../builtins';
 import type { Violation } from '../../../core/verdict';
-import { budgetOf, EnvelopeExceeded } from '../../../core/node/budget';
+import { ASK_BUDGET_MS, budgetOf, deriveCalibration, EnvelopeExceeded, unbounded } from '../../../core/node/budget';
 import { inspect } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { readNames } from './implementation';
@@ -39,7 +39,7 @@ const tree = (texts: Record<string, string>, extra: Partial<Tree> = {}): Tree =>
 });
 
 const found = (value: NameParams, texts: Record<string, string>): readonly Violation[] =>
-  inspect(names(value), tree(texts), Object.keys(texts)).violations;
+  inspect(names(value), tree(texts), Object.keys(texts), unbounded()).violations;
 
 const prints = (value: NameParams, texts: Record<string, string>): readonly string[] =>
   found(value, texts)
@@ -55,6 +55,7 @@ const judged = (value: NameParams, base: Record<string, string>, built: Record<s
       paths: [...new Set([...Object.keys(base), ...Object.keys(built)])].filter((path) => base[path] !== built[path]),
     },
     debt,
+    unbounded(),
   );
 
 const fresh = (
@@ -258,7 +259,7 @@ describe('names: symbols', () => {
       },
       mentions: (words) => new Set(Object.keys(texts).filter((path) => words.some((word) => (texts[path] as string).includes(word)))),
     });
-    const reading = inspect(names(params({ S4: { within: 'module', exempt: [] } })), watched, ['src/m/row.ts']);
+    const reading = inspect(names(params({ S4: { within: 'module', exempt: [] } })), watched, ['src/m/row.ts'], unbounded());
     expect(reading.violations.map(({ fingerprint }) => fingerprint)).toEqual(['S4 m:Row @ m/row.ts']);
     expect([...read].sort()).toEqual(['src/m/other.ts', 'src/m/row.ts']);
   });
@@ -338,7 +339,7 @@ describe('names: symbols', () => {
       'export type CountRefusal = typeof counts.Type;',
       '',
     ].join('\n');
-    const reading = inspect(names(value), tree({ 'src/x.ts': text }), ['src/x.ts']);
+    const reading = inspect(names(value), tree({ 'src/x.ts': text }), ['src/x.ts'], unbounded());
     expect(reading.violations.map(({ fingerprint }) => fingerprint).sort()).toEqual([
       'S8 x.ts#ReadFailed:tag',
       'S8 x.ts#ReadFailure:union',
@@ -372,7 +373,7 @@ describe('names: symbols', () => {
       'export type MappedFailure = typeof Mapped.Type;',
       '',
     ].join('\n');
-    const reading = inspect(names(value), tree({ 'src/x.ts': text }), ['src/x.ts']);
+    const reading = inspect(names(value), tree({ 'src/x.ts': text }), ['src/x.ts'], unbounded());
     expect(reading.violations.map(({ fingerprint }) => fingerprint).sort()).toEqual([
       'S8 x.ts#FinishRefusal:union',
       'S8 x.ts#RolloutRefusal:union',
@@ -391,10 +392,12 @@ describe('names: symbols', () => {
       },
     });
     const alias = "export type EveryRefusal = (typeof OPERATIONS)[OperationId]['refusals'][number];\n";
-    const reading = inspect(names(value), tree({ 'src/platform/body.ts': alias, 'src/platform/other.ts': alias }), [
-      'src/platform/body.ts',
-      'src/platform/other.ts',
-    ]);
+    const reading = inspect(
+      names(value),
+      tree({ 'src/platform/body.ts': alias, 'src/platform/other.ts': alias }),
+      ['src/platform/body.ts', 'src/platform/other.ts'],
+      unbounded(),
+    );
     expect(reading.unjudged.map(({ file }) => file)).toEqual(['src/platform/other.ts']);
   });
 
@@ -515,10 +518,9 @@ describe('names: region and envelope', () => {
   it('refuses a reading that reaches more files than its envelope, and never answers it clean; a judgement spends one budget over both sides', () => {
     const texts = { 'src/a.ts': '', 'src/b.ts': '', 'src/c.ts': '' };
     const value = params({ F4: { lines: 1, allowances: [] } });
-    expect(() => readNames(value, tree(texts), Object.keys(texts), ADAPTERS, budgetOf('names', { files: 2, mib: 1 }))).toThrow(
-      EnvelopeExceeded,
-    );
-    const shared = budgetOf('names', { files: 5, mib: 1 });
+    const capped = (files: number) => budgetOf('names', deriveCalibration(ASK_BUDGET_MS / files, 1, 1024 * 1024));
+    expect(() => readNames(value, tree(texts), Object.keys(texts), ADAPTERS, capped(2))).toThrow(EnvelopeExceeded);
+    const shared = capped(5);
     readNames(value, tree(texts), Object.keys(texts), ADAPTERS, shared);
     expect(() => readNames(value, tree(texts), Object.keys(texts), ADAPTERS, shared)).toThrow(EnvelopeExceeded);
   });

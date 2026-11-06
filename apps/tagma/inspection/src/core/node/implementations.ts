@@ -3,10 +3,10 @@ import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
 import type { Applied } from '../rule';
 import { valuedDuplicate, type Violation } from '../verdict';
-import { type Budget, budgetOf } from './budget';
+import type { Budget } from './budget';
 import type { InspectionMemo } from './memo';
 import type { Reading, ReadingScope, Remapped } from './reading';
-import { implementationOf, ruleOf } from './registry';
+import { implementationOf } from './registry';
 
 export const lists = (inspection: Applied, adapters: Adapters = ADAPTERS): readonly string[] =>
   implementationOf(inspection.builtin).lists(inspection.params, adapters);
@@ -26,8 +26,6 @@ export const prefetches = (id: string): boolean => implementationOf(id).prefetch
 export const reachKey = (inspection: Applied, slot: string): string | undefined =>
   implementationOf(inspection.builtin).reachKey?.(inspection.params, slot);
 
-export const budgetFor = (inspection: Applied): Budget => budgetOf(inspection.builtin, ruleOf(inspection.builtin).envelope);
-
 const uniqueValued = (builtin: string, violations: readonly Violation[]): void => {
   const repeated = valuedDuplicate(violations);
   if (repeated !== undefined)
@@ -38,8 +36,8 @@ export const inspect = (
   inspection: Applied,
   tree: Tree,
   paths: readonly string[],
+  budget: Budget,
   adapters: Adapters = ADAPTERS,
-  budget: Budget = budgetFor(inspection),
   memo?: InspectionMemo,
   scope: ReadingScope = 'reach',
 ): Reading => {
@@ -61,8 +59,8 @@ export const remapped = (
   before: Applied,
   tree: Tree,
   fingerprints: readonly string[],
+  budget: Budget,
   adapters: Adapters = ADAPTERS,
-  budget: Budget = budgetFor(inspection),
   memo?: InspectionMemo,
 ): Remapped | undefined =>
   inspection.builtin === before.builtin
@@ -74,8 +72,8 @@ export const affected = (
   base: Tree,
   built: Tree,
   paths: readonly string[],
+  budget: Budget,
   adapters: Adapters = ADAPTERS,
-  budget: Budget = budgetFor(inspection),
   memo?: InspectionMemo,
 ): readonly string[] =>
   implementationOf(inspection.builtin).affected?.(inspection.params, base, built, paths, adapters, budget, memo) ?? [];

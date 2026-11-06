@@ -6,6 +6,7 @@ import type { ThreadCallBroke } from '../thread/ThreadBorder';
 import { planeRefused } from './planeRefusal';
 import type { PlaneRefusalCode } from './refusals';
 import type { Threads } from './threads';
+import { deletionFact } from './collaborationVerbs';
 
 export type Standing = 'child' | 'descendant' | 'self' | 'ancestor' | 'outside';
 
@@ -73,15 +74,20 @@ export function crossing(reached: Reached | null, within: Within): readonly Rais
   return [{ condition: CROSSINGS[within].id, fact: STANDING_FACTS[reached.standing](reached.thread.id) }];
 }
 
-export function crossed(
-  reached: Reached | null,
-  threadId: string,
-  within: Within,
-  asked: readonly string[],
-): Effect.Effect<Reached, ThreadCallBroke> {
-  if (reached === null) {
-    return planeRefused('thread-unknown', `no thread ${threadId} stands under this owner.`);
-  }
+export const unreached = Effect.fnUntraced(function* (
+  threads: ThreadsShape,
+  caller: ThreadRecord,
+  address: string,
+): Effect.fn.Return<never, ThreadReadFailure | ThreadCallBroke> {
+  const gone = yield* threads.deleted(caller.principal, caller.spawnRootId, address);
+  return yield* gone === null
+    ? planeRefused('thread-unknown', `no thread ${address} stands under this owner.`)
+    : planeRefused('thread-unknown', `${deletionFact(gone)}, so no act reaches it any more.`, [
+        'spawn a fresh agent briefed with its last report for the work it was doing',
+      ]);
+});
+
+export function crossed(reached: Reached, within: Within, asked: readonly string[]): Effect.Effect<Reached, ThreadCallBroke> {
   const unasked = crossing(reached, within).find((raised) => !asked.includes(raised.condition));
   return unasked === undefined ? Effect.succeed(reached) : planeRefused(CROSSINGS[within].id, unasked.fact);
 }

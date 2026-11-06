@@ -9451,10 +9451,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutEntryForms.ts#RolloutForm",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutFile.ts#readsAsRecord",
           "owner": "5a3bed29"
         },

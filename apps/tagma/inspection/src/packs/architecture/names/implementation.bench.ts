@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Schema } from 'effect';
 import type { Params } from '../../../builtins';
 import { names as declared } from './declaration';
-import { calibratedBudgetOf, deriveCalibration, UNBOUNDED } from '../../../core/node/budget';
+import { budgetOf, deriveCalibration, unbounded } from '../../../core/node/budget';
 import { judge } from '../../../core/node/judge';
 import { readNames } from './implementation';
 import { commitTree } from '../../../core/node/sides';
@@ -118,8 +118,8 @@ const treeOf = (subject: Subject, facts: FacetMemo): Tree =>
   blobTree(subject.objects, subject.texts, new Map(), ADAPTERS, undefined, facts);
 
 const both = (params: NameParams, tree: Tree, paths: readonly string[]) => {
-  readNames(params, tree, paths, ADAPTERS, UNBOUNDED);
-  readNames(watch.base === params.base ? watch : { ...watch, base: params.base }, tree, paths, ADAPTERS, UNBOUNDED);
+  readNames(params, tree, paths, ADAPTERS, unbounded());
+  readNames(watch.base === params.base ? watch : { ...watch, base: params.base }, tree, paths, ADAPTERS, unbounded());
 };
 
 const measure = (label: string, params: NameParams, subject: Subject) => {
@@ -211,7 +211,7 @@ const largest = [...own.objects.keys()].sort(
 );
 const LANDING = largest.slice(0, 4);
 const calibration = deriveCalibration(small.cold, smallSubject.paths.length, smallSubject.bytes);
-const budget = () => calibratedBudgetOf('names', calibration);
+const budget = () => budgetOf('names', calibration);
 const words = new Map<string, Set<string>>();
 for (const [path, object] of own.objects) {
   for (const [word] of (own.texts.get(object) ?? '').matchAll(/[A-Za-z_$][\w$]*|'[^'\n]*'/g)) {
@@ -228,18 +228,14 @@ const landingTree = (facts: FacetMemo): Tree => ({
 const inspection = { builtin: 'names', params: gate } as const;
 const coldLanding = median(
   Array.from({ length: RUNS }, () =>
-    timed(() =>
-      judge(inspection, { base: landingTree(new Map()), built: landingTree(new Map()), paths: LANDING }, [], ADAPTERS, undefined, budget()),
-    ),
+    timed(() => judge(inspection, { base: landingTree(new Map()), built: landingTree(new Map()), paths: LANDING }, [], budget())),
   ),
 );
 const heldFacts: FacetMemo = new Map();
-judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], ADAPTERS, undefined, budget());
+judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], budget());
 const warmLanding = median(
   Array.from({ length: RUNS }, () =>
-    timed(() =>
-      judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], ADAPTERS, undefined, budget()),
-    ),
+    timed(() => judge(inspection, { base: landingTree(heldFacts), built: landingTree(heldFacts), paths: LANDING }, [], budget())),
   ),
 );
 console.log(

@@ -5,20 +5,19 @@ import { Data, Deferred, Effect, Schema } from 'effect';
 import { sql } from 'drizzle-orm';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import { type Adopting, IN_MEMORY, SetAsideFailed, type Store, type StoreBrand } from '../contract/service/store.js';
-import { setAsidePath } from '../contract/service/ownStore.js';
+import { adoptedPath, setAsidePath } from '../contract/service/ownStore.js';
 import { watched } from '../contract/service/drives.js';
 import { type DurableWriteFailed, makeDirectory, moveFile, removeFile } from '../durable/files.js';
+import { ASIDE_FILE, AsideDeclared } from './migrationLaw.js';
 
-const DECLARATION = 'aside.json';
-
-const Declared = Schema.fromJsonString(Schema.Struct({ tables: Schema.NonEmptyArray(Schema.NonEmptyString) }));
+const asideDeclared = Schema.decodeUnknownEffect(Schema.fromJsonString(AsideDeclared));
 
 const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
 const unwritten = (failure: DurableWriteFailed) => new SetAsideFailed({ path: failure.path, reason: failure.reason });
 
 const declaredTables = Effect.fn('Store.setAside.declared')(function* (folder: string, migration: string) {
-  const file = join(folder, migration, DECLARATION);
+  const file = join(folder, migration, ASIDE_FILE);
   const text = yield* Effect.tryPromise({
     try: () =>
       readFile(file, 'utf8').catch((cause: NodeJS.ErrnoException) => {
@@ -28,10 +27,8 @@ const declaredTables = Effect.fn('Store.setAside.declared')(function* (folder: s
     catch: (cause) => new SetAsideFailed({ path: file, reason: String(cause) }),
   });
   if (text === null) return null;
-  const declared = yield* Schema.decodeUnknownEffect(Declared)(text).pipe(
-    Effect.mapError((cause) => new SetAsideFailed({ path: file, reason: String(cause) })),
-  );
-  return declared.tables;
+  const declared = yield* asideDeclared(text).pipe(Effect.mapError((cause) => new SetAsideFailed({ path: file, reason: String(cause) })));
+  return declared.tables ?? null;
 });
 
 export const setAside = Effect.fn('Store.setAside')(function* (
@@ -104,6 +101,7 @@ const adoptFile = Effect.fn('Store.adopt')(function* (
   db: EffectSQLiteBunDatabase,
   transaction: Store<StoreBrand>['transaction'],
   file: string,
+  by: string,
 ) {
   if (!existsSync(file)) return { outcome: 'absent' } satisfies Adoption;
   const alias = `aside_${++attachments}`;
@@ -129,7 +127,7 @@ const adoptFile = Effect.fn('Store.adopt')(function* (
       }),
     );
   }).pipe(Effect.ensuring(Effect.orDie(db.run(sql.raw(`DETACH DATABASE ${quoted(alias)}`)))));
-  yield* removeFile(file).pipe(Effect.mapError(unwritten));
+  yield* moveFile(file, adoptedPath(file, by)).pipe(Effect.mapError(unwritten));
   return { outcome: 'adopted', rows } satisfies Adoption;
 });
 
@@ -144,7 +142,7 @@ export const adopting = Effect.fnUntraced(function* (
   const adopt = (file: string) =>
     watched(
       `store.adopt ${file}`,
-      Effect.tap(adoptFile(db, transaction, file), (adopted) =>
+      Effect.tap(adoptFile(db, transaction, file, plan.by), (adopted) =>
         Effect.sync(() => {
           if (adopted.outcome === 'adopted') console.log(`[tagma] ${file}: ${adopted.rows} rows adopted`);
         }),

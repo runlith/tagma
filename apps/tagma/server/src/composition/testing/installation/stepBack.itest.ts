@@ -1,42 +1,31 @@
 import { Database } from 'bun:sqlite';
 import { expect } from 'bun:test';
-import {
-  closeSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import * as BunPath from '@effect/platform-bun/BunPath';
 import { it } from '@runlith/effect-test';
-import { gitLayer } from '@runlith/git/Git';
-import { Effect, FileSystem, Layer, Schedule } from 'effect';
-import { releaseInstallation } from '../../../cut/release.js';
-import { inertPlatform } from '../../../cut/testing/platform.js';
+import { Effect, Layer, Schedule } from 'effect';
 import { endHosts } from '../../../executions/testing/doubles.js';
 import { partsAt } from '../../../installation/closure/read.js';
 import { writeInstallation } from '../../../installation/closure/write.js';
+import { ServerLaunch } from '../../../installation/process/launch.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
 import { CHANNELS } from '../../../installation/contract/wire/channel.js';
-import { MIGRATIONS } from '../../../installation/contract/wire/manifest.js';
+import { type InstallationRole, MIGRATIONS, SERVER_ENTRY } from '../../../installation/contract/wire/manifest.js';
 import { testProcesses } from '../../../installation/testing/processes.js';
-import { openVersion, swapCurrent } from '../../../platform/lock/versionedDirectories.js';
-import { DEVELOPER } from '../../developer/build.js';
+import { swapCurrent } from '../../../platform/lock/versionedDirectories.js';
+import { GRAPH_STEPS } from '../../../graph/steps/sequence.js';
+import { ENTRY_KINDS } from '../composed.js';
+import { checkoutInstalled, LEAVING_MIGRATION, leavingCopy } from './installed.js';
+import { freePorts, healthAt, op, served, servingBuild, worldEnv } from './serving.js';
 
-const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
-const machine = Layer.mergeAll(BunFileSystem.layer, spawning, gitLayer.pipe(Layer.provide(spawning)));
-
-const LEAVING_MIGRATION = '29991231000000_only_the_leaving_build';
-const LEAVING_SQL =
-  'ALTER TABLE `meta` ADD `only_leaving` text;--> statement-breakpoint\nCREATE TABLE `only_leaving` (`id` integer PRIMARY KEY);';
+const STEPS = ENTRY_KINDS.steps.map((step) => step.name);
+const NEWEST = STEPS.at(-1)!;
+const PREVIOUS = STEPS.at(-2)!;
+const UNKNOWN_STEP = `${NEWEST.slice(0, -1)}${NEWEST.endsWith('z') ? 'y' : 'z'}`;
+const GRAPH_NEWEST = GRAPH_STEPS.at(-1)!.id;
+const UNKNOWN_GRAPH = `${GRAPH_NEWEST.slice(0, -1)}${GRAPH_NEWEST.endsWith('z') ? 'y' : 'z'}`;
 const BROKEN_MIGRATION = '29991231000001_cannot_apply';
 
 const wrote = (path: string, text: string): void => {
@@ -44,63 +33,16 @@ const wrote = (path: string, text: string): void => {
   writeFileSync(path, text);
 };
 
-const freePorts = () => {
-  const listeners = Array.from({ length: 4 }, () => Bun.serve({ port: 0, fetch: () => new Response('') }));
-  const ports = listeners.map((listener) => listener.port!);
-  for (const listener of listeners) listener.stop(true);
-  return ports as [number, number, number, number];
+const mark = (path: string, threadId: string): string | null => {
+  const db = new Database(path, { readonly: true });
+  try {
+    return (
+      db.query<{ step: string | null }, [string]>('select step from thread_rollout_form where thread_id = ?').get(threadId)?.step ?? null
+    );
+  } finally {
+    db.close();
+  }
 };
-
-const worldEnv = (root: string, data: string, ports: readonly [number, number, number, number]): Record<string, string | undefined> => ({
-  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('TAGMA_'))),
-  HOME: join(root, 'home'),
-  TAGMA_DATABASE_PATH: join(data, 'tagma.sqlite'),
-  TAGMA_SEED_DIRECTORY: join(root, 'seeds'),
-  TAGMA_INSTALL_ROOT: join(root, 'install'),
-  TAGMA_PORT: String(ports[0]),
-  TAGMA_ARTIFACT_PORT: String(ports[1]),
-  TAGMA_SANDBOX_PORT: String(ports[2]),
-  TAGMA_REMOTE_PORT: String(ports[3]),
-  TAGMA_SQLITE_READERS: '1',
-});
-
-const served = (release: string, env: Record<string, string | undefined>, log: string) => {
-  const sink = openSync(log, 'a');
-  const child = Bun.spawn([join(release, 'bun'), '--no-install', join(release, 'bin/cli/main.js'), 'serve'], {
-    env,
-    stdin: 'ignore',
-    stdout: sink,
-    stderr: sink,
-    detached: true,
-  });
-  closeSync(sink);
-  return child;
-};
-
-type Health = { readonly source: { readonly installation: { readonly build: string } | null } };
-
-const healthAt = (origin: string): Effect.Effect<Health | null> =>
-  Effect.promise(() =>
-    fetch(`${origin}/health`)
-      .then((answer) => (answer.status === 200 ? (answer.json() as Promise<Health>) : null))
-      .catch(() => null),
-  );
-
-const servingBuild = (origin: string, build: string) =>
-  Effect.repeat(healthAt(origin), {
-    until: (health) => health?.source.installation?.build === build,
-    schedule: Schedule.spaced('100 millis'),
-  });
-
-const op = (origin: string, id: string, input: object) =>
-  Effect.promise(async () => {
-    const answer = await fetch(`${origin}/api/op/${id}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    return { status: answer.status, body: (await answer.json()) as Record<string, unknown> };
-  });
 
 const ledger = (path: string): readonly string[] => {
   const db = new Database(path, { readonly: true });
@@ -114,87 +56,84 @@ const ledger = (path: string): readonly string[] => {
   }
 };
 
+const stepBackWorld = Effect.fnUntraced(function* () {
+  const root = realpathSync(
+    yield* Effect.sync(() =>
+      Bun.spawnSync(['mktemp', '-d', join(tmpdir(), 'step-back-XXXXXX')])
+        .stdout.toString()
+        .trim(),
+    ),
+  );
+  const data = join(root, 'data');
+  mkdirSync(data, { recursive: true });
+  const install = join(root, 'install');
+  const log = join(data, 'serve.log');
+  const landed = yield* checkoutInstalled(root, { ...CHANNELS.dev, name: 'dev' });
+  const before = landed.version;
+  const beforeBuild = landed.manifest.identity.build;
+  const { version: leaving, root: leavingRoot, build: leavingBuild } = yield* leavingCopy(landed, `leaving ${beforeBuild}`);
+
+  const patched = landed.manifest.parts.filter(
+    (part) =>
+      part.kind === 'file' &&
+      part.path.startsWith('bin/') &&
+      /\.(js|ts)$/u.test(part.path) &&
+      [NEWEST, GRAPH_NEWEST].some((step) => readFileSync(join(landed.root, part.path), 'utf8').includes(step)),
+  );
+  expect(patched.map((part) => part.path)).toContain(SERVER_ENTRY);
+  for (const part of patched)
+    writeFileSync(
+      join(landed.root, part.path),
+      readFileSync(join(landed.root, part.path), 'utf8').replaceAll(NEWEST, UNKNOWN_STEP).replaceAll(GRAPH_NEWEST, UNKNOWN_GRAPH),
+    );
+  const repatched = yield* Effect.forEach(patched, (part) => partsAt(landed.root, part.role as InstallationRole, part.path));
+  yield* writeInstallation(landed.root, landed.manifest.platform, beforeBuild, [
+    ...landed.manifest.parts.filter((part) => !patched.includes(part)),
+    ...repatched.flat(),
+  ]);
+  swapCurrent(install, leaving);
+
+  const ports = freePorts();
+  const origin = `http://127.0.0.1:${ports[0]}`;
+  const env = worldEnv(root, data, ports);
+  const store = join(data, 'tagma.sqlite');
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      const state = yield* Effect.promise(() =>
+        fetch(`${origin}/api/op/read_machine_state`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+          .then((answer) => answer.json() as Promise<{ machine?: { server?: { pid?: number } } }>)
+          .catch(() => null),
+      );
+      const pid = state?.machine?.server?.pid;
+      if (pid !== undefined) process.kill(pid, 'SIGTERM');
+      yield* endHosts(root).pipe(Effect.orDie);
+      rmSync(root, { recursive: true, force: true });
+    }),
+  );
+  return { root, data, install, log, landed, before, beforeBuild, leaving, leavingRoot, leavingBuild, origin, env, store };
+});
+
 it.live(
   'a step back through the door returns the data a migration of the leaving build changed, restarts onto the frozen-strict installation before it and serves there, keeps what the user wrote, and goes forward again; a back that cannot carry leaves the leaving build serving and says why',
   () =>
     Effect.gen(function* () {
-      const root = realpathSync(
-        yield* Effect.sync(() =>
-          Bun.spawnSync(['mktemp', '-d', join(tmpdir(), 'step-back-XXXXXX')])
-            .stdout.toString()
-            .trim(),
-        ),
-      );
-      const data = join(root, 'data');
-      mkdirSync(data, { recursive: true });
-      const install = join(root, 'install');
-      const log = join(data, 'serve.log');
-      const desktop = join(root, 'desktop');
-      const app = join(root, 'app');
-      wrote(join(desktop, 'package.json'), '{"name":"@tagma/desktop"}\n');
-      wrote(
-        join(desktop, 'scripts/build-host.ts'),
-        `import { mkdirSync, writeFileSync } from 'node:fs';\nconst out = process.env.TAGMA_HOST_OUT!;\nmkdirSync(out + '/dev.app', { recursive: true });\nwriteFileSync(out + '/dev.app/dev', '');\n`,
-      );
-      wrote(
-        join(app, 'package.json'),
-        '{"name":"@tagma/app","scripts":{"build":"mkdir -p \\"$TAGMA_SURFACE_OUT\\" && echo ok > \\"$TAGMA_SURFACE_OUT/index.html\\""}}\n',
-      );
-      const { modules } = yield* Effect.promise(() => DEVELOPER.parts());
-      const landed = yield* releaseInstallation(
-        install,
-        join(root, 'bin/tagma'),
-        { HOME: join(root, 'home'), SHELL: '/bin/zsh', PATH: process.env.PATH },
-        {
-          ...DEVELOPER.cut,
-          channel: { ...CHANNELS.dev, name: 'dev' },
-          client: { root: app, config: null },
-          roots: { ...DEVELOPER.cut.roots, desktop },
-          platform: {
-            ...inertPlatform,
-            signer: Effect.succeed({ fingerprint: '-', name: 'test', created: false }),
-            notice: () => 'unsigned',
-          },
-          steps: { graph: [], journal: [] },
-          stores: modules.flatMap((module) => module.stores ?? []),
-          processes: testProcesses,
-        },
-        null,
-      ).pipe(Effect.provide(machine));
-      const before = landed.version;
-      const beforeBuild = landed.manifest.identity.build;
-
-      const leaving = `${before}-leaving`;
-      const leavingRoot = openVersion(install, leaving);
-      rmSync(leavingRoot, { recursive: true, force: true });
-      cpSync(landed.root, leavingRoot, { recursive: true, verbatimSymlinks: true });
-      wrote(join(leavingRoot, MIGRATIONS, LEAVING_MIGRATION, 'migration.sql'), LEAVING_SQL);
-      const leavingBuild = `leaving ${beforeBuild}`;
-      const carried = yield* partsAt(leavingRoot, 'migrations', join(MIGRATIONS, LEAVING_MIGRATION, 'migration.sql'));
-      yield* writeInstallation(leavingRoot, landed.manifest.platform, leavingBuild, [...landed.manifest.parts, ...carried]);
-      swapCurrent(install, leaving);
-
-      const ports = freePorts();
-      const origin = `http://127.0.0.1:${ports[0]}`;
-      const env = worldEnv(root, data, ports);
-      const store = join(data, 'tagma.sqlite');
-      yield* Effect.addFinalizer(() =>
-        Effect.gen(function* () {
-          const state = yield* Effect.promise(() =>
-            fetch(`${origin}/api/op/read_machine_state`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-              .then((answer) => answer.json() as Promise<{ machine?: { server?: { pid?: number } } }>)
-              .catch(() => null),
-          );
-          const pid = state?.machine?.server?.pid;
-          if (pid !== undefined) process.kill(pid, 'SIGTERM');
-          yield* endHosts(root).pipe(Effect.orDie);
-          rmSync(root, { recursive: true, force: true });
-        }),
-      );
-
+      const { root, install, log, landed, before, beforeBuild, leaving, leavingRoot, leavingBuild, origin, env, store } =
+        yield* stepBackWorld();
       served(leavingRoot, env, log);
       yield* servingBuild(origin, leavingBuild);
       expect(ledger(store)).toContain(LEAVING_MIGRATION);
+      const checkout = join(root, 'project');
+      mkdirSync(checkout, { recursive: true });
+      const added = yield* op(origin, 'add_project', { name: 'tools', rootPath: checkout, storage: 'stealth' });
+      const projectId = (added.body as { project: { id: number } }).project.id;
+      const born = yield* op(origin, `create_thread?project=${projectId}`, { approvalMode: 'trust' });
+      const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
+      expect(mark(store, threadId)).toBe(NEWEST);
+      const offered = yield* op(origin, 'read_machine_state', {});
+      expect(
+        (offered.body.machine as { server: { next: { back: { readOnlyGraphs?: readonly string[] } | null } } }).server.next.back
+          ?.readOnlyGraphs,
+      ).toContain('tools');
       const writing = new Database(store);
       writing.run(`INSERT INTO meta (key, value) VALUES ('users-work', 'kept')`);
       writing.close();
@@ -243,6 +182,8 @@ it.live(
       expect(returned.query(`select name from pragma_table_info('meta') where name = 'only_leaving'`).all()).toEqual([]);
       expect(returned.query(`select name from sqlite_master where name = 'only_leaving'`).all()).toEqual([]);
       returned.close();
+      expect(mark(store, threadId)).toBe(PREVIOUS);
+      expect(readFileSync(log, 'utf8')).toContain(`the form steps ${NEWEST} declare no way back`);
       yield* Effect.repeat(
         Effect.sync(() => [existsSync(join(install, 'attempt.json')), existsSync(join(install, 'back.json')), existsSync(`${store}.back`)]),
         { until: (left) => left.every((one) => !one), schedule: Schedule.spaced('100 millis') },
@@ -260,4 +201,33 @@ it.live(
       expect(forward.query(`select value from meta where key = 'users-work'`).get()).toEqual({ value: 'kept' });
       forward.close();
     }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
+it.live(
+  'under a launch owner a step back through the door returns the data and the owner raises the installation before it, which serves and stops with the owner',
+  () =>
+    Effect.gen(function* () {
+      const { install, log, before, beforeBuild, leavingRoot, leavingBuild, origin, env, store } = yield* stepBackWorld();
+      const launch = new ServerLaunch(
+        [join(leavingRoot, 'bun'), '--no-install', join(leavingRoot, 'bin/cli/main.js'), 'serve'],
+        env,
+        log,
+        yield* Processes,
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(() => launch.stop()));
+      yield* servingBuild(origin, leavingBuild);
+      expect(ledger(store)).toContain(LEAVING_MIGRATION);
+
+      expect((yield* op(origin, 'install_next', { offer: 'back', then: 'restart' })).status).toBe(200);
+      yield* servingBuild(origin, beforeBuild);
+
+      expect(readlinkSync(join(install, 'current'))).toBe(before);
+      expect(ledger(store)).not.toContain(LEAVING_MIGRATION);
+      yield* Effect.repeat(
+        Effect.sync(() => [existsSync(join(install, 'attempt.json')), existsSync(join(install, 'back.json')), existsSync(`${store}.back`)]),
+        { until: (left) => left.every((one) => !one), schedule: Schedule.spaced('100 millis') },
+      );
+      yield* Effect.promise(() => launch.stop());
+      expect(yield* healthAt(origin)).toBeNull();
+    }).pipe(Effect.provide(Layer.merge(BunFileSystem.layer, testProcesses))),
 );

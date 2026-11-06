@@ -24,6 +24,7 @@ const world = Effect.fnUntraced(function* (recorded: readonly ThreadTranscriptEn
   const collection = Threads.of({
     find: (id) => Effect.succeed(standing.has(id) ? ({ id, principal: OWNER, name: id } as ThreadRecord) : null),
     named: unused,
+    deleted: unused,
     lineage: unused,
     list: unused,
     watch: unused,

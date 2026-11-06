@@ -8,6 +8,7 @@ import type { HarnessSpent } from '../contract/service/harness.js';
 import type { HarnessName } from '../contract/wire/harness/names.js';
 import { thread, threadRun } from './kernel.js';
 import { stored } from '../../platform/store/crossing.js';
+import { readableField } from '../../platform/store/readableJson.js';
 
 export const harnessSpend = (
   db: StoreDb<'machine'>,
@@ -21,7 +22,7 @@ export const harnessSpend = (
       Effect.map(
         unit.run(
           db
-            .select({ runId: threadRun.id, tokens: sql<number | null>`json_extract(${threadRun.usage}, '$.totalTokens')` })
+            .select({ runId: threadRun.id, tokens: sql<number | null>`${readableField(threadRun.usage, '$.totalTokens')}` })
             .from(threadRun)
             .innerJoin(recordFacts, eq(recordFacts.id, threadRun.threadId))
             .innerJoin(thread, eq(thread.id, threadRun.threadId))
@@ -30,7 +31,7 @@ export const harnessSpend = (
                 inArray(threadRun.status, RUN_ENDINGS),
                 eq(recordFacts.spawnRootId, spawnRootId),
                 eq(recordFacts.principalId, principal),
-                sql`json_extract(${thread.transport}, '$.profile') = ${name}`,
+                sql`${readableField(thread.transport, '$.profile')} = ${name}`,
               ),
             ),
         ),

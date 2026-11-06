@@ -218,7 +218,7 @@ export function parseThreadHistory(value: unknown): ThreadHistory {
   return parsed.success;
 }
 
-export function parseThreadStreamTail(kinds: ThreadEntryReader, thread: string, value: unknown): ThreadTranscript | null {
+function parseThreadStreamTail(kinds: ThreadEntryReader, thread: string, value: unknown): ThreadTranscript | null {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) throw new Error('Persisted thread stream tail cannot be read — expected a list of entries');
   return value.map((entry) => {
@@ -255,7 +255,7 @@ export function parseThreadRunUsage(value: unknown): Usage | null {
 const decodeNotification = Schema.decodeUnknownResult(threadNotificationRecordSchema);
 const decodeSettledBy = Schema.decodeUnknownResult(threadSettledBySchema);
 
-export function parseThreadRunNotification(value: unknown): ThreadNotificationRecord | null {
+function parseThreadRunNotification(value: unknown): ThreadNotificationRecord | null {
   if (value === null || value === undefined) return null;
   const parsed = decodeNotification(value);
   if (parsed._tag !== 'Success') refuse('run notification', parsed.failure);
@@ -264,7 +264,7 @@ export function parseThreadRunNotification(value: unknown): ThreadNotificationRe
 
 const decodeStopRequest = Schema.decodeUnknownResult(threadRunStopRequestSchema);
 
-export function parseThreadRunStopRequest(value: unknown): ThreadRunStopRequest | null {
+function parseThreadRunStopRequest(value: unknown): ThreadRunStopRequest | null {
   if (value === null || value === undefined) return null;
   const parsed = decodeStopRequest(value);
   if (parsed._tag !== 'Success') refuse('run stop request', parsed.failure);
@@ -273,14 +273,14 @@ export function parseThreadRunStopRequest(value: unknown): ThreadRunStopRequest 
 
 const decodeWithdrawnWords = Schema.decodeUnknownResult(WithdrawnWords);
 
-export function parseWithdrawnWords(value: unknown): WithdrawnWords | null {
+function parseWithdrawnWords(value: unknown): WithdrawnWords | null {
   if (value === null || value === undefined) return null;
   const parsed = decodeWithdrawnWords(value);
   if (parsed._tag !== 'Success') refuse('withdrawn words', parsed.failure);
   return parsed.success;
 }
 
-export function parseThreadSettledBy(value: unknown): typeof threadSettledBySchema.Type {
+function parseThreadSettledBy(value: unknown): typeof threadSettledBySchema.Type {
   if (value === null || value === undefined) return null;
   const parsed = decodeSettledBy(value);
   if (parsed._tag !== 'Success') refuse('run ending actor', parsed.failure);
@@ -354,6 +354,46 @@ export function readableRowFact<A>(
 ): A {
   return rowFact(reads, thread, why, parse, otherwise, subject).value;
 }
+
+type RunPlace = { readonly id: string; readonly threadId: string };
+
+export const runFacts = (kinds: ThreadEntryReader, run: RunPlace) => {
+  const readable = <A>(why: string, parse: () => A, otherwise: A): A =>
+    readableRowFact(kinds, run.threadId, why, parse, otherwise, `Run ${run.id} of thread ${run.threadId}`);
+  return {
+    progress: (stored: unknown): ThreadRunProgress =>
+      readable('a run progress this build cannot read stands as no stage', () => parseThreadRunProgress(stored), {
+        stage: null,
+        message: null,
+      }),
+    usage: (stored: unknown) =>
+      readable('a run usage this build cannot read stands as unmeasured', () => parseThreadRunUsage(stored), null),
+    streamTail: (stored: unknown) =>
+      readable(
+        'a stream tail this build cannot read stands as none, so the run closes without the streamed lines it held',
+        () => parseThreadStreamTail(kinds, run.threadId, stored),
+        null,
+      ),
+    failure: (stored: unknown) =>
+      readable(
+        'a run failure this build cannot read leaves the run with its failure reason alone',
+        () => parseThreadRunFailure(stored),
+        null,
+      ),
+    settledBy: (stored: unknown) =>
+      readable('who ended a run this build cannot read stands as unknown', () => parseThreadSettledBy(stored), null),
+    notification: (stored: unknown) =>
+      readable('a run-end notification this build cannot read stands as none', () => parseThreadRunNotification(stored), null),
+    stopRequest: (stored: unknown) =>
+      readable(
+        'a stop request this build cannot read stands as none; the run can be stopped again',
+        () => parseThreadRunStopRequest(stored),
+        null,
+      ),
+    withdrawnWords: (stored: unknown) =>
+      readable('withdrawn words this build cannot read stand as none', () => parseWithdrawnWords(stored), null),
+  };
+};
 
 export const threadBornOfSchema = Schema.Struct({
   by: Schema.String.check(Schema.isMinLength(1)),

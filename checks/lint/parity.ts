@@ -10,7 +10,7 @@ import { blobTree } from '../../packages/code-facts/src/blobs';
 import { OUTLINE } from '../../packages/code-facts/src/languages/js/index';
 import { facetOf, type Tree } from '../../packages/code-facts/src/tree';
 import { names, readNames } from '../../apps/tagma/inspection/src/packs/architecture/names/implementation';
-import { UNBOUNDED } from '../../apps/tagma/inspection/src/core/node/budget';
+import { unbounded } from '../../apps/tagma/inspection/src/core/node/budget';
 import type { NameParams } from '../../apps/tagma/inspection/src/packs/architecture/names/reading';
 import { catalogPlugin, ruleName, type Options } from './catalogTags';
 import { corpus, options } from './corpus';
@@ -67,7 +67,7 @@ export const compare = (texts: Readonly<Record<string, string>>, options: Option
       return facetOf(held, path, facet, ADAPTERS);
     },
   };
-  const builtin = readNames(params, tree, Object.keys(texts), ADAPTERS, UNBOUNDED);
+  const builtin = readNames(params, tree, Object.keys(texts), ADAPTERS, unbounded());
   assert.deepEqual(builtin.unjudged, []);
   const evidence = new Map<string, number[]>();
   for (const file of read) {

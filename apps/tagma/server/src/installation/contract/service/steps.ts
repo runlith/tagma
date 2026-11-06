@@ -1,5 +1,6 @@
 import { Context, type Effect } from 'effect';
 import type { SnapshotFailed, SnapshotLoss } from '../../../platform/contract/service/snapshots.js';
+import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { InstallFailed, McpDeclarationWrite } from '../wire/install.js';
 import type { RestartHost } from '../wire/source.js';
 import type { HostUnprepared } from './succession.js';
@@ -33,6 +34,13 @@ export class DowngradeSteps extends Context.Service<
     drained(): Effect.Effect<{ readonly waiting: number; readonly unread: number }>;
   }
 >()('tagma/installation/DowngradeSteps') {}
+
+type GraphMark = { readonly project: string; readonly step: string | null };
+
+export type GraphMarks = {
+  readonly owns: (step: string) => boolean;
+  readonly marks: Effect.Effect<readonly GraphMark[], StoreFailure>;
+};
 
 export class ConsoleKeyRollback extends Context.Service<
   ConsoleKeyRollback,

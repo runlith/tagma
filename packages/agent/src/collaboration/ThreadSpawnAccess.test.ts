@@ -15,6 +15,7 @@ const accessOver = Effect.fnUntraced(function* (ancestors: ReadonlyMap<string, r
     lineage: (threadId) => Effect.succeed({ ancestors: ancestors.get(threadId) ?? [], complete: ancestors.has(threadId) }),
     find: unused,
     named: unused,
+    deleted: unused,
     list: unused,
     watch: unused,
     birthReceipt: unused,

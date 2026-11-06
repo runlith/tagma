@@ -91,6 +91,9 @@ import { makeRunSweep } from '../ending.js';
 import { askAgent, coldWakeRefusal, coldWakeTokens } from '../contract/wire/settings.js';
 import { makeChildUpdates } from '../collaboration/childUpdates.js';
 import { makeHeldTasks } from '../collaboration/heldTasks.js';
+import { makeThreadDeletions } from '../collaboration/deletions.js';
+import { ThreadDeletions } from '../contract/service/deletions.js';
+import { makeDeletionRecords } from '../store/deletions.js';
 import { HolderCopies } from '../../graph/contract/service/holders.js';
 import { HeldTasks } from '../contract/service/heldTasks.js';
 import { WorkPlaces } from '../contract/service/working.js';
@@ -391,6 +394,7 @@ export const threadEngineLayer = Layer.effectContext(
     const subscribers = makeSubscriptionRecipient({ subscriptions: yield* ThreadSubscriptions, threads: lookup, lines, reads: eventReads });
     const workPlaces = yield* WorkPlaces;
     const held = yield* makeHeldTasks({ threads: lookup, places: workPlaces, placement, lines });
+    const deletions = makeThreadDeletions({ threads: lookup, inbox, records: yield* makeDeletionRecords, lines });
     const holderCopies = yield* HolderCopies;
     yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -514,6 +518,7 @@ export const threadEngineLayer = Layer.effectContext(
       Context.add(ThreadTeams, teams),
       Context.add(ThreadEvents, { told: events.told, serveDecisions: events.serveDecisions }),
       Context.add(HeldTasks, held.service),
+      Context.add(ThreadDeletions, deletions),
     );
   }),
 );

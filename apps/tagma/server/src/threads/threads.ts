@@ -20,6 +20,7 @@ import { stance } from './notes/stance.js';
 import { recordMetaForm } from './steps/recordMeta.js';
 import { questionEndorsedForm } from './steps/questionEndorsed.js';
 import { askPartialForm } from './steps/askPartial.js';
+import { messageIndexFill } from './store/messageIndex.js';
 
 const live: ThreadLive = liveOf(THREAD_FEEDS, (door) => {
   const feeds = Context.get(door, ThreadFeeds);
@@ -38,6 +39,7 @@ export const threads = manifest({
   verbs: threadsVerbs,
   entryKinds: THREADS_ENTRY_KINDS,
   formSteps: [recordMetaForm, questionEndorsedForm, askPartialForm],
+  indexFills: [messageIndexFill],
   sections: Object.values(SECTIONS),
   contributions: [
     ...RELOCATIONS.of({
@@ -138,6 +140,7 @@ export const threads = manifest({
       { threadPlace, threadCopy },
       { operatorNote },
       { threadSubscription },
+      { threadDeletion },
     ] = await Promise.all([
       import('./store/tables.js'),
       import('./store/pins.js'),
@@ -150,6 +153,7 @@ export const threads = manifest({
       import('./store/places.js'),
       import('./notes/table.js'),
       import('./store/subscriptions.js'),
+      import('./store/deletions.js'),
     ]);
     return {
       entities: [
@@ -173,6 +177,7 @@ export const threads = manifest({
         spentEpoch,
         operatorNote,
         threadSubscription,
+        threadDeletion,
       ],
       history: [
         threadMessage,

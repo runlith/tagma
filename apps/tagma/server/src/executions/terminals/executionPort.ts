@@ -54,6 +54,22 @@ const refusedAs = (tag: (typeof hostRefusalOf)[TerminalRefused['reason']], detai
 
 const refused = (detail: string): HostRefused => refusedAs('Unauthorized', detail);
 
+const unanswering: ReadonlySet<TerminalFailure['_tag']> = new Set([
+  'ProjectRootsUnavailable',
+  'RootUnavailable',
+  'RepositoryUnavailable',
+  'RepositoryUnreadable',
+  'EnvironmentUnavailable',
+  'EnvironmentRegistryUnavailable',
+  'EffectDrizzleQueryError',
+  'SqlError',
+]);
+
+const detailOf = (failure: TerminalFailure): string => {
+  const said = 'message' in failure ? failure.message : 'reason' in failure && typeof failure.reason === 'string' ? failure.reason : '';
+  return said === '' ? failure._tag : `${failure._tag}: ${said}`;
+};
+
 const carried = <A>(work: Effect.Effect<A, TerminalFailure>): Effect.Effect<A, ExecutionsFailure> =>
   Effect.catch(work, (failure) =>
     failure instanceof TerminalRefused
@@ -67,7 +83,9 @@ const carried = <A>(work: Effect.Effect<A, TerminalFailure>): Effect.Effect<A, E
             failure._tag === 'WireUnavailable' ||
             failure._tag === 'HostRefused'
           ? Effect.fail(failure)
-          : Effect.fail(refused(`the terminals floor could not answer: ${failure._tag}`)),
+          : unanswering.has(failure._tag)
+            ? Effect.fail(refusedAs('HostUnavailable', `the terminals floor could not answer: ${detailOf(failure)}`))
+            : Effect.fail(refused(`the terminals floor refused: ${detailOf(failure)}`)),
   );
 
 const withheld = <A>(act: string): Effect.Effect<A, ExecutionsFailure> =>

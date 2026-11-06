@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import { Console, Effect, Schema } from 'effect';
+import { readOnlyWarning } from '../installation/voice/status.js';
 import { Command, Flag } from 'effect/cli';
 import { ASKED_EVERY_MS, BUILD_ASKED_EVERY_MS, BUILD_COMMAND } from '../installation/contract/wire/layout.js';
 import { dataDirectoryLocked } from '../platform/lock/holder.js';
@@ -173,6 +174,8 @@ export const update = ({ ask, baseUrl, boundHere, healthOrNone, here, startup }:
       const before = yield* machineState({ ask, here });
       const next = before.server.next;
       if (![...next.offers, ...(next.back === null ? [] : [next.back])].some((one) => one.id === offer)) return noDoor();
+      const warned = offer === 'back' && next.back !== null ? readOnlyWarning(next.back) : null;
+      if (warned !== null && !o.json) yield* Console.log(warned);
       const leaving = before.server.pid;
       const restartId = before.restart.record?.id;
       const started = yield* installNext({ ask, here }, { offer, then: 'restart' }, o.json);

@@ -23,6 +23,7 @@ import type { RestedFolds } from '../transcript/restedFolds.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { inProgram, inRead, inUnit, stored } from '../../platform/store/crossing.js';
 import { among } from '../../platform/store/rows.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { capabilitiesOf } from '../../threads/store/seat.js';
 import { kernelStorageWrites } from './storageWrites.js';
@@ -315,7 +316,7 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
       const team = and(
         eq(threadRow.spawnRootId, ask.spawnRootId),
         eq(threadRow.ownerId, ask.ownerId),
-        sql`json_extract(${threadRow.bornOf}, '$.ask') is null`,
+        sql`${readableField(threadRow.bornOf, '$.ask')} is null`,
         ask.parent === undefined ? undefined : eq(threadRow.parentThreadId, ask.parent),
       );
       const going = sql`exists (select 1 from ${threadRun} where ${threadRun.threadId} = ${threadRow.id} and ${threadRun.status} = 'running')`;

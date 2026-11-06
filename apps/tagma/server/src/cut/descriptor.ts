@@ -12,7 +12,7 @@ import type { ReleaseRecord } from './stage.js';
 
 export type CutMachine = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git;
 
-type SourceRoots = {
+export type SourceRoots = {
   readonly checkout: string;
   readonly server: string;
   readonly packages: string;

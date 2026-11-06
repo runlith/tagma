@@ -3,6 +3,7 @@ import type { Tree } from '@runlith/code-facts/tree';
 import { Schema } from 'effect';
 import type { Params } from '../../../builtins';
 import { platforms as declaration, runningOf } from './declaration';
+import { unbounded } from '../../../core/node/budget';
 import { inspect } from '../../../core/node/implementations';
 import { judge } from '../../../core/node/judge';
 import { type InspectionMemo, type MemoStats, type MemoValue, memoWrites } from '../../../core/node/memo';
@@ -72,7 +73,7 @@ const tree = (texts: Map<string, string>): Tree => ({
   },
 });
 const read = (texts: Map<string, string>, options = params, memo?: InspectionMemo) =>
-  inspect({ builtin: 'platforms', params: options }, tree(texts), [...texts.keys()], undefined, undefined, memo);
+  inspect({ builtin: 'platforms', params: options }, tree(texts), [...texts.keys()], unbounded(), undefined, memo);
 
 describe('platforms', () => {
   it('refuses overlapping app scopes before a later internal prefix can shadow the first', () => {
@@ -658,6 +659,7 @@ describe('platforms', () => {
         paths: ['apps/a/src/main.ts', 'apps/a/src/launch.ts'],
       },
       [],
+      unbounded(),
     );
     expect(report.violations).toEqual([]);
     expect(report.followed).toContainEqual({

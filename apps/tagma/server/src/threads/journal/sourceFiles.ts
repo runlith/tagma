@@ -70,7 +70,7 @@ const stageSource = Effect.fnUntraced(function* (input: SourceStage, folds: Nati
         ? yield* folds
             .stage(
               { path: extracting, packed: state.path, transcript: `${extracting}.entries` },
-              { form: 'compressed', wanted: [], steps: [], suffix: '.source' },
+              { form: 'compressed', wanted: [], steps: [], back: false, suffix: '.source' },
             )
             .pipe(Effect.onError(() => removeExtracted))
         : null;

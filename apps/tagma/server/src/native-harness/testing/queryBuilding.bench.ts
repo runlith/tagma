@@ -20,6 +20,7 @@ import { journalHead } from '../../threads/journal/base.js';
 import { recordFacts, recordsAs } from '../../thread-record/facts.js';
 import { factsWhere } from '../../thread-record/identity.js';
 import { bindQuery } from '../../platform/store/queries.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import { storeDb } from '../../platform/contract/service/store.js';
 import { setting } from '../../settings/store/table.js';
 import { journalProjectOf, threadBase, threadEvent, threadEventIdentity, threadRolloutCursor } from '../../threads/store/journal.js';
@@ -303,7 +304,7 @@ BunRuntime.runMain(
         db
           .select({ id: threadRow.id })
           .from(threadRow)
-          .where(and(eq(threadRow.id, bind.id), sql`json_extract(${threadRow.transport}, '$.adapter') is ${bind.adapter}`));
+          .where(and(eq(threadRow.id, bind.id), sql`${readableField(threadRow.transport, '$.adapter')} is ${bind.adapter}`));
       const absentGuard = (bind: Bind) => db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, bind.id));
       const lineage = (column: SQL, label: string) => (bind: Bind) =>
         db.all<{ id: string; depth: number }>(sql`

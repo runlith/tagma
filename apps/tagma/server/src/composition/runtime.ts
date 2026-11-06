@@ -254,7 +254,7 @@ export type ServerRuntime = {
     | ExtensionOwners,
     never
   >;
-  graph: Context.Context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>;
+  graph: Context.Context<GraphServices | GraphSteps | GraphStore | GraphUnits | MachineStore | MachineUnits>;
   enforcement: Context.Context<JudgingServices | OperationChecks>;
   pool: ServedGraphs['Service'];
   tokens: TokenStore;

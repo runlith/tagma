@@ -123,12 +123,17 @@ type Held = Readonly<Record<string, unknown>>;
 
 export type ThreadFormRecord = 'entry' | 'payload' | 'message' | 'reading' | 'meta' | 'inbox';
 
+export type ThreadFormForms = { readonly [record in ThreadFormRecord]?: (held: Held) => Held | null };
+
+type ThreadFormBack = ThreadFormForms & { readonly holds?: readonly [string, ...string[]] };
+
 export type ThreadFormStep = {
   readonly name: string;
   readonly samples: Readonly<Partial<Record<ThreadFormRecord, Held>>>;
-} & {
-  readonly [record in ThreadFormRecord]?: (held: Held) => Held | null;
-};
+  readonly back?: ThreadFormBack | undefined;
+} & ThreadFormForms;
+
+export const reversed = (step: ThreadFormStep): ThreadFormStep => ({ name: step.name, samples: {}, ...step.back });
 
 export type ThreadFormBase = { readonly step: string; readonly release: string };
 

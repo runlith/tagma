@@ -84,7 +84,7 @@ export const callServices = {
     'A `Context` built in one statement and provided in another — assigned to a variable, returned from a helper, or passed as a parameter — is not read; only a `Context.make` or `Context.add` written inside the provider call’s arguments is.',
     'The fingerprint names the file relative to `base`, the top-level declaration holding the site, the tag and the form; a second site with the same four carries a `#n` suffix in source order.',
     'Only files mentioning one of the tags’ names are read.',
-    'A reading past its calibrated envelope is refused as too large, never judged clean.',
+    'A reading past its calibrated envelope is refused as too large, never judged clean. The envelope is calibrated on the machine that judges by timing a cold read and parse of a probe of up to 16 selected files or 512 KiB: a reading of F files and M MiB is refused where 10 s + max(F·t/f, M·t/m) would pass 120 s, t being the probe time and f, m its files and MiB. The server keeps the calibration per repository — in its workers and in its inspection cache, which every server start clears — and reuses it only while the subject fits it, measuring again past that; the inspections CLI measures on every run. A reading that measured no probe stays bounded by the probe size.',
     'A selected file whose text does not parse fails the whole inspection, never reads as a file providing nothing.',
   ],
   unblock: [

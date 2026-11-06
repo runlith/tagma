@@ -30,4 +30,4 @@ A stand-in only keeps the thread open and listed; a reader that acts decides by 
 - A model move on a thread whose capabilities or transport did not read refuses `model-pinned` saying so, never "fixed at its birth".
 - A stored seat read back for a fork yields no kernel when its transport or capabilities did not read, so those stand-ins are never written into another thread. An authority stand-in is inherited by a fork or spawn as a real `review`, the conservative direction.
 
-Capabilities do not gate a launch, so a native thread whose capabilities alone did not read still takes turns, with steer, withdraw, compaction, aside and model moves off; one whose transport did not read starts none. Text that is not JSON at all fails the row query before any reading runs.
+Capabilities do not gate a launch, so a native thread whose capabilities alone did not read still takes turns, with steer, withdraw, compaction, aside and model moves off; one whose transport did not read starts none. Text that is not JSON at all reaches these readings as a string, which they refuse the same way; [[24b4dbd8]] says how the store and its SQL let it through.

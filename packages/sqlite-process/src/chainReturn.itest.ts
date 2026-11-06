@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BACK_SCRIPT, chainFits, type ChainTarget, returnToChain } from './chainReturn.js';
+import { BACK_SCRIPT, chainFits, type ChainKept, type ChainTarget, returnToChain } from './chainReturn.js';
 
 const CHAIN_LEDGER = '__drizzle_migrations';
 type ChainStep = ChainTarget['steps'][number];
@@ -75,6 +75,16 @@ const ledger = (path: string) =>
   );
 
 const forward = (path: string, one: ChainStep): void => read(path, (db) => applied(db, [one]));
+
+const keptCopy = (path: string, table: string): ChainKept => {
+  const file = join(home, `kept-${++serial}.sqlite`);
+  read(path, (db) => {
+    db.run(`ATTACH DATABASE ? AS kept`, [file]);
+    db.run(`CREATE TABLE kept.${table} AS SELECT * FROM main.${table}`);
+    db.run('DETACH DATABASE kept');
+  });
+  return { file, tables: null };
+};
 
 const BASE = step('1000_base', 'CREATE TABLE thread (id text PRIMARY KEY NOT NULL, title text NOT NULL, kept text)');
 
@@ -234,9 +244,155 @@ test('a child the leaving build kept without its foreign key comes back without 
   expect(read(path, (db) => db.query('select id from child').all())).toEqual([{ id: 1 }]);
 });
 
+test('a table an unknown migration left and the leaving chain creates again goes with its rows counted, so going forward never meets it standing', () => {
+  const elsewhere = step('1500_elsewhere', 'CREATE TABLE later (id integer PRIMARY KEY)', `ALTER TABLE thread ADD \`seen\` text`);
+  const leaving = step('2000_later', 'CREATE TABLE later (id integer PRIMARY KEY)');
+  const path = store([BASE, elsewhere], (db) => {
+    db.run(`INSERT INTO thread (id, title) VALUES ('a', 'first')`);
+    db.run('INSERT INTO later (id) VALUES (1), (2)');
+  });
+  const answer = returnToChain(path, { steps: [BASE] }, { steps: [BASE, leaving], folder: null });
+  expect(answer.lost).toEqual([{ table: 'later', rows: 2 }]);
+  expect(read(path, shapeOf)).toEqual(fresh([BASE]));
+  forward(path, leaving);
+  expect(read(path, shapeOf)).toEqual(fresh([BASE, leaving]));
+  expect(read(path, (db) => db.query('select id, title from thread').all())).toEqual([{ id: 'a', title: 'first' }]);
+});
+
+test('a full-text index the return recreates comes back holding its rows: its own content copied, a contentless one filled by its owner, and one with no fill is named', () => {
+  const base = step(
+    '1000_base',
+    'CREATE TABLE note (id integer PRIMARY KEY, body text NOT NULL)',
+    'CREATE VIRTUAL TABLE note_words USING fts5(body)',
+    `CREATE VIRTUAL TABLE note_find USING fts5(body, content='', contentless_delete=1)`,
+    `CREATE VIRTUAL TABLE note_lost USING fts5(body, content='', contentless_delete=1)`,
+  );
+  const leaving = step(
+    '2000_trigram',
+    'DROP TABLE note_words',
+    `CREATE VIRTUAL TABLE note_words USING fts5(body, tokenize='trigram')`,
+    'DROP TABLE note_find',
+    `CREATE VIRTUAL TABLE note_find USING fts5(body, content='', contentless_delete=1, tokenize='trigram')`,
+    'DROP TABLE note_lost',
+    `CREATE VIRTUAL TABLE note_lost USING fts5(body, content='', contentless_delete=1, tokenize='trigram')`,
+  );
+  const path = store([base, leaving], (db) => {
+    db.run(`INSERT INTO note (id, body) VALUES (1, 'alpha words'), (2, 'beta words')`);
+    for (const table of ['note_words', 'note_find', 'note_lost'])
+      db.run(`INSERT INTO ${table} (rowid, body) VALUES (1, 'alpha words'), (2, 'beta words')`);
+  });
+  const answer = returnToChain(
+    path,
+    { steps: [base] },
+    { steps: [base, leaving], folder: null },
+    new Map([['note_find', (db: Database) => void db.run('INSERT INTO note_find (rowid, body) SELECT id, body FROM note')]]),
+  );
+  expect(answer.unfilled).toEqual([{ table: 'note_lost', reason: 'no fill is declared for it' }]);
+  expect(read(path, shapeOf)).toEqual(fresh([base]));
+  const found = (table: string) =>
+    read(path, (db) =>
+      db
+        .query<{ rowid: number }, []>(`select rowid from ${table} where ${table} match 'alpha'`)
+        .all()
+        .map((row) => row.rowid),
+    );
+  expect(found('note_words')).toEqual([1]);
+  expect(found('note_find')).toEqual([1]);
+  forward(path, leaving);
+  expect(read(path, shapeOf)).toEqual(fresh([base, leaving]));
+});
+
+test('what the leaving migrations dropped comes back from the copies they kept: a table with its rows, a column by key, and a row deleted after the drop stays deleted', () => {
+  const base = step(
+    '1000_base',
+    'CREATE TABLE thread (id text PRIMARY KEY NOT NULL, title text NOT NULL, kept text)',
+    'CREATE TABLE note (id integer PRIMARY KEY, body text NOT NULL)',
+  );
+  const narrowed = step('2000_narrowed', 'ALTER TABLE thread DROP COLUMN kept');
+  const gone = step('3000_gone', 'DROP TABLE note');
+  const path = store([base], (db) => {
+    db.run(`INSERT INTO thread (id, title, kept) VALUES ('a', 'first', 'value'), ('c', 'third', 'gone too')`);
+    db.run(`INSERT INTO note (id, body) VALUES (1, 'hello')`);
+  });
+  const column = keptCopy(path, 'thread');
+  forward(path, narrowed);
+  read(path, (db) => {
+    db.run(`INSERT INTO thread (id, title) VALUES ('b', 'second')`);
+    db.run(`DELETE FROM thread WHERE id = 'c'`);
+  });
+  const table = keptCopy(path, 'note');
+  forward(path, gone);
+
+  const answer = returnToChain(
+    path,
+    { steps: [base] },
+    {
+      steps: [base, narrowed, gone],
+      folder: null,
+      kept: new Map([
+        [narrowed.name!, column],
+        [gone.name!, table],
+      ]),
+    },
+  );
+
+  expect(answer.restored.toSorted((a, b) => a.table.localeCompare(b.table))).toEqual([
+    { table: 'note', rows: 1 },
+    { table: 'thread', rows: 1 },
+  ]);
+  expect(read(path, shapeOf)).toEqual(fresh([base]));
+  expect(read(path, (db) => db.query('select id, title, kept from thread order by id').all())).toEqual([
+    { id: 'a', title: 'first', kept: 'value' },
+    { id: 'b', title: 'second', kept: null },
+  ]);
+  expect(read(path, (db) => db.query('select id, body from note').all())).toEqual([{ id: 1, body: 'hello' }]);
+});
+
+test('a dropped column comes back inside the rebuild of its table, from any number of copies: a required unique value keeps every row, and a NULL stays NULL under a default', () => {
+  const tables = Array.from({ length: 11 }, (_, at) => `gone${at}`);
+  const base = step(
+    '1000_base',
+    `CREATE TABLE note (id integer PRIMARY KEY, token text NOT NULL UNIQUE, tone text DEFAULT 'plain', body text)`,
+    ...tables.map((table) => `CREATE TABLE ${table} (id integer PRIMARY KEY, body text NOT NULL)`),
+  );
+  const narrowed = step(
+    '2000_narrowed',
+    'CREATE TABLE __new_note (id integer PRIMARY KEY, body text)',
+    'INSERT INTO __new_note (id, body) SELECT id, body FROM note',
+    'DROP TABLE note',
+    'ALTER TABLE __new_note RENAME TO note',
+  );
+  const drops = tables.map((table, at) => step(`${3000 + at}_${table}`, `DROP TABLE ${table}`));
+  const path = store([base], (db) => {
+    db.run(`INSERT INTO note (id, token, tone, body) VALUES (1, 't1', NULL, 'a'), (2, 't2', 'loud', 'b')`);
+    for (const table of tables) db.run(`INSERT INTO ${table} (id, body) VALUES (1, '${table}')`);
+  });
+  const kept = new Map<string, ChainKept>([[narrowed.name!, keptCopy(path, 'note')]]);
+  forward(path, narrowed);
+  for (const [at, drop] of drops.entries()) {
+    kept.set(drop.name!, keptCopy(path, tables[at]!));
+    forward(path, drop);
+  }
+
+  returnToChain(path, { steps: [base] }, { steps: [base, narrowed, ...drops], folder: null, kept });
+
+  expect(read(path, (db) => db.query('select id, token, tone, body from note order by id').all())).toEqual([
+    { id: 1, token: 't1', tone: null, body: 'a' },
+    { id: 2, token: 't2', tone: 'loud', body: 'b' },
+  ]);
+  expect(read(path, (db) => tables.map((table) => db.query(`select body from ${table}`).get()))).toEqual(
+    tables.map((table) => ({ body: table })),
+  );
+});
+
 test('a store whose ledger the target already holds is left untouched', () => {
   const later = step('2000_later', 'CREATE TABLE later (id integer PRIMARY KEY)');
   const path = store([BASE], () => undefined);
-  expect(returnToChain(path, { steps: [BASE, later] }, { steps: [BASE, later], folder: null })).toEqual({ returned: false, lost: [] });
+  expect(returnToChain(path, { steps: [BASE, later] }, { steps: [BASE, later], folder: null })).toEqual({
+    returned: false,
+    lost: [],
+    unfilled: [],
+    restored: [],
+  });
   expect(ledger(path)).toEqual([BASE.name!]);
 });

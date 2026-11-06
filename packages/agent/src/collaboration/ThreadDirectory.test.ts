@@ -27,6 +27,7 @@ const listedFrom = (rows: readonly ThreadDirectoryRow[], pageRows: number) =>
       }),
     find: unused,
     named: unused,
+    deleted: unused,
     lineage: unused,
     watch: unused,
     birthReceipt: unused,

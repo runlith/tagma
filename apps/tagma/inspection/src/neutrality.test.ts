@@ -4,6 +4,7 @@ import { Schema } from 'effect';
 import { type Assembled, BUILTINS, assembled } from './builtins';
 import { ready } from './builtins.node';
 import type { ModuleMap } from './core/rule';
+import { unbounded } from './core/node/budget';
 import { inspect } from './core/node/implementations';
 
 await ready('modules');
@@ -79,7 +80,7 @@ const policies = (project: Project): readonly Assembled[] => [
 const judged = (policy: Project, code: Project): readonly string[] =>
   policies(policy)
     .flatMap((inspection) =>
-      inspect(inspection, tree(code.files), Object.keys(code.files)).violations.map(
+      inspect(inspection, tree(code.files), Object.keys(code.files), unbounded()).violations.map(
         ({ fingerprint }) => `${inspection.builtin} ${fingerprint}`,
       ),
     )

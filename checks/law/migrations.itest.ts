@@ -104,7 +104,7 @@ test('landing judges a new history migration and a backdated form against the im
   }
 });
 
-test('a new migration of any judged chain that a step back cannot return without losing what the build before reads is named until a back.sql stands beside it', async () => {
+test('a new migration of any judged chain that a step back cannot return without losing what the build before reads is named until a back.sql returns it, or aside.json keeps what it drops', async () => {
   const root = mkdtempSync(join(tmpdir(), 'migration-backs-'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   const put = (path: string, text: string) => {
@@ -143,6 +143,19 @@ test('a new migration of any judged chain that a step back cannot return without
     put(`drizzle/${next}/migration.sql`, 'alter table events rename column body to text;');
     put(`drizzle/${next}/back.sql`, 'alter table events rename column missing to body;');
     judge();
+    put(`drizzle/${next}/migration.sql`, 'alter table events drop column body;');
+    put(`drizzle/${next}/back.sql`, 'select 1;');
+    put(`host/${next}/migration.sql`, 'drop table runs;');
+    put(`host/${next}/aside.json`, '{"tables":["runs"]}');
+    judge();
+    put(
+      `drizzle/${next}/migration.sql`,
+      'create table __new_events (id integer primary key);\n--> statement-breakpoint\ninsert into __new_events select id from events;\n--> statement-breakpoint\ndrop table events;\n--> statement-breakpoint\nalter table __new_events rename to events;',
+    );
+    rmSync(join(root, `drizzle/${next}/back.sql`));
+    put(`drizzle/${next}/aside.json`, '{"derived":["events"]}');
+    put(`host/${next}/aside.json`, '{"tables":[]}');
+    judge();
     expect(await inspectAll(root, law, trees, base)).toEqual([
       [
         expect.objectContaining({ path: `drizzle/${next}/migration.sql`, message: expect.stringContaining('back.sql') }),
@@ -151,6 +164,8 @@ test('a new migration of any judged chain that a step back cannot return without
       [],
       [],
       [expect.objectContaining({ path: `drizzle/${next}/back.sql`, message: expect.stringContaining('missing') })],
+      [expect.objectContaining({ path: `drizzle/${next}/migration.sql`, message: expect.stringContaining('drops body') })],
+      [expect.objectContaining({ path: `host/${next}/aside.json`, message: expect.stringContaining('does not read') })],
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });

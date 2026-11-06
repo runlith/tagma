@@ -1,13 +1,23 @@
 import { Database } from 'bun:sqlite';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { Clock, Data, Effect, Result, Schema } from 'effect';
-import { type ChainLoss, type ChainTarget, chainFits, returnToChain } from '@runlith/sqlite-process/chainReturn';
+import { Clock, Data, Effect, Result, Schedule, Schema } from 'effect';
+import {
+  type ChainFills,
+  type ChainKept,
+  type ChainLoss,
+  type ChainTarget,
+  chainFits,
+  returnToChain,
+} from '@runlith/sqlite-process/chainReturn';
 import { prepareEngine, selectEngine } from '@runlith/sqlite-process/engine';
 import type { Words } from '../../platform/contract/wire/refusal.js';
+import { ownStorePath, setAsideDirectory, setAsidePath } from '../../platform/contract/service/ownStore.js';
 import { cloneFile, type DurableWriteFailed, moveFile, removeFile } from '../../platform/durable/files.js';
 import { currentVersion } from '../../platform/lock/versionedDirectories.js';
+import { ASIDE_FILE, AsideDeclared } from '../../platform/store/migrationLaw.js';
+import { releasesNewestFirst } from '../closure/versions.js';
 import {
   askedStepBack,
   clearStepBack,
@@ -19,9 +29,11 @@ import {
   writeStepBack,
 } from '../closure/attempt.js';
 import { carriedOnto, moving, undoneOnto } from '../closure/moves.js';
+import { INSTALL_FILE } from '../contract/wire/layout.js';
+import { SERVER_ENTRY } from '../contract/wire/manifest.js';
 import { STEP_BACK_SUFFIX, type StepBack } from '../contract/wire/stepBack.js';
 
-export type StoreFile = { readonly path: string; readonly chain: string };
+export type StoreFile = { readonly path: string; readonly chain: string; readonly fills?: ChainFills | undefined };
 
 class StepBackFailed extends Data.TaggedError('StepBackFailed')<{ readonly detail: string; readonly words?: Words }> {
   override get message(): string {
@@ -47,6 +59,8 @@ const receiptSchema = Schema.fromJsonString(
 );
 
 const decodeReceipt = Schema.decodeUnknownResult(receiptSchema);
+
+const decodeAside = Schema.decodeUnknownResult(Schema.fromJsonString(AsideDeclared));
 
 const chainTarget = (folder: string): ChainTarget => {
   const receiptAt = join(folder, 'baseline.json');
@@ -86,16 +100,108 @@ const snapshotsDropped = (path: string): void => {
   for (const at of [`${path}.snapshot.json`, `${path}.snapshots`]) rmSync(at, { recursive: true, force: true });
 };
 
+const ASIDE = /^(\d{14}_[^.]+)(?:\.adopted\.(.+))?\.sqlite$/u;
+
+const tablesIn = (path: string): ReadonlySet<string> => {
+  const db = new Database(path, { readonly: true });
+  try {
+    return new Set(
+      db
+        .query<{ name: string }, []>(`select name from sqlite_master where type = 'table' and name not like 'sqlite_%'`)
+        .all()
+        .map((row) => row.name.toLowerCase()),
+    );
+  } finally {
+    db.close();
+  }
+};
+
+const keptAside = (storePath: string, migration: string): ChainKept | undefined => {
+  const fresh = setAsidePath(storePath, migration);
+  if (existsSync(fresh)) return { file: fresh, tables: null };
+  const directory = setAsideDirectory(storePath);
+  const adopted = existsSync(directory)
+    ? readdirSync(directory).flatMap((name) => {
+        const matched = ASIDE.exec(name);
+        return matched?.[1] === migration && matched[2] !== undefined ? [{ copy: join(directory, name), by: matched[2] }] : [];
+      })[0]
+    : undefined;
+  if (adopted === undefined) return undefined;
+  const live = ownStorePath(storePath, adopted.by);
+  return existsSync(live) ? { file: live, tables: tablesIn(adopted.copy) } : { file: adopted.copy, tables: null };
+};
+
+const movedAside = (migration: string): boolean => {
+  const declared = join(migration, ASIDE_FILE);
+  if (!existsSync(declared)) return false;
+  const read = decodeAside(readFileSync(declared, 'utf8'));
+  return Result.isFailure(read) || read.success.moved === true;
+};
+
+export const asidesReleased = (installRoot: string, ownRoot: string, files: readonly StoreFile[]): readonly string[] => {
+  const standing = releasesNewestFirst(installRoot).map((version) => join(installRoot, version));
+  const released: string[] = [];
+  for (const { path, chain } of files) {
+    const directory = setAsideDirectory(path);
+    if (!existsSync(directory)) continue;
+    for (const name of readdirSync(directory)) {
+      const matched = ASIDE.exec(name);
+      if (matched === null) continue;
+      const migration = matched[1]!;
+      const own = join(ownRoot, chain, migration);
+      if (!existsSync(own) || standing.some((root) => !existsSync(join(root, chain, migration)))) continue;
+      if (matched[2] === undefined && movedAside(own)) continue;
+      rmSync(join(directory, name), { force: true });
+      released.push(join(directory, name));
+    }
+  }
+  return released;
+};
+
+type Handed = { readonly store: string; readonly tables: readonly string[] };
+
+type FileReturned = { readonly losses: readonly ChainLoss[]; readonly handed: readonly Handed[] };
+
+const UNCHANGED: FileReturned = { losses: [], handed: [] };
+
+const handedBack = Effect.fnUntraced(function* ({ store, tables }: Handed) {
+  if (!existsSync(`${store}${STEP_BACK_SUFFIX}`))
+    yield* copied(store).pipe(
+      Effect.mapError(
+        (failure: DurableWriteFailed) =>
+          new StepBackFailed({ detail: `${store} could not be copied aside before the moved tables leave it: ${failure.reason}` }),
+      ),
+    );
+  yield* Effect.try({
+    try: () => {
+      const db = new Database(store);
+      try {
+        const standing = tablesIn(store);
+        db.run('BEGIN IMMEDIATE');
+        for (const table of tables) if (standing.has(table)) db.run(`DELETE FROM "${table.replaceAll('"', '""')}"`);
+        db.run('COMMIT');
+        db.run('PRAGMA wal_checkpoint(TRUNCATE)');
+      } finally {
+        db.close();
+      }
+    },
+    catch: (cause) => failedOf(`the moved tables could not leave ${store}`, cause),
+  });
+  console.error(
+    `[tagma] ${tables.join(', ')} left ${basename(store)}: the step back put their rows where the installation before reads them`,
+  );
+});
+
 const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: string, fromRoot: string) {
   const { path, chain } = file;
   const folder = join(toRoot, chain);
-  if (!existsSync(path) || !existsSync(folder)) return [];
+  if (!existsSync(path) || !existsSync(folder)) return UNCHANGED;
   const target = yield* Effect.try({
     try: () => chainTarget(folder),
     catch: (cause) => failedOf(`the migrations of ${folder} could not be read`, cause),
   });
   const fits = yield* Effect.try({ try: () => chainFits(path, target), catch: (cause) => failedOf(`${path} could not be read`, cause) });
-  if (fits) return [];
+  if (fits) return UNCHANGED;
   yield* copied(path).pipe(
     Effect.mapError(
       (failure: DurableWriteFailed) =>
@@ -103,16 +209,35 @@ const returnedFile = Effect.fnUntraced(function* (file: StoreFile, toRoot: strin
     ),
   );
   const leaving = join(fromRoot, chain);
-  const answer = yield* Effect.try({
-    try: () =>
-      returnToChain(path, target, {
-        steps: existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [],
-        folder: existsSync(leaving) ? leaving : null,
-      }),
+  const { answer, kept } = yield* Effect.try({
+    try: () => {
+      const steps = existsSync(leaving) ? readMigrationFiles({ migrationsFolder: leaving }) : [];
+      const kept = new Map(
+        steps.flatMap((step) => {
+          const aside = step.name === undefined ? undefined : keptAside(path, step.name);
+          return aside === undefined ? [] : [[step.name!, aside] as const];
+        }),
+      );
+      return { answer: returnToChain(path, target, { steps, folder: existsSync(leaving) ? leaving : null, kept }, file.fills), kept };
+    },
     catch: (cause) => failedOf(`${path} could not be returned`, cause),
   });
+  const back = new Set(answer.restored.map((one) => one.table.toLowerCase()));
+  const handed = [...kept.values()].flatMap(({ file: store, tables }) => {
+    const left = tables === null ? [] : [...tables].filter((table) => back.has(table));
+    return left.length === 0 ? [] : [{ store, tables: left }];
+  });
   if (answer.returned) snapshotsDropped(path);
-  return answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` }));
+  for (const index of answer.unfilled)
+    console.error(`[tagma] the step back recreated the index ${index.table} of ${basename(path)} empty: ${index.reason}`);
+  for (const back of answer.restored)
+    console.error(
+      `[tagma] the step back put ${back.rows} rows of ${basename(path)} ${back.table} back from what its migrations kept aside`,
+    );
+  return {
+    losses: answer.lost.map((loss): ChainLoss => ({ ...loss, table: `${basename(path)} ${loss.table}` })),
+    handed,
+  } satisfies FileReturned;
 });
 
 const forEachCopy = Effect.fnUntraced(function* (
@@ -145,8 +270,13 @@ const returned = Effect.fn('installation.returnStores')(function* (place: Return
   yield* Effect.try({ try: selectEngine, catch: (cause) => failedOf('the SQLite engine could not be selected', cause) });
   const toRoot = join(place.installRoot, back.to);
   const carried = yield* Effect.forEach(files, (file) => returnedFile(file, toRoot, place.ownRoot));
-  for (const loss of carried.flat())
+  for (const loss of carried.flatMap((one) => one.losses))
     console.error(`[tagma] the step back to ${back.to} left out ${loss.rows} rows of ${loss.table}: its build cannot hold them`);
+  yield* Effect.forEach(
+    carried.flatMap((one) => one.handed),
+    handedBack,
+    { discard: true },
+  );
 });
 
 const failedRecord = (back: StepBack, failure: StepBackFailed): StepBack => ({
@@ -183,6 +313,32 @@ export const stepBackAsked = (installRoot: string, own: string): StepBack | null
   const asked = askedStepBack(installRoot);
   return asked !== null && asked.from === own && asked.to !== own ? asked : null;
 };
+
+export const JOURNAL_STARTS = 2;
+
+export const stepsCarried = (toRoot: string, names: readonly string[]): ReadonlySet<string> => {
+  const entry = join(toRoot, SERVER_ENTRY);
+  const code = existsSync(entry) ? readFileSync(entry, 'utf8') : '';
+  return new Set(names.filter((name) => code.includes(name)));
+};
+
+export const installedSince = (root: string): Date => new Date(statSync(join(root, INSTALL_FILE)).mtimeMs);
+
+const journalsWritten = (installRoot: string, back: StepBack, journals: NonNullable<StepBack['journals']>) =>
+  moving(installRoot, () =>
+    Effect.sync(() => {
+      const standing = askedStepBack(installRoot);
+      if (standing === null || standing.from !== back.from || standing.to !== back.to) return false;
+      writeStepBack(installRoot, { ...standing, journals });
+      return true;
+    }),
+  );
+
+export const journalsDeferred = (installRoot: string, back: StepBack) =>
+  journalsWritten(installRoot, back, { starts: (back.journals?.starts ?? 0) + 1, returned: false });
+
+export const journalsMarked = (installRoot: string, back: StepBack, returned: boolean) =>
+  journalsWritten(installRoot, back, { starts: back.journals?.starts ?? 0, returned });
 
 const setAside = Effect.fn('installation.stepBackSetAside')(function* (place: ReturnPlace, unread: RecordUnreadable) {
   const stamp = yield* Clock.currentTimeMillis;
@@ -264,6 +420,24 @@ export const stepBackUnlisted = Effect.fn('installation.stepBackUnlisted')(funct
   yield* moving(installRoot, () => Effect.sync(() => writeStepBack(installRoot, failedRecord(back, new StepBackFailed({ detail })))));
   console.error(`[tagma] the step back to ${back.to} did not start, and the server puts back what an earlier start left: ${detail}`);
 });
+
+const ATTEMPT_POLL = '200 millis';
+
+export const stepBackDecided = (installRoot: string, back: StepBack) =>
+  Effect.asVoid(
+    Effect.repeat(
+      Effect.sync(() => readAttempt(installRoot)),
+      {
+        until: (read) =>
+          Result.isFailure(read) ||
+          read.success === null ||
+          read.success.to !== back.to ||
+          read.success.ended !== null ||
+          currentVersion(installRoot) !== back.to,
+        schedule: Schedule.spaced(ATTEMPT_POLL),
+      },
+    ),
+  );
 
 export const stepBackPassed = Effect.fn('installation.stepBackPassed')(function* (place: ReturnPlace, back: StepBack) {
   const open = readAttempt(place.installRoot);

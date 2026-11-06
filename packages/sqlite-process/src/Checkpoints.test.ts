@@ -45,18 +45,20 @@ const owned = (losses: string[], name: string) => (reason: string) => ({
 
 const passes = (driver: Driver) => driver.sent.filter((ask) => ask._tag === 'Checkpoint');
 
-test('a kept checkpoint driver answers each pass to the file that asked for it, not to the next owner', async () => {
+test('a closing owner waits for the pass in flight on its file, and a kept driver answers each pass to the file that asked for it', async () => {
   const pool = new RecordedPool(0, 'stop', undefined, inlineHosting);
   const checkpoints = new Checkpoints(pool, () => true);
   const losses: string[] = [];
   checkpoints.add(1, 'a.db', false, owned(losses, 'a'), undefined);
   checkpoints.changed('a.db');
-  await checkpoints.drop(1);
-  checkpoints.add(2, 'b.db', false, owned(losses, 'b'), undefined);
-  checkpoints.changed('b.db');
+  let dropped = false;
+  const dropping = checkpoints.drop(1).then(() => {
+    dropped = true;
+  });
   const [driver] = pool.drivers;
-  const [first, second] = passes(driver!);
-  expect([first, second].map((ask) => ask?._tag === 'Checkpoint' && ask.filename)).toEqual(['a.db', 'b.db']);
+  const [first] = passes(driver!);
+  await Promise.resolve();
+  expect(dropped).toBe(false);
   const thrown = {
     name: 'SQLiteError',
     message: 'unable to open database file',
@@ -65,6 +67,11 @@ test('a kept checkpoint driver answers each pass to the file that asked for it, 
     constraint: undefined,
   };
   driver!.say({ _tag: 'Failed', id: first!.id, thrown, queueMs: 0, execMs: 0 });
+  await dropping;
+  checkpoints.add(2, 'b.db', false, owned(losses, 'b'), undefined);
+  checkpoints.changed('b.db');
+  const [, second] = passes(driver!);
+  expect([first, second].map((ask) => ask?._tag === 'Checkpoint' && ask.filename)).toEqual(['a.db', 'b.db']);
   driver!.say({ _tag: 'Checkpointed', id: second!.id, log: 0, copied: 0 });
   expect(losses).toEqual([]);
   expect(pool.drivers.length).toBe(1);

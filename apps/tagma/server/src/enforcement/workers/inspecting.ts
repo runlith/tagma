@@ -2,9 +2,9 @@ import { bunSpawner } from '@runlith/executions/bunSpawner';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { envelopeOf, type Assembled, type PackId, relevant, sliceable } from '@tagma/inspection/builtins';
+import { type Assembled, type PackId, relevant, sliceable } from '@tagma/inspection/builtins';
 import { ready, usedPacks } from '@tagma/inspection/node/builtins';
-import { type Budget, budgetOf, type Calibration, UNBOUNDED } from '@tagma/inspection/node/budget';
+import { admit, type Budget, budgetOf, unbounded } from '@tagma/inspection/node/budget';
 import { facetFor, inspect, lists, prefetches, reachKey, remapped, selects } from '@tagma/inspection/node/implementations';
 import { type InspectionMemo, type MemoValue, ReachHeadMoved, memoWrites, type Validity } from '@tagma/inspection/node/memo';
 import { judge, judgeReadings } from '@tagma/inspection/node/judge';
@@ -50,7 +50,7 @@ import type {
 } from './asks.js';
 import { cacheAt, type InspectionCache, rested } from './caches.js';
 import { checkoutAt, checkoutFile, checkoutText, installedIn } from './checkout.js';
-import { ensureCalibration, subjectOf } from './calibration.js';
+import { ensureCalibration, subjectAt } from './calibration.js';
 import { factsAt } from './facts.js';
 import { facets, parses, trimParses } from './parses.js';
 import { carried, keepReading, knownReading } from './readings.js';
@@ -96,7 +96,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
   root: string,
   inspection: Assembled,
   sides: readonly Side[],
-  work: (trees: readonly Tree[], memo: InspectionMemo, trusted: InspectionMemo | undefined, calibration: Calibration | undefined) => Worked,
+  work: (trees: readonly Tree[], memo: InspectionMemo, trusted: InspectionMemo | undefined, budget: Budget) => Worked,
   cache: InspectionCache | undefined,
   trusted?: Map<string, MemoValue>,
   validity?: Validity,
@@ -107,17 +107,10 @@ const settled = Effect.fn('inspecting.settled')(function* (
 ) {
   return yield* Effect.gen(function* () {
     const calibration = yield* ensureCalibration(git, root, inspection, sides, cache);
-    const envelope = envelopeOf(inspection.builtin);
     const imports = cache?.parses ?? parses;
     const store: InspectionMemo = cache?.memo ?? new Map();
     const prefetch = prefetches(inspection.builtin);
-    if (prefetch) {
-      const subject = subjectOf(sides);
-      yield* Effect.try({
-        try: () => budgetOf(inspection.builtin, envelope, calibration).take(subject.files, subject.bytes),
-        catch: unreadFrom,
-      });
-    }
+    if (prefetch) yield* Effect.try({ try: () => admit(inspection.builtin, calibration, subjectAt(sides)), catch: unreadFrom });
     const held = new Map<string, string>();
     const unread = new Map<string, string>();
     const facet = facetFor(inspection.builtin);
@@ -137,7 +130,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
       compared: compared === undefined ? undefined : new Set(compared.map(([path]) => path)),
       depth: placed.depth,
     };
-    const fetchedBudget = budget ?? budgetOf(inspection.builtin, envelope, calibration);
+    const fetchedBudget = budget ?? budgetOf(inspection.builtin, calibration);
     let wanted = sides.map((side) => ({
       ...side,
       paths: prefetch ? side.paths.filter((path) => !known(side.listed.objects.get(path) ?? '', path)) : [],
@@ -182,7 +175,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
       const kept = trusted === undefined ? undefined : memoWrites(trusted);
       const { worked, thrown } = yield* Effect.sync((): { readonly worked?: Worked; readonly thrown?: unknown } => {
         try {
-          const run = () => work(trees, memo, kept, calibration);
+          const run = () => work(trees, memo, kept, budgetOf(inspection.builtin, calibration));
           return { worked: table?.round === undefined ? run() : table.round(run) };
         } catch (error) {
           return { thrown: error };
@@ -299,15 +292,14 @@ const reach = Effect.fn('inspecting.reach')(function* (git: Git['Service'], ask:
     ask.root,
     ask.inspection,
     [{ commit: ask.commit, tree, slot: ask.root, listed, parts, paths: ask.previous === undefined ? paths : [], change }],
-    ([tree], memo, _trusted, calibration) => {
-      const budget = budgetOf(ask.inspection.builtin, envelopeOf(ask.inspection.builtin), calibration);
+    ([tree], memo, _trusted, budget) => {
       const mapped =
         ask.previous === undefined
           ? undefined
-          : remapped(ask.inspection, ask.previous.inspection, tree as Tree, ask.previous.fingerprints, ADAPTERS, budget, memo);
+          : remapped(ask.inspection, ask.previous.inspection, tree as Tree, ask.previous.fingerprints, budget, ADAPTERS, memo);
       selected = (mapped?.paths ?? paths).filter(judged);
       return {
-        verdict: inspect(ask.inspection, tree as Tree, selected, ADAPTERS, budget, memo, ask.paths === undefined ? 'reach' : 'change'),
+        verdict: inspect(ask.inspection, tree as Tree, selected, budget, ADAPTERS, memo, ask.paths === undefined ? 'reach' : 'change'),
         footprint: mapped?.footprint,
       };
     },
@@ -398,7 +390,7 @@ const plan = Effect.fn('inspecting.plan')(function* (git: Git['Service'], ask: P
     ask.checkout ?? ask.root,
     compared,
     ask.installed,
-    UNBOUNDED,
+    unbounded(),
   );
   if (prepared !== undefined) {
     rememberSnapshot(job, ask.commit, prepared);
@@ -427,7 +419,7 @@ const slice = Effect.fn('inspecting.slice')(function* (git: Git['Service'], ask:
     ask.checkout ?? ask.root,
     ask.compared,
     ask.installed,
-    UNBOUNDED,
+    unbounded(),
   );
 });
 
@@ -442,14 +434,13 @@ const judged = (git: Git['Service'], ask: JudgeRequest, sides: readonly Side[], 
     ask.root,
     ask.inspection,
     sides,
-    ([base, built], memo, _trusted, calibration) => {
+    ([base, built], memo, _trusted, budget) => {
       const trees = { base: base as Tree, built: built as Tree, paths: ask.paths };
-      const budget = budgetOf(ask.inspection.builtin, envelopeOf(ask.inspection.builtin), calibration);
       return {
         verdict:
           ask.readings === undefined
-            ? judge(ask.inspection, trees, ask.debt, ADAPTERS, memo, budget)
-            : judgeReadings(ask.inspection, trees, ask.debt, ask.readings.base, ask.readings.built, ADAPTERS, budget),
+            ? judge(ask.inspection, trees, ask.debt, budget, ADAPTERS, memo)
+            : judgeReadings(ask.inspection, trees, ask.debt, ask.readings.base, ask.readings.built, budget),
       };
     },
     cache,

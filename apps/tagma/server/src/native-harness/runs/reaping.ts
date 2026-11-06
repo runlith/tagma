@@ -10,17 +10,7 @@ import {
   type ThreadRunReapResult,
   type ThreadRunReapSelector,
 } from '@runlith/agent/thread/storage/runs';
-import {
-  parseThreadRunFailure,
-  parseThreadRunNotification,
-  parseThreadSettledBy,
-  parseThreadRunProgress,
-  parseThreadRunStopRequest,
-  parseWithdrawnWords,
-  parseThreadRunUsage,
-  parseThreadStreamTail,
-  readableRowFact,
-} from '@runlith/agent/thread/persisted';
+import { runFacts } from '@runlith/agent/thread/persisted';
 import { seedThreadNotification, type ThreadNotificationRecord } from '@runlith/agent/thread/storage/settlement';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, type Placeholder, type SQL, sql } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
@@ -32,6 +22,7 @@ import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { spellRows, threadLiveSpell } from '../../threads/store/mandate.js';
 import type { ThreadStatusMove } from '../../thread-record/contract/service/records.js';
 import { stored, trusted, type StoredFailure } from '../../platform/store/crossing.js';
+import { readableEdit, readableField, readableText } from '../../platform/store/readableJson.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 
 export type RunLifecycle = {
@@ -52,8 +43,10 @@ export type Reaping = ReturnType<Effect.Success<typeof makeReaping>>;
 export const stageText = (progress: ThreadRunStage): string =>
   JSON.stringify({ stage: progress.stage, message: progress.message, halt: progress.halt });
 
+const heldPhase = sql`${readableText(threadRun.progress)} -> '$.phase'`;
+
 export const stagedFrom = (stage: string | Placeholder): SQL =>
-  sql`case when ${threadRun.progress} -> '$.phase' is null then json(${stage}) else json_set(json(${stage}), '$.phase', ${threadRun.progress} -> '$.phase') end`;
+  sql`case when ${heldPhase} is null then json(${stage}) else json_set(json(${stage}), '$.phase', ${heldPhase}) end`;
 
 export const staged = (progress: ThreadRunStage): SQL => stagedFrom(stageText(progress));
 
@@ -79,7 +72,7 @@ export const makeReaping = Effect.gen(function* () {
       return and(
         eq(threadRun.status, 'running'),
         claim,
-        sql`json_extract(${threadRun.progress}, '$.stage') is not ${THREAD_RUN_AWAITING_QUESTION_STAGE}`,
+        sql`${readableField(threadRun.progress, '$.stage')} is not ${THREAD_RUN_AWAITING_QUESTION_STAGE}`,
         scope,
       );
     };
@@ -92,7 +85,7 @@ export const makeReaping = Effect.gen(function* () {
         isNull(threadRun.settledNotifiedAt),
         expectedId === null
           ? isNull(threadRun.settledNotification)
-          : sql`json_extract(${threadRun.settledNotification}, '$.id') = ${expectedId}`,
+          : sql`${readableField(threadRun.settledNotification, '$.id')} = ${expectedId}`,
       ) as SQL;
 
     const ending = Effect.fnUntraced(function* (
@@ -131,7 +124,9 @@ export const makeReaping = Effect.gen(function* () {
         return stored('reapableRuns')(
           units.read((unit) =>
             Effect.flatMap(unit.run(limit === undefined ? query : query.limit(limit)), (rows) =>
-              trusted('reapableRuns', () => rows.map((row) => ({ ...row, stopRequest: parseThreadRunStopRequest(row.stopRequest) }))),
+              trusted('reapableRuns', () =>
+                rows.map((row) => ({ ...row, stopRequest: runFacts(kinds, row).stopRequest(row.stopRequest) })),
+              ),
             ),
           ),
         );
@@ -144,10 +139,14 @@ export const makeReaping = Effect.gen(function* () {
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
-                  db.select({ streamTail: threadRun.streamTail, stopRequest: threadRun.stopRequest }).from(threadRun).where(claim).get(),
+                  db
+                    .select({ threadId: threadRun.threadId, streamTail: threadRun.streamTail, stopRequest: threadRun.stopRequest })
+                    .from(threadRun)
+                    .where(claim)
+                    .get(),
                 );
                 if (!current) return null;
-                const stopped = parseThreadRunStopRequest(current.stopRequest);
+                const stopped = runFacts(kinds, { id: runId, threadId: current.threadId }).stopRequest(current.stopRequest);
                 const run = yield* unit.run(
                   db
                     .update(threadRun)
@@ -243,7 +242,6 @@ export const makeReaping = Effect.gen(function* () {
         const claim = and(
           eq(threadRun.id, runId),
           reapClaim(input.selector),
-          isNull(threadRun.stopRequest),
           handedOver ? undefined : lt(threadRun.resumes, input.maxResumes),
         );
         return stored('adoptRun')(
@@ -252,9 +250,21 @@ export const makeReaping = Effect.gen(function* () {
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
-                  db.select({ streamTail: threadRun.streamTail, resumes: threadRun.resumes }).from(threadRun).where(claim).get(),
+                  db
+                    .select({
+                      threadId: threadRun.threadId,
+                      streamTail: threadRun.streamTail,
+                      resumes: threadRun.resumes,
+                      stopText: sql<string | null>`${threadRun.stopRequest}`,
+                    })
+                    .from(threadRun)
+                    .where(claim)
+                    .get(),
                 );
                 if (!current) return null;
+                const held = current.stopText === null ? null : threadRun.stopRequest.mapFromDriverValue(current.stopText);
+                if (runFacts(kinds, { id: runId, threadId: current.threadId }).stopRequest(held) !== null) return null;
+                const unstopped = and(claim, sql`${threadRun.stopRequest} is ${current.stopText}`);
                 const run = yield* unit.run(
                   db
                     .update(threadRun)
@@ -267,7 +277,7 @@ export const makeReaping = Effect.gen(function* () {
                       handedOverAt: null,
                       updatedAt: new Date(yield* Clock.currentTimeMillis),
                     })
-                    .where(claim)
+                    .where(unstopped)
                     .returning()
                     .get(),
                 );
@@ -320,7 +330,7 @@ export const makeReaping = Effect.gen(function* () {
                       unconfirmed,
                       sql`${threadRun.settledNotifyAttempts} >= ${input.maxAttempts}`,
                       isNotNull(threadRun.settledNotification),
-                      sql`json_extract(${threadRun.settledNotification}, '$.exhaustedAt') is null`,
+                      sql`${readableField(threadRun.settledNotification, '$.exhaustedAt')} is null`,
                     ),
                   )
                   .orderBy(asc(threadRun.finishedAt), asc(threadRun.id))
@@ -328,7 +338,7 @@ export const makeReaping = Effect.gen(function* () {
               );
               const exhausted = yield* trusted('claimSettledForNotification', () =>
                 spent.map((row) => {
-                  const record = parseThreadRunNotification(row.settledNotification);
+                  const record = runFacts(kinds, row).notification(row.settledNotification);
                   return {
                     id: row.id,
                     threadId: row.threadId,
@@ -343,17 +353,20 @@ export const makeReaping = Effect.gen(function* () {
                 );
               }
               const claims = yield* trusted('claimSettledForNotification', () =>
-                claimed.map((row) => ({
-                  id: row.id,
-                  threadId: row.threadId,
-                  kind: row.kind,
-                  status: row.status,
-                  failureReason: row.failureReason,
-                  failure: parseThreadRunFailure(row.failure),
-                  settledBy: parseThreadSettledBy(row.settledBy),
-                  settledNotification: seedThreadNotification(row.id, input.now, parseThreadRunNotification(row.settledNotification)),
-                  attempt: row.settledNotifyAttempts + 1,
-                })),
+                claimed.map((row) => {
+                  const read = runFacts(kinds, row);
+                  return {
+                    id: row.id,
+                    threadId: row.threadId,
+                    kind: row.kind,
+                    status: row.status,
+                    failureReason: row.failureReason,
+                    failure: read.failure(row.failure),
+                    settledBy: read.settledBy(row.settledBy),
+                    settledNotification: seedThreadNotification(row.id, input.now, read.notification(row.settledNotification)),
+                    attempt: row.settledNotifyAttempts + 1,
+                  };
+                }),
               );
               for (const claim of claims) {
                 yield* unit.run(
@@ -441,7 +454,10 @@ export const makeReaping = Effect.gen(function* () {
               .update(threadRun)
               .set({
                 settledNotifyAttempts: 0,
-                settledNotification: sql`case when ${threadRun.settledNotification} is null then null else json_set(${threadRun.settledNotification}, '$.exhaustedAt', json('null')) end`,
+                settledNotification: readableEdit(
+                  threadRun.settledNotification,
+                  (stored) => sql`json_set(${stored}, '$.exhaustedAt', json('null'))`,
+                ),
                 updatedAt: new Date(clock.currentTimeMillisUnsafe()),
               })
               .where(
@@ -462,36 +478,16 @@ export const makeReaping = Effect.gen(function* () {
 });
 
 export function trustedRun(kinds: ThreadEntryReader, call: string, row: ThreadRunRow): Effect.Effect<ThreadRunRow, ThreadStorageFailed> {
-  const readable = <A>(why: string, parse: () => A, otherwise: A): A =>
-    readableRowFact(kinds, row.threadId, why, parse, otherwise, `Run ${row.id} of thread ${row.threadId}`);
+  const read = runFacts(kinds, row);
   return trusted(call, () => ({
     ...row,
-    progress: readable('a run progress this build cannot read stands as no stage', () => parseThreadRunProgress(row.progress), {
-      stage: null,
-      message: null,
-    }),
-    usage: readable('a run usage this build cannot read stands as unmeasured', () => parseThreadRunUsage(row.usage), null),
-    streamTail: readable(
-      'a stream tail this build cannot read stands as none, so the run closes without the streamed lines it held',
-      () => parseThreadStreamTail(kinds, row.threadId, row.streamTail),
-      null,
-    ),
-    failure: readable(
-      'a run failure this build cannot read leaves the run with its failure reason alone',
-      () => parseThreadRunFailure(row.failure),
-      null,
-    ),
-    settledBy: readable('who ended a run this build cannot read stands as unknown', () => parseThreadSettledBy(row.settledBy), null),
-    settledNotification: readable(
-      'a run-end notification this build cannot read stands as none',
-      () => parseThreadRunNotification(row.settledNotification),
-      null,
-    ),
-    stopRequest: readable(
-      'a stop request this build cannot read stands as none; the run can be stopped again',
-      () => parseThreadRunStopRequest(row.stopRequest),
-      null,
-    ),
-    withdrawnWords: readable('withdrawn words this build cannot read stand as none', () => parseWithdrawnWords(row.withdrawnWords), null),
+    progress: read.progress(row.progress),
+    usage: read.usage(row.usage),
+    streamTail: read.streamTail(row.streamTail),
+    failure: read.failure(row.failure),
+    settledBy: read.settledBy(row.settledBy),
+    settledNotification: read.notification(row.settledNotification),
+    stopRequest: read.stopRequest(row.stopRequest),
+    withdrawnWords: read.withdrawnWords(row.withdrawnWords),
   }));
 }

@@ -10,6 +10,7 @@ import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
 import { session } from '../../platform/store/writers.js';
 import { threadFolder } from './folders.js';
 import { projectRows } from '../../platform/contract/service/projections.js';
+import { readableJson } from '../../platform/store/readableJson.js';
 
 export const threadRecord = sqliteTable(
   'thread',
@@ -31,7 +32,7 @@ export const threadRecord = sqliteTable(
     titleAskedInput: text('title_asked_input'),
     harness: text('harness').notNull().default(NATIVE_HARNESS),
     agentId: text('agent_id').notNull(),
-    bornOf: text('born_of', { mode: 'json' }).$type<ThreadBornOf>(),
+    bornOf: readableJson('born_of').$type<ThreadBornOf>(),
     spawnedByRunId: text('spawned_by_run_id'),
     createdBy: text('created_by'),
     scopeBlockUuid: text('scope_block_uuid'),

@@ -2,8 +2,9 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Effect, Layer } from 'effect';
-import { doorFixture } from '../doorFixture.js';
-import { nativeLanding } from '../landing/native.js';
+import { PROBE_MAX_FILES } from '@tagma/inspection/node/budget';
+import { doorFixture } from '../composition/testing/doorFixture.js';
+import { nativeLanding } from '../composition/testing/landing/native.js';
 
 const config = `export default ${JSON.stringify({
   inspections: {
@@ -14,7 +15,7 @@ const config = `export default ${JSON.stringify({
   },
 })};\n`;
 
-const PATHS = Array.from({ length: 17 }, (_, at) => `src/core/part${at}.ts`);
+const PATHS = Array.from({ length: PROBE_MAX_FILES + 1 }, (_, at) => `src/core/part${at}.ts`);
 
 const setup = nativeLanding(
   {
@@ -22,7 +23,7 @@ const setup = nativeLanding(
     'tagma.config.ts': config,
     [PATHS[0]!]: 'export const part0 = 0;\n',
   },
-  { tools: ['check_rules', 'submit_work'] },
+  { tools: ['check_rules', 'submit_work'], own: 'inspection workers no earlier judgement has calibrated' },
 );
 
 class Calibrating extends Context.Service<Calibrating, Effect.Success<typeof setup>>()('testing/Calibrating') {}

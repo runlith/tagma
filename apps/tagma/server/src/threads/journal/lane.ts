@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { ThreadResourceKind } from '@runlith/agent/resources/ResourcesConfig';
 import type { ThreadResourceStorage } from '@runlith/agent/thread/storage/resources';
 import type { Lane } from '@runlith/held/Lane';
+import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { Settings } from '../../settings/contract/service/values.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { sourcesOutside, unfiledHeirs } from './base.js';
@@ -32,6 +33,7 @@ import { rolloutReconciling } from './rolloutReconciling.js';
 import type { RolloutForms } from './rolloutForming.js';
 import { rolloutRehydrating } from './rolloutRehydrate.js';
 import { rolloutRepairing } from './rolloutRepairing.js';
+import { rolloutReturning } from './rolloutReturn.js';
 import { rolloutWhole } from './rolloutWhole.js';
 import { rolloutShelf } from './rolloutShelf.js';
 import { threadUses } from './uses.js';
@@ -114,6 +116,7 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   const { repair: repaired, report } = rolloutRepairing(ctx, forms, repair, rollout, rehydrate);
   const whole = rolloutWhole(ctx, forms, rest, wake, runAppend, uses);
   const { shelve, shelving } = rolloutShelf(ctx, evict);
+  const returnOnto = rolloutReturning(ctx, forms, uses);
   const appendMeta = (threadId: string): Effect.Effect<void> => {
     if (rolloutHome === undefined) return Effect.void;
     return ctx
@@ -151,6 +154,10 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     repair: repaired,
     report,
     rewritten: rewrites.follow,
+    returnOnto: (plan) =>
+      returnOnto(plan).pipe(
+        Effect.catchTag('RolloutUnreadable', (cause) => Effect.fail(new ThreadStorageFailed({ call: 'ThreadRollout.returnOnto', cause }))),
+      ),
 
     appendRecord: (threadId, record) => {
       if (rolloutHome === undefined) return;

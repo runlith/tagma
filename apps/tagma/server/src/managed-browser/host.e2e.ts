@@ -52,6 +52,14 @@ const server: Bun.Server<undefined> = Bun.serve({
       return new Response('twelve bytes', {
         headers: { 'content-type': 'text/plain', 'content-disposition': 'attachment; filename="report.txt"' },
       });
+    if (path === '/labels')
+      return html(`<title>Subscription</title><style>
+        body { margin: 0; padding-top: 1400px; }
+        button { position: relative; width: 400px; height: 60px; }
+        button::after { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; }
+        #cover { position: fixed; inset: 0; background: white; display: none; }
+        #cover::after { content: 'Cover'; position: absolute; inset: 0; }
+      </style><button id="subscription" aria-expanded="false" onclick="this.setAttribute('aria-expanded', 'true')">How do I pause or cancel my Premium subscription?</button><div id="cover"></div>`);
     if (path === '/second') return html('<title>Second</title><h1>Second page</h1>');
     return new Response('ok');
   },
@@ -116,6 +124,37 @@ layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
       const navigated = yield* calling(PAGE.navigate_page.body.execute({ page: opened.page.id, url: at('/second') }, undefined, agent));
       expect(navigated.page.url).toBe(at('/second'));
       expect(yield* evaluate(opened.page.id, 'document.title')).toBe('Second');
+    }),
+  );
+
+  it.effect('a ref click through a generated button label expands its answer but a covering element still refuses', () =>
+    Effect.gen(function* () {
+      const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/labels'), profile: INSTALLED }, undefined, agent));
+      const page = opened.page.id;
+      const pages = yield* Pages;
+      yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
+      const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
+      const ref = refIn(shot.text, /button "How do I pause or cancel/);
+      yield* calling(
+        PAGE.act_on_page.body.execute(
+          {
+            page,
+            steps: [
+              { action: 'scroll', ref },
+              { action: 'click', ref },
+            ],
+          },
+          undefined,
+          agent,
+        ),
+      );
+      expect(yield* evaluate(page, 'document.getElementById("subscription").getAttribute("aria-expanded")')).toBe('true');
+      yield* evaluate(page, 'document.getElementById("cover").style.display = "block"');
+      const refused = yield* refusalOf(
+        calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', ref }] }, undefined, agent)),
+      );
+      expect(refused.code).toBe('element-obscured');
+      expect(refused.reason).toContain('#cover');
     }),
   );
 

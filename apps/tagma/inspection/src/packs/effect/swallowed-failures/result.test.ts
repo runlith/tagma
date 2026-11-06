@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Tree } from '@runlith/code-facts/tree';
 import { ready } from '../../../builtins.node';
-import { UNBOUNDED } from '../../../core/node/budget';
+import { unbounded } from '../../../core/node/budget';
 import type { SwallowedFailuresParams } from './declaration';
 import { swallowedFailures } from './implementation';
 
@@ -18,7 +18,7 @@ export const read = E.fnUntraced(function* () { ${body} });`;
     read: () => text,
     mentions: (words) => new Set(words.some((word) => text.includes(word)) ? [path] : []),
   };
-  return swallowedFailures.read({ ...params, allow }, tree, [path], ADAPTERS, UNBOUNDED);
+  return swallowedFailures.read({ ...params, allow }, tree, [path], ADAPTERS, unbounded());
 };
 const origin = 'const result = yield* E.result(work);';
 

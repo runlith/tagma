@@ -11,6 +11,7 @@ import { recordFacts, recordsAs } from '../../thread-record/facts.js';
 import { mandateFacts } from '../mandate.js';
 import { liveProcesses, sessionOf, sessionRows } from '../store/harnessFacet.js';
 import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
+import { readableField } from '../../platform/store/readableJson.js';
 import type { ThreadSummary } from './summary.js';
 import { recapStatusOf } from '../recap/standing.js';
 
@@ -75,7 +76,7 @@ const homesSql = (homes: readonly number[]): SQL =>
     sql`, `,
   )})`;
 
-const unasked: SQL = sql`json_extract(${recordFacts.bornOf}, '$.ask') is null`;
+const unasked: SQL = sql`${readableField(recordFacts.bornOf, '$.ask')} is null`;
 
 export const selected = (ownerId: string, homes: readonly number[], selection: ThreadSelection): SQL | undefined =>
   and(
@@ -210,7 +211,7 @@ export const liveFamilyOf = (ownerId: string, seeds: readonly string[]): SQL => 
       cross join ${recordsAs('child')} on child.parent_id = f.id
       where child.principal_id = ${ownerId}
         and child.archived_at is null
-        and json_extract(child.born_of, '$.ask') is null
+        and ${readableField(sql.raw('child.born_of'), '$.ask')} is null
   )
   select id from family
 )`;

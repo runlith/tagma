@@ -729,6 +729,7 @@ describe('ThreadEnvelopes delivery', () => {
         status: 'not-found',
         addresses: ['reviewer'],
         addressable: ['parent'],
+        deleted: [],
       });
       expect(h.sent).toEqual([]);
     }),
@@ -1663,6 +1664,7 @@ const envelopeHarness = Effect.fnUntraced(function* (
       Effect.succeed(
         [...records.values()].find((entry) => entry.principal === principal && entry.spawnRootId === root && entry.name === name) ?? null,
       ),
+    deleted: () => Effect.succeed(null),
     list: (query) =>
       Effect.succeed({
         rows: [...records.values()]

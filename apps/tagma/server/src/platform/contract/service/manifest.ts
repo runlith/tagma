@@ -11,7 +11,7 @@ import type { Contribution } from '../wire/contribution.js';
 import type { CapabilityDeclaration } from '../wire/capability.js';
 import type { SnapshotHome, SnapshotParticipant } from './snapshots.js';
 import type { SubjectPlace } from './place.js';
-import type { OwnStore } from './ownStore.js';
+import type { IndexFill, OwnStore } from './ownStore.js';
 import type { Machine } from './capacity.js';
 import type { ThreadEntryKind, ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
@@ -51,6 +51,7 @@ export type Manifest = {
   readonly rowFacts?: () => Promise<RowDeclarations>;
   readonly retiredTables?: readonly string[];
   readonly stores?: readonly OwnStore[];
+  readonly indexFills?: readonly IndexFill[];
 
   readonly formSteps?: readonly ThreadFormStep[];
   readonly pools?: (machine: Machine) => readonly PoolDeclaration[];

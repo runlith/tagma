@@ -28,6 +28,7 @@ import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities } from '@runlith/agent/thread/record';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import { projectRows } from '../../platform/contract/service/projections.js';
+import { readableField, readableJson } from '../../platform/store/readableJson.js';
 import type { ThreadPick } from '../contract/wire/harness/pick.js';
 
 export const ENDINGS_LIST: SQL = sql.raw(`(${RUN_ENDINGS.map((status) => `'${status}'`).join(', ')})`);
@@ -50,7 +51,7 @@ export const thread = sqliteTable(
     model: text('model'),
     reasoning: text('reasoning'),
     switches: text('switches', { mode: 'json' }).$type<ModelSwitches>().notNull().default({}),
-    transport: text('transport', { mode: 'json' }).$type<TransportBinding>().notNull().default(NATIVE_BINDING),
+    transport: readableJson('transport').$type<TransportBinding>().notNull().default(NATIVE_BINDING),
     capabilities: text('capabilities', { mode: 'json' }).$type<TransportCapabilities>().notNull().default(NATIVE_CAPABILITIES),
     callEnvelopeMs: integer('call_envelope_ms').generatedAlwaysAs(sql`json_extract(capabilities, '$.callEnvelopeMs')`, { mode: 'virtual' }),
     systemPrompt: text('system_prompt'),
@@ -58,7 +59,7 @@ export const thread = sqliteTable(
     pendingDefinition: text('pending_definition', { mode: 'json' }).$type<ThreadDefinition>(),
     pendingModel: text('pending_model', { mode: 'json' }).$type<ThreadPick>(),
     failureReason: text('failure_reason'),
-    contextReading: text('context_reading', { mode: 'json' }).$type<ThreadContextReading>(),
+    contextReading: readableJson('context_reading').$type<ThreadContextReading>(),
     contextEventId: integer('context_event_id').notNull().default(0),
     worldStateSnapshot: text('world_state_snapshot', { mode: 'json' }).notNull().$type<Record<string, unknown>>().default({}),
     worldStateCheckpointId: text('world_state_checkpoint_id'),
@@ -132,13 +133,13 @@ export const threadRun = sqliteTable(
     switches: text('switches', { mode: 'json' }).$type<ModelSwitches>().notNull().default({}),
     approvalMode: text('approval_mode').$type<AgentApprovalMode>().notNull().default('trust'),
     interactive: integer('interactive', { mode: 'boolean' }).notNull().default(false),
-    progress: text('progress', { mode: 'json' }).$type<ThreadRunProgress>().notNull().default({ stage: null, message: null }),
-    usage: text('usage', { mode: 'json' }).$type<Usage>(),
+    progress: readableJson('progress').$type<ThreadRunProgress>().notNull().default({ stage: null, message: null }),
+    usage: readableJson('usage').$type<Usage>(),
     cost: text('cost', { mode: 'json' }).$type<ThreadRunCost>(),
-    streamTail: text('stream_tail', { mode: 'json' }).$type<ThreadTranscript>(),
+    streamTail: readableJson('stream_tail').$type<ThreadTranscript>(),
     resumes: integer('resumes').notNull().default(0),
     failureReason: text('failure_reason'),
-    failure: text('failure', { mode: 'json' }).$type<ThreadFailureDiagnostics>(),
+    failure: readableJson('failure').$type<ThreadFailureDiagnostics>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -152,10 +153,10 @@ export const threadRun = sqliteTable(
     finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
     settledNotifiedAt: integer('settled_notified_at', { mode: 'timestamp_ms' }),
     settledBy: text('settled_by').$type<ThreadRunRow['settledBy']>(),
-    settledNotification: text('settled_notification', { mode: 'json' }).$type<ThreadRunRow['settledNotification']>(),
+    settledNotification: readableJson('settled_notification').$type<ThreadRunRow['settledNotification']>(),
     settledNotifyAttempts: integer('settled_notify_attempts').notNull().default(0),
-    stopRequest: text('stop_request', { mode: 'json' }).$type<ThreadRunRow['stopRequest']>(),
-    withdrawnWords: text('withdrawn_words', { mode: 'json' }).$type<ThreadRunRow['withdrawnWords']>(),
+    stopRequest: readableJson('stop_request').$type<ThreadRunRow['stopRequest']>(),
+    withdrawnWords: readableJson('withdrawn_words').$type<ThreadRunRow['withdrawnWords']>(),
     appliedSeq: integer('applied_seq').notNull().default(0),
     startKey: text('start_key'),
     startDigest: text('start_digest'),
@@ -256,7 +257,7 @@ export const runRows = projectRows({
 export const ENDED_RUN: SQL = sql`${threadRun.status} in ${ENDINGS_LIST}`;
 
 export const unparkedRun: SQL = sql`(${threadRun.status} = 'running'
-  and json_extract(${threadRun.progress}, '$.stage') is not ${THREAD_RUN_AWAITING_QUESTION_STAGE})`;
+  and ${readableField(threadRun.progress, '$.stage')} is not ${THREAD_RUN_AWAITING_QUESTION_STAGE})`;
 
 export const stalledKernelThread = (now: Date): SQL =>
   sql`(${thread.updatedAt} + max(${thread.callEnvelopeMs}, ${STALL_FLOOR_MS}) < ${now.getTime()})`;

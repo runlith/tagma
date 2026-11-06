@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import type { Finding } from '@runlith/tagma/rules';
 import { Option, Schema } from 'effect';
-import { migrationIssues, unreturnedIssues } from '../../apps/tagma/server/src/platform/store/migrationLaw';
-import { BACK_SCRIPT } from '../../packages/sqlite-process/src/chainReturn';
+import { ASIDE_FILE, migrationIssues, stepBackLosses } from '../../apps/tagma/server/src/platform/store/migrationLaw';
+import { BACK_SCRIPT } from '@runlith/sqlite-process/chainReturn';
 import type { Declaration } from './declarations';
 import { blobTexts, changedBetween, type Entry, entriesAt, git, mentioning, present } from './git';
 
@@ -319,18 +319,27 @@ const migrationsAt = (snapshot: Snapshot, root: string, folder: string) => {
 
 const statementsOf = (text: string): string[] => text.split('--> statement-breakpoint').filter((one) => one.trim() !== '');
 
-const backFailure = (chain: readonly string[], back: string): string | null => {
-  const db = new Database(':memory:');
-  try {
-    db.run('PRAGMA foreign_keys = OFF');
-    for (const text of chain) for (const statement of statementsOf(text)) db.run(statement);
-    for (const statement of statementsOf(back)) db.run(statement);
-    return null;
-  } catch (failure) {
-    return failure instanceof Error ? failure.message : String(failure);
-  } finally {
-    db.close();
-  }
+const lossesOf = (tree: Snapshot, migrations: ReturnType<typeof migrationsAt>, added: readonly string[]): readonly Finding[] => {
+  const judged = new Set(added);
+  const beside = (path: string, file: string): string => path.replace(/migration\.sql$/, file);
+  const besides = added
+    .flatMap((path) => [beside(path, BACK_SCRIPT), beside(path, ASIDE_FILE)])
+    .filter((path) => migrations.listed.has(path));
+  tree.load([...migrations.paths, ...besides]);
+  const text = (path: string, file: string): string | null =>
+    judged.has(path) && migrations.listed.has(beside(path, file)) ? tree.read(beside(path, file)) : null;
+  const chain = migrations.paths.map((path) => ({
+    name: path,
+    sql: tree.read(path),
+    back: text(path, BACK_SCRIPT),
+    aside: text(path, ASIDE_FILE),
+  }));
+  return stepBackLosses(chain, judged).map((loss) => ({
+    path: loss.file === 'migration' ? loss.migration : beside(loss.migration, loss.file === 'back' ? BACK_SCRIPT : ASIDE_FILE),
+    line: 1,
+    fingerprint: `${loss.migration}: ${loss.fingerprint}`,
+    message: loss.message,
+  }));
 };
 
 const foreignKeys = (
@@ -444,33 +453,7 @@ export const storedJudge = (root: string, treeAt: string, baseAt: string | null)
       for (const folder of params.folders) {
         const migrations = migrationsAt(tree, root, folder);
         const added = addedMigrations(migrations, base === null ? null : migrationsAt(base, root, folder), params.cut);
-        const scripted = added.filter((path) => migrations.listed.has(path.replace(/migration\.sql$/, BACK_SCRIPT)));
-        if (scripted.length > 0) {
-          tree.load(migrations.paths);
-          for (const path of scripted) {
-            const failure = backFailure(
-              migrations.paths.slice(0, migrations.paths.indexOf(path) + 1).map((one) => tree.read(one)),
-              tree.read(path.replace(/migration\.sql$/, BACK_SCRIPT)),
-            );
-            if (failure !== null)
-              findings.push({
-                path: path.replace(/migration\.sql$/, BACK_SCRIPT),
-                line: 1,
-                fingerprint: `${path}: back script ${failure}`,
-                message: `${BACK_SCRIPT} does not run on the shape its migration leaves, so a step back would fail on a person's machine: ${failure}`,
-              });
-          }
-        }
-        const unscripted = added.filter((path) => !scripted.includes(path));
-        tree.load(unscripted);
-        for (const path of unscripted)
-          for (const issue of unreturnedIssues(statementsOf(tree.read(path))))
-            findings.push({
-              path,
-              line: 1,
-              fingerprint: `${path}: back ${issue.table ?? 'unresolved'} ${issue.statement.trim()}`,
-              message: `${issue.table ?? 'unknown target'}: ${issue.reason}, and no ${BACK_SCRIPT} stands beside it to return it: ${issue.statement.trim()}`,
-            });
+        if (added.length > 0) findings.push(...lossesOf(tree, migrations, added));
       }
       return [{ key: key.key, side: 'tree', findings }];
     }
