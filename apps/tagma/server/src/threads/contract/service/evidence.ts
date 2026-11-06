@@ -10,7 +10,7 @@ import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { FeedPosition, ThreadOpenText, ThreadOpenView, ThreadResumeOf } from '@runlith/agent/transcript/live';
 import type { ThreadPagePayload } from '@runlith/agent/protocol/http';
 import type { ConversationHeld } from '../wire/conversation.js';
-import type { EvidenceThread } from '../wire/evidence.js';
+import type { EvidenceThread, UnreadGraph } from '../wire/evidence.js';
 import type { StatusRowOnTheWire } from '../wire/statuses.js';
 import type { EndingRowOnTheWire } from '../wire/endings.js';
 import type { WarmthBasis, WarmthSubject } from '../wire/warmth.js';
@@ -66,11 +66,13 @@ export type ThreadActSummary = {
   readonly entries: number;
   readonly blocks: readonly string[];
   readonly bounded: boolean;
+  readonly unread: readonly UnreadGraph[];
 };
 
 export type ThreadRunActs = {
   readonly acts: readonly { readonly op: string; readonly block: string | null; readonly at: string }[];
   readonly bounded: boolean;
+  readonly unread: readonly UnreadGraph[];
 };
 
 export type ThreadEvidenceSnapshot = {

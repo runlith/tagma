@@ -205,6 +205,7 @@ export function beyondWords(read: RewindPreview): boolean {
     read.files.total > 0 ||
     read.files.unavailable !== null ||
     read.graph.acts.length > 0 ||
+    read.graph.unread.length > 0 ||
     read.preview.running !== null ||
     read.preview.taken.length > 0 ||
     read.preview.children.some((child) => child.running)

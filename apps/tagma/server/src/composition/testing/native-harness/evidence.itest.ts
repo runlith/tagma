@@ -110,7 +110,7 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
       expect(read.entries).toBe(5);
       expect(read.runs).toEqual([]);
       expect(read.thread.projectId).toBe(projectId);
-      expect(read.acts).toEqual({ name: null, entries: 0, blocks: [], bounded: false });
+      expect(read.acts).toEqual({ name: null, entries: 0, blocks: [], bounded: false, unread: [] });
 
       const first = yield* query(projectId, { select: 'records', threads: [threadId], limit: 3 });
       expect(first.status).toBe(200);

@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { family } from '@runlith/paging';
 import { threadQueuedTurnSchema } from '@runlith/agent/protocol/http';
 import { LinesReverted, RunFilesRead } from '../../../change-record/contract/wire/runFiles.js';
+import { unreadGraphSchema } from './evidence.js';
 
 export const REWIND_FILES = family('rewind_files', 1, 'json', { text: 420, json: 640 }, 20, () => ({
   path: 'x'.repeat(60),
@@ -82,6 +83,7 @@ export const rewindActSchema = Schema.Struct({
 export const rewindActsSchema = Schema.Struct({
   acts: Schema.Array(rewindActSchema),
   bounded: Schema.Boolean,
+  unread: Schema.Array(unreadGraphSchema),
 });
 
 export const rewindFilesSchema = RunFilesRead;

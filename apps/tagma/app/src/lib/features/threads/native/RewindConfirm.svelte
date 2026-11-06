@@ -83,6 +83,9 @@
             `${count(acts.length, 'graph write', 'graph writes')}${asking.read.graph.bounded ? ' or more' : ''}. The graph is shared; they stay.`,
           )}
         {/if}
+        {#each asking.read.graph.unread as graph (graph.root)}
+          {@render line(true, `Graph writes cannot be counted in this checkout: ${graph.reason}`, graph.root)}
+        {/each}
         {#each children as child (child.threadId)}
           {@render line(
             false,

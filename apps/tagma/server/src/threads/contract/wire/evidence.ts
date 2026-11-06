@@ -10,11 +10,20 @@ import { THREAD_QUERY_SOURCES } from '@runlith/agent/protocol/threadQuery';
 import { harnessRowSchema } from './harness/externalSession.js';
 import { recapLineSchema, recapReadingSchema } from './recap.js';
 
+export const unreadGraphSchema = Schema.Struct({
+  projectId: Schema.Int,
+  root: Schema.String,
+  code: Schema.String,
+  reason: Schema.String,
+});
+export type UnreadGraph = typeof unreadGraphSchema.Type;
+
 export const threadActsSchema = Schema.Struct({
   name: Schema.NullOr(Schema.String),
   entries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   blocks: Schema.Array(Schema.String),
   bounded: Schema.Boolean,
+  unread: Schema.Array(unreadGraphSchema),
 });
 
 export const threadShapeSchema = Schema.Struct({

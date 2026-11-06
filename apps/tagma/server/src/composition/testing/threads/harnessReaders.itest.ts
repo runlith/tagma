@@ -147,7 +147,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provide(builtinRegistry)), { exclu
         const evidence = {
           shape: { thread: { ...row, systemPrompt: null }, entries: 0, runs: [] },
           facet: { title: row.title, projectId: row.projectId, scope: null, harness: row.harness },
-          acts: { name: null, entries: 0, blocks: [], bounded: false },
+          acts: { name: null, entries: 0, blocks: [], bounded: false, unread: [] },
         };
         const shape = wireThreadShape(evidence as Parameters<typeof wireThreadShape>[0], basis);
         expect(shape.thread.harness?.observation.metadata.model).toMatchObject({ _tag: 'Value', value: 'sonnet' });

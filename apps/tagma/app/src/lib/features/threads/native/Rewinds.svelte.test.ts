@@ -6,7 +6,7 @@ import { Rewinds } from './Rewinds.svelte.js';
 
 const beyond = {
   files: { total: 1, unavailable: null },
-  graph: { acts: [] },
+  graph: { acts: [], unread: [] },
   preview: { running: null, taken: [], children: [] },
 };
 

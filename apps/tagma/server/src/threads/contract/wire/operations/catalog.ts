@@ -172,7 +172,7 @@ export const THREAD_OPERATIONS = {
       },
     }),
     meaning:
-      'What one thread IS — its row, frozen prompt, log size, runs with model, usage and timing, and the graph acts its session signed — or a query over the facts of one thread or a selected set: runs, steps, model-call measurements, logical entries, raw records and the activity record.',
+      'What one thread IS — its row, frozen prompt, log size, runs with model, usage and timing, and the graph acts its session signed, with each checkout whose graph cannot be read listed as unread under its refusal — or a query over the facts of one thread or a selected set: runs, steps, model-call measurements, logical entries, raw records and the activity record.',
     grammar: `${THREAD_GRAMMAR}\n\n${EVIDENCE_GRAMMAR}\n\n\`selection\` takes the terms list_threads takes. For source \`activity\`, its default \`set\` is \`all\`: archiving a thread after an event preserves that event in the window. Explicit \`set: live\` restricts it to live threads. Other sources default to \`live\`.`,
     input: threadInput({
       threadId: Schema.optional(ThreadId).annotate({ description: 'One thread. Its shape, or the facts queried.' }),

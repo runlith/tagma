@@ -92,7 +92,8 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
     let entries = 0;
     let bounded = false;
     const blocks = new Set<string>();
-    for (const graph of yield* copies(threadId, projectId, null)) {
+    const { served, unread } = yield* copies(threadId, projectId, null);
+    for (const graph of served) {
       const sessions = Context.get(graph, WriterRegister);
       const sessionId = yield* sessions.idOf({ harness: NATIVE_HARNESS, key: threadId });
       if (sessionId === null) continue;
@@ -106,7 +107,7 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
       );
       for (const block of named.values()) blocks.add(block);
     }
-    return { name, entries, blocks: [...blocks], bounded };
+    return { name, entries, blocks: [...blocks], bounded, unread };
   });
 
   const owned = Effect.fnUntraced(function* (threadIds: readonly string[], projectId: number) {
@@ -285,11 +286,12 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
           const windows = (yield* runs.runsOf(threadId)).flatMap((run) =>
             named.has(run.id) ? [{ from: run.startedAt.getTime(), to: run.finishedAt?.getTime() ?? Number.POSITIVE_INFINITY }] : [],
           );
-          if (windows.length === 0) return { acts: [], bounded: false };
+          if (windows.length === 0) return { acts: [], bounded: false, unread: [] };
           const earliest = Math.min(...windows.map((window) => window.from));
           const found: { readonly op: string; readonly block: string | null; readonly ts: Date }[] = [];
           let bounded = false;
-          for (const graph of yield* copies(threadId, projectId, runIds)) {
+          const { served, unread } = yield* copies(threadId, projectId, runIds);
+          for (const graph of served) {
             const sessionId = yield* Context.get(graph, WriterRegister).idOf({ harness: NATIVE_HARNESS, key: threadId });
             if (sessionId === null) continue;
             const entries = yield* Context.get(graph, GraphJournal).events({ projectId, sessions: [sessionId], limit: ACTS_READ_BOUND });
@@ -310,6 +312,7 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
               .toSorted((left, right) => left.ts.getTime() - right.ts.getTime())
               .map((entry) => ({ op: entry.op, block: entry.block, at: entry.ts.toISOString() })),
             bounded,
+            unread,
           };
         }),
       ),

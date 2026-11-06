@@ -304,10 +304,15 @@ export function threadShapeText(shape: ThreadShape): string {
   ];
   const acts = shape.acts;
   lines.push(
-    acts.name === null
-      ? 'acts: none — this thread never wrote to the graph'
-      : `acts: ${acts.entries}${acts.bounded ? '+' : ''} by session ${acts.name} over ${acts.blocks.length} blocks${acts.blocks.length > 0 ? `: ${acts.blocks.join(' ')}` : ''}`,
+    acts.name !== null
+      ? `acts: ${acts.entries}${acts.bounded ? '+' : ''} by session ${acts.name} over ${acts.blocks.length} blocks${acts.blocks.length > 0 ? `: ${acts.blocks.join(' ')}` : ''}`
+      : acts.unread.length === 0
+        ? 'acts: none — this thread never wrote to the graph'
+        : 'acts: none in the graphs that could be read',
   );
+  for (const graph of acts.unread) {
+    lines.push(`acts unread: ${graph.root} (project ${graph.projectId}) — ${graph.code}: ${graph.reason}`);
+  }
   return lines.join('\n');
 }
 
