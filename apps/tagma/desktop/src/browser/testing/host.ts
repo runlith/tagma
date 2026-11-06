@@ -32,7 +32,7 @@ void app.whenReady().then(() => {
     downloaded: (contents, download) => host?.downloaded(contents, download),
     window: (contents) => host?.window(contents) ?? null,
   });
-  const served = new BrowserHost(profiles, 'cleaned', { newWindow: () => undefined, reveal: () => undefined });
+  const served = new BrowserHost(profiles, 'cleaned', { newWindow: () => undefined, reveal: () => undefined, pressed: () => false });
   host = served;
   const surface = new BrowserWindow({ show: false, width: 1000, height: 800, webPreferences: { sandbox: true, contextIsolation: true } });
   void surface.loadURL(SURFACE);

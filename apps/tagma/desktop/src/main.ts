@@ -14,7 +14,10 @@ import { Dictation, type Pill } from './Dictation.js';
 import { type LoaderWindow, SurfaceLoader } from './SurfaceLoader.js';
 import { namedSurfaceUrl, resolveSurfaceUrl } from './config.js';
 import { inputHelperIn } from './helper.js';
-import { serveTabKeys } from './tabKeys.js';
+import { GlobalShortcuts } from '@runlith/desktop-host/GlobalShortcuts';
+import { Globals } from './globals.js';
+import { Keys } from './keys.js';
+import { keptChords } from './kept.js';
 import { Swipes } from './swipe.js';
 import { Folders } from './folders.js';
 import { ProjectWindows } from './projectWindows.js';
@@ -41,6 +44,7 @@ import { reach } from './server.js';
 import { holdInstance } from './instance.js';
 
 let dictation: Dictation | undefined;
+let globals: Globals | undefined;
 let windows: ProjectWindows | undefined;
 let checkAsked = false;
 let browserServing: Fiber.Fiber<never> | undefined;
@@ -341,7 +345,7 @@ class PillWindow implements Pill {
   }
 }
 
-function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows): void {
+function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows, keys: Keys): void {
   const surfaceUrl = fronts.built;
   const userData = app.getPath('userData');
   const hostId = hostIdIn(userData);
@@ -353,6 +357,7 @@ function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows): v
   host = new BrowserHost(profiles, identity, {
     newWindow: (from) => projects.create(fronts.placed(from.webContents.getURL()) ?? surfaceUrl),
     reveal: (popup) => popup.show(),
+    pressed: (window, page, input) => keys.page(window.webContents, page, input),
   });
   new Panels(fronts, host, hostId, userData, identity).install();
   const declarer = new Declaring(host, (url) => fronts.trusts(url));
@@ -398,7 +403,16 @@ app.whenReady().then(() => {
   });
   dictation = new Dictation((down) => new PillWindow(surfaceUrl, down), inputHelperIn(app.getPath('exe')), fronts);
   dictation.install();
-  serveTabKeys(fronts);
+  const mac = process.platform === 'darwin';
+  globals = new Globals(new GlobalShortcuts(mac), dictation, mac);
+  const keys = new Keys(
+    fronts,
+    globals,
+    () => quitting?.menuKeys() ?? new Set(),
+    () => keptChords(process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux'),
+    (contents) => windows?.published(contents),
+  );
+  keys.install();
   loader = surfaceLoader(surfaceUrl);
   const projects = new ProjectWindows(
     fronts,
@@ -408,13 +422,15 @@ app.whenReady().then(() => {
     Swipes.start(),
     () => void reportProblem(),
     dev,
+    keys,
   );
   windows = projects;
+  globals.attach(projects);
   projects.install();
   dev?.install(projects);
   new ViewWindows(fronts, PRELOAD, projects).install();
   new Folders(fronts).install();
-  if (data !== null) serveBrowser(fronts, data, projects);
+  if (data !== null) serveBrowser(fronts, data, projects, keys);
   projects.create(surfaceUrl);
 
   app.on('activate', () => {
@@ -432,7 +448,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   if (browserServing !== undefined) Effect.runFork(Fiber.interrupt(browserServing));
   if (app.isReady()) session.defaultSession.flushStorageData();
-  windows?.dispose();
+  globals?.dispose();
   void dictation?.dispose();
   dictation = undefined;
 });

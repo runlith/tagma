@@ -21,7 +21,7 @@ import type { LiveFailure } from '$lib/wire/Live.js';
 import { Refusal } from '$lib/wire/refusal.js';
 import { STREAM_MISSING } from './RecordStream.svelte.js';
 import { TerminalAppearance } from '../appearance/Settings.svelte.js';
-import { TerminalKeymap } from './Keymap.js';
+import { terminalKeymap } from './testing/keys.svelte.js';
 import { TerminalOutput, pageHidden, pageTime, type Time } from './Output.js';
 import { TerminalPane, type PaneGround, type PaneLifecycleClock, type PaneSource } from './Pane.svelte.js';
 import type { DroppedPaths } from './fileDrop.js';
@@ -393,7 +393,7 @@ async function paneOver(
       opts.holders ?? new TerminalHolders(() => [], ThreadNames.make()),
       new TerminalOutput(opts.time ?? pageTime(), pageHidden, scope),
       policy,
-      new TerminalKeymap(platform),
+      terminalKeymap(platform),
       appearance,
       new Notices(scope),
       platform,

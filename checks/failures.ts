@@ -128,6 +128,13 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'The archive mark is already committed; the reroute runs in a forked fiber outside the lock of the write that moved it, and a failure is logged while the question keeps its former route until that thread is rerouted again.',
   },
   {
+    path: 'apps/tagma/server/src/threads/harness/pluginQuestions.ts',
+    symbol: 'makePluginQuestions.ask',
+    form: 'catchCause',
+    site: '49cecffc',
+    why: 'The question is already marked left; the hand-back reroute runs in a forked fiber outside the question lock, and its failure is logged while the question keeps the plugin as approver until the thread is rerouted again.',
+  },
+  {
     path: 'apps/tagma/server/src/change-record/record/stamping.ts',
     symbol: 'told',
     form: 'catchCause',

@@ -40,7 +40,7 @@
     <AppMenu />
     {#if column !== null}
       {@const words = `${column.open ? 'Hide' : 'Show'} the ${column.label}`}
-      <Tooltip text={words} keys={keymap.spell(keymap.mod('Backslash'))} side="right" class="flex">
+      <Tooltip text={words} keys={keymap.spell('column.toggle')} side="right" class="flex">
         <button
           type="button"
           class={cn(RAIL_ITEM, RAIL_IDLE)}

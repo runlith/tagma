@@ -1,5 +1,6 @@
 import { McpAppCsp } from '@runlith/mcp/apps';
 import { Schema } from 'effect';
+import { HeldChordText, parseChord, writeChord } from '../../../platform/contract/wire/chord.js';
 import type { PluginFace, PointHeld } from '../../../platform/contract/wire/contribution.js';
 import { ToolEntry, TOOLS_FACE } from '../../../plugin-host/contract/wire/audience.js';
 
@@ -78,6 +79,36 @@ export type LauncherEntry = typeof LauncherEntry.Type;
 export const LauncherEntries = Schema.Array(LauncherEntry).check(Schema.makeFilter(unique((entry: LauncherEntry) => entry.view, 'view')));
 export type LauncherEntries = typeof LauncherEntries.Type;
 
+const ActionEntry = Schema.Struct({
+  id: ViewId.annotate({ description: 'The action, named within its plugin: lowercase letters, digits and inner hyphens.' }),
+  title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(60)).annotate({
+    description: 'What the palette and the shortcuts screen call the action.',
+  }),
+  tool: ToolEntry.fields.name.annotate({
+    description: 'The tool of the plugin’s process that runs the action, named in contributes.tools with audience tagma.',
+  }),
+});
+type ActionEntry = typeof ActionEntry.Type;
+
+export const ActionEntries = Schema.Array(ActionEntry).check(Schema.makeFilter(unique((entry: ActionEntry) => entry.id, 'action')));
+export type ActionEntries = typeof ActionEntries.Type;
+
+const ShortcutEntry = Schema.Struct({
+  keys: HeldChordText.annotate({ description: 'The chord this plugin proposes, like Mod+Alt+G.' }),
+  action: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(60)).annotate({
+    description:
+      'What the chord runs: an id of contributes.actions, section:<view> for a section of contributes.surfaces, or pane:<view> for a pane of contributes.panes.',
+  }),
+  global: Schema.optional(Schema.Boolean).annotate({
+    description:
+      'true asks for the chord to work in every app. It is a request: the person allows it on the plugin’s card, and until then the chord works inside Tagma.',
+  }),
+});
+type ShortcutEntry = typeof ShortcutEntry.Type;
+
+export const ShortcutEntries = Schema.Array(ShortcutEntry);
+export type ShortcutEntries = typeof ShortcutEntries.Type;
+
 export const VIEWS_FACE: PluginFace<ViewEntries> = { name: 'views', title: 'Pages inside Tagma', schema: ViewEntries };
 
 export const undeclaredViews = (sibling: PointHeld['sibling'], named: readonly string[]): string | null => {
@@ -129,4 +160,40 @@ export const LAUNCHERS_FACE: PluginFace<LauncherEntries> = {
   title: 'Windows you open from the palette',
   schema: LauncherEntries,
   refuses: viewsNamed,
+};
+
+export const ACTIONS_FACE: PluginFace<ActionEntries> = {
+  name: 'actions',
+  title: 'Actions you run from the palette or a shortcut',
+  schema: ActionEntries,
+  calls: (entries) => entries.map((entry) => entry.tool),
+};
+
+const SECTION = 'section:';
+const PANE = 'pane:';
+
+const unnamed = (shortcut: ShortcutEntry, { sibling }: PointHeld): boolean => {
+  if (shortcut.action.startsWith(SECTION))
+    return !(sibling(SURFACES_FACE) ?? []).some((entry) => entry.view === shortcut.action.slice(SECTION.length));
+  if (shortcut.action.startsWith(PANE))
+    return !(sibling(PANES_FACE) ?? []).some((entry) => entry.view === shortcut.action.slice(PANE.length));
+  return !(sibling(ACTIONS_FACE) ?? []).some((entry) => entry.id === shortcut.action);
+};
+
+export const SHORTCUTS_FACE: PluginFace<ShortcutEntries> = {
+  name: 'shortcuts',
+  title: 'Shortcuts',
+  schema: ShortcutEntries,
+  refuses: (shortcuts, held) => {
+    const lost = [...new Set(shortcuts.filter((shortcut) => unnamed(shortcut, held)).map((shortcut) => shortcut.action))];
+    if (lost.length > 0)
+      return `names ${lost.join(', ')}, which is no action of contributes.actions, no section:<view> of contributes.surfaces and no pane:<view> of contributes.panes`;
+    const seen = new Set<string>();
+    for (const { keys } of shortcuts) {
+      const chord = writeChord(parseChord(keys)!);
+      if (seen.has(chord)) return `the chord ${chord} is listed twice`;
+      seen.add(chord);
+    }
+    return null;
+  },
 };

@@ -15,13 +15,9 @@ import {
   WebContentsView,
   type WebFrameMain,
 } from 'electron';
-import type { Chord, FramedChord, PageKey } from '../bridge.js';
 import { BROWSER } from '../channels.js';
 import { devToolsChord, newWindowChord, toggleDevTools } from '../projectWindows.js';
-import { tabCommandOf } from '../tabKeys.js';
-import { chordOf, sameChord } from './chords.js';
 import type { Executor, Reporter } from './connection.js';
-import { forwardFramed } from './framedKeys.js';
 import { Driven } from './driven.js';
 import { HeapCaptures } from './heaps.js';
 import { readKey } from './keychain.js';
@@ -61,6 +57,7 @@ export const liveLimit = (): number => Math.max(4, Math.floor(totalmem() / 2 ** 
 export type HostActs = {
   readonly newWindow: (from: BrowserWindow) => void;
   readonly reveal: (popup: BaseWindow) => void;
+  readonly pressed: (window: BrowserWindow, page: string, input: Input) => boolean;
 };
 
 type Service = { readonly view: WebContentsView; readonly window: BaseWindow };
@@ -88,8 +85,6 @@ export class BrowserHost implements Executor {
   private readonly heaps = new HeapCaptures(this.strains);
   private probing: ReturnType<typeof setInterval> | null = null;
   private readonly services = new Map<string, Service>();
-  private readonly chords = new Map<WebContents, readonly Chord[]>();
-  private readonly framed = new Map<WebContents, readonly FramedChord[]>();
   private readonly reported = new WeakMap<HeldPage, number>();
   private readonly observers: (() => void)[] = [];
   private locals = 0;
@@ -131,18 +126,6 @@ export class BrowserHost implements Executor {
 
   observe(listener: () => void): void {
     this.observers.push(listener);
-  }
-
-  keys(owner: WebContents, chords: readonly Chord[], framed: readonly FramedChord[]): void {
-    if (!this.chords.has(owner)) {
-      owner.once('destroyed', () => {
-        this.chords.delete(owner);
-        this.framed.delete(owner);
-      });
-      forwardFramed(owner, () => this.framed.get(owner) ?? []);
-    }
-    this.chords.set(owner, chords);
-    this.framed.set(owner, framed);
   }
 
   downloaded(contents: WebContents, download: Extract<HostEvent, { readonly kind: 'download' }>['download']): void {
@@ -649,16 +632,12 @@ export class BrowserHost implements Executor {
       this.acts.newWindow(window);
       return;
     }
-    if (devToolsChord(input)) {
+    if (devToolsChord(input, mac)) {
       event.preventDefault();
       toggleDevTools(window);
       return;
     }
-    const chord = chordOf(input);
-    const published = this.chords.get(window.webContents) ?? [];
-    if (page.id === null || (tabCommandOf(input, mac) === null && !published.some((held) => sameChord(held, chord)))) return;
-    event.preventDefault();
-    window.webContents.send(BROWSER.key, { page: page.id, chord, frame: null } satisfies PageKey);
+    if (page.id !== null && this.acts.pressed(window, page.id, input)) event.preventDefault();
   }
 
   private trim(arrived: HeldPage): void {

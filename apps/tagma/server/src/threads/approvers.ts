@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, FiberSet } from 'effect';
+import { Cause, Effect, Exit, FiberSet, Stream } from 'effect';
 import { eq, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { AgentHarness } from '@runlith/agent/thread/AgentHarness';
@@ -25,6 +25,10 @@ import type { ThreadLookup } from './contract/service/reads.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { among } from '../platform/store/rows.js';
 import { approves as approvesKey } from './contract/wire/settings.js';
+import type { PluginQuestions } from './harness/pluginQuestions.js';
+import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
+import { PLUGIN_BINDING } from './contract/wire/pluginEndings.js';
+import type { ThreadSummary } from './list/summary.js';
 
 type ApproversPort = NonNullable<ThreadHost['approvers']>;
 
@@ -56,8 +60,12 @@ export const readApproves = Effect.fnUntraced(function* (
   return { own: null, effective: yield* settings.value(approvesKey, projectId, unit), setAt: null, origin: 'setting' } as const;
 });
 
-export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) {
+export const followRoutes = Effect.fnUntraced(function* (
+  harness: AgentHarness,
+  owners: { readonly lookup: ThreadLookup['Service']; readonly followAsking: (listener: (plugin: string) => void) => () => void },
+) {
   const changes = yield* SettingChanges;
+  const enabled = yield* EnabledPlugins;
   const records = yield* ThreadRecords;
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
@@ -115,6 +123,26 @@ export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) 
     ),
   );
   yield* Effect.addFinalizer(() => Effect.sync(unshelve));
+  const rerouteBound = Effect.fn('threads.reroutePluginQuestions')(function* (bound: (thread: ThreadSummary) => boolean) {
+    const open = openQuestions();
+    const standing = yield* units.read((unit) => unit.run(db.select({ id: open.id }).from(open)));
+    for (const { id } of standing) {
+      const thread = yield* owners.lookup.summary(id);
+      if (thread !== undefined && bound(thread)) yield* harness.runs.questions().reroute(id);
+    }
+  });
+  const unrouted = (cause: Cause.Cause<unknown>) => Effect.logWarning('a plugin change left questions on their former route', { cause });
+  const unask = owners.followAsking((plugin) =>
+    runFork(rerouteBound((thread) => thread.bindings[PLUGIN_BINDING] === plugin).pipe(Effect.catchCause(unrouted))),
+  );
+  yield* Effect.addFinalizer(() => Effect.sync(unask));
+  yield* Effect.forkScoped(
+    Stream.runForEach(enabled.changes, (projectId) =>
+      rerouteBound(
+        (thread) => thread.bindings[PLUGIN_BINDING] !== undefined && (projectId === null || thread.projectId === projectId),
+      ).pipe(Effect.catchCause(unrouted)),
+    ),
+  );
 });
 
 export type ApprovalDelivery = (
@@ -160,7 +188,7 @@ const noticeText = (notice: ApprovalNotice): string =>
 
 export type ApproverStanding = {
   readonly approver: string | null;
-  readonly why: Exclude<ApproverWhy, 'parent-owns'>;
+  readonly why: Exclude<ApproverWhy, 'parent-owns' | 'owner'>;
   readonly grant: ReadonlySet<string>;
 };
 
@@ -193,6 +221,7 @@ export function threadApprovers(
   mandate: ThreadMandate['Service'],
   settings: Settings['Service'],
   delivery: () => ApprovalDelivery | null,
+  plugins: PluginQuestions,
 ): ApproversPort {
   const parentOf = Effect.fnUntraced(function* (threadId: string) {
     const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL);
@@ -201,13 +230,20 @@ export function threadApprovers(
       ? ({ approver: null, why: 'no-parent' } as const)
       : ({ approver: parent.id, why: 'parent-owns' } as const);
   });
-  const route: ApproversPort['route'] = (threadId, asked) =>
+  const routed = (threadId: string, asked: Parameters<ApproversPort['route']>[1]) =>
     asked.length > 0 && asked.every((one) => one.parent === true)
       ? parentOf(threadId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })))
       : Effect.map(standingOf(threadId), ({ approver, why, grant }): ApproverRoute => {
           if (approver === null) return { approver: null, why };
           return grantCovers(grant, asked) ? { approver, why } : { approver: null, why: 'no-grant' };
         }).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+  const route: ApproversPort['route'] = (threadId, asked, questionId) =>
+    asked.length === 0
+      ? routed(threadId, asked)
+      : plugins.owner(threadId, questionId).pipe(
+          Effect.mapError((cause) => new ThreadCallBroke({ cause })),
+          Effect.flatMap((approver) => (approver === null ? routed(threadId, asked) : Effect.succeed({ approver, why: 'owner' } as const))),
+        );
   return {
     route,
     grantOf: Effect.fnUntraced(
@@ -218,6 +254,7 @@ export function threadApprovers(
       Effect.mapError((cause) => new ThreadCallBroke({ cause })),
     ),
     notify: (approver, notice) => {
+      if (plugins.ask(approver, notice)) return Effect.void;
       const deliver = delivery();
       if (deliver === null) return Effect.void;
       return Effect.exit(

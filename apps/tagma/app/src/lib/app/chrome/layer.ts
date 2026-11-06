@@ -20,8 +20,9 @@ import { RailPins } from './RailPins.svelte.js';
 import { ServerFaults } from './ServerFaults.svelte.js';
 import { Standing } from './Standing.svelte.js';
 import { WireState } from './WireState.svelte.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
-import { ActionRegistry } from './ActionRegistry.js';
+import { ActionRunner } from '$lib/app/keys/ports.js';
+import { ActionCatalog, Actions } from '$lib/features/workspace/action.js';
+import { ActionRegistry } from './ActionRegistry.svelte.js';
 import { actions } from './actions.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 import { MenuParts, MenuSignal, TopBarParts, WindowParts } from '$lib/shared/window/parts.js';
@@ -32,8 +33,14 @@ export const FrameLayer = Layer.mergeAll(
   MenuParts,
   Layer.fallback(MenuSignal, () => ({ waiting: false })),
   ActionRegistry,
+  Layer.provide(ActionRunner, function* () {
+    return yield* ActionRegistry;
+  }),
+  Layer.provide(ActionCatalog, function* () {
+    return yield* ActionRegistry;
+  }),
   ColumnRegistry,
-  PaletteActions.contribute('chrome', { id: 'chrome', actions }),
+  Actions.contribute('chrome', { id: 'chrome', area: 'Window', actions }),
   Bar,
   Frame,
   WireState,

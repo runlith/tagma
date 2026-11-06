@@ -12,12 +12,16 @@
   import SquareArrowOutUpRight from '@lucide/svelte/icons/square-arrow-out-up-right';
   import TextSelect from '@lucide/svelte/icons/text-select';
   import X from '@lucide/svelte/icons/x';
+  import type { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
-  import type { TerminalKeymap } from './Keymap.js';
+  import { actionOf } from './actions.js';
+  import type { TerminalAct } from './Keymap.js';
   import type { TerminalPane } from './Pane.svelte.js';
   import type { TerminalTab } from './Tab.svelte.js';
 
-  let { tab, keymap, detach }: { tab: TerminalTab; keymap: TerminalKeymap; detach?: (pane: string) => void } = $props();
+  let { tab, keymap, detach }: { tab: TerminalTab; keymap: Keymap; detach?: (pane: string) => void } = $props();
+
+  const keysOf = (tag: Exclude<TerminalAct['_tag'], 'select-index'>): string | null => keymap.spell(actionOf({ _tag: tag } as TerminalAct));
 
   const menu = $derived(tab.menu);
   const pane = $derived(menu === null ? null : (tab.panes.get(menu.pane) ?? null));
@@ -54,7 +58,7 @@
       <DropdownMenu.Item
         data-menu-split-right
         icon={PanelRightClose}
-        keys={keymap.chordLabel('split-right')}
+        keys={keysOf('split-right')}
         onSelect={() => run((pane) => void tab.split(pane, 'row'))}
       >
         Split Terminal Right
@@ -62,7 +66,7 @@
       <DropdownMenu.Item
         data-menu-split-down
         icon={PanelBottomClose}
-        keys={keymap.chordLabel('split-down')}
+        keys={keysOf('split-down')}
         onSelect={() => run((pane) => void tab.split(pane, 'column'))}
       >
         Split Terminal Down
@@ -75,7 +79,7 @@
       <DropdownMenu.Item
         data-menu-set-title
         icon={Pencil}
-        keys={keymap.chordLabel('set-title')}
+        keys={keysOf('set-title')}
         onSelect={() => run((pane) => (tab.renaming = pane.id))}
       >
         Set Title…
@@ -84,7 +88,7 @@
         <DropdownMenu.Item
           data-menu-clear-title
           icon={X}
-          keys={keymap.chordLabel('clear-title')}
+          keys={keysOf('clear-title')}
           onSelect={() => run((pane) => tab.retitle(pane.id, null))}
         >
           Clear Pane Title
@@ -95,7 +99,7 @@
           Take Over from {pane.holder.label}
         </DropdownMenu.Item>
       {/if}
-      <DropdownMenu.Item data-menu-clear icon={Eraser} keys={keymap.chordLabel('clear')} onSelect={() => run((pane) => pane.clear())}>
+      <DropdownMenu.Item data-menu-clear icon={Eraser} keys={keysOf('clear')} onSelect={() => run((pane) => pane.clear())}>
         Clear Screen
       </DropdownMenu.Item>
 
@@ -104,7 +108,7 @@
       <DropdownMenu.Item
         data-menu-equalise
         icon={PanelsTopLeft}
-        keys={keymap.chordLabel('equalize')}
+        keys={keysOf('equalize')}
         disabled={!many || tab.expanded !== null}
         onSelect={() => run(() => tab.equalise())}
       >
@@ -113,7 +117,7 @@
       <DropdownMenu.Item
         data-menu-expand
         icon={expanded ? Minimize2 : Maximize2}
-        keys={keymap.chordLabel('expand-pane')}
+        keys={keysOf('expand-pane')}
         disabled={!many}
         onSelect={() => run((pane) => tab.expand(pane.id))}
       >
@@ -122,21 +126,16 @@
 
       <DropdownMenu.Separator />
 
-      <DropdownMenu.Item data-menu-copy icon={Copy} keys={keymap.chordLabel('copy')} onSelect={() => run((pane) => void pane.copy())}>
+      <DropdownMenu.Item data-menu-copy icon={Copy} keys={keysOf('copy')} onSelect={() => run((pane) => void pane.copy())}>
         Copy
       </DropdownMenu.Item>
-      <DropdownMenu.Item
-        data-menu-paste
-        icon={Clipboard}
-        keys={keymap.chordLabel('paste')}
-        onSelect={() => run((pane) => void pane.paste())}
-      >
+      <DropdownMenu.Item data-menu-paste icon={Clipboard} keys={keysOf('paste')} onSelect={() => run((pane) => void pane.paste())}>
         Paste
       </DropdownMenu.Item>
       <DropdownMenu.Item
         data-menu-select-all
         icon={TextSelect}
-        keys={keymap.chordLabel('select-all')}
+        keys={keysOf('select-all')}
         onSelect={() => run((pane) => pane.selectAll())}
       >
         Select All
@@ -155,7 +154,7 @@
         data-menu-close
         variant="destructive"
         icon={X}
-        keys={keymap.chordLabel('close-pane')}
+        keys={keysOf('close-pane')}
         onSelect={() => run((pane) => tab.close(pane.id))}
       >
         Close Pane

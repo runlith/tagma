@@ -21,7 +21,7 @@ import { ThreadWorkRepo } from './ThreadWorkRepo.js';
 import { TranslationLayer } from './translation/layer.js';
 import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { Columns } from '$lib/features/workspace/column.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
@@ -39,7 +39,7 @@ export const GraphLayer = Layer.mergeAll(
   SettingSections.contribute('graph', ...sections),
   LinkKinds.contribute('graph', ...links),
   LinkMenuItems.contribute('graph', ...items),
-  PaletteActions.contribute('graph', { id: 'graph', actions }),
+  Actions.contribute('graph', { id: 'graph', area: 'Knowledge', actions }),
   ThreadWorkRepo,
   ThreadWork,
   Sidebar,

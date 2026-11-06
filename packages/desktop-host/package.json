@@ -9,9 +9,9 @@
       "types": "./src/ExternalLinks.ts",
       "default": "./src/ExternalLinks.ts"
     },
-    "./QuickHideShortcut": {
-      "types": "./src/QuickHideShortcut.ts",
-      "default": "./src/QuickHideShortcut.ts"
+    "./GlobalShortcuts": {
+      "types": "./src/GlobalShortcuts.ts",
+      "default": "./src/GlobalShortcuts.ts"
     },
     "./WindowPlacement": {
       "types": "./src/WindowPlacement.ts",

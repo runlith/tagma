@@ -8,8 +8,8 @@
   import TerminalPaneHost from './PaneHost.svelte';
   import TerminalPaneTitle, { PANE_TITLE_HEIGHT_PX, sameRect, type TitleRect } from './PaneTitle.svelte';
   import { hasPane, isMoveNoOp, nearestZone, sideFlex, sideHidden, zoneRect, type DropZone, type PaneNode } from './paneLayout.js';
+  import type { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import type { TerminalAppearance } from '../appearance/Settings.svelte.js';
-  import type { TerminalKeymap } from './Keymap.js';
   import type { TerminalPane } from './Pane.svelte.js';
   import type { TerminalTab } from './Tab.svelte.js';
   import type { Snippet } from 'svelte';
@@ -23,7 +23,7 @@
     detach,
   }: {
     tab: TerminalTab;
-    keymap: TerminalKeymap;
+    keymap: Keymap;
     appearance: TerminalAppearance;
     isMac: boolean;
     dictation?: Snippet<[TerminalPane, HTMLElement]>;

@@ -83,7 +83,7 @@
     </div>
   {:else}
     <Callout
-      tone={notice.kind === 'offer' ? 'plain' : 'error'}
+      tone={notice.kind === 'offer' || notice.kind === 'said' ? 'plain' : 'error'}
       {title}
       {note}
       onDismiss={dismiss}

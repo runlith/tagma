@@ -286,11 +286,6 @@
       "browser": "./src/lib/features/speech/check.ts",
       "default": "./src/lib/features/speech/check.ts"
     },
-    "./speech/chord": {
-      "types": "./src/lib/features/speech/dictation/chord.ts",
-      "browser": "./src/lib/features/speech/dictation/chord.ts",
-      "default": "./src/lib/features/speech/dictation/chord.ts"
-    },
     "./speech/Card.svelte": {
       "types": "./src/lib/features/speech/Card.svelte",
       "browser": "./src/lib/features/speech/Card.svelte",

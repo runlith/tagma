@@ -16,7 +16,7 @@ import { TerminalTabs } from './terminal/Tabs.svelte.js';
 import { ExecutionsRepo } from './Repo.js';
 import { isLive } from './processes/lines.js';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { Panes } from '$lib/shared/panes/pane.js';
 import { actions } from './actions.js';
 import { panes } from './panes.js';
@@ -25,7 +25,7 @@ import { sections } from './settings.js';
 export const TerminalsLayer = Layer.mergeAll(
   Panes.contribute('executions', ...panes),
   SettingSections.contribute('executions', ...sections),
-  PaletteActions.contribute('executions', { id: 'executions', actions }),
+  Actions.contribute('executions', { id: 'executions', area: 'Terminals', actions }),
   ExecutionsRepo,
   SettingsRepo,
   TerminalAppearance,

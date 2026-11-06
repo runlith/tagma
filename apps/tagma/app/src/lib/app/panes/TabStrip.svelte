@@ -6,7 +6,6 @@
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
   import { Keymap } from '../keys/Keymap.svelte.js';
-  import { areaChord } from './areaChord.js';
   import NewTab from './NewTab.svelte';
   import { SidePanes } from './SidePanes.svelte.js';
 
@@ -15,7 +14,7 @@
   const panes = SidePanes.use();
   const opening = Opening.use();
   const keymap = Keymap.use();
-  const chord = keymap.spell(areaChord(keymap));
+  const chord = $derived(keymap.spell('area.toggle'));
 
   const active = $derived(panes.active);
   const expanding = $derived.by((): readonly { readonly tab: SidePane; readonly full: LinkStep }[] => {

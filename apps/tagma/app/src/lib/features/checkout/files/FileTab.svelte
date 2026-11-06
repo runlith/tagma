@@ -168,14 +168,14 @@
         >
       {/if}
       {#if onPreview !== undefined && isPreviewable(tab.path)}
-        <Tooltip text="Open preview" keys={keymap.spell(keymap.mod('KeyV', { shift: true }))}>
+        <Tooltip text="Open preview" keys={keymap.spellText('Mod+Shift+V')}>
           <button type="button" class={ICON} aria-label="Open preview" onclick={onPreview}>
             <Eye class="size-3.5" />
           </button>
         </Tooltip>
       {/if}
       <OpenIn file={outsideFile} line={focusLine} />
-      <Tooltip text="Wrap lines" keys={keymap.spell({ ...keymap.bare('KeyZ'), alt: true })}>
+      <Tooltip text="Wrap lines" keys={keymap.spellText('Alt+Z')}>
         <button
           type="button"
           class={cn(ICON, wrap && 'bg-selected text-foreground')}

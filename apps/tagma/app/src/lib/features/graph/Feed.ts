@@ -7,6 +7,7 @@ import type { QueryClient } from '@tanstack/query-core';
 import { createEventEmitter, type EventEmitter } from '@runlith/utils/event';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { Live, type GraphChange, type GraphFrame, type LiveConnection } from '$lib/wire/Live.js';
+import { refusalOf } from '$lib/wire/refusal.js';
 import { BlocksRepo } from './BlocksRepo.js';
 import { JournalRepo } from './JournalRepo.js';
 import { SessionsRepo } from './SessionsRepo.js';
@@ -59,7 +60,9 @@ export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph'
         }),
       (frame) => this.take(frame),
       (reason) => {
-        if (reason.kind === 'subscription') failure.report(new Error(reason.message));
+        if (reason.kind !== 'subscription') return;
+        const { code, message, unblock, words, right } = reason;
+        failure.report(code === undefined ? new Error(message) : refusalOf({ code, reason: message, unblock, words, right }));
       },
     );
     scope.defer(() => held.unsubscribe());

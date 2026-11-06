@@ -6,26 +6,21 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { CHAT, SurfaceRegistry } from '$lib/features/workspace/surface.js';
   import { ProjectSwitchWatch } from '$lib/features/projects/switchRecord.js';
-  import { settingsHref } from '$lib/features/workspace/address.js';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
   import { TileRung } from '$lib/features/workspace/TileRung.js';
-  import { Topics } from '$lib/shared/threads/Topics.svelte.js';
-  import DesktopTabKeys from '$lib/features/checkout/files/DesktopTabKeys.svelte';
+  import TabKeys from '$lib/features/checkout/files/TabKeys.svelte';
   import DictationKeys from '$lib/features/speech/dictation/Keys.svelte';
   import PointView from '@runlith/layer/svelte/PointView.svelte';
   import { WindowParts } from '$lib/shared/window/parts.js';
   import ShellPlugins from '$lib/features/plugin-views/ShellPlugins.svelte';
-  import DictationArm from '$lib/features/speech/dictation/Arm.svelte';
   import TerminalCloses from '$lib/features/executions/terminal/CloseDialogs.svelte';
   import TerminalPanel from '$lib/features/executions/terminal/Panel.svelte';
   import RightArea from '../panes/RightArea.svelte';
   import FrameFollow from './FrameFollow.svelte';
   import { AreaFrame } from '../panes/AreaFrame.svelte.js';
-  import { areaChord } from '../panes/areaChord.js';
   import { SidePanes } from '../panes/SidePanes.svelte.js';
-  import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
-  import { Keymap } from '../keys/Keymap.svelte.js';
+  import { ActionRegistry } from './ActionRegistry.svelte.js';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { ColumnRegistry } from './ColumnRegistry.js';
   import { standingKey } from '$lib/features/workspace/standing.js';
@@ -58,10 +53,8 @@
 
   const panes = SidePanes.use();
   const away = (): void => panes.focusOn(null);
-  const seats = ThreadSeats.use();
   const area = AreaFrame.use();
-  const topics = Topics.use();
-  const keymap = Keymap.use();
+  const actionRegistry = ActionRegistry.use();
   const parts = WindowParts.use();
   const projectAim = ProjectRung.Source.use();
   const projectKey = $derived(router.params.project ? (projectAim()?.projectId ?? null) : null);
@@ -116,50 +109,7 @@
   });
   const frame = $derived(framed?.frame === undefined || !framed.open ? null : framed.frame());
 
-  const togglePalette = (group?: 'files'): true => {
-    if (overlay.isOpen(Palette)) overlay.close(Palette);
-    else overlay.open(Palette, group === undefined ? {} : { group });
-    return true;
-  };
-
-  $effect(() =>
-    keymap.bind([
-      { chord: keymap.mod('KeyK'), run: () => togglePalette() },
-      { chord: keymap.mod('KeyP'), run: () => projectKey !== null && togglePalette('files') },
-      {
-        chord: keymap.mod('Backslash'),
-        run: () => {
-          if (framed === null) return false;
-          framed.toggle();
-          return true;
-        },
-      },
-      {
-        chord: areaChord(keymap),
-        run: () => {
-          if (projectKey === null || panes.panes.length === 0) return false;
-          panes.showArea(!panes.showing);
-          return true;
-        },
-      },
-      {
-        chord: keymap.mod('KeyI'),
-        run: () => {
-          const topic = topics.current;
-          if (projectKey === null || topic === null) return false;
-          seats.ask(topic);
-          return true;
-        },
-      },
-      {
-        chord: keymap.mod('Comma'),
-        run: () => {
-          void router.goto(settingsHref(router));
-          return true;
-        },
-      },
-    ]),
-  );
+  onDestroy(actionRegistry.attach(app));
 </script>
 
 {#snippet dock()}<Dock />{/snippet}
@@ -168,14 +118,13 @@
 <PointView point={parts} props={{}} />
 <ShellPlugins />
 <WarmHolds />
-<DictationArm />
 {#if host.isDesktop && host.os === 'macos'}
   <ProjectKeys cycling={() => overlay.isOpen(Palette) && overlay.close(Palette)} />
   <HistorySwipe />
 {/if}
 {#if graphKey !== null}
   {#key graphKey}
-    <DesktopTabKeys />
+    <TabKeys />
   {/key}
 {/if}
 

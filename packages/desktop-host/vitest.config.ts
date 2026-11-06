@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-const isolatedUnit = ['src/ExternalLinks.test.ts', 'src/QuickHideShortcut.test.ts'];
+const isolatedUnit = ['src/ExternalLinks.test.ts', 'src/GlobalShortcuts.test.ts'];
 
 export default defineConfig({
   test: {

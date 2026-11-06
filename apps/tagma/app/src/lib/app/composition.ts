@@ -85,6 +85,10 @@ import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { DesktopBrowser } from '$lib/shared/desktop/DesktopBrowser.js';
 import { DesktopDictation } from '$lib/shared/desktop/DesktopDictation.js';
 import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
+import { DesktopKeys } from '$lib/shared/desktop/DesktopKeys.js';
+import { ShellKeys } from '$lib/app/keys/ports.js';
+import { browserKept, DesktopKept } from '$lib/features/shortcuts/kept.svelte.js';
+import { ShortcutsLayer } from '$lib/features/shortcuts/layer.js';
 import { DesktopSurface } from '$lib/shared/desktop/DesktopSurface.js';
 import { DesktopSwipe } from '$lib/shared/desktop/DesktopSwipe.js';
 import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
@@ -156,6 +160,16 @@ export function appLayers(desktop: DesktopApi | undefined) {
       bridged((bridge) => bridge.windows),
     ),
     Layer.when(
+      () => desktop?.keys !== undefined,
+      Layer.provide(
+        DesktopKeys,
+        bridged((bridge) => {
+          if (bridge.keys === undefined) throw new Error('This desktop shell publishes no keys');
+          return bridge.keys;
+        }),
+      ),
+    ),
+    Layer.when(
       () => desktop?.updates !== undefined,
       Layer.provide(
         DesktopUpdates,
@@ -224,6 +238,11 @@ export function appLayers(desktop: DesktopApi | undefined) {
     PanesLayer,
     OpeningLayer,
     Keymap,
+    ShortcutsLayer,
+    Layer.provide(ShellKeys, function* () {
+      const host = yield* Host;
+      return host.isDesktop ? new DesktopKept(yield* DesktopKeys.optional(), host.apple) : browserKept(host);
+    }),
     BrowserLayer,
     Screen,
     Layer.provide(ThreadOnScreen, function* () {

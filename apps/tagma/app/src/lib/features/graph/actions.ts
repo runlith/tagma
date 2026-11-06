@@ -3,7 +3,7 @@ import X from '@lucide/svelte/icons/x';
 import { Router } from '@runlith/layer/Router';
 import { isBlockName } from '@tagma/server/graph/contract/wire/references';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
-import type { ActionEnv, PaletteActionList } from '$lib/features/workspace/action.js';
+import type { ActionEnv, ActionList } from '$lib/features/workspace/action.js';
 import { currentLanguage, currentPlace, languageLensHref } from '$lib/features/workspace/address.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { Translations } from './translation/Translations.svelte.js';
@@ -13,7 +13,7 @@ function blockShown(env: ActionEnv): string | null {
   return env.surface === env.resolve(SurfaceRegistry).root && place !== null && isBlockName(place) ? place : null;
 }
 
-export const actions: PaletteActionList = [
+export const actions: ActionList = [
   {
     id: 'block.translate',
     order: 40,

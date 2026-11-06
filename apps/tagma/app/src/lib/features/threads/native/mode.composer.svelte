@@ -44,7 +44,7 @@
         type: 'button',
         label: current.label,
         title: modeHint(current, views.authority.notes),
-        hints: [{ keys: keymap.spell({ ...keymap.bare('Tab'), shift: true }), words: 'cycles it' }],
+        hints: [{ keys: keymap.spellText('Shift+Tab'), words: 'cycles it' }],
         destructive: current.elevated === true,
         leading: currentIcon,
         onclick: () => void writes.perform(cycle.run()),

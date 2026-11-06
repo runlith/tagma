@@ -436,10 +436,16 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     holding.delete(prepared.token);
     shelf.forget(held.root);
     shelf.forget(root);
-    yield* recorded((current) => [
-      ...current.filter((entry) => entry.id !== id),
-      { id, source: held.fetched, root, origin: held.origin ?? undefined, declared: held.declared ?? undefined },
-    ]);
+    const install: PluginInstall = {
+      id,
+      source: held.fetched,
+      root,
+      origin: held.origin ?? undefined,
+      declared: held.declared ?? undefined,
+    };
+    yield* recorded((current) =>
+      current.some((entry) => entry.id === id) ? current.map((entry) => (entry.id === id ? install : entry)) : [...current, install],
+    );
     if (change !== 'kept') yield* switched(projectId, id, change);
     if (replaces) yield* touched(id);
     yield* changed(null);

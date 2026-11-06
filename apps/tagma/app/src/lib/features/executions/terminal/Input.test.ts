@@ -4,7 +4,8 @@ import type { LiveConnection, LiveStatus } from '$lib/wire/Live.js';
 import { commitComposition, newComposition } from './engineGuards.js';
 import { HOST_INPUT_ADMISSION_BYTES, IME_CHORD_ABANDON_MS, IME_NEWLINE_FALLBACK_MS, TerminalInput } from './Input.js';
 import type { Engine } from './terminalEngine.js';
-import { TerminalKeymap, type TerminalAct } from './Keymap.js';
+import type { TerminalAct } from './Keymap.js';
+import { terminalKeymap } from './testing/keys.svelte.js';
 import type { Writer } from './Output.js';
 import {
   DROP,
@@ -224,7 +225,7 @@ const setup = (
 ) => {
   const term = terminalOver();
   const engine = { terminal: term.terminal } as unknown as Engine;
-  const keymap = new TerminalKeymap(new Host('tab', options.os ?? 'linux'));
+  const keymap = terminalKeymap(new Host('tab', options.os ?? 'linux'));
   const clipboard = clipboardOver();
   const clock = clockOver();
   const problems: string[] = [];

@@ -1,8 +1,8 @@
 import SquareArrowOutUpRight from '@lucide/svelte/icons/square-arrow-out-up-right';
-import type { PaletteActionList } from '$lib/features/workspace/action.js';
+import type { ActionList } from '$lib/features/workspace/action.js';
 import { Outside } from './files/Outside.svelte.js';
 
-export const actions: PaletteActionList = [
+export const actions: ActionList = [
   {
     id: 'file.openIn',
     order: 50,

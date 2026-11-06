@@ -1,5 +1,4 @@
 import { installExternalLinks } from '@runlith/desktop-host/ExternalLinks';
-import { type ConcealableWindow, QuickHideShortcut } from '@runlith/desktop-host/QuickHideShortcut';
 import { WindowPlacement } from '@runlith/desktop-host/WindowPlacement';
 import { DEFAULT_WINDOW_BEHAVIOR_STATE, type WindowBehaviorState } from '@runlith/window-behavior/contract/state';
 import { ElectronWindowBehaviorHost } from '@runlith/window-behavior/host-electron/ElectronWindowBehaviorHost';
@@ -10,24 +9,27 @@ import {
   type BrowserWindowConstructorOptions,
   type Input,
   type MessageBoxOptions,
+  type WebContents,
   app,
   dialog,
   ipcMain,
   screen,
 } from 'electron';
-import type { SurfaceKind, SurfaceRefusal } from './bridge.js';
-import { DEV_SURFACE_ARGUMENT, WINDOWS } from './channels.js';
+import type { KeyPress, SurfaceKind, SurfaceRefusal } from './bridge.js';
+import { DEV_SURFACE_ARGUMENT, KEYS, TABS, WINDOWS } from './channels.js';
 import { type DevPort, type Fronts, rebased } from './fronts.js';
+import type { PressTarget } from './globals.js';
+import { chordOfInput } from './inputChord.js';
+import { DEVTOOLS_CHORDS, NEW_WINDOW_CHORDS } from './kept.js';
+import type { KeyFollower } from './keys.js';
 import type { SurfaceLoader } from './SurfaceLoader.js';
 import type { Swipes } from './swipe.js';
-import { installTabKeys } from './tabKeys.js';
 import { revealedUrl, surfacePage } from './viewWindowUrl.js';
 import { type LoaderState, waitingPageUrl, windowAct } from './waitingPage.js';
 
 const DEFAULT_SIZE = { width: 1280, height: 860 };
 const MINIMUM_SIZE = { width: 960, height: 640 };
 const CASCADE = 24;
-const QUICK_HIDE = 'CommandOrControl+Shift+L';
 const TABBING = 'projects';
 const INITIAL_STATE: WindowBehaviorState = { ...DEFAULT_WINDOW_BEHAVIOR_STATE, windowOpacity: 1, overlayBackgroundVisible: false };
 const ABORTED = -3;
@@ -43,6 +45,8 @@ type Held = {
   entering: boolean;
   leaving: { readonly reason: string | null } | null;
   unbadge: (() => void) | null;
+  keyed: boolean;
+  waiting: KeyPress | null;
 };
 
 const CLOSED: SurfaceRefusal = {
@@ -51,18 +55,14 @@ const CLOSED: SurfaceRefusal = {
   said: 'Tagma is not open in this window yet.',
 };
 
-export const newWindowChord = (input: Input, mac: boolean): boolean =>
-  input.type === 'keyDown' &&
-  !input.isAutoRepeat &&
-  !input.alt &&
-  !input.shift &&
-  (mac ? input.meta && !input.control : input.control && !input.meta) &&
-  input.key.toLowerCase() === 'n';
+export const newWindowChord = (input: Input, mac: boolean): boolean => {
+  const chord = input.type === 'keyDown' && !input.isAutoRepeat ? chordOfInput(input, mac) : null;
+  return chord !== null && NEW_WINDOW_CHORDS(mac).has(chord);
+};
 
-export class ProjectWindows {
+export class ProjectWindows implements PressTarget {
   private readonly held: Held[] = [];
   private said: LoaderState | 'open' | null = null;
-  private readonly quickHide: QuickHideShortcut;
 
   constructor(
     private readonly fronts: Fronts,
@@ -72,15 +72,32 @@ export class ProjectWindows {
     private readonly swipes: Swipes | null,
     private readonly report: () => void,
     private readonly dev: DevPort | null,
-  ) {
-    const every: ConcealableWindow = {
-      isShown: () => this.shown(),
-      conceal: () => {
-        for (const { behavior } of this.held) behavior.conceal();
-      },
-      reveal: () => this.revealAll(),
-    };
-    this.quickHide = new QuickHideShortcut({ accelerator: QUICK_HIDE, windowBehavior: every });
+    private readonly keys: KeyFollower,
+  ) {}
+
+  toggleHidden(): void {
+    if (!this.shown()) {
+      this.revealAll();
+      return;
+    }
+    for (const { behavior } of this.held) behavior.conceal();
+  }
+
+  deliver(press: KeyPress): void {
+    this.reveal();
+    const target = this.held.at(-1);
+    if (target === undefined) return;
+    if (target.keyed) target.window.webContents.send(KEYS.press, press);
+    else target.waiting = press;
+  }
+
+  published(contents: WebContents): void {
+    const target = this.held.find((one) => one.window.webContents === contents);
+    if (target === undefined) return;
+    target.keyed = true;
+    if (target.waiting === null) return;
+    contents.send(KEYS.press, target.waiting);
+    target.waiting = null;
   }
 
   install(): void {
@@ -93,11 +110,9 @@ export class ProjectWindows {
       const made = this.create(this.held.at(-1)?.address ?? this.fronts.built);
       from?.addTabbedWindow(made);
     });
-    this.quickHide.register();
-  }
-
-  dispose(): void {
-    this.quickHide.dispose();
+    ipcMain.on(TABS.closeWindow, (event) => {
+      if (this.fronts.trusts(event.senderFrame?.url)) BrowserWindow.fromWebContents(event.sender)?.close();
+    });
   }
 
   focused(): BrowserWindow | undefined {
@@ -194,12 +209,14 @@ export class ProjectWindows {
       entering: false,
       leaving: null,
       unbadge: null,
+      keyed: false,
+      waiting: null,
     };
     this.held.unshift(held);
     const untrack = placement?.track(window);
     installExternalLinks({ appOrigins: () => this.fronts.origins(), page: surfacePage, webContents: window.webContents });
     installDevTools(window);
-    installTabKeys(window);
+    this.keys.follow(window.webContents);
     this.swipes?.follow(window);
     this.follow(held);
     window.once('ready-to-show', () => {
@@ -255,6 +272,7 @@ export class ProjectWindows {
 
   private wait(held: Held, page: string): void {
     held.onSurface = false;
+    held.waiting = null;
     held.window.loadURL(page).catch(() => undefined);
   }
 
@@ -361,6 +379,7 @@ export class ProjectWindows {
     });
     contents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame || details.isSameDocument) return;
+      held.keyed = false;
       if (this.fronts.fromDev(details.url)) held.entering = false;
       else if (held.front === 'dev') this.left(held);
       if (!this.fronts.trusts(details.url)) return;
@@ -379,10 +398,9 @@ export class ProjectWindows {
   }
 }
 
-export const devToolsChord = (input: Input): boolean => {
-  if (input.type !== 'keyDown') return false;
-  const key = input.key.toLowerCase();
-  return input.key === 'F12' || (key === 'i' && input.shift && (input.control || input.meta)) || (key === 'i' && input.alt && input.meta);
+export const devToolsChord = (input: Input, mac: boolean): boolean => {
+  const chord = input.type === 'keyDown' ? chordOfInput(input, mac) : null;
+  return chord !== null && DEVTOOLS_CHORDS(mac).has(chord);
 };
 
 export const toggleDevTools = (window: BrowserWindow): void => {
@@ -392,7 +410,7 @@ export const toggleDevTools = (window: BrowserWindow): void => {
 
 function installDevTools(window: BrowserWindow): void {
   window.webContents.on('before-input-event', (event, input) => {
-    if (!devToolsChord(input)) return;
+    if (!devToolsChord(input, process.platform === 'darwin')) return;
     event.preventDefault();
     toggleDevTools(window);
   });

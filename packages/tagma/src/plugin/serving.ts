@@ -7,6 +7,7 @@ import { issueText } from './issues.js';
 import { modelsClient } from './models.js';
 import { type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
 import {
+  type AskedInput,
   type BuildStepInput,
   type EndingInput,
   handlerTools,
@@ -125,9 +126,13 @@ const handlersOf = (definition: PluginDefinition): ReadonlyMap<string, Handler> 
     handlers.set(handlerTools.build(name), async (input, ctx) => ({
       text: JSON.stringify(await step.run(input as unknown as BuildStepInput, ctx)),
     }));
-  const { onThreadEnded, onNotification } = definition;
+  for (const [name, declared] of Object.entries(definition.actions ?? {}))
+    handlers.set(handlerTools.action(name), async (_input, ctx) => answered(await declared.run(ctx)));
+  const { onThreadEnded, onThreadAsked, onNotification } = definition;
   if (onThreadEnded !== undefined)
     handlers.set(handlerTools.ended, async (input, ctx) => answered(await onThreadEnded(input as unknown as EndingInput, ctx)));
+  if (onThreadAsked !== undefined)
+    handlers.set(handlerTools.asked, async (input, ctx) => answered(await onThreadAsked(input as unknown as AskedInput, ctx)));
   if (onNotification !== undefined)
     handlers.set(handlerTools.notification, async (input, ctx) =>
       answered(await onNotification(input as unknown as NotificationInput, ctx)),

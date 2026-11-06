@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Host } from '@runlith/layer/Host';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { TerminalAppearance } from '../appearance/Settings.svelte.js';
   import { Terminals } from '../worktrees/Terminals.svelte.js';
   import type { WorktreeTerminals } from '../worktrees/WorktreeTerminals.svelte.js';
   import Dictated from './Dictated.svelte';
-  import { TerminalKeymap } from './Keymap.js';
   import type { TerminalPane } from './Pane.svelte.js';
   import TerminalPaneTree from './PaneTree.svelte';
   import type { TerminalTab } from './Tab.svelte.js';
@@ -13,7 +13,7 @@
   let { worktree, tabs, active }: { worktree: WorktreeTerminals | null; tabs: readonly TerminalTab[]; active: string | null } = $props();
 
   const terminals = Terminals.use();
-  const keymap = TerminalKeymap.use();
+  const keymap = Keymap.use();
   const appearance = TerminalAppearance.use();
   const isMac = Host.use().apple;
 

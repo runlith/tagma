@@ -1,10 +1,4 @@
-export type SpelledChord = {
-  readonly key: string;
-  readonly meta: boolean;
-  readonly ctrl: boolean;
-  readonly alt: boolean;
-  readonly shift: boolean;
-};
+import type { HostChord } from '@tagma/server/platform/contract/wire/chord';
 
 const PUNCTUATION: Readonly<Record<string, string>> = {
   BracketLeft: '[',
@@ -82,7 +76,7 @@ export function keyOfCode(code: string): string {
 export const spellKey = (code: string, isMac: boolean): string =>
   spellChord({ key: keyOfCode(code), meta: false, ctrl: false, alt: false, shift: false }, isMac);
 
-export function spellChord(chord: SpelledChord, isMac: boolean): string {
+export function spellChord(chord: HostChord, isMac: boolean): string {
   const order: readonly Modifier[] = isMac ? ['ctrl', 'alt', 'shift', 'meta'] : ['ctrl', 'meta', 'alt', 'shift'];
   const held = order.filter((modifier) => chord[modifier]).map((modifier) => spellModifier(modifier, isMac));
   const key = (isMac ? MAC_KEYS : OTHER_KEYS)[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key);

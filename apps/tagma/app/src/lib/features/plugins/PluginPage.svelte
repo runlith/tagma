@@ -19,6 +19,7 @@
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import Asked from '$lib/features/plugins/Asked.svelte';
   import Gives from '$lib/features/plugins/Gives.svelte';
+  import Keys from '$lib/features/plugins/Keys.svelte';
   import Threads from '$lib/features/plugins/Threads.svelte';
   import { type Here, processShown, stillWorking } from '$lib/features/plugins/here.js';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
@@ -216,6 +217,7 @@
       {#if threads.data !== undefined}<Threads threads={threads.data.threads} total={threads.data.total} home={project.name} />{/if}
     {/if}
 
+    <Keys plugin={row.id} />
     <Gives components={row.components} ignored={row.ignored} options={[]} />
   </div>
 

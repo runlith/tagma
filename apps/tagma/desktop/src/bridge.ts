@@ -1,12 +1,5 @@
 export type OperatingSystemKind = 'macos' | 'windows' | 'linux' | 'unknown';
 
-export type HeldKey = {
-  readonly code: string;
-  readonly alt: boolean;
-  readonly ctrl: boolean;
-  readonly meta: boolean;
-};
-
 export type GlobalState =
   | { readonly kind: 'off' }
   | { readonly kind: 'starting' }
@@ -21,7 +14,6 @@ export const PILL_PATH = '/_desktop/dictation';
 export const VIEW_WINDOW_PATH = '/_desktop/view/';
 
 export interface DesktopDictation {
-  arm(key: HeldKey | null): void;
   state(): Promise<GlobalState>;
   onState(listener: (state: GlobalState) => void): () => void;
   prompt(): void;
@@ -33,10 +25,7 @@ export interface DesktopDictation {
   show(shown: boolean): void;
 }
 
-export type TabCommand = 'close' | 'reopen';
-
 export interface DesktopTabs {
-  onCommand(listener: (command: TabCommand) => void): () => void;
   closeWindow(): void;
 }
 
@@ -80,18 +69,6 @@ export type BrowserIdentity = 'cleaned' | 'native';
 
 export type PageRect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 
-export type Chord = {
-  readonly code: string;
-  readonly meta: boolean;
-  readonly ctrl: boolean;
-  readonly alt: boolean;
-  readonly shift: boolean;
-};
-
-export type FramedChord = { readonly chord: Chord; readonly frame: string };
-
-export type PageKey = { readonly page: string | null; readonly chord: Chord; readonly frame: string | null };
-
 export type PageShown = { readonly page: string; readonly panel: string };
 
 export type PageFound = { readonly page: string; readonly matches: number; readonly active: number };
@@ -104,8 +81,6 @@ export interface DesktopBrowser {
   hide(shown: PageShown): void;
   freeze(shown: PageShown, frozen: boolean): void;
   onElsewhere(listener: (lost: PageShown) => void): () => void;
-  keys(chords: readonly Chord[], framed: readonly FramedChord[]): void;
-  onKey(listener: (key: PageKey) => void): () => void;
   find(page: string, text: string, forward: boolean): void;
   stopFind(page: string): void;
   onFound(listener: (found: PageFound) => void): () => void;
@@ -114,6 +89,32 @@ export interface DesktopBrowser {
   capture(page: string): Promise<string | null>;
   identity(): Promise<Identities | null>;
   chooseIdentity(identity: BrowserIdentity): void;
+}
+
+export type FramedKey = { readonly chord: string; readonly frame: string };
+
+export type GlobalKey = { readonly chord: string; readonly action: string; readonly hold: boolean };
+
+export type WindowKeys = {
+  readonly chords: readonly string[];
+  readonly claimed: readonly string[];
+  readonly framed: readonly FramedKey[];
+  readonly served: readonly string[];
+  readonly global: readonly GlobalKey[];
+};
+
+export type KeyPress = { readonly chord: string; readonly page: string | null; readonly frame: string | null; readonly global: boolean };
+
+export type KeyGrant = 'held' | 'taken' | 'needs-accessibility' | 'unavailable';
+
+export type GlobalAnswer = { readonly chord: string; readonly grant: KeyGrant; readonly reason: string | null };
+
+export interface DesktopKeys {
+  publish(keys: WindowKeys): void;
+  onPress(listener: (press: KeyPress) => void): () => void;
+  kept(): Promise<readonly string[]>;
+  answers(): Promise<readonly GlobalAnswer[]>;
+  onAnswers(listener: (answers: readonly GlobalAnswer[]) => void): () => void;
 }
 
 export interface DesktopFiles {
@@ -137,6 +138,8 @@ export interface DesktopApi {
   readonly windows: DesktopWindows;
   readonly folders: DesktopFolders;
   readonly browser: DesktopBrowser;
+  //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
+  readonly keys?: DesktopKeys;
   //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
   readonly files?: DesktopFiles;
   //! A desktop shell built before this member serves the newer app the server sends, and lacks it.

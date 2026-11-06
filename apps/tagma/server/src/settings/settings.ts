@@ -5,6 +5,7 @@ import { DeclaredSettings } from './contract/service/declarations.js';
 import { Settings } from './contract/service/values.js';
 import { MACHINE_REGISTRY } from '../platform/contract/service/machineRegistry.js';
 import { LINKS_SETTING_SECTIONS, linksClick } from './contract/wire/links.js';
+import { SHORTCUTS_SETTING_SECTIONS, shortcutBindings } from './contract/wire/shortcuts.js';
 import { settingKeys } from './doctrine/keys.js';
 import type { SETTINGS_FEEDS } from './contract/wire/feeds.js';
 
@@ -14,8 +15,8 @@ const live: LiveDeclaration<typeof SETTINGS_FEEDS, Settings | DeclaredSettings> 
 
 export const settings = manifest({
   ...declaration,
-  settings: [linksClick],
-  settingSections: [...LINKS_SETTING_SECTIONS],
+  settings: [linksClick, shortcutBindings],
+  settingSections: [...LINKS_SETTING_SECTIONS, ...SHORTCUTS_SETTING_SECTIONS],
   sections: [
     { id: 'setting-keys', place: { prompt: 25, base: 25 }, owner: 'settings', render: settingKeys, path: 'src/settings/doctrine/keys.ts' },
   ],

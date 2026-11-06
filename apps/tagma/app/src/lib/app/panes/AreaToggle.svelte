@@ -5,13 +5,12 @@
   import PanelIcon from '$lib/shared/ui/PanelIcon.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { Keymap } from '../keys/Keymap.svelte.js';
-  import { areaChord } from './areaChord.js';
   import NewTab from './NewTab.svelte';
   import { SidePanes } from './SidePanes.svelte.js';
 
   const panes = SidePanes.use();
   const keymap = Keymap.use();
-  const chord = keymap.spell(areaChord(keymap));
+  const chord = $derived(keymap.spell('area.toggle'));
   const count = $derived(panes.panes.length);
 </script>
 

@@ -86,7 +86,8 @@ import { makeOwedCallRows } from '../store/owedCalls.js';
 import { CallEpoch } from '../contract/service/owedCalls.js';
 import { OwnWork } from '../contract/service/ownWork.js';
 import { PluginPoints } from '../../plugins/contract/service/points.js';
-import { ENDINGS, makeEndingDelivery } from './pluginEndings.js';
+import { ON, makePluginOn } from './pluginEndings.js';
+import { makePluginQuestions } from './pluginQuestions.js';
 import { makeRunSweep } from '../ending.js';
 import { askAgent, coldWakeRefusal, coldWakeTokens } from '../contract/wire/settings.js';
 import { makeChildUpdates } from '../collaboration/childUpdates.js';
@@ -273,7 +274,15 @@ export const threadEngineLayer = Layer.effectContext(
     const standingOf = approverStanding(lookup, mandate, settings);
     const states = yield* makeEngineStates({ depths, standingOf });
     let delivering: ApprovalDelivery | null = null;
-    const approvers = threadApprovers(standingOf, lookup, mandate, settings, () => delivering);
+    let rerouting: ((threadId: string) => Effect.Effect<void, unknown>) | null = null;
+    const on = yield* makePluginOn;
+    yield* Effect.acquireRelease((yield* PluginPoints).declare(ON, on.register), (withdraw) => Effect.sync(withdraw));
+    const pluginQuestions = yield* makePluginQuestions({
+      lookup,
+      asking: on.asking,
+      reroute: (threadId) => (rerouting === null ? Effect.void : rerouting(threadId)),
+    });
+    const approvers = threadApprovers(standingOf, lookup, mandate, settings, () => delivering, pluginQuestions);
     const ports = Layer.mergeAll(
       threadStorageLayer<Unit<'machine'>, WriteUnit<'machine'>>({
         storage: native.threads,
@@ -377,8 +386,6 @@ export const threadEngineLayer = Layer.effectContext(
       }),
       Layer.succeed(ActivityLog, yield* ActivityLog),
     );
-    const endings = yield* makeEndingDelivery;
-    yield* Effect.acquireRelease((yield* PluginPoints).declare(ENDINGS, endings.register), (withdraw) => Effect.sync(withdraw));
     const evidence = yield* CacheWarmth;
     const warmth: ThreadWarmth = (summary, now) =>
       Effect.map(evidence.warmthBasis([summary]), (basis) => cacheWarmthOf(summary, false, basis, now));
@@ -420,7 +427,7 @@ export const threadEngineLayer = Layer.effectContext(
       warmth,
       reads: eventReads,
       opener: makeOpener({ inbox, storage: native }),
-      recipients: [endings.recipient, children.recipient, subscribers, held.recipient],
+      recipients: [on.recipient, children.recipient, subscribers, held.recipient],
     });
     const harness: ThreadHarness['Service'] = yield* AgentHarness.make<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>(
       ports,
@@ -444,6 +451,7 @@ export const threadEngineLayer = Layer.effectContext(
       (unfollow) => Effect.sync(unfollow),
     );
     delivering = (threadId, envelope) => harness.inputs.deliver(threadId, OPERATOR_PRINCIPAL, envelope);
+    rerouting = (threadId) => harness.runs.questions().reroute(threadId);
     yield* Effect.acquireRelease(
       Effect.sync(() => rollouts.rewritten((threadId) => harness.threads.rewritten(threadId))),
       (unfollow) => Effect.sync(unfollow),
@@ -491,7 +499,7 @@ export const threadEngineLayer = Layer.effectContext(
     yield* Effect.forkScoped(
       backfill.run().pipe(Effect.tapCause((cause) => Effect.logError('the conversation index backfill stopped', cause))),
     );
-    yield* followRoutes(harness);
+    yield* followRoutes(harness, { lookup, followAsking: on.followAsking });
     const awake = yield* AwakePolicy;
     harness.runs.onDriving((count) => awake.working(count));
     const histories = yield* NativeHistories;

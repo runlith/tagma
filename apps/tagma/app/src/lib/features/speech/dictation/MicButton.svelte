@@ -8,8 +8,9 @@
   import { SystemSettings } from '$lib/shared/SystemSettings.js';
   import { settingsHref } from '$lib/features/workspace/address.js';
   import { SpeechRepo } from '../Repo.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { HOLD } from './action.js';
   import { blocked } from './blocked.js';
-  import { chordLabel } from './chord.js';
   import { Dictation } from './Dictation.svelte.js';
   import Meter from './Meter.svelte';
   import type { Target } from './target.js';
@@ -17,6 +18,7 @@
   let { target }: { target: Target } = $props();
 
   const dictation = Dictation.use();
+  const keymap = Keymap.use();
   const speech = SpeechRepo.use();
   const router = Router.use();
   const apple = Host.use().apple;
@@ -38,7 +40,8 @@
         { keys: spellModifier('shift', apple), words: 'on release sends' },
         { keys: spellKey('Escape', apple), words: 'cancels' },
       ];
-    return mine || stop !== null ? [] : [{ keys: chordLabel(dictation.chord, apple), words: 'hold to speak' }];
+    const held = keymap.spell(HOLD);
+    return mine || stop !== null || held === null ? [] : [{ keys: held, words: 'hold to speak' }];
   });
 
   let pressing = false;

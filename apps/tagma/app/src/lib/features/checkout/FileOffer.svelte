@@ -11,7 +11,7 @@
 
 <DropdownMenu.Item
   icon={FileSearch}
-  keys={keymap.spell(keymap.mod('KeyP'))}
+  keys={keymap.spell('palette.files')}
   onSelect={() => overlay.open(Palette, { group: 'files', beside: true })}
 >
   File…

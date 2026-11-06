@@ -30,6 +30,8 @@ import type { AwakeState } from '@tagma/server/power/contract/wire/power';
 import { Awake } from '$lib/features/power/Awake.svelte.js';
 import { ExecutionActs } from '$lib/features/executions/acts.svelte.js';
 import { TerminalKeymap } from '$lib/features/executions/terminal/Keymap.js';
+import { defaultKeys, terminalKeymap } from '$lib/features/executions/terminal/testing/keys.svelte.js';
+import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { Terminals } from '$lib/features/executions/worktrees/Terminals.svelte.js';
 import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
 import { View } from '$lib/features/executions/load/View.svelte.js';
@@ -197,7 +199,8 @@ function draw(options: { at?: GraphAim | undefined } = {}): HTMLElement {
       Layer.of(Awake, awake as never),
       Layer.of(ServerFaults, { page: null, clearing: false, clear: () => Promise.resolve() } as never),
       Layer.of(Terminals, { home: null, shown: false, count: () => 0, toggle: () => undefined } as never),
-      Layer.of(TerminalKeymap, new TerminalKeymap(new Host('tab', 'linux'))),
+      Layer.of(TerminalKeymap, terminalKeymap(new Host('tab', 'linux'))),
+      Layer.of(Keymap, defaultKeys(new Host('tab', 'linux'))),
       testShellOps,
       Layer.of(
         Opening,

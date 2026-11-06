@@ -16,6 +16,7 @@ import { Door } from '$lib/wire/Door.js';
 import { Live, type LiveStatus } from '$lib/wire/Live.js';
 import { TerminalAppearance } from '$lib/features/executions/appearance/Settings.svelte.js';
 import { TerminalKeymap } from '$lib/features/executions/terminal/Keymap.js';
+import { terminalKeymap } from '$lib/features/executions/terminal/testing/keys.svelte.js';
 import { TerminalOutput, pageHidden, pageTime } from '$lib/features/executions/terminal/Output.js';
 import { TerminalRenderPolicy } from '$lib/features/executions/terminal/RenderPolicy.js';
 import { TerminalHolders } from '$lib/features/executions/terminal/Holders.svelte.js';
@@ -147,7 +148,7 @@ function stand(reads: Reads = {}) {
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, { lens: () => ({ project: '1' }) } as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),
-        Layer.of(TerminalKeymap, new TerminalKeymap(new Host('tab', 'linux'))),
+        Layer.of(TerminalKeymap, terminalKeymap(new Host('tab', 'linux'))),
       ),
       { ladder: [ProjectRung], effectRoot: (build) => $effect.root(build) },
     );

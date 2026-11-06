@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { beforeBuild, definePlugin, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
+import { action, beforeBuild, definePlugin, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
 import { testPlugin } from './testing.js';
 
 test('a definition naming a field the SDK does not take is refused with the field it means', () => {
@@ -99,4 +99,24 @@ test('testPlugin runs a tick, a build step, a refusing tool and a project-keyed 
   expect(await tested.call('move', { to: 'x' })).toEqual({ text: '{"moved":"x"}', isError: false, structured: { moved: 'x' } });
   expect(await tested.read('notes://project/1')).toEqual({ text: '{"project":"1"}', isError: false });
   expect(await tested.read('notes://project/2')).toEqual({ text: 'a view reads only its own project', isError: true });
+});
+
+test('an action is a tool Tagma alone calls, listed in actions with the chords the plugin proposes, and answers the operator one sentence', async () => {
+  const plugin = definePlugin({
+    id: 'boards',
+    title: 'Boards',
+    actions: {
+      sync: action({ title: 'Sync boards', run: async (ctx) => `Synced in project ${ctx.project}` }),
+      quiet: action({ title: 'Do nothing', run: async () => undefined }),
+    },
+    shortcuts: [{ keys: 'Mod+Alt+S', action: 'sync', global: true }],
+  });
+  const tested = testPlugin(plugin);
+  expect(tested.manifest.contributes?.actions).toEqual([
+    { id: 'sync', title: 'Sync boards', tool: '__action_sync' },
+    { id: 'quiet', title: 'Do nothing', tool: '__action_quiet' },
+  ]);
+  expect(tested.manifest.contributes?.shortcuts).toEqual([{ keys: 'Mod+Alt+S', action: 'sync', global: true }]);
+  expect(await tested.act('sync', 7)).toEqual({ text: 'Synced in project 7', isError: false });
+  expect(await tested.act('quiet')).toEqual({ text: '', isError: false });
 });

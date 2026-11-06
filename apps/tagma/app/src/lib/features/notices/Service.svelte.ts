@@ -7,7 +7,7 @@ import { Offer, offeredAct, type OfferPort } from './Offer.js';
 
 export type Notice = {
   id: number;
-  kind: 'refusal' | 'offer' | 'error' | 'undo';
+  kind: 'refusal' | 'offer' | 'said' | 'error' | 'undo';
   title: string;
   body: string;
   told?: Told;
@@ -29,6 +29,7 @@ export type Fault = {
 const FAULTS_KEPT = 20;
 
 const recordedByServer = (error: unknown): boolean => error instanceof Refusal && error.code === 'server-fault';
+const placeGone = (error: unknown): boolean => error instanceof Refusal && error.code === 'no-checkout';
 const NOTICES_KEPT = 20;
 
 export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
@@ -71,7 +72,7 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
   }
 
   background(error: unknown): void {
-    if (recordedByServer(error)) return;
+    if (recordedByServer(error) || placeGone(error)) return;
     if (error instanceof Refusal) this.fault(error.code, error.reason);
     else this.fault('Request failed', error instanceof Error ? error.message : String(error));
   }
@@ -102,6 +103,10 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
 
   error(title: string, body: string): number {
     return this.push({ kind: 'error', title, body });
+  }
+
+  said(text: string): number {
+    return this.push({ kind: 'said', title: text, body: '' });
   }
 
   private push(next: Omit<Notice, 'id' | 'lastAt'>): number {

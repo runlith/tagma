@@ -14,7 +14,7 @@ export type ApprovalPrompt = {
 
 export type AskedAction = { readonly action: string; readonly asked: readonly string[]; readonly parent?: true };
 
-export type ApproverWhy = 'taken-over' | 'parent' | 'parent-owns' | 'no-grant' | 'no-parent';
+export type ApproverWhy = 'owner' | 'taken-over' | 'parent' | 'parent-owns' | 'no-grant' | 'no-parent';
 
 export type ApproverRoute = { readonly approver: string | null; readonly why: ApproverWhy };
 
@@ -29,7 +29,7 @@ export type ApprovalNotice = {
 };
 
 export type ApproversPort = {
-  route(threadId: string, asked: readonly AskedAction[]): Effect.Effect<ApproverRoute, ThreadBorderFailed>;
+  route(threadId: string, asked: readonly AskedAction[], questionId: string): Effect.Effect<ApproverRoute, ThreadBorderFailed>;
   notify(approver: string, notice: ApprovalNotice): Effect.Effect<void, ThreadBorderFailed>;
   grantOf(threadId: string): Effect.Effect<readonly string[], ThreadBorderFailed>;
 };

@@ -1,8 +1,9 @@
 import { McpAppCallResult } from '@runlith/mcp/apps';
 import { Schema } from 'effect';
 import { ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
-import { placeRole } from '../../../platform/contract/wire/place.js';
+import { placeRole, projectField } from '../../../platform/contract/wire/place.js';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
+import { ACTION_REFUSALS } from './actions.js';
 import { ViewId } from './points.js';
 import { pluginName, STORAGE_REFUSALS, VIEW_REFUSALS } from './sets.js';
 
@@ -41,6 +42,22 @@ export const VIEW_OPERATIONS = {
     confirmation: (input) => ({ summary: `Call ${input.tool} of the plugin ${input.plugin} from its view?` }),
     confirmLabel: 'Call',
     presentation: { running: 'Calling a plugin tool', done: 'Called a plugin tool' },
+    subjects: () => [],
+  }),
+  run_plugin_action: operation('run_plugin_action', {
+    ...viewed,
+    place: 'project',
+    effect: 'external',
+    identity: { key: 'call' },
+    answer: arms({ ok: { said: Schema.NullOr(Schema.String) } }),
+    meaning: 'Run an action of a plugin for the operator, from the palette or a shortcut, in this project.',
+    grammar:
+      'Only an action the plugin declares in contributes.actions runs, and only while the plugin is enabled in this project; the process receives the caller operator in this project and starts if it sleeps. `said` is the one sentence the handler answers for the person, or null; a handler that fails refuses plugin-call-failed with its reason.',
+    input: Schema.Struct({ project: projectField, plugin: pluginName, action: ViewId }),
+    refusals: ACTION_REFUSALS,
+    confirmation: (input) => ({ summary: `Run ${input.action} of the plugin ${input.plugin}?` }),
+    confirmLabel: 'Run',
+    presentation: { running: 'Running a plugin action', done: 'Ran a plugin action' },
     subjects: () => [],
   }),
   read_plugin_resource: operation('read_plugin_resource', {

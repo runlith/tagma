@@ -42,7 +42,7 @@ import { TeamRepo } from './team/TeamRepo.js';
 import { ThreadTeam } from './team/ThreadTeam.svelte.js';
 import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { Columns } from '$lib/features/workspace/column.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
@@ -62,7 +62,7 @@ export const HarnessLayer = Layer.mergeAll(
   SettingSections.contribute('threads', ...sections),
   LinkKinds.contribute('threads', ...links),
   LinkMenuItems.contribute('threads', ...items),
-  PaletteActions.contribute('threads', { id: 'threads', actions }),
+  Actions.contribute('threads', { id: 'threads', area: 'Agents', actions }),
   ThreadSeats,
   AgentsColumn,
   ThreadsRepo,

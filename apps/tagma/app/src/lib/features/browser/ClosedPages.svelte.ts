@@ -58,15 +58,10 @@ export class ClosedPages extends Service<ClosedPages>()('ClosedPages', { tier: '
   }
 
   private listen(keymap: Keymap): () => void {
-    return keymap.bind([
-      {
-        chord: keymap.mod('KeyT', { shift: true }),
-        run: () => {
-          if (!this.armed || this.route()?.projectId !== this.aim.projectId) return false;
-          this.reopen().catch((error: unknown) => this.notices.refusal(error));
-          return true;
-        },
-      },
-    ]);
+    return keymap.handle('tab.reopen', () => {
+      if (!this.armed || this.route()?.projectId !== this.aim.projectId) return false;
+      this.reopen().catch((error: unknown) => this.notices.refusal(error));
+      return true;
+    });
   }
 }

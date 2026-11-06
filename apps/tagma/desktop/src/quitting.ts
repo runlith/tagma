@@ -1,6 +1,7 @@
 import { type BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, powerMonitor } from 'electron';
 import { CHANNEL } from './channel.js';
 import { type Leaving, stopAll, stopIdle } from './leaving.js';
+import { menuChords } from './menuKeys.js';
 import { machineWork, type Refusal, type Work } from './server.js';
 import { tell } from './telling.js';
 
@@ -30,6 +31,7 @@ const stopping = (work: Work | null): string => {
 export class Quitting {
   private state: 'open' | 'quitting' | 'leaving' = 'open';
   private system = false;
+  private held: ReadonlySet<string> = new Set();
 
   constructor(
     private readonly surfaceUrl: URL,
@@ -55,49 +57,53 @@ export class Quitting {
     });
     const stop: MenuItemConstructorOptions[] =
       this.places === null ? [] : [{ label: `Stop ${CHANNEL.name}…`, click: () => void this.stop() }];
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        {
-          role: 'appMenu',
-          submenu: [
-            { role: 'about' },
-            { label: 'Check for Updates…', click: () => this.checkForUpdates() },
-            { type: 'separator' },
-            { role: 'services' },
-            { type: 'separator' },
-            { role: 'hide' },
-            { role: 'hideOthers' },
-            { role: 'unhide' },
-            { type: 'separator' },
-            ...stop,
-            { role: 'quit' },
-          ],
-        },
-        { role: 'fileMenu' },
-        { role: 'editMenu' },
-        this.view.length === 0
-          ? { role: 'viewMenu' }
-          : {
-              label: 'View',
-              submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
-                { role: 'toggleDevTools' },
-                { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
-                { type: 'separator' },
-                { role: 'togglefullscreen' },
-                { type: 'separator' },
-                ...this.view,
-              ],
-            },
-        { role: 'windowMenu' },
-        { role: 'help', submenu: [{ label: 'Report a Problem…', click: () => this.report() }] },
-      ]),
-    );
+    const menu = Menu.buildFromTemplate([
+      {
+        role: 'appMenu',
+        submenu: [
+          { role: 'about' },
+          { label: 'Check for Updates…', click: () => this.checkForUpdates() },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          ...stop,
+          { role: 'quit' },
+        ],
+      },
+      { role: 'fileMenu' },
+      { role: 'editMenu' },
+      this.view.length === 0
+        ? { role: 'viewMenu' }
+        : {
+            label: 'View',
+            submenu: [
+              { role: 'reload' },
+              { role: 'forceReload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' },
+              { role: 'resetZoom' },
+              { role: 'zoomIn' },
+              { role: 'zoomOut' },
+              { type: 'separator' },
+              { role: 'togglefullscreen' },
+              { type: 'separator' },
+              ...this.view,
+            ],
+          },
+      { role: 'windowMenu' },
+      { role: 'help', submenu: [{ label: 'Report a Problem…', click: () => this.report() }] },
+    ]);
+    Menu.setApplicationMenu(menu);
+    this.held = menuChords(menu.items, process.platform === 'darwin');
     if (stop.length > 0) app.dock?.setMenu(Menu.buildFromTemplate(stop));
+  }
+
+  menuKeys(): ReadonlySet<string> {
+    return this.held;
   }
 
   leave(): void {

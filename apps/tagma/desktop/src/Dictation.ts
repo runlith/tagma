@@ -1,14 +1,17 @@
 import { createDesktopInputHost } from '@runlith/desktop-input/DesktopInputHost';
 import type { DesktopAccessibilityState, DesktopHold, DesktopInputHost, HoldBinding } from '@runlith/desktop-input/contract/types';
 import { app, BrowserWindow, clipboard, ipcMain, type WebContents } from 'electron';
-import type { GlobalState, HeldKey, Stroke } from './bridge.js';
+import { type HostChord, chordId } from '@tagma/server/platform/contract/wire/chord';
+import type { GlobalState, KeyGrant, Stroke } from './bridge.js';
 import { DICTATION } from './channels.js';
 import type { Fronts } from './fronts.js';
 import { bindingOf } from './keyCodes.js';
 
 const RESTART_AFTER_MS = 60_000;
 
-type Armed = { readonly key: HeldKey; readonly binding: HoldBinding };
+type Armed = { readonly chord: HostChord; readonly binding: HoldBinding };
+
+export type HoldGrant = { readonly grant: KeyGrant; readonly reason: string | null };
 
 export interface Pill {
   readonly contents: WebContents;
@@ -20,6 +23,7 @@ export interface Pill {
 
 export class Dictation {
   private armed: Armed | null = null;
+  private readonly watchers = new Set<() => void>();
   private input: DesktopInputHost | null = null;
   private trusted = false;
   private fault: string | null = null;
@@ -39,9 +43,6 @@ export class Dictation {
   ) {}
 
   install(): void {
-    ipcMain.on(DICTATION.arm, (event, key: HeldKey | null) => {
-      if (this.fronts.trusts(event.senderFrame?.url)) void this.arm(key);
-    });
     ipcMain.handle(DICTATION.state, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.state : { kind: 'off' }));
     ipcMain.on(DICTATION.prompt, (event) => {
       if (this.fronts.trusts(event.senderFrame?.url)) this.input?.promptAccessibility();
@@ -75,18 +76,29 @@ export class Dictation {
     await this.disarm(null);
   }
 
-  private async arm(key: HeldKey | null): Promise<void> {
-    if (key === null) {
+  grant(): HoldGrant {
+    if (this.state.kind === 'untrusted') return { grant: 'needs-accessibility', reason: null };
+    if (this.state.kind === 'unavailable') return { grant: 'unavailable', reason: this.state.reason };
+    return { grant: 'held', reason: null };
+  }
+
+  watch(listener: () => void): () => void {
+    this.watchers.add(listener);
+    return () => void this.watchers.delete(listener);
+  }
+
+  async arm(chord: HostChord | null): Promise<void> {
+    if (chord === null) {
       if (this.armed !== null || this.state.kind !== 'off') await this.disarm(null);
       return;
     }
-    if (this.armed !== null && this.input !== null && same(this.armed.key, key)) return;
-    const binding = bindingOf(key);
+    if (this.armed !== null && this.input !== null && chordId(this.armed.chord) === chordId(chord)) return;
+    const binding = bindingOf(chord);
     if (binding === null) {
-      await this.disarm(`The key ${key.code} cannot be held outside the Tagma window; choose a letter, a digit, a function key or Space.`);
+      await this.disarm(`The key ${chord.key} cannot be held outside the Tagma window; choose a letter, a digit, a function key or Space.`);
       return;
     }
-    this.armed = { key, binding };
+    this.armed = { chord, binding };
     if (this.input === null) await this.start();
     else this.sync();
   }
@@ -226,6 +238,7 @@ export class Dictation {
     if (same(this.state, state)) return;
     this.state = state;
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send(DICTATION.changed, state);
+    for (const watcher of this.watchers) watcher();
   }
 }
 

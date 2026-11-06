@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
+import { PluginActions } from './contract/service/actions.js';
 import { PluginViews, ViewStorage } from './contract/service/views.js';
 import { VIEW_OPERATIONS as OPS } from './contract/wire/operations.js';
 
@@ -22,6 +23,15 @@ export const VIEW_PAIRS = {
           threadId: input.threadId,
         });
         return { status: 'ok' as const, result };
+      }),
+    }),
+  ),
+  run_plugin_action: pair(
+    OPS.run_plugin_action,
+    body(OPS.run_plugin_action, {
+      execute: Effect.fnUntraced(function* (input) {
+        const said = yield* (yield* PluginActions).run(yield* projectId, input.plugin, input.action);
+        return { status: 'ok' as const, said };
       }),
     }),
   ),

@@ -8,13 +8,71 @@ import Sun from '@lucide/svelte/icons/sun';
 import type { Component } from 'svelte';
 import { labelOf } from '$lib/features/workspace/mark.js';
 import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
-import type { PaletteAction, PaletteActionList } from '$lib/features/workspace/action.js';
+import type { Action, ActionList } from '$lib/features/workspace/action.js';
 import { Theme, type ThemeChoice } from '$lib/shared/Theme.svelte.js';
+import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
+import { Host } from '@runlith/layer/Host';
+import { Overlay } from '@runlith/primitives/Overlay.svelte';
+import { Palette } from '../panes/palette.js';
+import { SidePanes } from '../panes/SidePanes.svelte.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 import { ProjectCreation } from './ProjectCreation.svelte.js';
 import { Standing } from './Standing.svelte.js';
 
-const pick = (choice: ThemeChoice, title: string, icon: Component<{ class?: string }>): PaletteAction => ({
+const togglePalette = (overlay: Overlay, group?: 'files'): void => {
+  if (overlay.isOpen(Palette)) overlay.close(Palette);
+  else overlay.open(Palette, group === undefined ? {} : { group });
+};
+
+const keys: readonly Action[] = [
+  {
+    id: 'palette.open',
+    title: 'Find or ask',
+    palette: false,
+    keys: ['Mod+K'],
+    run: (env) => togglePalette(env.resolve(Overlay)),
+  },
+  {
+    id: 'palette.files',
+    title: 'Go to a file',
+    palette: false,
+    keys: ['Mod+P'],
+    available: (env) => env.routeProject !== null,
+    run: (env) => togglePalette(env.resolve(Overlay), 'files'),
+  },
+  {
+    id: 'area.toggle',
+    order: 31,
+    title: 'Show or hide the right area',
+    keywords: ['pane', 'side', 'beside', 'panel', 'hide', 'show'],
+    keys: ['Mod+Alt+Backslash'],
+    available: (env) => env.routeProject !== null && env.resolve(SidePanes).panes.length > 0,
+    run: (env) => {
+      const panes = env.resolve(SidePanes);
+      panes.showArea(!panes.showing);
+    },
+  },
+  {
+    id: 'tab.close',
+    title: 'Close the focused tab',
+    palette: false,
+    keys: ['Mod+W'],
+    tabKeys: [],
+    available: (env) => env.resolve(Host).isDesktop,
+    run: (env) => {
+      const panes = env.resolve(SidePanes);
+      const beside = panes.focus;
+      if (beside !== null) return void panes.close(beside);
+      const shown = panes.showing ? panes.active : null;
+      if (shown !== null) return void panes.close(shown.key);
+      env.resolve(DesktopTabs).closeWindow();
+    },
+  },
+  { id: 'tab.reopen', title: 'Reopen the closed tab', palette: false, keys: ['Mod+Shift+T'], tabKeys: [], run: () => undefined },
+  { id: 'tagma.hide', title: 'Hide and show Tagma', keys: [{ keys: 'Mod+Shift+L', global: true }], tabKeys: [] },
+];
+
+const pick = (choice: ThemeChoice, title: string, icon: Component<{ class?: string }>): Action => ({
   id: `theme.${choice}`,
   order: 40,
   title,
@@ -24,7 +82,7 @@ const pick = (choice: ThemeChoice, title: string, icon: Component<{ class?: stri
   run: (env) => env.resolve(Theme).choose(choice),
 });
 
-const update: PaletteAction = {
+const update: Action = {
   id: 'tagma.update',
   order: 90,
   title: 'Update Tagma',
@@ -46,13 +104,15 @@ const update: PaletteAction = {
   },
 };
 
-export const actions: PaletteActionList = [
+export const actions: ActionList = [
+  ...keys,
   {
     id: 'column.toggle',
     order: 30,
     title: 'Toggle column',
     keywords: ['sidebar', 'index', 'panel', 'hide', 'show'],
     icon: PanelLeft,
+    keys: ['Mod+Backslash'],
     available: (env) => env.surface !== null && env.resolve(ColumnRegistry).of(env.surface, env) !== null,
     note: (env) => (env.surface === null ? null : (env.resolve(ColumnRegistry).of(env.surface, env)?.label ?? null)),
     run: (env) => {

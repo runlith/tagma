@@ -15,7 +15,7 @@
   let { omnibox, id }: { omnibox: Omnibox; id: string } = $props();
 
   const keymap = Keymap.use();
-  const enter = keymap.spell(keymap.bare('Enter'));
+  const enter = keymap.spellText('Enter');
   const query = $derived(omnibox.typed.trim());
 
   const inView = (option: HTMLElement): void => option.scrollIntoView({ block: 'nearest' });

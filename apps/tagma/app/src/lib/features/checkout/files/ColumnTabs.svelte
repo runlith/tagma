@@ -8,14 +8,14 @@
   const keymap = Keymap.use();
 
   const LABEL: Record<ColumnView, string> = { files: 'Files', search: 'Search', git: 'Git' };
-  const CODE: Record<ColumnView, string> = { files: 'KeyE', search: 'KeyF', git: 'KeyG' };
+  const CHORD: Record<ColumnView, string> = { files: 'Mod+Shift+E', search: 'Mod+Shift+F', git: 'Mod+Shift+G' };
 
   let { changes = 0 }: { changes?: number } = $props();
 </script>
 
 <div class="flex h-8 shrink-0 items-center gap-1 border-b px-1" role="tablist" aria-label="Checkout" data-column-tabs>
   {#each COLUMN_VIEWS as view (view)}
-    <Tooltip text={LABEL[view]} keys={keymap.spell(keymap.mod(CODE[view], { shift: true }))}>
+    <Tooltip text={LABEL[view]} keys={keymap.spellText(CHORD[view])}>
       <ViewTab selected={column.view === view} onclick={() => column.show(view)} data-column-tab={view}>
         {LABEL[view]}
         {#if view === 'git' && changes > 0}

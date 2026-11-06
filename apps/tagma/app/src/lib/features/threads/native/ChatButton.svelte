@@ -38,6 +38,7 @@
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+  import { spellKey } from '$lib/shared/chordSpelling.js';
   import { Button, buttonVariants } from '$lib/shared/ui/button/index.js';
   import { cn } from '$lib/shared/utils.js';
 
@@ -99,7 +100,7 @@
     </span>
     <DropdownMenu.Content align="end" class="min-w-56" returnFocus={control.choiceFocus}>
       {#each choices as choice (choice.label)}
-        <DropdownMenu.Item icon={choice.icon} keys={choice.key ? keymap.spell(keymap.bare(choice.key)) : null} onSelect={choice.onSelect}>
+        <DropdownMenu.Item icon={choice.icon} keys={choice.key ? spellKey(choice.key, keymap.mac) : null} onSelect={choice.onSelect}>
           {choice.label}
         </DropdownMenu.Item>
       {/each}

@@ -9,7 +9,7 @@ import { ThreadChanges } from './ThreadChanges.svelte.js';
 import { ThreadHistory } from './ThreadHistory.svelte.js';
 import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
 import { actions } from './actions.js';
@@ -24,7 +24,7 @@ export const CheckoutLayer = Layer.mergeAll(
   SettingSections.contribute('checkout', ...sections),
   LinkKinds.contribute('checkout', ...links),
   LinkMenuItems.contribute('checkout', ...items),
-  PaletteActions.contribute('checkout', { id: 'checkout', actions }),
+  Actions.contribute('checkout', { id: 'checkout', area: 'Files', actions }),
   Checkout,
   Holdings,
   CheckoutRepo,

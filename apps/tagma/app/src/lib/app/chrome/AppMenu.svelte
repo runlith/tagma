@@ -67,7 +67,7 @@
   </Tooltip>
   <DropdownMenu.Content side="right" align="end" class="min-w-60">
     <PointView point={parts} props={{}} only={(part) => part.place === 'head'} frame={after} />
-    <DropdownMenu.Item icon={Settings} keys={keymap.spell(keymap.mod('Comma'))} onSelect={() => void router.goto(settingsHref(router))}>
+    <DropdownMenu.Item icon={Settings} keys={keymap.spell('settings.open')} onSelect={() => void router.goto(settingsHref(router))}>
       Settings
     </DropdownMenu.Item>
     <PointView point={parts} props={{}} only={(part) => part.place === 'go'} />

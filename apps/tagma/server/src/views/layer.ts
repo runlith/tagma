@@ -1,24 +1,35 @@
 import { Context, Effect, Layer } from 'effect';
 import type { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import type { PluginTools } from '../plugin-host/contract/service/tools.js';
-import type { EnabledPlugins } from '../plugins/contract/service/plugins.js';
+import type { EnabledPlugins, HostedPlugins, Plugins } from '../plugins/contract/service/plugins.js';
 import { PluginPoints } from '../plugins/contract/service/points.js';
+import { makeActions } from './actions.js';
+import { PluginActions } from './contract/service/actions.js';
 import { PluginViews, ViewStorage } from './contract/service/views.js';
 import { makeShelf } from './shelf.js';
 import { makeValues } from './storage.js';
 
-export const viewsLayer: Layer.Layer<PluginViews | ViewStorage, never, EnabledPlugins | PluginHost | PluginPoints | PluginTools> =
-  Layer.effectContext(
-    Effect.gen(function* () {
-      const shelf = yield* makeShelf;
-      const points = yield* PluginPoints;
-      const { views, results, surfaces, panes, launchers } = shelf.contributions;
-      const withdrawn = (withdraw: () => void) => Effect.sync(withdraw);
-      yield* Effect.acquireRelease(points.declare(views.point, views.register), withdrawn);
-      yield* Effect.acquireRelease(points.declare(results.point, results.register), withdrawn);
-      yield* Effect.acquireRelease(points.declare(surfaces.point, surfaces.register), withdrawn);
-      yield* Effect.acquireRelease(points.declare(panes.point, panes.register), withdrawn);
-      yield* Effect.acquireRelease(points.declare(launchers.point, launchers.register), withdrawn);
-      return Context.make(PluginViews, shelf).pipe(Context.add(ViewStorage, makeValues({ shelf })));
-    }),
-  );
+export const viewsLayer: Layer.Layer<
+  PluginViews | ViewStorage | PluginActions,
+  never,
+  EnabledPlugins | HostedPlugins | Plugins | PluginHost | PluginPoints | PluginTools
+> = Layer.effectContext(
+  Effect.gen(function* () {
+    const shelf = yield* makeShelf;
+    const points = yield* PluginPoints;
+    const { views, results, surfaces, panes, launchers } = shelf.contributions;
+    const acting = yield* makeActions({ moves: shelf.moves, changed: shelf.bump, viewed: shelf.viewed, surfaces, panes });
+    const withdrawn = (withdraw: () => void) => Effect.sync(withdraw);
+    yield* Effect.acquireRelease(points.declare(views.point, views.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(results.point, results.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(surfaces.point, surfaces.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(panes.point, panes.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(launchers.point, launchers.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(acting.contributions.actions.point, acting.contributions.actions.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(acting.contributions.shortcuts.point, acting.contributions.shortcuts.register), withdrawn);
+    return Context.make(PluginViews, shelf).pipe(
+      Context.add(ViewStorage, makeValues({ shelf })),
+      Context.add(PluginActions, acting.service),
+    );
+  }),
+);

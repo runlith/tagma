@@ -8,7 +8,7 @@ import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import { rank, terms } from '@runlith/search-text/match';
 import type { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
-import type { ActionEnv, PaletteAction } from '$lib/features/workspace/action.js';
+import type { ActionEnv, Action } from '$lib/features/workspace/action.js';
 import { Feed } from '$lib/features/palette/Feed.svelte.js';
 import { type FilesAim, FilesFeed, fileTargetOf } from '$lib/features/palette/Files.svelte.js';
 import type { BlocksAsk, CommitsAsk, PaletteRepo, ThreadsAsk, ThreadsCoverage } from '$lib/features/palette/Repo.js';
@@ -30,7 +30,7 @@ export type Row =
   | { readonly kind: 'block'; readonly value: string; readonly hit: SearchHit }
   | { readonly kind: 'commit'; readonly value: string; readonly commit: HistoryCommit }
   | { readonly kind: 'setting'; readonly value: string; readonly entry: SettingEntry; readonly positions: readonly number[] }
-  | { readonly kind: 'action'; readonly value: string; readonly action: PaletteAction; readonly positions: readonly number[] }
+  | { readonly kind: 'action'; readonly value: string; readonly action: Action; readonly positions: readonly number[] }
   | { readonly kind: 'ask'; readonly value: string; readonly text: string };
 
 export type Section = {
@@ -107,7 +107,7 @@ export class PaletteModel {
     private readonly tags: () => TagCatalog | null,
     repo: PaletteRepo,
     private readonly settings: SettingsRepo,
-    private readonly declared: () => readonly PaletteAction[],
+    private readonly declared: () => readonly Action[],
     private readonly env: () => ActionEnv,
     private readonly place: FilesPort,
     door: Door,
@@ -295,7 +295,7 @@ export class PaletteModel {
 
   private actionRows(): readonly Row[] {
     const env = this.env();
-    const available = this.declared().filter((action) => action.available?.(env) ?? true);
+    const available = this.declared().filter((action) => (action.available?.(env) ?? true) && (action.listed?.(env) ?? true));
     return rank(available, this.text, (action) => ({ name: action.title, text: action.keywords })).map(({ item: action, hit }): Row => ({
       kind: 'action',
       value: `action:${action.id}`,

@@ -32,42 +32,6 @@ export const dictationRecognizer = settingKey({
   merge: 'replace',
 });
 
-export const dictationKey = settingKey({
-  id: 'speech.dictation.key',
-  order: 902,
-  title: 'Dictation key',
-  description:
-    'The chord held in the Tagma window to dictate into the focused agent field or terminal, written as modifiers and a key code joined by `+`, like `Alt+Space`; a tap shorter than 300 ms keeps recording until the next press.',
-  schema: Schema.String.check(Schema.isMinLength(1)),
-  fallback: 'Alt+Space',
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const globalDictation = settingKey({
-  id: 'speech.dictation.global',
-  order: 903,
-  title: 'Global dictation',
-  description:
-    'Whether the Tagma desktop app dictates into whatever app is focused while its global key is held; it needs Accessibility for Tagma in macOS Privacy & Security.',
-  schema: Schema.Boolean,
-  fallback: false,
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const globalDictationKey = settingKey({
-  id: 'speech.dictation.globalKey',
-  order: 904,
-  title: 'Global dictation key',
-  description:
-    'The chord held in any app to dictate into it, written like the dictation key; the Tagma window keeps its own key while it is focused.',
-  schema: Schema.String.check(Schema.isMinLength(1)),
-  fallback: 'Alt+Space',
-  scopes: ['user'],
-  merge: 'replace',
-});
-
 export const languages = settingKey({
   id: 'speech.languages',
   order: 905,
@@ -137,18 +101,7 @@ export const segmenter = settingKey({
   merge: 'replace',
 });
 
-export const SPEECH_SETTINGS = [
-  recognizerChoice,
-  dictationRecognizer,
-  dictationKey,
-  globalDictation,
-  globalDictationKey,
-  languages,
-  voiceChoice,
-  microphone,
-  tuning,
-  segmenter,
-] as const;
+export const SPEECH_SETTINGS = [recognizerChoice, dictationRecognizer, languages, voiceChoice, microphone, tuning, segmenter] as const;
 
 export const SPEECH_SETTING_SECTIONS = [
   {

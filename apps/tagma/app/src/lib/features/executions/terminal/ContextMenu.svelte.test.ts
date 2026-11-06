@@ -4,7 +4,7 @@ import { waitUntil } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import TerminalContextMenu from './ContextMenu.svelte';
-import { TerminalKeymap } from './Keymap.js';
+import { defaultKeys } from './testing/keys.svelte.js';
 import type { TerminalPane } from './Pane.svelte.js';
 import type { TerminalTab } from './Tab.svelte.js';
 
@@ -76,7 +76,7 @@ async function drawMenu(stand: TabStand): Promise<void> {
   document.body.appendChild(host);
   const app = mount(TerminalContextMenu, {
     target: host,
-    props: { tab: stand as unknown as TerminalTab, keymap: new TerminalKeymap(new Host('tab', 'macos')) },
+    props: { tab: stand as unknown as TerminalTab, keymap: defaultKeys(new Host('tab', 'macos')) },
   });
   apps.push(() => {
     unmount(app);

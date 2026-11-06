@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import TerminalPaneTree from './PaneTree.svelte';
 import { paneNode, splitPane, removePane } from './paneLayout.js';
 import type { TerminalTab } from './Tab.svelte.js';
-import type { TerminalKeymap } from './Keymap.js';
+import type { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import type { TerminalAppearance } from '../appearance/Settings.svelte.js';
 
 class PaneStand {
@@ -95,7 +95,7 @@ test.each(['map-first', 'layout-first'] as const)(
       target: host,
       props: {
         tab: stand as unknown as TerminalTab,
-        keymap: {} as TerminalKeymap,
+        keymap: {} as Keymap,
         appearance: { dividerColor: '#000', paneBackground: '#000', titleTone: 'dark' } as unknown as TerminalAppearance,
         isMac: true,
       },

@@ -23,7 +23,7 @@
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import Working from '$lib/shared/ui/Working.svelte';
-  import { ZOOM_KEYS, zoomStep } from './zoom.js';
+  import { zoomStep } from './zoom.js';
   import ZoomLevel from './ZoomLevel.svelte';
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
@@ -196,46 +196,40 @@
   const mine = (page: string | null): boolean => (page === null ? panes.focus === pane.key : page === current?.id);
 
   $effect(() => {
-    const bound = (key: string, run: (page: string | null) => void, shift = false) => ({
-      chord: keymap.mod(key, { shift }),
-      run: (page: string | null) => {
+    const bound = (action: string, run: () => void) =>
+      keymap.handle(action, ({ page }) => {
         if (!mine(page)) return false;
-        run(page);
+        run();
         return true;
-      },
-    });
-    return keymap.bind([
-      bound('KeyT', () => panes.open(browserPane(null))),
-      bound('KeyW', () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
-      bound('KeyT', () => void act(() => closedPages.reopen()), true),
-      bound('KeyL', edit),
-      bound('BracketLeft', () => navigate('back')),
-      bound('BracketRight', () => navigate('forward')),
-      bound('KeyR', () => navigate('reload')),
-      bound('KeyF', seek),
+      });
+    const releases = [
+      bound('tab.close', () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
+      bound('tab.reopen', () => void act(() => closedPages.reopen())),
+      bound('browser.address', edit),
+      bound('browser.back', () => navigate('back')),
+      bound('browser.forward', () => navigate('forward')),
+      bound('browser.reload', () => navigate('reload')),
+      bound('browser.find', seek),
       ...(native
         ? [
-            bound(ZOOM_KEYS.in, () => zoomTo(zoomStep(zoom, 1))),
-            bound(ZOOM_KEYS.in, () => zoomTo(zoomStep(zoom, 1)), true),
-            bound(ZOOM_KEYS.out, () => zoomTo(zoomStep(zoom, -1))),
-            bound(ZOOM_KEYS.reset, () => zoomTo(1)),
+            bound('page.zoom-in', () => zoomTo(zoomStep(zoom, 1))),
+            bound('page.zoom-out', () => zoomTo(zoomStep(zoom, -1))),
+            bound('page.zoom-reset', () => zoomTo(1)),
           ]
         : []),
-    ]);
+    ];
+    return () => {
+      for (const release of releases) release();
+    };
   });
 
   $effect(() => {
     if (!picking) return;
-    return keymap.bind([
-      {
-        chord: keymap.bare('Escape'),
-        run: (page) => {
-          if (page !== null && page !== current?.id) return false;
-          picking = false;
-          return true;
-        },
-      },
-    ]);
+    return keymap.handle('browser.stop-picking', ({ page }) => {
+      if (page !== null && page !== current?.id) return false;
+      picking = false;
+      return true;
+    });
   });
 </script>
 
@@ -285,7 +279,7 @@
       </Tooltip>
     {/if}
     {#if current !== null}<Downloads page={current} />{/if}
-    <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell(keymap.bare('Escape')) : null}>
+    <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell('browser.stop-picking') : null}>
       <button
         type="button"
         class="tool"
@@ -304,9 +298,10 @@
   {/if}
 
   {#if picking}
+    {@const stop = keymap.spell('browser.stop-picking')}
     <p class="shrink-0 border-b bg-raised px-3 py-1.5 text-small text-muted-foreground">
       Click elements on the page to put them into the field of the thread you worked in last.
-      <Kbd chord={keymap.spell(keymap.bare('Escape'))} size="sm" /> stops.
+      {#if stop !== null}<Kbd chord={stop} size="sm" /> stops.{/if}
     </p>
   {/if}
 

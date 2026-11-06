@@ -1098,11 +1098,27 @@
       "browser": "./src/settings/contract/wire/links.ts",
       "default": "./src/settings/contract/wire/links.ts"
     },
+    "./settings/contract/wire/feeds": {
+      "types": "./src/settings/contract/wire/feeds.ts",
+      "browser": "./src/settings/contract/wire/feeds.ts",
+      "default": "./src/settings/contract/wire/feeds.ts"
+    },
+    "./settings/contract/wire/shortcuts": {
+      "types": "./src/settings/contract/wire/shortcuts.ts",
+      "browser": "./src/settings/contract/wire/shortcuts.ts",
+      "default": "./src/settings/contract/wire/shortcuts.ts"
+    },
     "./platform/contract/wire/live": {
       "types": "./src/platform/contract/wire/live.ts",
       "browser": "./src/platform/contract/wire/live.ts",
       "node": "./src/platform/contract/wire/live.ts",
       "default": "./src/platform/contract/wire/live.ts"
+    },
+    "./platform/contract/wire/chord": {
+      "types": "./src/platform/contract/wire/chord.ts",
+      "browser": "./src/platform/contract/wire/chord.ts",
+      "node": "./src/platform/contract/wire/chord.ts",
+      "default": "./src/platform/contract/wire/chord.ts"
     },
     "./worktrees/contract/wire/feed": {
       "types": "./src/worktrees/contract/wire/feed.ts",

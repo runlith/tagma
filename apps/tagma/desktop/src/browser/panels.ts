@@ -1,5 +1,5 @@
 import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, type WebContents } from 'electron';
-import type { BrowserIdentity, Chord, FramedChord, Identities, PageRect, PageShown } from '../bridge.js';
+import type { BrowserIdentity, Identities, PageRect, PageShown } from '../bridge.js';
 import { BROWSER } from '../channels.js';
 import type { Fronts } from '../fronts.js';
 import type { BrowserHost } from './host.js';
@@ -17,16 +17,6 @@ const isRect = (value: unknown): value is PageRect => {
 const isShown = (value: unknown): value is PageShown => {
   const shown = value as Partial<PageShown> | null;
   return typeof shown?.page === 'string' && typeof shown.panel === 'string';
-};
-
-const isChord = (value: unknown): value is Chord => {
-  const chord = value as Partial<Chord> | null;
-  return typeof chord?.code === 'string' && [chord.meta, chord.ctrl, chord.alt, chord.shift].every((flag) => typeof flag === 'boolean');
-};
-
-const isFramed = (value: unknown): value is FramedChord => {
-  const framed = value as Partial<FramedChord> | null;
-  return isChord(framed?.chord) && typeof framed?.frame === 'string' && framed.frame !== '';
 };
 
 export class Panels {
@@ -64,10 +54,6 @@ export class Panels {
       const held = window === null || !isShown(shown) || typeof frozen !== 'boolean' ? undefined : this.host.page(shown.page);
       if (window !== null && held !== undefined)
         this.host.placement.freeze(held.placed, window, (shown as PageShown).panel, frozen as boolean);
-    });
-    ipcMain.on(BROWSER.keys, (event, chords: unknown, framed: unknown) => {
-      if (!this.ours(event) || !Array.isArray(chords) || !chords.every(isChord)) return;
-      this.host.keys(event.sender, chords, Array.isArray(framed) && framed.every(isFramed) ? framed : []);
     });
     ipcMain.on(BROWSER.find, (event, page: unknown, text: unknown, forward: unknown) => {
       const held = this.pageOf(event, page);

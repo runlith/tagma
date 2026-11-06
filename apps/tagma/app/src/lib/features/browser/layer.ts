@@ -1,7 +1,7 @@
 import { Layer } from '@runlith/layer/Layer';
 import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Actions } from '$lib/features/workspace/action.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
 import { actions } from './actions.js';
@@ -21,7 +21,7 @@ export const BrowserLayer = Layer.mergeAll(
   SettingSections.contribute('browser', ...sections),
   LinkKinds.contribute('browser', ...links),
   LinkMenuItems.contribute('browser', ...items),
-  PaletteActions.contribute('browser', { id: 'browser', actions }),
+  Actions.contribute('browser', { id: 'browser', area: 'Browser', actions }),
   DesktopPages,
   Links,
   Picks,

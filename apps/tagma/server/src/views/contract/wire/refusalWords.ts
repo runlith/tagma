@@ -1,6 +1,7 @@
 import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
 
 export const REFUSAL_WORDS = {
+  'plugin-action-unknown': 'Plugin has no such action',
   'plugin-call-failed': 'Plugin tool failed',
   'plugin-resource-failed': 'Plugin view failed to load',
   'plugin-tool-unoffered': 'Tool not offered to views',

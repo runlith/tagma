@@ -52,6 +52,12 @@ await Effect.runPromise(
         journal(`ended ${String(args.runId)} ${String(args.status)} ${process.pid} ${callerKind(meta)}`);
         return { text: 'taken' };
       }
+      if (tool === 'asked') {
+        journal(`asked ${callerKind(meta)} ${JSON.stringify(args)}`);
+        if (existsSync(join(data, 'fail-asked'))) return { text: 'cannot take questions now', isError: true };
+        if (existsSync(join(data, 'leave'))) return { text: '', structuredContent: { question: 'left' } };
+        return { text: 'taken' };
+      }
       if (tool === 'environment') {
         return {
           text: JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([name]) => name.startsWith('TAGMA_')))),

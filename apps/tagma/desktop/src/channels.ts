@@ -1,5 +1,4 @@
 export const DICTATION = {
-  arm: 'dictation:arm',
   state: 'dictation:state',
   changed: 'dictation:changed',
   prompt: 'dictation:prompt',
@@ -12,8 +11,15 @@ export const DICTATION = {
 } as const;
 
 export const TABS = {
-  command: 'tabs:command',
   closeWindow: 'tabs:close-window',
+} as const;
+
+export const KEYS = {
+  publish: 'keys:publish',
+  press: 'keys:press',
+  kept: 'keys:kept',
+  answers: 'keys:answers',
+  answered: 'keys:answered',
 } as const;
 
 export const UPDATES = {
@@ -36,8 +42,6 @@ export const BROWSER = {
   hide: 'browser:hide',
   freeze: 'browser:freeze',
   elsewhere: 'browser:elsewhere',
-  keys: 'browser:keys',
-  key: 'browser:key',
   find: 'browser:find',
   stopFind: 'browser:stop-find',
   found: 'browser:found',

@@ -1,7 +1,7 @@
 <script lang="ts">
   import AppWindow from '@lucide/svelte/icons/app-window';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
-  import { PaletteActions } from '$lib/features/workspace/action.js';
+  import { Actions } from '$lib/features/workspace/action.js';
   import { launchesOf } from './launchers.js';
   import { ViewSets } from './ViewSets.svelte.js';
   import { ViewWindows } from './windows/ViewWindows.js';
@@ -9,7 +9,7 @@
   const LAUNCHERS = 'plugin-views:launchers';
 
   const sets = ViewSets.use();
-  const actions = PaletteActions.use();
+  const actions = Actions.use();
   const windows = ViewWindows.use();
   const workspace = Workspace.use();
 
@@ -21,6 +21,7 @@
   $effect(() => {
     return actions.register(LAUNCHERS, {
       id: LAUNCHERS,
+      area: 'Plugins',
       actions: launches.map((launch) => ({
         id: `plugin.${launch.plugin}.${launch.view}`,
         title: launch.title,

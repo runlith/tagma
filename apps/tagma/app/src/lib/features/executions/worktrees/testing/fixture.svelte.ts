@@ -18,6 +18,7 @@ import type { WorktreeTerminals } from '../WorktreeTerminals.svelte.js';
 import { TerminalAppearance } from '../../appearance/Settings.svelte.js';
 import { TerminalHolders } from '../../terminal/Holders.svelte.js';
 import { TerminalKeymap } from '../../terminal/Keymap.js';
+import { terminalKeymap } from '../../terminal/testing/keys.svelte.js';
 import { LaneSockets } from '$lib/wire/LaneSockets.js';
 import { TerminalOutput, pageHidden, pageTime } from '../../terminal/Output.js';
 import type { TerminalPane } from '../../terminal/Pane.svelte.js';
@@ -445,7 +446,7 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, {} as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),
-        Layer.of(TerminalKeymap, new TerminalKeymap(new Host('tab', 'linux'))),
+        Layer.of(TerminalKeymap, terminalKeymap(new Host('tab', 'linux'))),
         Layer.of(Worktrees, worktrees as never),
       ),
       {

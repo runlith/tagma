@@ -5,25 +5,27 @@ import type {
   DesktopDictation,
   DesktopFiles,
   DesktopFolders,
+  DesktopKeys,
   DesktopSurface,
   DesktopSwipe,
   DesktopTabs,
   DesktopUpdates,
   DesktopWindows,
+  GlobalAnswer,
   GlobalState,
   Identities,
+  KeyPress,
   OperatingSystemKind,
   PageFound,
-  PageKey,
   PageShown,
   Stroke,
   SurfaceKind,
   SurfaceRefusal,
   SwipeDirection,
   SwipePhase,
-  TabCommand,
+  WindowKeys,
 } from './bridge.js';
-import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
+import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, KEYS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
 
 function isMainFrame(): boolean {
   try {
@@ -55,7 +57,6 @@ function listen<T>(channel: string, listener: (value: T) => void): () => void {
 }
 
 const dictation: DesktopDictation = {
-  arm: (key) => ipcRenderer.send(DICTATION.arm, key),
   state: () => ipcRenderer.invoke(DICTATION.state) as Promise<GlobalState>,
   onState: (listener) => listen<GlobalState>(DICTATION.changed, listener),
   prompt: () => ipcRenderer.send(DICTATION.prompt),
@@ -68,7 +69,6 @@ const dictation: DesktopDictation = {
 };
 
 const tabs: DesktopTabs = {
-  onCommand: (listener) => listen<TabCommand>(TABS.command, listener),
   closeWindow: () => ipcRenderer.send(TABS.closeWindow),
 };
 
@@ -105,8 +105,6 @@ const browser: DesktopBrowser = {
   hide: (shown) => ipcRenderer.send(BROWSER.hide, shown),
   freeze: (shown, frozen) => ipcRenderer.send(BROWSER.freeze, shown, frozen),
   onElsewhere: (listener) => listen<PageShown>(BROWSER.elsewhere, listener),
-  keys: (chords, framed) => ipcRenderer.send(BROWSER.keys, chords, framed),
-  onKey: (listener) => listen<PageKey>(BROWSER.key, listener),
   find: (page, text, forward) => ipcRenderer.send(BROWSER.find, page, text, forward),
   stopFind: (page) => ipcRenderer.send(BROWSER.stopFind, page),
   onFound: (listener) => listen<PageFound>(BROWSER.found, listener),
@@ -115,6 +113,14 @@ const browser: DesktopBrowser = {
   capture: (page) => ipcRenderer.invoke(BROWSER.capture, page) as Promise<string | null>,
   identity: () => ipcRenderer.invoke(BROWSER.identity) as Promise<Identities | null>,
   chooseIdentity: (identity) => ipcRenderer.send(BROWSER.chooseIdentity, identity),
+};
+
+const keys: DesktopKeys = {
+  publish: (published) => ipcRenderer.send(KEYS.publish, published satisfies WindowKeys),
+  onPress: (listener) => listen<KeyPress>(KEYS.press, listener),
+  kept: () => ipcRenderer.invoke(KEYS.kept) as Promise<readonly string[]>,
+  answers: () => ipcRenderer.invoke(KEYS.answers) as Promise<readonly GlobalAnswer[]>,
+  onAnswers: (listener) => listen<readonly GlobalAnswer[]>(KEYS.answered, listener),
 };
 
 const RECEIVER_ONLY = /\/TemporaryItems\/NSIRD_[^/]*\//;
@@ -139,6 +145,7 @@ const api: DesktopApi = {
   windows,
   folders,
   browser,
+  keys,
   files,
   updates,
   ...(process.argv.includes(DEV_SURFACE_ARGUMENT) ? { surface } : {}),

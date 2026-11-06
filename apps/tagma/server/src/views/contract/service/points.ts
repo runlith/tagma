@@ -1,11 +1,15 @@
 import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
 import {
+  type ActionEntries,
+  ACTIONS_FACE,
   type LauncherEntries,
   LAUNCHERS_FACE,
   PANES_FACE,
   type ResultEntries,
   RESULTS_FACE,
   type SectionEntries,
+  type ShortcutEntries,
+  SHORTCUTS_FACE,
   SURFACES_FACE,
   type ViewEntries,
   VIEWS_FACE,
@@ -20,3 +24,7 @@ export const SURFACES = new ContributionPoint<never, SectionEntries>('views/surf
 export const PANES = new ContributionPoint<never, SectionEntries>('views/panes', PANES_FACE);
 
 export const LAUNCHERS = new ContributionPoint<never, LauncherEntries>('views/launchers', LAUNCHERS_FACE);
+
+export const ACTIONS = new ContributionPoint<never, ActionEntries>('views/actions', ACTIONS_FACE);
+
+export const SHORTCUTS = new ContributionPoint<never, ShortcutEntries>('views/shortcuts', SHORTCUTS_FACE);

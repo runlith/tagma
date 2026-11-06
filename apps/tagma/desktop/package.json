@@ -11,6 +11,12 @@
       "browser": "./src/bridge.ts",
       "node": "./src/bridge.ts",
       "default": "./src/bridge.ts"
+    },
+    "./kept": {
+      "types": "./src/kept.ts",
+      "browser": "./src/kept.ts",
+      "node": "./src/kept.ts",
+      "default": "./src/kept.ts"
     }
   },
   "scripts": {

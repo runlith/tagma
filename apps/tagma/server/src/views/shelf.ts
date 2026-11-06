@@ -16,18 +16,15 @@ import { PluginViews, type ViewFailure, type ViewMount, type ViewSites } from '.
 import type { ResultEntries, ViewEntries } from './contract/wire/points.js';
 import type { PluginViewSet, PluginViewState, ViewRefusalCode } from './contract/wire/sets.js';
 import { makeLaunchers } from './launchers.js';
+import { callRefusal, READ_PLUGINS, refusal, unreadable } from './refusals.js';
 import { makeSections } from './sections.js';
 
 type Shown = { readonly plugin: PluginRef; readonly views: ViewEntries };
 const RECOVERY = Schedule.min([Schedule.exponential('500 millis'), Schedule.spaced('30 seconds')]);
 const RETURNING: ReadonlySet<string> = new Set(['plugin-unavailable', 'plugin-view-unknown']);
-const READ_PLUGINS = 'read_plugins answers each plugin’s process state and why it stopped';
 const viewer = (mount: ViewMount): McpCaller => ({ kind: 'operator', projectId: mount.projectId, view: mount.view });
-const refusal = (code: ViewRefusalCode, reason: string) =>
-  new GateRefusal<ViewRefusalCode>(code, reason, code === 'plugin-unavailable' ? [READ_PLUGINS] : ['try again', READ_PLUGINS]);
 const resourceRefusal = (failure: { readonly _tag: string; readonly message: string }) =>
-  refusal(failure._tag === 'McpResourceFailed' ? 'plugin-resource-failed' : 'plugin-unavailable', failure.message);
-const unreadable = (failure: { readonly message: string }) => new GateRefusal('plugin-unavailable', failure.message, [READ_PLUGINS]);
+  refusal<ViewRefusalCode>(failure._tag === 'McpResourceFailed' ? 'plugin-resource-failed' : 'plugin-unavailable', failure.message);
 
 export const makeShelf = Effect.gen(function* () {
   const enabledPlugins = yield* EnabledPlugins;
@@ -147,19 +144,7 @@ export const makeShelf = Effect.gen(function* () {
             ]);
         });
         return yield* host.callAdmitted(mount.plugin, admit, tool, args, { caller }).pipe(
-          Effect.mapError((failure) => {
-            switch (failure._tag) {
-              case 'McpCallFailed':
-              case 'McpTimedOut':
-                return refusal('plugin-call-failed', failure.message);
-              case 'McpConnectFailed':
-              case 'McpNotConnected':
-              case 'McpNeedsSignIn':
-                return refusal('plugin-unavailable', failure.message);
-              default:
-                return failure;
-            }
-          }),
+          Effect.mapError((failure) => (failure instanceof GateRefusal ? failure : callRefusal(failure))),
           Effect.map(mcpAppResult),
         );
       }),
@@ -193,6 +178,9 @@ export const makeShelf = Effect.gen(function* () {
       },
     }),
     mounted,
+    moves: moved,
+    bump,
+    viewed: (): ReadonlyMap<string, PluginRef> => new Map([...shown].map(([id, standing]) => [id, standing.plugin])),
     contributions: {
       views: { point: VIEWS, register: registerViews },
       results: { point: RESULTS, register: registerResults },

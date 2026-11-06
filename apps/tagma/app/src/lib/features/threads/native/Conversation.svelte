@@ -17,6 +17,7 @@
   import { overlayLayers } from '@runlith/primitives/OverlayLayers.svelte';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { keyOfCode } from '$lib/shared/chordSpelling.js';
   import { FileSaver } from '$lib/shared/FileSaver.js';
   import { BlockTitles } from '$lib/features/graph/BlockTitles.svelte.js';
   import { CommitLinks } from '$lib/features/checkout/CommitLinks.svelte.js';
@@ -95,8 +96,14 @@
   const keymap = Keymap.use();
 
   function spelled(chord: ChatChord): string {
-    const base = chord.mod === true ? keymap.mod(chord.code) : keymap.bare(chord.code);
-    return keymap.spell({ ...base, alt: chord.alt === true, shift: chord.shift === true });
+    const mod = chord.mod === true;
+    return keymap.spellChord({
+      key: keyOfCode(chord.code),
+      meta: mod && keymap.mac,
+      ctrl: mod && !keymap.mac,
+      alt: chord.alt === true,
+      shift: chord.shift === true,
+    });
   }
 
   const tip = (shown: () => ChatTip): Attachment<HTMLElement> =>

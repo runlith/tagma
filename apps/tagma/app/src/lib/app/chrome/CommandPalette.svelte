@@ -11,7 +11,7 @@
   import { Tabs } from '$lib/features/checkout/files/Tabs.svelte.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { ActionEnv } from '$lib/features/workspace/action.js';
-  import { ActionRegistry } from './ActionRegistry.js';
+  import { ActionRegistry } from './ActionRegistry.svelte.js';
   import { ASK_VALUE, type FilesPort, PaletteModel, type Row as PaletteRow, SHOWN } from '$lib/features/palette/Palette.svelte.js';
   import type { GroupId } from '$lib/app/panes/palette.js';
   import { CHIPS, GROUP_TITLES, nextChip } from '$lib/features/palette/query.js';
@@ -21,9 +21,8 @@
   import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
   import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
   import { Asking } from '$lib/features/threads/Asking.js';
-  import { projectOpen, settingsHref } from '$lib/features/workspace/address.js';
+  import { settingsHref } from '$lib/features/workspace/address.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
-  import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -56,15 +55,9 @@
   const router = Router.use();
   const sections = SectionRegistry.use();
   const addresses = Addresses.use();
-  const surfaces = SurfaceRegistry.use();
 
-  const env = (): ActionEnv => ({
-    project: workspace.contextProject,
-    routeProject: projectOpen(router) ? (router.params.project ?? null) : null,
-    surface: projectOpen(router) ? surfaces.of(router.routeId, router.params) : null,
-    goto: (href) => void router.goto(href),
-    resolve: (key) => app.resolve(key),
-  });
+  const registry = ActionRegistry.use();
+  const env = (): ActionEnv => registry.env();
 
   const opener = FileOpener.use();
   const graphAim = GraphRung.Source.use();
@@ -102,8 +95,7 @@
     },
   };
 
-  const registry = ActionRegistry.use();
-  const declared = $derived(registry.of(app));
+  const declared = $derived(registry.of());
 
   const model = new PaletteModel(
     workspace,
@@ -198,7 +190,7 @@
       return;
     }
     if (row.kind === 'action') {
-      void Promise.resolve(row.action.run(env())).catch((error: unknown) => notices.refusal(error));
+      void Promise.resolve(row.action.run?.(env())).catch((error: unknown) => notices.refusal(error));
       return;
     }
     const where = row.kind === 'thread' ? (row.hit.project?.name ?? project?.name) : project?.name;
@@ -293,7 +285,7 @@
       >
         <Globe class="size-3.5" />
         All projects
-        <Kbd chord={keymap.spell({ ...keymap.bare('KeyP'), alt: true })} size="sm" />
+        <Kbd chord={keymap.spellText('Alt+P')} size="sm" />
       </button>
     {/if}
   </div>
@@ -380,12 +372,10 @@
       {/each}
     </div>
     <div class="flex shrink-0 items-center gap-3">
-      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spell(keymap.bare('Enter'))} size="sm" />open</span>
-      {#if besideable}<span class="flex items-center gap-1.5"
-          ><Kbd chord={keymap.spell({ ...keymap.bare('Enter'), alt: true })} size="sm" />beside</span
-        >{/if}
-      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spell(keymap.mod('Enter'))} size="sm" />ask</span>
-      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spell(keymap.bare('Tab'))} size="sm" />group</span>
+      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spellText('Enter')} size="sm" />open</span>
+      {#if besideable}<span class="flex items-center gap-1.5"><Kbd chord={keymap.spellText('Alt+Enter')} size="sm" />beside</span>{/if}
+      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spellText('Mod+Enter')} size="sm" />ask</span>
+      <span class="flex items-center gap-1.5"><Kbd chord={keymap.spellText('Tab')} size="sm" />group</span>
     </div>
   </div>
 </Command.Root>

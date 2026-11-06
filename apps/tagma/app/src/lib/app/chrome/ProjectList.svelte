@@ -14,7 +14,7 @@
   import { Host } from '@runlith/layer/Host';
   import { Menu } from '@runlith/primitives/menu.svelte';
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
-  import { chordOf, Keymap, sameChord } from '$lib/app/keys/Keymap.svelte.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { labelOf } from '$lib/features/workspace/mark.js';
   import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
@@ -60,8 +60,8 @@
   const keymap = Keymap.use();
   const windows = ProjectWindows.find();
   const newWindowKeys = spellChord({ key: 'Enter', meta: host.apple, ctrl: !host.apple, alt: false, shift: false }, host.apple);
-  const removeChord = keymap.mod('Backspace');
-  const removeKeys = keymap.spell(removeChord);
+  const removeChord = 'Mod+Backspace';
+  const removeKeys = keymap.spellText(removeChord);
   const renameKeys = spellKey('F2', host.apple);
 
   let query = $state('');
@@ -99,7 +99,7 @@
   }
 
   function pressed(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
-    const act = sameChord(chordOf(event), removeChord)
+    const act = keymap.matches(event, removeChord)
       ? '[data-project-remove]'
       : event.key === 'F2'
         ? '[data-project-rename]'

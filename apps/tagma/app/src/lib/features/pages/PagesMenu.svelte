@@ -4,7 +4,7 @@
   import FileText from '@lucide/svelte/icons/file-text';
   import type { ThreadPage } from '@tagma/server/artifacts/contract/wire/artifacts';
   import { Host } from '@runlith/layer/Host';
-  import { chordOf, Keymap, sameChord } from '$lib/app/keys/Keymap.svelte.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import { ThreadPlaces } from '$lib/app/panes/ThreadPlaces.js';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
@@ -25,8 +25,8 @@
   const host = Host.use();
   const keymap = Keymap.use();
   const panel = host.kind !== 'mobile';
-  const copyChord = keymap.mod('KeyC');
-  const copyKeys = keymap.spell(copyChord);
+  const copyChord = 'Mod+C';
+  const copyKeys = keymap.spellText(copyChord);
 
   const team = $derived(pages.members);
 
@@ -53,7 +53,7 @@
   }
 
   function pressed(event: KeyboardEvent, page: ThreadPage): void {
-    if (!sameChord(chordOf(event), copyChord)) return;
+    if (!keymap.matches(event, copyChord)) return;
     event.preventDefault();
     void copy(page);
   }

@@ -89,6 +89,7 @@ const HANDLED_BY: Readonly<Record<HandledPoint, keyof PluginDefinition>> = {
   beforeBuild: 'beforeBuild',
   on: 'onThreadEnded',
   notify: 'onNotification',
+  actions: 'actions',
 };
 
 const HANDLED: ReadonlySet<string> = new Set(Object.keys(HANDLED_BY));
@@ -103,7 +104,9 @@ const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, tr
   resources: true,
   schedules: true,
   beforeBuild: true,
+  actions: true,
   onThreadEnded: true,
+  onThreadAsked: true,
   onNotification: true,
 };
 
@@ -148,7 +151,24 @@ const dataOf = (definition: PluginDefinition): PluginData =>
 
 export const describePlugin = (definition: PluginDefinition): PluginDescription => {
   unknownFields(definition);
-  const { id, title, description, options, resident, resources, schedules, beforeBuild, onThreadEnded, onNotification } = definition;
+  const {
+    id,
+    title,
+    description,
+    options,
+    resident,
+    resources,
+    schedules,
+    beforeBuild,
+    actions,
+    onThreadEnded,
+    onThreadAsked,
+    onNotification,
+  } = definition;
+  const on = {
+    ...(onThreadEnded === undefined ? {} : { ended: handlerTools.ended }),
+    ...(onThreadAsked === undefined ? {} : { asked: handlerTools.asked }),
+  };
   const scheduled = Object.entries(schedules ?? {}).map(([name, declared]) => ({
     name: named('schedule', name),
     everyMs: everyMs(name, declared.every),
@@ -158,11 +178,18 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     tool: handlerTools.build(named('build step', name)),
     title: step.title,
   }));
+  const acts = Object.entries(actions ?? {}).map(([name, declared]) => ({
+    id: named('action', name),
+    title: declared.title,
+    tool: handlerTools.action(name),
+  }));
   const tools: ToolEntry[] = [
     ...Object.entries(definition.tools ?? {}).map(([name, declared]) => authored(name, declared)),
     ...scheduled.map((entry) => tagmaTool(entry.tool, `Runs the schedule ${entry.name}.`)),
     ...steps.map((entry) => tagmaTool(entry.tool, `Runs the build step ${entry.title}.`)),
+    ...acts.map((entry) => tagmaTool(entry.tool, `Runs the action ${entry.title}.`)),
     ...(onThreadEnded === undefined ? [] : [tagmaTool(handlerTools.ended, 'Receives the end of a turn of a thread bound to this plugin.')]),
+    ...(onThreadAsked === undefined ? [] : [tagmaTool(handlerTools.asked, 'Takes a question of a thread bound to this plugin.')]),
     ...(onNotification === undefined
       ? []
       : [tagmaTool(handlerTools.notification, 'Receives the answer to a notification this plugin sent.')]),
@@ -173,7 +200,8 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     ...(tools.length === 0 ? {} : { tools }),
     ...(scheduled.length === 0 ? {} : { schedule: scheduled }),
     ...(steps.length === 0 ? {} : { beforeBuild: steps }),
-    ...(onThreadEnded === undefined ? {} : { on: { ended: handlerTools.ended } }),
+    ...(acts.length === 0 ? {} : { actions: acts }),
+    ...(Object.keys(on).length === 0 ? {} : { on }),
     ...(onNotification === undefined ? {} : { notify: { tool: handlerTools.notification } }),
   };
   return { id, title, description, options, process: handled ? { resident: resident ?? false } : null, tools, contributes };

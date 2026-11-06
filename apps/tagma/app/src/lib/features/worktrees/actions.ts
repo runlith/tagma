@@ -1,8 +1,8 @@
 import GitBranchPlus from '@lucide/svelte/icons/git-branch-plus';
-import type { PaletteActionList } from '$lib/features/workspace/action.js';
+import type { ActionList } from '$lib/features/workspace/action.js';
 import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 
-export const actions: PaletteActionList = [
+export const actions: ActionList = [
   {
     id: 'worktree.new',
     order: 25,

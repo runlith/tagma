@@ -319,7 +319,7 @@
       </Tooltip>
       <ViewMenu />
       {#if closable}
-        <Tooltip text="Close" keys={keymap.spell(keymap.bare('Escape'))}>
+        <Tooltip text="Close" keys={keymap.spellText('Escape')}>
           <button type="button" class={ICON} aria-label="Close" onclick={onClose}><X class="size-3.5" /></button>
         </Tooltip>
       {/if}

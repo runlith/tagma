@@ -3,16 +3,22 @@ import { EventEmitter } from 'node:events';
 
 class Contents extends EventEmitter {
   loaded: string[] = [];
+  sent: [string, unknown][] = [];
+  readonly focusedFrame = null;
+  readonly mainFrame = { frameTreeNodeId: 1, url: '' };
   loadURL(url: string): Promise<void> {
     this.loaded.push(url);
     return Promise.resolve();
   }
   setWindowOpenHandler(): void {}
-  send(): void {}
+  send(channel: string, value: unknown): void {
+    this.sent.push([channel, value]);
+  }
 }
 
 class Window extends EventEmitter {
   static made: Window[] = [];
+  static getAllWindows = (): Window[] => Window.made.filter((window) => !window.destroyed);
   readonly webContents = new Contents();
   destroyed = false;
   visible = false;
@@ -53,7 +59,9 @@ class Window extends EventEmitter {
 }
 
 const chords = new Map<string, () => void>();
+const heldByOthers = new Set<string>();
 const handlers = new Map<string, (event: unknown, value: unknown) => void>();
+const invoked = new Map<string, (event: unknown) => unknown>();
 const dialogs: (Window | null)[] = [];
 const desktop = { hidden: false };
 
@@ -73,18 +81,25 @@ mock.module('electron', () => ({
     },
   },
   globalShortcut: {
-    register: (accelerator: string, toggle: () => void) => !chords.has(accelerator) && chords.set(accelerator, toggle) !== undefined,
+    register: (accelerator: string, toggle: () => void) =>
+      !heldByOthers.has(accelerator) && !chords.has(accelerator) && chords.set(accelerator, toggle) !== undefined,
     unregister: (accelerator: string) => chords.delete(accelerator),
   },
-  ipcMain: { on: (channel: string, handler: (event: unknown, value: unknown) => void) => handlers.set(channel, handler) },
+  ipcMain: {
+    on: (channel: string, handler: (event: unknown, value: unknown) => void) => handlers.set(channel, handler),
+    handle: (channel: string, handler: (event: unknown) => unknown) => invoked.set(channel, handler),
+  },
   screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) },
   shell: { openExternal: async () => undefined },
 }));
 
 const { ProjectWindows } = await import('./projectWindows.js');
 const { SurfaceLoader } = await import('./SurfaceLoader.js');
-const { WINDOWS } = await import('./channels.js');
+const { KEYS, WINDOWS } = await import('./channels.js');
 const { Fronts } = await import('./fronts.js');
+const { GlobalShortcuts } = await import('@runlith/desktop-host/GlobalShortcuts');
+const { Globals } = await import('./globals.js');
+const { Keys } = await import('./keys.js');
 
 const surface = new URL('http://127.0.0.1:5173/');
 const vite = new URL('http://localhost:5641/');
@@ -104,7 +119,11 @@ const devPort = () => {
   };
 };
 
-const compose = (dev: ReturnType<typeof devPort> | null = null) => {
+const compose = (
+  dev: ReturnType<typeof devPort> | null = null,
+  keys: ConstructorParameters<typeof ProjectWindows>[7] = { follow: () => undefined },
+  to: (windows: InstanceType<typeof ProjectWindows>) => void = () => undefined,
+) => {
   let windows: InstanceType<typeof ProjectWindows> | undefined;
   const loader = new SurfaceLoader(
     surface,
@@ -120,10 +139,47 @@ const compose = (dev: ReturnType<typeof devPort> | null = null) => {
       fell: async () => 'left',
     },
   );
-  windows = new ProjectWindows(new Fronts(surface), '/preload.cjs', '/nowhere/placement.json', loader, null, () => undefined, dev);
+  windows = new ProjectWindows(new Fronts(surface), '/preload.cjs', '/nowhere/placement.json', loader, null, () => undefined, dev, keys);
+  to(windows);
   windows.install();
   return windows;
 };
+
+type Grant = { grant: 'held' | 'needs-accessibility' | 'unavailable'; reason: string | null };
+
+const keyed = () => {
+  const holds = { armed: [] as unknown[], grant: { grant: 'held', reason: null } as Grant };
+  const dictation = {
+    arm: async (chord: unknown) => void holds.armed.push(chord),
+    grant: () => holds.grant,
+    watch: () => () => undefined,
+  };
+  const globals = new Globals(new GlobalShortcuts(true), dictation, true);
+  let windows: InstanceType<typeof ProjectWindows> | undefined;
+  const mac = process.platform === 'darwin';
+  const keys = new Keys(
+    new Fronts(surface),
+    globals,
+    () => new Set([mac ? 'Cmd+W' : 'Ctrl+W']),
+    () => [],
+    (contents) => windows?.published(contents),
+  );
+  keys.install();
+  windows = compose(null, keys, (made) => globals.attach(made));
+  return { windows, holds };
+};
+
+const publish = (window: Window, global: readonly { chord: string; action: string; hold: boolean }[], chords: string[] = []): void =>
+  handlers.get(KEYS.publish)?.(
+    { sender: window.webContents, senderFrame: { url: surface.toString() } },
+    { chords, claimed: chords, framed: [], served: [], global },
+  );
+
+const answers = (window: Window): unknown =>
+  invoked.get(KEYS.answers)?.({ sender: window.webContents, senderFrame: { url: surface.toString() } });
+
+const presses = (window: Window): unknown[] =>
+  window.webContents.sent.filter(([channel]) => channel === KEYS.press).map(([, press]) => press);
 
 const open = (): Window[] => Window.made.filter((window) => !window.destroyed);
 const last = (window: Window): string | undefined => window.webContents.loaded.at(-1);
@@ -133,7 +189,9 @@ const asked = (from: string, path: unknown): void => handlers.get(WINDOWS.openPr
 beforeEach(() => {
   Window.made = [];
   chords.clear();
+  heldByOthers.clear();
   handlers.clear();
+  invoked.clear();
   dialogs.length = 0;
   desktop.hidden = false;
 });
@@ -257,24 +315,94 @@ test('activating the app makes a window only when none is open', async () => {
   expect(last(open()[0]!)).toBe(surface.toString());
 });
 
-test('the quick hide chord is held once by the app and hides and shows every window, and activation after it shows them all', () => {
-  const windows = compose();
+const FIND = { chord: 'Shift+Cmd+K', action: 'find.ask', hold: false };
+
+test('a published global registers, a chord another app holds is answered taken, and the set outlives the last window', () => {
+  heldByOthers.add('Alt+Space');
+  const { windows } = keyed();
+  windows.create(surface);
+  const [window] = open();
+
+  publish(window!, [FIND, { chord: 'Alt+Space', action: 'launch.show', hold: false }]);
+  const expected = [
+    { chord: 'Shift+Cmd+K', grant: 'held', reason: null },
+    { chord: 'Alt+Space', grant: 'taken', reason: null },
+  ];
+
+  expect(chords.has('Shift+Command+K')).toBe(true);
+  expect(chords.has('Alt+Space')).toBe(false);
+  expect(answers(window!)).toEqual(expected);
+  expect(window!.webContents.sent).toContainEqual([KEYS.answered, expected]);
+
+  window!.destroy();
+  expect(open()).toHaveLength(0);
+  expect(chords.has('Shift+Command+K')).toBe(true);
+});
+
+test('a global pressed with no window open opens one and delivers the press once that window publishes, and straight to a window that stands', () => {
+  const { windows } = keyed();
+  windows.create(surface);
+  publish(open()[0]!, [FIND]);
+  open()[0]!.destroy();
+
+  chords.get('Shift+Command+K')!();
+  const [opened] = open();
+  expect(open()).toHaveLength(1);
+  expect(presses(opened!)).toEqual([]);
+
+  publish(opened!, [FIND]);
+  expect(presses(opened!)).toEqual([{ chord: 'Shift+Cmd+K', page: null, frame: null, global: true }]);
+
+  chords.get('Shift+Command+K')!();
+  expect(presses(opened!)).toHaveLength(2);
+});
+
+test('the hide action runs in main over every window and reaches none, and a hold global arms Dictation and answers from its state', () => {
+  const { windows, holds } = keyed();
   windows.create(surface);
   windows.create(new URL('/runlith/chat', surface));
-  for (const window of open()) window.emit('ready-to-show');
-  const chord = chords.get('CommandOrControl+Shift+L')!;
-  const some = (): boolean => !desktop.hidden && open().some((window) => window.visible);
-  const every = (): boolean => !desktop.hidden && open().every((window) => window.visible);
+  for (const one of open()) one.emit('ready-to-show');
+  const [window] = open();
+  const some = (): boolean => !desktop.hidden && open().some((one) => one.visible);
+  const every = (): boolean => !desktop.hidden && open().every((one) => one.visible);
 
-  expect([...chords.keys()]).toEqual(['CommandOrControl+Shift+L']);
-  chord();
+  publish(window!, [
+    { chord: 'Shift+Cmd+L', action: 'tagma.hide', hold: false },
+    { chord: 'Alt+Space', action: 'dictation.hold', hold: true },
+  ]);
+  chords.get('Shift+Command+L')!();
   expect(some()).toBe(false);
-  chord();
+  chords.get('Shift+Command+L')!();
   expect(every()).toBe(true);
-
-  chord();
+  chords.get('Shift+Command+L')!();
   windows.reveal();
   expect(every()).toBe(true);
-  chord();
-  expect(some()).toBe(false);
+  expect(presses(window!)).toEqual([]);
+
+  expect(holds.armed).toEqual([{ meta: false, ctrl: false, alt: true, shift: false, key: 'Space' }]);
+  expect(chords.has('Alt+Space')).toBe(false);
+  holds.grant = { grant: 'needs-accessibility', reason: null };
+  expect(answers(window!)).toContainEqual({ chord: 'Alt+Space', grant: 'needs-accessibility', reason: null });
+});
+
+test('⌘W is cancelled for the menu and delivered to the page as a press because the window published it and the menu holds it', () => {
+  const { windows } = keyed();
+  windows.create(surface);
+  const [window] = open();
+  const mac = process.platform === 'darwin';
+  const close = mac ? 'Cmd+W' : 'Ctrl+W';
+  publish(window!, [], [close, mac ? 'Cmd+K' : 'Ctrl+K']);
+  const type = (letter: string): boolean => {
+    let prevented = false;
+    window!.webContents.emit(
+      'before-input-event',
+      { preventDefault: () => (prevented = true) },
+      { type: 'keyDown', key: letter, code: `Key${letter.toUpperCase()}`, meta: mac, control: !mac, alt: false, shift: false },
+    );
+    return prevented;
+  };
+
+  expect(type('w')).toBe(true);
+  expect(type('k')).toBe(false);
+  expect(presses(window!)).toEqual([{ chord: close, page: null, frame: null, global: false }]);
 });

@@ -133,7 +133,7 @@
       {/if}
     </div>
     {#if searchHere || !roomy}
-      <Tooltip text="Find or ask" keys={keymap.spell(keymap.mod('KeyK'))}>
+      <Tooltip text="Find or ask" keys={keymap.spell('palette.open')}>
         <Button
           variant="quiet"
           size="icon-sm"

@@ -77,7 +77,7 @@
     class="min-h-0 w-full resize-none rounded-md bg-sunken px-2 py-1.5 text-ui text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:inset-ring-1 focus-visible:inset-ring-ring"
   ></textarea>
   <div class="flex items-center gap-1">
-    <Tooltip text="Commit" keys={keymap.spell(keymap.mod('Enter'))} class="flex flex-1">
+    <Tooltip text="Commit" keys={keymap.spellText('Mod+Enter')} class="flex flex-1">
       <Button size="sm" class="h-7 flex-1" disabled={!ready} onclick={() => commit()} aria-busy={committing}>
         {#if committing}
           <Waiting class="size-3.5" />Committing…

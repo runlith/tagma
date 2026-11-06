@@ -15,6 +15,7 @@
   const keymap = Keymap.use();
 
   const active = $derived(tabs.active);
+  const find = $derived(keymap.spell('palette.files'));
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col" data-editor-area>
@@ -24,7 +25,9 @@
   <div class="min-h-0 flex-1">
     {#if active === null}
       <p class="grid h-full place-items-center px-6 text-center text-ui text-muted-foreground" data-checkout-pick>
-        <span>Open a file from the tree, or press <Kbd chord={keymap.spell(keymap.mod('KeyP'))} /> to find one</span>
+        <span
+          >Open a file from the tree{#if find !== null}, or press <Kbd chord={find} /> to find one{/if}</span
+        >
       </p>
     {:else}
       {#each [active] as tab (tab.id)}

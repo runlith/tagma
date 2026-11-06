@@ -39,7 +39,9 @@ void app.whenReady().then(async () => {
       fell: async () => 'left',
     },
   );
-  windows = new ProjectWindows(fronts, '', join(app.getPath('userData'), 'placement.json'), loader, null, () => undefined, null);
+  windows = new ProjectWindows(fronts, '', join(app.getPath('userData'), 'placement.json'), loader, null, () => undefined, null, {
+    follow: () => undefined,
+  });
   Object.assign(globalThis, {
     surfaceCache: {
       url: url.toString(),

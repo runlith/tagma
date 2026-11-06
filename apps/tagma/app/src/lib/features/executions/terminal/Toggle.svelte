@@ -2,13 +2,14 @@
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import TerminalIcon from '../TerminalIcon.svelte';
   import { Terminals } from '../worktrees/Terminals.svelte.js';
-  import { TerminalKeymap } from './Keymap.js';
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+  import { TOGGLE } from './actions.js';
 
   const terminals = Terminals.use();
-  const keymap = TerminalKeymap.use();
+  const keymap = Keymap.use();
 
   const count = $derived(terminals.count(terminals.home));
-  const chord = $derived(keymap.chordLabel('toggle-terminals'));
+  const chord = $derived(keymap.spell(TOGGLE));
   const label = $derived(terminals.shown ? 'Hide terminals' : 'Show terminals');
 </script>
 

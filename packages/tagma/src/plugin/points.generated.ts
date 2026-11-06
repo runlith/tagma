@@ -26,6 +26,11 @@ export type PluginEnvelope = {
 };
 
 export type PluginPoints = {
+  readonly actions: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly tool: string;
+  }[];
   readonly agents: readonly {
     readonly id: string;
     readonly path: string;
@@ -43,6 +48,7 @@ export type PluginPoints = {
   };
   readonly on: {
     readonly ended?: string;
+    readonly asked?: string;
   };
   readonly panes: readonly {
     readonly view: string;
@@ -60,6 +66,11 @@ export type PluginPoints = {
     readonly name: string;
     readonly everyMs: number;
     readonly tool: string;
+  }[];
+  readonly shortcuts: readonly {
+    readonly keys: string;
+    readonly action: string;
+    readonly global?: boolean;
   }[];
   readonly surfaces: readonly {
     readonly view: string;
@@ -237,4 +248,4 @@ export type BuildVerdict = {
   readonly thread?: string;
 };
 
-export const POINT_NAMES = ['agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];
+export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

@@ -98,13 +98,15 @@
   {:else if row.kind === 'action'}
     {@const Icon = row.action.icon ?? ChevronRight}
     {@const note = row.action.note?.(env) ?? null}
+    {@const chord = keymap.spell(row.action.id)}
     <Icon class="size-3.5 shrink-0 text-muted-foreground" />
     <FadeText class="flex-1"><MatchText text={row.action.title} positions={row.positions} /></FadeText>
     {#if note !== null}<span class="stamp shrink-0 text-muted-foreground">{note}</span>{/if}
+    {#if chord !== null}<Kbd {chord} size="sm" />{/if}
   {:else}
     <Sparkles class="size-3.5 shrink-0 text-brand" />
     <span class="shrink-0">Ask Tagma</span>
     <FadeText class="flex-1 text-muted-foreground" text={`“${row.text}”`} />
-    <Kbd chord={keymap.spell(keymap.mod('Enter'))} size="sm" />
+    <Kbd chord={keymap.spellText('Mod+Enter')} size="sm" />
   {/if}
 </Command.Item>

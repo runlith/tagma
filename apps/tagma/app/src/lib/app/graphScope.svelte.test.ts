@@ -16,7 +16,9 @@ import { SessionsRepo } from '$lib/features/graph/SessionsRepo.js';
 import { mountShell, type TestApp, testTagCatalog } from '$lib/app/testing.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
-import { Live, type GraphFrame } from '$lib/wire/Live.js';
+import { Live, type GraphFrame, type SubscriptionFailure } from '$lib/wire/Live.js';
+import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { Scope } from '@runlith/layer/Scope';
 import { Door } from '$lib/wire/Door.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 
@@ -72,7 +74,12 @@ const change = (over: Partial<Extract<GraphFrame, { type: 'change' }>> = {}): Gr
 
 type Held = { tree: TreeBlock[]; sessions: ReturnType<typeof session>[] };
 
-type Subscription = { readonly branch: string; readonly frame: (frame: GraphFrame) => void; open: boolean };
+type Subscription = {
+  readonly branch: string;
+  readonly frame: (frame: GraphFrame) => void;
+  readonly fail: (failure: SubscriptionFailure) => void;
+  open: boolean;
+};
 
 let graphs = new Map<string, Held>();
 const held = (url: URL): Held => graphs.get(url.searchParams.get('branch') ?? '') ?? { tree: [], sessions: [] };
@@ -101,12 +108,12 @@ function stand(branch: string, server: Record<string, Held>) {
   const failures: unknown[] = [];
 
   const live = {
-    hold: (subscribe: (client: never) => unknown, frame: (frame: GraphFrame) => void) => {
+    hold: (subscribe: (client: never) => unknown, frame: (frame: GraphFrame) => void, fail: (failure: SubscriptionFailure) => void) => {
       const aim = subscribe({ 'graph.subscribe': (params: unknown) => params } as never) as {
         projectId: number;
         branch?: string;
       };
-      const subscription: Subscription = { branch: aim.branch ?? '', frame, open: true };
+      const subscription: Subscription = { branch: aim.branch ?? '', frame, fail, open: true };
       subscriptions.push(subscription);
       return {
         unsubscribe: () => {
@@ -189,6 +196,20 @@ test('the branch the address moves to is a new scope: the old one is finalized, 
   expect((await now.tree.loadOrThrow())?.map((row) => row.name)).toEqual(['next-root']);
   expect(world.answersUnder(Repo.prefixOf(after))).toContain('blocks.tree');
   expect(world.failures).toEqual([]);
+});
+
+test('a branch whose working copy is removed under the window is no error of the window', async () => {
+  const world = stand('gone', { gone: { tree: [], sessions: [] } });
+  const here = world.app.app.hold('graph', { projectId: 1, branch: 'gone' });
+  world.app.app.resolve(GraphFeed, here.scope);
+  const gone = world.subscriptions.find((standing) => standing.branch === 'gone' && standing.open);
+  gone?.fail({ kind: 'subscription', code: 'no-checkout', message: 'no working copy stands on branch "gone"', unblock: [] });
+
+  const notices = new Notices(Scope.make());
+  for (const failure of world.failures) notices.background(failure);
+  expect(world.failures).toHaveLength(1);
+  expect(notices.faults).toEqual([]);
+  here.release();
 });
 
 test('a commit on one branch reaches that branch’s tree and no other', async () => {

@@ -12,6 +12,27 @@ export type EndingInput = {
   readonly failureReason: string | null;
 };
 
+export type AskedPrompt = {
+  readonly id: string;
+  readonly prompt: string;
+  readonly header?: string;
+  readonly options: readonly { readonly value: string; readonly label: string; readonly description?: string }[];
+  readonly freeform: boolean;
+  readonly multiple: boolean;
+};
+
+export type AskedInput = {
+  readonly threadId: string;
+  readonly questionId: string;
+  readonly summary: string;
+  readonly prompts: readonly AskedPrompt[] | null;
+  readonly deadlineAt: string | null;
+};
+
+export const ASKED_LEFT = { question: 'left' } as const;
+
+export type AskedLeft = typeof ASKED_LEFT;
+
 export type NotificationInput = {
   readonly id: string;
   readonly title: string;
@@ -36,6 +57,8 @@ export const RESERVED_PREFIX = '__';
 export const handlerTools = {
   schedule: (name: string): string => `${RESERVED_PREFIX}schedule_${name}`,
   build: (name: string): string => `${RESERVED_PREFIX}build_${name}`,
+  action: (name: string): string => `${RESERVED_PREFIX}action_${name}`,
   ended: `${RESERVED_PREFIX}ended`,
+  asked: `${RESERVED_PREFIX}asked`,
   notification: `${RESERVED_PREFIX}notification`,
 } as const;

@@ -37,6 +37,7 @@ export type TestedPlugin = {
   readonly end: (ending: EndingInput, project?: number | null) => Promise<TestedAnswer>;
   readonly notify: (answer: NotificationInput) => Promise<TestedAnswer>;
   readonly build: (step: string, input: BuildStepInput, project?: number | null) => Promise<TestedAnswer>;
+  readonly act: (action: string, project?: number | null) => Promise<TestedAnswer>;
   readonly read: (uri: string, caller?: McpCaller) => Promise<TestedAnswer>;
   readonly changed: readonly string[];
 };
@@ -86,6 +87,8 @@ export const testPlugin = (definition: PluginDefinition, given: TestPluginOption
     end: (ending, project = AGENT.projectId) => call(handlerTools.ended, ending, tagma(project, 'ended')),
     notify: (answer) => call(handlerTools.notification, answer, tagma(null, 'notification')),
     build: (step, input, project = AGENT.projectId) => call(handlerTools.build(step), input, tagma(project, 'build')),
+    act: (action, project = AGENT.projectId) =>
+      call(handlerTools.action(action), {}, { kind: 'operator', projectId: project, view: `action:${action}` }),
     read: async (uri, caller = AGENT) => {
       const read = await serving.read(uri, meta(caller), new AbortController().signal);
       return 'refused' in read ? { text: read.refused, isError: true } : { text: read.text, isError: false };

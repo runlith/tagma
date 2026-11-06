@@ -1,5 +1,5 @@
 import type { ChordModifier, HoldBinding } from '@runlith/desktop-input/contract/types';
-import type { HeldKey } from './bridge.js';
+import type { HostChord } from '@tagma/server/platform/contract/wire/chord';
 
 const LETTERS: Readonly<Record<string, number>> = {
   A: 0,
@@ -46,7 +46,6 @@ const NAMED: Readonly<Record<string, number>> = {
   BracketLeft: 33,
   BracketRight: 30,
   Backslash: 42,
-  IntlBackslash: 10,
   Semicolon: 41,
   Quote: 39,
   Comma: 43,
@@ -62,22 +61,21 @@ const NAMED: Readonly<Record<string, number>> = {
   ArrowUp: 126,
 };
 
-function keyCodeOf(code: string): number | undefined {
-  const letter = /^Key([A-Z])$/.exec(code)?.[1];
-  if (letter !== undefined) return LETTERS[letter];
-  const digit = /^Digit([0-9])$/.exec(code)?.[1];
-  if (digit !== undefined) return DIGITS[Number(digit)];
-  const fn = /^F([0-9]{1,2})$/.exec(code)?.[1];
+function keyCodeOf(key: string): number | undefined {
+  if (/^[A-Z]$/.test(key)) return LETTERS[key];
+  if (/^[0-9]$/.test(key)) return DIGITS[Number(key)];
+  const fn = /^F([0-9]{1,2})$/.exec(key)?.[1];
   if (fn !== undefined) return FUNCTIONS[Number(fn) - 1];
-  return NAMED[code];
+  return NAMED[key];
 }
 
-export function bindingOf(key: HeldKey): HoldBinding | null {
-  const keyCode = keyCodeOf(key.code);
+export function bindingOf(chord: HostChord): HoldBinding | null {
+  const keyCode = keyCodeOf(chord.key);
   if (keyCode === undefined) return null;
   const modifiers: ChordModifier[] = [];
-  if (key.meta) modifiers.push('command');
-  if (key.alt) modifiers.push('option');
-  if (key.ctrl) modifiers.push('control');
+  if (chord.meta) modifiers.push('command');
+  if (chord.alt) modifiers.push('option');
+  if (chord.ctrl) modifiers.push('control');
+  if (chord.shift) modifiers.push('shift');
   return { kind: 'key', keyCode, modifiers };
 }

@@ -25,9 +25,6 @@ export type Tuning = Readonly<Record<string, Readonly<Record<string, number>>>>;
 export const SPEECH = {
   recognizer: 'speech.recognizer',
   dictationRecognizer: 'speech.dictation.recognizer',
-  dictationKey: 'speech.dictation.key',
-  globalDictation: 'speech.dictation.global',
-  globalKey: 'speech.dictation.globalKey',
   languages: 'speech.languages',
   voice: 'speech.voice',
   microphone: 'speech.microphone',

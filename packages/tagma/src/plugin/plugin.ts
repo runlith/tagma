@@ -3,7 +3,15 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/sp
 import type { ModelsClient } from './models.js';
 import type { ExternalOperations } from './operations.generated.js';
 import type { BuildVerdict, PluginEnvelope, PluginPoints } from './points.generated.js';
-import type { BuildStepInput, EndingInput, NotificationInput, TickInput } from './protocol.js';
+import {
+  ASKED_LEFT,
+  type AskedInput,
+  type AskedLeft,
+  type BuildStepInput,
+  type EndingInput,
+  type NotificationInput,
+  type TickInput,
+} from './protocol.js';
 
 export type InputSchema<Input = unknown, Output = Input> = StandardSchemaV1<Input, Output> & StandardJSONSchemaV1<Input, Output>;
 
@@ -65,11 +73,18 @@ export type BuildStep = {
   readonly run: (step: BuildStepInput, ctx: PluginContext) => Promise<BuildVerdict>;
 };
 
+export type Action = {
+  readonly title: PluginPoints['actions'][number]['title'];
+  readonly run: (ctx: PluginContext) => Promise<string | void>;
+};
+
 export type EndingHandler = (ending: EndingInput, ctx: PluginContext) => Promise<void>;
+
+export type AskedHandler = (asked: AskedInput, ctx: PluginContext) => Promise<void | AskedLeft>;
 
 export type NotificationHandler = (answer: NotificationInput, ctx: PluginContext) => Promise<void>;
 
-export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify';
+export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify' | 'actions';
 
 export type PluginData = { readonly [Point in Exclude<keyof PluginPoints, HandledPoint>]?: PluginPoints[Point] };
 
@@ -83,7 +98,9 @@ export type PluginDefinition = PluginData & {
   readonly resources?: Readonly<Record<string, Resource>>;
   readonly schedules?: Readonly<Record<string, Schedule>>;
   readonly beforeBuild?: Readonly<Record<string, BuildStep>>;
+  readonly actions?: Readonly<Record<string, Action>>;
   readonly onThreadEnded?: EndingHandler;
+  readonly onThreadAsked?: AskedHandler;
   readonly onNotification?: NotificationHandler;
 };
 
@@ -100,7 +117,13 @@ export const schedule = (declared: Schedule): Schedule => declared;
 
 export const beforeBuild = (declared: BuildStep): BuildStep => declared;
 
+export const action = (declared: Action): Action => declared;
+
 export const onThreadEnded = (handler: EndingHandler): EndingHandler => handler;
+
+export const onThreadAsked = (handler: AskedHandler): AskedHandler => handler;
+
+export const leave = (): AskedLeft => ASKED_LEFT;
 
 export const onNotification = (handler: NotificationHandler): NotificationHandler => handler;
 

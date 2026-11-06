@@ -1,8 +1,10 @@
-import type { Chord } from '@tagma/desktop/bridge';
+import type { Press } from '@tagma/server/platform/contract/wire/chord';
 import { Host } from '@runlith/layer/Host';
 import { Service } from '@runlith/layer/key';
-import { spellChord } from '$lib/shared/chordSpelling.js';
+import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+import type { Place } from '$lib/app/keys/resolve.js';
 import { TerminalAppearance } from '../appearance/Settings.svelte.js';
+import { actOf, TOGGLE } from './actions.js';
 
 export type KeymapPolicy = 'app-first' | 'terminal-first';
 
@@ -45,8 +47,6 @@ export type TerminalAct =
   | { readonly _tag: 'scroll-top' }
   | { readonly _tag: 'scroll-bottom' };
 
-export type TerminalActTag = TerminalAct['_tag'];
-
 export type Resolution =
   | { readonly kind: 'act'; readonly act: TerminalAct }
   | { readonly kind: 'interrupt' }
@@ -71,6 +71,8 @@ export type ResolveContext = {
   readonly layout?: LayoutCategory;
   readonly inTerminal?: boolean;
 };
+
+type TerminalKeys = { readonly mac: boolean; actionOf(press: Press, place: Place): string | null };
 
 const META_INPUT_SOURCE_IDS: ReadonlySet<string> = new Set(['com.apple.keylayout.us', 'com.apple.keylayout.usinternational-pc']);
 
@@ -119,315 +121,14 @@ const ESC_B = `${ESC}b`;
 const ESC_F = `${ESC}f`;
 const ESC_D = `${ESC}d`;
 
-type PlatformName = 'darwin' | 'linux' | 'win32';
+type Mods = { readonly meta: boolean; readonly ctrl: boolean; readonly alt: boolean; readonly shift: boolean };
 
-type ChordRow = {
-  readonly tag: TerminalActTag;
-  readonly act: TerminalAct;
-  readonly scope: 'terminal' | 'tabs' | 'global';
-  readonly allowInTerminal?: boolean;
-  readonly outsideTerminal?: boolean;
-  readonly digitIndex?: boolean;
-  readonly darwin: readonly string[];
-  readonly linux: readonly string[];
-  readonly win32: readonly string[];
-  readonly tab?: { readonly darwin: readonly string[]; readonly linux: readonly string[]; readonly win32: readonly string[] };
-};
+const YIELDING: ReadonlySet<TerminalAct['_tag']> = new Set(['new-tab', 'reopen-tab', 'rename-tab', 'close-all-tabs', 'select-index']);
 
-const CHORD_TABLE: readonly ChordRow[] = [
-  {
-    tag: 'copy',
-    act: { _tag: 'copy' },
-    scope: 'terminal',
-    darwin: ['Mod+C'],
-    linux: ['Ctrl+Shift+C', 'Ctrl+C'],
-    win32: ['Ctrl+Shift+C', 'Ctrl+C'],
-  },
-  {
-    tag: 'select-all',
-    act: { _tag: 'select-all' },
-    scope: 'terminal',
-    darwin: ['Mod+A'],
-    linux: ['Ctrl+Shift+A'],
-    win32: ['Ctrl+Shift+A'],
-  },
-  {
-    tag: 'paste',
-    act: { _tag: 'paste' },
-    scope: 'terminal',
-    darwin: ['Mod+V'],
-    linux: ['Ctrl+V', 'Ctrl+Shift+V', 'Shift+Insert'],
-    win32: ['Ctrl+V', 'Ctrl+Shift+V', 'Shift+Insert'],
-  },
-  {
-    tag: 'search',
-    act: { _tag: 'search' },
-    scope: 'terminal',
-    darwin: ['Mod+F'],
-    linux: ['Mod+F'],
-    win32: ['Mod+F'],
-  },
-  {
-    tag: 'clear',
-    act: { _tag: 'clear' },
-    scope: 'terminal',
-    darwin: ['Mod+K'],
-    linux: ['Mod+K'],
-    win32: ['Mod+K'],
-  },
-  {
-    tag: 'focus-next',
-    act: { _tag: 'focus-next' },
-    scope: 'terminal',
-    darwin: ['Mod+BracketRight'],
-    linux: ['Mod+BracketRight'],
-    win32: ['Mod+BracketRight'],
-  },
-  {
-    tag: 'focus-previous',
-    act: { _tag: 'focus-previous' },
-    scope: 'terminal',
-    darwin: ['Mod+BracketLeft'],
-    linux: ['Mod+BracketLeft'],
-    win32: ['Mod+BracketLeft'],
-  },
-  {
-    tag: 'equalize',
-    act: { _tag: 'equalize' },
-    scope: 'terminal',
-    darwin: [],
-    linux: [],
-    win32: [],
-  },
-  {
-    tag: 'expand-pane',
-    act: { _tag: 'expand-pane' },
-    scope: 'terminal',
-    darwin: ['Mod+Shift+Enter'],
-    linux: ['Mod+Shift+Enter'],
-    win32: ['Mod+Shift+Enter'],
-  },
-  {
-    tag: 'set-title',
-    act: { _tag: 'set-title' },
-    scope: 'terminal',
-    darwin: [],
-    linux: [],
-    win32: [],
-  },
-  {
-    tag: 'clear-title',
-    act: { _tag: 'clear-title' },
-    scope: 'terminal',
-    darwin: [],
-    linux: [],
-    win32: [],
-  },
-  {
-    tag: 'close-pane',
-    act: { _tag: 'close-pane' },
-    scope: 'terminal',
-    darwin: ['Mod+W'],
-    linux: ['Mod+W'],
-    win32: ['Mod+W'],
-    tab: { darwin: ['Alt+W'], linux: ['Alt+W'], win32: ['Alt+W'] },
-  },
-  {
-    tag: 'split-right',
-    act: { _tag: 'split-right' },
-    scope: 'terminal',
-    darwin: ['Mod+D'],
-    linux: ['Mod+Shift+D'],
-    win32: ['Mod+Shift+D'],
-  },
-  {
-    tag: 'split-down',
-    act: { _tag: 'split-down' },
-    scope: 'terminal',
-    darwin: ['Mod+Shift+D'],
-    linux: ['Alt+Shift+D'],
-    win32: ['Alt+Shift+D'],
-  },
-  {
-    tag: 'zoom-in',
-    act: { _tag: 'zoom-in' },
-    scope: 'terminal',
-    darwin: ['Mod+Equal', 'Mod+Shift+Equal'],
-    linux: ['Mod+Equal', 'Mod+Shift+Equal'],
-    win32: ['Mod+Equal', 'Mod+Shift+Equal'],
-  },
-  {
-    tag: 'zoom-out',
-    act: { _tag: 'zoom-out' },
-    scope: 'terminal',
-    darwin: ['Mod+Minus'],
-    linux: ['Mod+Minus'],
-    win32: ['Mod+Minus'],
-  },
-  {
-    tag: 'zoom-reset',
-    act: { _tag: 'zoom-reset' },
-    scope: 'terminal',
-    darwin: ['Mod+0'],
-    linux: ['Mod+0'],
-    win32: ['Mod+0'],
-  },
-  {
-    tag: 'new-tab',
-    act: { _tag: 'new-tab' },
-    scope: 'tabs',
-    darwin: ['Mod+T'],
-    linux: ['Mod+T'],
-    win32: ['Mod+T'],
-    tab: { darwin: ['Alt+T'], linux: ['Alt+T'], win32: ['Alt+T'] },
-  },
-  {
-    tag: 'reopen-tab',
-    act: { _tag: 'reopen-tab' },
-    scope: 'tabs',
-    darwin: ['Mod+Shift+T'],
-    linux: ['Mod+Shift+T'],
-    win32: ['Mod+Shift+T'],
-    tab: { darwin: ['Alt+Shift+W'], linux: ['Alt+Shift+W'], win32: ['Alt+Shift+W'] },
-  },
-  {
-    tag: 'rename-tab',
-    act: { _tag: 'rename-tab' },
-    scope: 'tabs',
-    darwin: ['Mod+R'],
-    linux: [],
-    win32: [],
-    tab: { darwin: ['Alt+R'], linux: [], win32: [] },
-  },
-  {
-    tag: 'close-all-tabs',
-    act: { _tag: 'close-all-tabs' },
-    scope: 'tabs',
-    darwin: ['Mod+Alt+W'],
-    linux: ['Mod+Alt+W'],
-    win32: ['Mod+Alt+W'],
-  },
-  {
-    tag: 'next-tab',
-    act: { _tag: 'next-tab' },
-    scope: 'tabs',
-    allowInTerminal: true,
-    darwin: ['Ctrl+PageDown'],
-    linux: ['Ctrl+PageDown'],
-    win32: ['Ctrl+PageDown'],
-    tab: { darwin: ['Alt+PageDown'], linux: ['Alt+PageDown'], win32: ['Alt+PageDown'] },
-  },
-  {
-    tag: 'previous-tab',
-    act: { _tag: 'previous-tab' },
-    scope: 'tabs',
-    allowInTerminal: true,
-    darwin: ['Ctrl+PageUp'],
-    linux: ['Ctrl+PageUp'],
-    win32: ['Ctrl+PageUp'],
-    tab: { darwin: ['Alt+PageUp'], linux: ['Alt+PageUp'], win32: ['Alt+PageUp'] },
-  },
-  {
-    tag: 'next-tab',
-    act: { _tag: 'next-tab' },
-    scope: 'tabs',
-    darwin: ['Mod+Alt+BracketRight'],
-    linux: ['Mod+Alt+BracketRight'],
-    win32: ['Mod+Alt+BracketRight'],
-  },
-  {
-    tag: 'previous-tab',
-    act: { _tag: 'previous-tab' },
-    scope: 'tabs',
-    darwin: ['Mod+Alt+BracketLeft'],
-    linux: ['Mod+Alt+BracketLeft'],
-    win32: ['Mod+Alt+BracketLeft'],
-  },
-  {
-    tag: 'previous-recent-tab',
-    act: { _tag: 'previous-recent-tab' },
-    scope: 'tabs',
-    allowInTerminal: true,
-    darwin: ['Ctrl+Tab'],
-    linux: ['Ctrl+Tab'],
-    win32: ['Ctrl+Tab'],
-    tab: { darwin: ['Alt+Q'], linux: ['Alt+Q'], win32: ['Alt+Q'] },
-  },
-  {
-    tag: 'select-index',
-    act: { _tag: 'select-index', index: 0 },
-    scope: 'tabs',
-    digitIndex: true,
-    darwin: ['Ctrl+1'],
-    linux: ['Alt+1'],
-    win32: ['Alt+1'],
-    tab: { darwin: ['Ctrl+1'], linux: ['Alt+Shift+1'], win32: ['Alt+Shift+1'] },
-  },
-  {
-    tag: 'toggle-terminals',
-    act: { _tag: 'toggle-terminals' },
-    scope: 'global',
-    allowInTerminal: true,
-    darwin: ['Mod+J'],
-    linux: ['Ctrl+Backquote'],
-    win32: ['Ctrl+Backquote'],
-  },
-  {
-    tag: 'toggle-terminals',
-    act: { _tag: 'toggle-terminals' },
-    scope: 'global',
-    outsideTerminal: true,
-    darwin: [],
-    linux: ['Ctrl+J'],
-    win32: ['Ctrl+J'],
-  },
-];
-
-type ParsedChord = {
-  readonly mod: boolean;
-  readonly meta: boolean;
-  readonly control: boolean;
-  readonly alt: boolean;
-  readonly shift: boolean;
-  readonly key: string;
-};
-
-type CompiledRow = Omit<ChordRow, 'darwin' | 'linux' | 'win32' | 'tab'> & {
-  readonly darwin: readonly ParsedChord[];
-  readonly linux: readonly ParsedChord[];
-  readonly win32: readonly ParsedChord[];
-  readonly tab:
-    | { readonly darwin: readonly ParsedChord[]; readonly linux: readonly ParsedChord[]; readonly win32: readonly ParsedChord[] }
-    | undefined;
-};
-
-function parseChord(chord: string): ParsedChord {
-  let mod = false;
-  let meta = false;
-  let control = false;
-  let alt = false;
-  let shift = false;
-  let key = '';
-  for (const part of chord.split('+')) {
-    if (part === 'Mod') mod = true;
-    else if (part === 'Cmd') meta = true;
-    else if (part === 'Ctrl') control = true;
-    else if (part === 'Alt') alt = true;
-    else if (part === 'Shift') shift = true;
-    else key = part;
-  }
-  return { mod, meta, control, alt, shift, key };
-}
-
-const CLIPBOARD: ReadonlySet<TerminalActTag> = new Set(['copy', 'paste', 'select-all']);
-
-function staysUnderTerminalFirst(row: {
-  readonly scope: 'terminal' | 'tabs' | 'global';
-  readonly allowInTerminal?: boolean;
-  readonly outsideTerminal?: boolean;
-  readonly tag: TerminalActTag;
-}): boolean {
-  return row.scope === 'terminal' || row.allowInTerminal === true || row.outsideTerminal === true || CLIPBOARD.has(row.tag);
+//! Under terminal-first the program gets tab acts, except tab switching by Ctrl+PageUp/PageDown, which programs rarely read.
+function yields(act: TerminalAct, press: Press): boolean {
+  if (YIELDING.has(act._tag)) return true;
+  return (act._tag === 'next-tab' || act._tag === 'previous-tab') && press.key !== 'PageDown' && press.key !== 'PageUp';
 }
 
 function logicalLetter(key: string): string | null {
@@ -438,131 +139,10 @@ function logicalLetter(key: string): string | null {
   return null;
 }
 
-function logicalDigit(key: string): string | null {
-  return key.length === 1 && key >= '0' && key <= '9' ? key : null;
-}
+const controlLetter = (press: Press): boolean =>
+  press.ctrl && !press.meta && !press.alt && !press.shift && (logicalLetter(press.key) !== null || /^Key[A-Z]$/u.test(press.code));
 
-function isDeadKey(key: string): boolean {
-  return key === '' || key === 'Dead' || key === 'Unidentified';
-}
-
-function isComposedKey(key: string): boolean {
-  return key.length === 1 && logicalLetter(key) === null && logicalDigit(key) === null && !isDeadKey(key);
-}
-
-const PUNCTUATION_OF_KEY: Readonly<Record<string, string>> = {
-  '[': 'BracketLeft',
-  ']': 'BracketRight',
-  '{': 'BracketLeft',
-  '}': 'BracketRight',
-  '=': 'Equal',
-  '+': 'Equal',
-  '-': 'Minus',
-  _: 'Minus',
-  '`': 'Backquote',
-  '~': 'Backquote',
-};
-
-function matchLetter(
-  letter: string,
-  mods: { ctrl: boolean; meta: boolean; alt: boolean },
-  event: KeymapEvent,
-  isMac: boolean,
-  chordAlt: boolean,
-  expectedCtrl: boolean,
-): boolean {
-  const logical = logicalLetter(event.key);
-  if (logical !== null) return logical === letter;
-  if (!isMac && mods.ctrl && mods.alt && !expectedCtrl) return false;
-  if (isDeadKey(event.key)) return event.code === `Key${letter}`;
-  if (!isMac && (mods.ctrl || mods.meta) && !mods.alt && isComposedKey(event.key)) {
-    return event.code === `Key${letter}`;
-  }
-  if (isMac && chordAlt && mods.alt) return event.code === `Key${letter}`;
-  return false;
-}
-
-function matchDigit(
-  digit: string,
-  digitIndex: boolean,
-  mods: { ctrl: boolean; meta: boolean; alt: boolean },
-  event: KeymapEvent,
-  isMac: boolean,
-  chordAlt: boolean,
-  expectedCtrl: boolean,
-): boolean {
-  const logical = logicalDigit(event.key);
-  if (logical !== null) return digitIndex ? logical >= '1' && logical <= '9' : logical === digit;
-  if (!isMac && mods.ctrl && mods.alt && !expectedCtrl) return false;
-  const code = event.code ?? '';
-  const physical = code.startsWith('Digit') && code.length === 6 ? code.slice(5) : null;
-  if (physical === null) return false;
-  if (isDeadKey(event.key)) return digitIndex ? physical >= '1' && physical <= '9' : physical === digit;
-  if (!isMac && (mods.ctrl || mods.meta) && !mods.alt && isComposedKey(event.key)) {
-    return digitIndex ? physical >= '1' && physical <= '9' : physical === digit;
-  }
-  if (isMac && chordAlt && mods.alt) {
-    return digitIndex ? physical >= '1' && physical <= '9' : physical === digit;
-  }
-  return false;
-}
-
-function matchPunctuation(
-  name: string,
-  mods: { ctrl: boolean; meta: boolean; alt: boolean },
-  event: KeymapEvent,
-  isMac: boolean,
-  chordAlt: boolean,
-  expectedCtrl: boolean,
-): boolean {
-  const semantic = PUNCTUATION_OF_KEY[event.key];
-  if (semantic !== undefined) return semantic === name;
-  if (!isMac && mods.ctrl && mods.alt && !expectedCtrl) return false;
-  if (isDeadKey(event.key)) return event.code === name;
-  if (!isMac && (mods.ctrl || mods.meta) && !mods.alt && isComposedKey(event.key)) {
-    return event.code === name;
-  }
-  if (isMac && chordAlt && mods.alt) return event.code === name;
-  return false;
-}
-
-function matchKey(
-  chord: ParsedChord,
-  digitIndex: boolean,
-  mods: { ctrl: boolean; meta: boolean; alt: boolean },
-  event: KeymapEvent,
-  isMac: boolean,
-  expectedCtrl: boolean,
-): boolean {
-  const key = chord.key;
-  if (key.length === 1 && key >= 'A' && key <= 'Z') {
-    return matchLetter(key, mods, event, isMac, chord.alt, expectedCtrl);
-  }
-  if (key.length === 1 && key >= '0' && key <= '9') {
-    return matchDigit(key, digitIndex, mods, event, isMac, chord.alt, expectedCtrl);
-  }
-  if (key === 'BracketLeft' || key === 'BracketRight' || key === 'Equal' || key === 'Minus' || key === 'Backquote') {
-    return matchPunctuation(key, mods, event, isMac, chord.alt, expectedCtrl);
-  }
-  return event.key === key;
-}
-
-function matchChord(
-  chord: ParsedChord,
-  digitIndex: boolean,
-  event: KeymapEvent,
-  mods: { meta: boolean; ctrl: boolean; alt: boolean; shift: boolean },
-  isMac: boolean,
-): boolean {
-  const expectedMeta = chord.meta || (chord.mod && isMac);
-  const expectedCtrl = chord.control || (chord.mod && !isMac);
-  if (mods.meta !== expectedMeta || mods.ctrl !== expectedCtrl || mods.alt !== chord.alt || mods.shift !== chord.shift) {
-    return false;
-  }
-  return matchKey(chord, digitIndex, mods, event, isMac, expectedCtrl);
-}
-
-function nonLatinControlByte(event: KeymapEvent, mods: { meta: boolean; ctrl: boolean; alt: boolean; shift: boolean }): string | null {
+function nonLatinControlByte(event: KeymapEvent, mods: Mods): string | null {
   if (!mods.ctrl || mods.meta || mods.alt || mods.shift) return null;
   if (Array.from(event.key).length !== 1 || (event.key.codePointAt(0) ?? 0) <= 0x7f) return null;
   const code = event.code ?? '';
@@ -572,19 +152,11 @@ function nonLatinControlByte(event: KeymapEvent, mods: { meta: boolean; ctrl: bo
   return String.fromCharCode(letter.charCodeAt(0) - 0x40);
 }
 
-function isInterrupt(event: KeymapEvent, mods: { meta: boolean; ctrl: boolean; alt: boolean; shift: boolean }): boolean {
+function isInterrupt(event: KeymapEvent, mods: Mods): boolean {
   if (!mods.ctrl || mods.meta || mods.alt || mods.shift) return false;
   const logical = logicalLetter(event.key);
   if (logical !== null) return logical === 'C';
   return event.code === 'KeyC' || event.keyCode === 67;
-}
-
-function digitIndexOf(event: KeymapEvent): number {
-  const logical = logicalDigit(event.key);
-  if (logical !== null) return Number(logical) - 1;
-  const code = event.code ?? '';
-  if (code.startsWith('Digit') && code.length === 6) return Number(code.slice(5)) - 1;
-  return 0;
 }
 
 const PC101_PUNCTUATION: Readonly<Record<string, string>> = {
@@ -623,116 +195,48 @@ function sendBytes(data: string): Resolution {
 
 const ENGINE: Resolution = { kind: 'engine' };
 const INTERRUPT: Resolution = { kind: 'interrupt' };
-
-function platformOf(host: Host): PlatformName {
-  return host.apple ? 'darwin' : host.os === 'windows' ? 'win32' : 'linux';
-}
-
-function codeOfKey(key: string): string {
-  if (logicalLetter(key) !== null) return `Key${key.toUpperCase()}`;
-  if (logicalDigit(key) !== null) return `Digit${key}`;
-  return key;
-}
-
-function spelled(chord: ParsedChord, isMac: boolean): string {
-  return spellChord(
-    {
-      key: chord.key,
-      meta: chord.meta || (chord.mod && isMac),
-      ctrl: chord.control || (chord.mod && !isMac),
-      alt: chord.alt,
-      shift: chord.shift,
-    },
-    isMac,
-  );
-}
+const TOGGLING: Resolution = { kind: 'act', act: { _tag: 'toggle-terminals' } };
 
 export class TerminalKeymap extends Service<TerminalKeymap>()('TerminalKeymap', { tier: 'app' }) {
   static *make() {
     const appearance = yield* TerminalAppearance;
     return new TerminalKeymap(
       yield* Host,
+      yield* Keymap,
       () => appearance.keymapPolicy(),
       () => appearance.macOptionAsAlt(),
     );
   }
 
-  private readonly table: readonly CompiledRow[];
-
   constructor(
     private readonly host: Host,
+    private readonly keys: TerminalKeys,
     readonly policy: () => KeymapPolicy = () => 'app-first',
     readonly macOptionAsAlt: () => MacOptionAsAltSetting = () => 'auto',
   ) {
     super();
-    this.table = CHORD_TABLE.map((row) => ({
-      ...row,
-      darwin: row.darwin.map(parseChord),
-      linux: row.linux.map(parseChord),
-      win32: row.win32.map(parseChord),
-      tab:
-        row.tab === undefined
-          ? undefined
-          : {
-              darwin: row.tab.darwin.map(parseChord),
-              linux: row.tab.linux.map(parseChord),
-              win32: row.tab.win32.map(parseChord),
-            },
-    }));
   }
 
-  private chordsOf(row: CompiledRow, platform: PlatformName): readonly ParsedChord[] {
-    if (this.host.kind === 'tab' && row.tab !== undefined) return row.tab[platform];
-    return row[platform];
-  }
-
-  chords(tag: TerminalActTag): Chord[] {
-    const platform = platformOf(this.host);
-    const isMac = platform === 'darwin';
-    return this.table
-      .filter((row) => row.tag === tag)
-      .flatMap((row) => this.chordsOf(row, platform))
-      .map((chord) => ({
-        code: codeOfKey(chord.key),
-        meta: chord.meta || (chord.mod && isMac),
-        ctrl: chord.control || (chord.mod && !isMac),
-        alt: chord.alt,
-        shift: chord.shift,
-      }));
-  }
-
-  chordLabel(tag: TerminalActTag): string | null {
-    const platform = platformOf(this.host);
-    const row = this.table.find((row) => row.tag === tag);
-    const chord = row === undefined ? undefined : this.chordsOf(row, platform)[0];
-    return chord === undefined ? null : spelled(chord, platform === 'darwin');
+  private act(event: KeymapEvent, press: Press, context: ResolveContext): Resolution | null {
+    const act = actOf(this.keys.actionOf(press, 'terminal') ?? '');
+    const copyWithout = act?._tag === 'copy' && !this.host.apple && controlLetter(press) && context.hasSelection !== true;
+    if (act !== null && (event.repeat !== true || act._tag === 'select-all') && !copyWithout) {
+      return this.policy() === 'terminal-first' && yields(act, press) ? ENGINE : { kind: 'act', act };
+    }
+    if (event.repeat === true || this.keys.actionOf(press, 'window') !== TOGGLE) return null;
+    return context.inTerminal === true && controlLetter(press) ? null : TOGGLING;
   }
 
   resolve(event: KeymapEvent, context: ResolveContext = {}): Resolution {
-    const platform = platformOf(this.host);
-    const isMac = platform === 'darwin';
-    const mods = {
+    const isMac = this.host.apple;
+    const mods: Mods = {
       meta: event.metaKey ?? false,
       ctrl: event.ctrlKey ?? false,
       alt: event.altKey ?? false,
       shift: event.shiftKey ?? false,
     };
-
-    for (const row of this.table) {
-      if (event.repeat === true && row.tag !== 'select-all') continue;
-      if (row.outsideTerminal === true && context.inTerminal === true) continue;
-      for (const chord of this.chordsOf(row, platform)) {
-        if (!matchChord(chord, row.digitIndex === true, event, mods, isMac)) continue;
-        if (row.tag === 'copy' && !isMac && chord.key === 'C' && !chord.shift && context.hasSelection !== true) {
-          continue;
-        }
-        if (this.policy() === 'terminal-first' && !staysUnderTerminalFirst(row)) return ENGINE;
-        if (row.tag === 'select-index') {
-          return { kind: 'act', act: { _tag: 'select-index', index: digitIndexOf(event) } };
-        }
-        return { kind: 'act', act: row.act };
-      }
-    }
+    const acted = this.act(event, { key: event.key, code: event.code ?? '', ...mods }, context);
+    if (acted !== null) return acted;
 
     if (isInterrupt(event, mods)) return INTERRUPT;
     const controlByte = nonLatinControlByte(event, mods);
@@ -753,8 +257,6 @@ export class TerminalKeymap extends Service<TerminalKeymap>()('TerminalKeymap', 
       if (event.key === 'Delete') return sendBytes(CTRL_K);
       if (event.key === 'ArrowLeft') return sendBytes(CTRL_A);
       if (event.key === 'ArrowRight') return sendBytes(CTRL_E);
-      if (event.key === 'ArrowUp') return { kind: 'act', act: { _tag: 'scroll-top' } };
-      if (event.key === 'ArrowDown') return { kind: 'act', act: { _tag: 'scroll-bottom' } };
     }
 
     if (!mods.meta && !mods.ctrl && mods.alt && !mods.shift && event.key === 'Backspace') {

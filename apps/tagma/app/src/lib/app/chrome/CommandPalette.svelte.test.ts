@@ -16,7 +16,7 @@ import { Asking } from '$lib/features/threads/Asking.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
-import { ActionRegistry } from './ActionRegistry.js';
+import { ActionRegistry } from './ActionRegistry.svelte.js';
 import CommandPalette from './CommandPalette.svelte';
 
 await loadCatalog();

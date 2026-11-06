@@ -18,6 +18,7 @@
   import Body from './Body.svelte';
   import { closeFocused, routeKey } from './keys.js';
   import { TerminalKeymap } from './Keymap.js';
+  import { actionOf, TOGGLE } from './actions.js';
   import type { TerminalTab } from './Tab.svelte.js';
   import TabFace from './TabFace.svelte';
 
@@ -30,9 +31,9 @@
 
   const worktree = $derived(terminals.home);
   let panel: HTMLElement | null = $state(null);
-  const newLabel = $derived(keymap.chordLabel('new-tab'));
-  const splitLabel = $derived(keymap.chordLabel('split-right'));
-  const foldLabel = $derived(keymap.chordLabel('toggle-terminals'));
+  const newLabel = $derived(appKeys.spell(actionOf({ _tag: 'new-tab' })));
+  const splitLabel = $derived(appKeys.spell(actionOf({ _tag: 'split-right' })));
+  const foldLabel = $derived(appKeys.spell(TOGGLE));
 
   $effect(() => terminals.mountPanel());
 
@@ -42,22 +43,9 @@
     if (worktree !== null) routeKey(event, keymap, worktree.current, (act) => terminals.perform(act, worktree, null));
   }
 
-  $effect(() =>
-    appKeys.bind(
-      keymap.chords('toggle-terminals').map((chord) => ({
-        chord,
-        run: (page) => {
-          if (page === null && document.activeElement?.closest('.xterm') != null) return false;
-          terminals.toggle();
-          return true;
-        },
-      })),
-    ),
-  );
+  $effect(() => appKeys.handle(TOGGLE, ({ page }) => page === null && document.activeElement?.closest('.xterm') != null));
 
-  $effect(() =>
-    appKeys.bind(keymap.chords('close-pane').map((chord) => ({ chord, run: () => closeFocused(panel, worktree?.current ?? null) }))),
-  );
+  $effect(() => appKeys.handle('tab.close', () => closeFocused(panel, worktree?.current ?? null)));
 
   function split(): void {
     const tab = worktree?.current ?? null;

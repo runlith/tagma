@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { McpResourceEvent } from '../../../mcp/contract/wire/feeds.js';
 import { feed } from '../../../platform/contract/wire/operation.js';
+import { PluginActionState } from './actions.js';
 import { PluginViewState, pluginName, VIEW_REFUSALS } from './sets.js';
 import { ViewId } from './points.js';
 
@@ -22,4 +23,12 @@ export const VIEW_RESOURCE_FEED = feed('views.resource.subscribe', {
   admission: 'project',
 });
 
-export const VIEW_FEEDS = [VIEW_SETS_FEED, VIEW_RESOURCE_FEED] as const;
+const VIEW_ACTIONS_FEED = feed('views.actions', {
+  input: Schema.Struct({}),
+  event: PluginActionState,
+  refusals: [],
+  callers: 'operator',
+  graph: 'none',
+});
+
+export const VIEW_FEEDS = [VIEW_SETS_FEED, VIEW_RESOURCE_FEED, VIEW_ACTIONS_FEED] as const;

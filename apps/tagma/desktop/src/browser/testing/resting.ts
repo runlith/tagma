@@ -31,7 +31,7 @@ if (process.platform === 'darwin') app.setActivationPolicy('accessory');
 void app.whenReady().then(async () => {
   let host: BrowserHost | undefined;
   const profiles = new Profiles('cleaned', { downloaded: () => undefined, window: (contents) => host?.window(contents) ?? null });
-  const served = new BrowserHost(profiles, 'cleaned', { newWindow: () => undefined, reveal: () => undefined });
+  const served = new BrowserHost(profiles, 'cleaned', { newWindow: () => undefined, reveal: () => undefined, pressed: () => false });
   host = served;
   profiles
     .session(PROFILE)

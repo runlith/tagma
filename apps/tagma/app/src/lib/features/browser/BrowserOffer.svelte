@@ -9,6 +9,6 @@
   const keymap = Keymap.use();
 </script>
 
-<DropdownMenu.Item icon={Globe} keys={keymap.spell(keymap.mod('KeyT'))} onSelect={() => panes.open(browserPane(null))}>
+<DropdownMenu.Item icon={Globe} keys={keymap.spell('browser.open')} onSelect={() => panes.open(browserPane(null))}>
   Browser page
 </DropdownMenu.Item>

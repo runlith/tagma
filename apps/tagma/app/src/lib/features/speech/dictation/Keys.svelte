@@ -1,35 +1,24 @@
 <script lang="ts">
+  import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { Refusal } from '$lib/wire/refusal.js';
-  import { pressed } from './chord.js';
+  import { HOLD } from './action.js';
   import { Dictation } from './Dictation.svelte.js';
   import { Targets } from './Targets.js';
 
   const dictation = Dictation.use();
   const targets = Targets.use();
   const notices = Notices.use();
+  const keymap = Keymap.use();
 
-  function swallow(event: KeyboardEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function down(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && dictation.phase !== 'idle') {
-      swallow(event);
-      dictation.cancel();
-      return;
-    }
-    if (!pressed(dictation.chord, event)) return;
-    swallow(event);
-    if (event.repeat) return;
+  function press(send: boolean): void {
     if (dictation.phase === 'recording') {
-      if (dictation.target !== null) dictation.press(dictation.target, event.shiftKey);
+      if (dictation.target !== null) dictation.press(dictation.target, send);
       return;
     }
     const target = targets.focused();
     if (target !== null) {
-      dictation.press(target, event.shiftKey);
+      dictation.press(target, send);
       return;
     }
     notices.refusal(
@@ -43,23 +32,28 @@
     );
   }
 
-  function up(event: KeyboardEvent): void {
-    if (event.code !== dictation.chord.code || dictation.phase === 'idle') return;
-    swallow(event);
-    dictation.lift(event.shiftKey);
+  function lift(send: boolean): void {
+    if (dictation.phase !== 'idle') dictation.lift(send);
+  }
+
+  function escape(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || dictation.phase === 'idle') return;
+    event.preventDefault();
+    event.stopPropagation();
+    dictation.cancel();
   }
 
   function blur(): void {
     if (dictation.phase === 'recording' && !dictation.latched) dictation.lift(false);
   }
 
+  $effect(() => keymap.hold(HOLD, { press, lift }));
+
   $effect(() => {
-    window.addEventListener('keydown', down, { capture: true });
-    window.addEventListener('keyup', up, { capture: true });
+    window.addEventListener('keydown', escape, { capture: true });
     window.addEventListener('blur', blur);
     return () => {
-      window.removeEventListener('keydown', down, { capture: true });
-      window.removeEventListener('keyup', up, { capture: true });
+      window.removeEventListener('keydown', escape, { capture: true });
       window.removeEventListener('blur', blur);
     };
   });

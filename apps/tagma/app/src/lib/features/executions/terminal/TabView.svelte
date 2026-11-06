@@ -29,7 +29,7 @@
     if (worktree !== null && tab !== null) routeKey(event, keymap, tab, (act) => terminals.perform(act, worktree, tab.key));
   }
 
-  $effect(() => appKeys.bind(keymap.chords('close-pane').map((chord) => ({ chord, run: () => closeFocused(section, tab) }))));
+  $effect(() => appKeys.handle('tab.close', () => closeFocused(section, tab)));
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

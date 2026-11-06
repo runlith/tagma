@@ -4,7 +4,7 @@
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
-  import { ZOOM_KEYS, zoomStep } from '$lib/features/browser/zoom.js';
+  import { zoomStep } from '$lib/features/browser/zoom.js';
   import ZoomControls from '$lib/features/browser/ZoomControls.svelte';
   import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
   import { doorAddress } from './address.js';
@@ -39,21 +39,24 @@
   $effect(() => {
     const frame = shown?.href;
     if (!zoomable || frame === undefined) return;
-    const bound = (code: string, factor: () => number, shift = false) => ({
-      chord: keymap.mod(code, { shift }),
-      framed: frame,
-      run: (at: string | null, from: string | null) => {
-        if (at !== null || (from === null && panes.focus !== pane.key)) return false;
-        zoomTo(factor());
-        return true;
-      },
-    });
-    return keymap.bind([
-      bound(ZOOM_KEYS.in, () => zoomStep(zoom, 1)),
-      bound(ZOOM_KEYS.in, () => zoomStep(zoom, 1), true),
-      bound(ZOOM_KEYS.out, () => zoomStep(zoom, -1)),
-      bound(ZOOM_KEYS.reset, () => 1),
-    ]);
+    const bound = (action: string, factor: () => number) =>
+      keymap.handle(
+        action,
+        ({ page: at, frame: from }) => {
+          if (at !== null || (from === null && panes.focus !== pane.key)) return false;
+          zoomTo(factor());
+          return true;
+        },
+        frame,
+      );
+    const releases = [
+      bound('page.zoom-in', () => zoomStep(zoom, 1)),
+      bound('page.zoom-out', () => zoomStep(zoom, -1)),
+      bound('page.zoom-reset', () => 1),
+    ];
+    return () => {
+      for (const release of releases) release();
+    };
   });
 </script>
 

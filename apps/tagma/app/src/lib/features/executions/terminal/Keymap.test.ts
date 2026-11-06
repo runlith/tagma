@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { Host } from '@runlith/layer/Host';
+import { actionOf, TOGGLE } from './actions.js';
 import {
   TerminalKeymap,
   detectLayoutCategory,
@@ -7,16 +8,18 @@ import {
   type KeymapEvent,
   type Resolution,
   type ResolveContext,
+  type TerminalAct,
 } from './Keymap.js';
+import { defaultKeys, terminalKeymap } from './testing/keys.svelte.js';
 
-const mac = new TerminalKeymap(new Host('desktop', 'macos'));
-const linux = new TerminalKeymap(new Host('desktop', 'linux'));
-const win = new TerminalKeymap(new Host('desktop', 'windows'));
-const macFirst = new TerminalKeymap(new Host('desktop', 'macos'), () => 'terminal-first');
-const linuxFirst = new TerminalKeymap(new Host('desktop', 'linux'), () => 'terminal-first');
-const tabMac = new TerminalKeymap(new Host('tab', 'macos'));
-const tabLinux = new TerminalKeymap(new Host('tab', 'linux'));
-const tabWin = new TerminalKeymap(new Host('tab', 'windows'));
+const mac = terminalKeymap(new Host('desktop', 'macos'));
+const linux = terminalKeymap(new Host('desktop', 'linux'));
+const win = terminalKeymap(new Host('desktop', 'windows'));
+const macFirst = terminalKeymap(new Host('desktop', 'macos'), () => 'terminal-first');
+const linuxFirst = terminalKeymap(new Host('desktop', 'linux'), () => 'terminal-first');
+const tabMac = terminalKeymap(new Host('tab', 'macos'));
+const tabLinux = terminalKeymap(new Host('tab', 'linux'));
+const tabWin = terminalKeymap(new Host('tab', 'windows'));
 
 const ESC = 0x1b;
 
@@ -223,16 +226,20 @@ describe('TerminalKeymap', () => {
   });
 
   test('menus print the desktop chord on a desktop host and the alternate on a tab host', () => {
-    expect(mac.chordLabel('new-tab')).toBe('⌘T');
-    expect(tabMac.chordLabel('new-tab')).toBe('⌥T');
-    expect(tabMac.chordLabel('reopen-tab')).toBe('⌥⇧W');
-    expect(tabLinux.chordLabel('close-pane')).toBe('Alt+W');
-    expect(linux.chordLabel('rename-tab')).toBe(null);
-    expect(linux.chordLabel('toggle-terminals')).toBe('Ctrl+`');
-    expect(mac.chordLabel('toggle-terminals')).toBe('⌘J');
-    expect(mac.chordLabel('zoom-in')).toBe('⌘=');
-    expect(mac.chordLabel('zoom-out')).toBe('⌘-');
-    expect(mac.chordLabel('close-all-tabs')).toBe('⌥⌘W');
-    expect(tabMac.chordLabel('zoom-reset')).toBe('⌘0');
+    const spelled = (host: Host, tag: TerminalAct['_tag']) =>
+      defaultKeys(host).spell(tag === 'toggle-terminals' ? TOGGLE : actionOf({ _tag: tag } as TerminalAct));
+    const desktopMac = new Host('desktop', 'macos');
+    const browserMac = new Host('tab', 'macos');
+    expect(spelled(desktopMac, 'new-tab')).toBe('⌘T');
+    expect(spelled(browserMac, 'new-tab')).toBe('⌥T');
+    expect(spelled(browserMac, 'reopen-tab')).toBe('⌥⇧W');
+    expect(spelled(new Host('tab', 'linux'), 'close-pane')).toBe('Alt+W');
+    expect(spelled(new Host('desktop', 'linux'), 'rename-tab')).toBe(null);
+    expect(spelled(new Host('desktop', 'linux'), 'toggle-terminals')).toBe('Ctrl+`');
+    expect(spelled(desktopMac, 'toggle-terminals')).toBe('⌘J');
+    expect(spelled(desktopMac, 'zoom-in')).toBe('⌘=');
+    expect(spelled(desktopMac, 'zoom-out')).toBe('⌘-');
+    expect(spelled(desktopMac, 'close-all-tabs')).toBe('⌥⌘W');
+    expect(spelled(browserMac, 'zoom-reset')).toBe('⌘0');
   });
 });

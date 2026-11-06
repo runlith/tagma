@@ -1,22 +1,16 @@
 import type { Heard, TrackPlace } from '@tagma/server/speech/contract/wire/listening';
 import type { Words } from '@tagma/server/platform/contract/wire/refusal';
-import type { SettingEntry } from '@tagma/server/settings/contract/wire/catalog';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Stream } from 'effect';
-import { untrack } from 'svelte';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { Act } from '$lib/wire/told.js';
-import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
-import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live, type LiveConnection, type LiveFailure } from '$lib/wire/Live.js';
 import { Refusal, refusalOf } from '$lib/wire/refusal.js';
 import { SoundChannel } from '$lib/wire/SoundChannel.js';
 import { levelDb, levelFill, SILENCE_DB } from '../check.js';
 import { SpeechRepo } from '../Repo.js';
-import { SPEECH } from '../values.js';
-import { chordOf, DEFAULT_CHORD, type Chord } from './chord.js';
 import { microphoneMissing, Sender } from './Sender.js';
 import { Take, type Ending, type Settled } from './take.js';
 import type { Target } from './target.js';
@@ -41,16 +35,7 @@ type Queued = { readonly target: Target; readonly pressedAt: number; readonly la
 
 export class Dictation extends Service<Dictation>()('Dictation', { tier: 'app' }) {
   static *make() {
-    return new Dictation(
-      yield* Live,
-      yield* Door,
-      yield* SoundChannel,
-      yield* Notices,
-      yield* SettingsRepo,
-      yield* SpeechRepo,
-      yield* Workspace,
-      yield* Scope,
-    );
+    return new Dictation(yield* Live, yield* Door, yield* SoundChannel, yield* Notices, yield* SpeechRepo, yield* Scope);
   }
 
   phase = $state<Phase>('idle');
@@ -62,7 +47,6 @@ export class Dictation extends Service<Dictation>()('Dictation', { tier: 'app' }
   quietSince = $state<number | null>(null);
   stable = $state('');
   guess = $state('');
-  chord = $state.raw<Chord>(chordOf(DEFAULT_CHORD)!);
 
   private take: Take | null = null;
   private held: { unsubscribe: () => void } | null = null;
@@ -81,21 +65,11 @@ export class Dictation extends Service<Dictation>()('Dictation', { tier: 'app' }
     private readonly door: Door,
     private readonly channel: SoundChannel,
     private readonly notices: Notices,
-    private readonly settings: SettingsRepo,
     private readonly speech: SpeechRepo,
-    private readonly workspace: Workspace,
     scope: Scope,
   ) {
     super();
     scope.defer(() => this.cancel());
-    $effect(() => {
-      const projectId = this.workspace.contextProject?.id;
-      if (projectId === undefined) return;
-      const loaded = this.settings.catalog.key(projectId).data;
-      const catalog = writtenCatalog(this.settings, projectId) ?? loaded;
-      if (catalog === undefined) return;
-      untrack(() => this.read(catalog.entries));
-    });
   }
 
   get hushed(): boolean {
@@ -147,11 +121,6 @@ export class Dictation extends Service<Dictation>()('Dictation', { tier: 'app' }
     this.stop();
     take.drop();
     this.tell('dictation-stopped', reason, []);
-  }
-
-  private read(entries: readonly SettingEntry[]): void {
-    const written = entries.find((entry) => entry.id === SPEECH.dictationKey)?.value;
-    this.chord = chordOf(typeof written === 'string' ? written : DEFAULT_CHORD) ?? chordOf(DEFAULT_CHORD)!;
   }
 
   private begin(target: Target, pressedAt: number, latched: boolean): void {
