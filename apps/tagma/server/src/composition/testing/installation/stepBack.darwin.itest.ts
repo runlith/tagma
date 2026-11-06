@@ -128,8 +128,9 @@ it.live(
       const projectId = (added.body as { project: { id: number } }).project.id;
       expect(yield* op(origin, 'save_console_key', { provider: 'muse', key: 'step-back' })).toMatchObject({ status: 200 });
       const born = yield* op(origin, `create_thread?project=${projectId}`, { approvalMode: 'trust' });
-      expect(born).toMatchObject({ status: 200, body: { snapshot: { thread: { id: expect.any(String) } } } });
-      const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
+      const threadId = (born.body as { snapshot?: { thread?: { id?: string } } }).snapshot?.thread?.id;
+      expect(born.status, JSON.stringify(born.body)).toBe(200);
+      if (threadId === undefined) return yield* Effect.die(`create_thread answered no thread: ${JSON.stringify(born.body)}`);
       expect(mark(store, threadId)).toBe(NEWEST);
       const offered = yield* op(origin, 'read_machine_state', {});
       expect(
