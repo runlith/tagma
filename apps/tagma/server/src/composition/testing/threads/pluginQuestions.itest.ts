@@ -186,6 +186,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       const asked = yield* askedOf(threadId);
       expect(asked.prompts).toMatchObject([{ prompt: PROMPT }]);
       expect(yield* inAttention(threadId)).toBe(false);
+      expect((yield* openOf(threadId)).map((entry) => [entry.approver, entry.approverName])).toEqual([['plugin:tutor', 'German tutor']]);
       const answer = { threadId, questionId: asked.questionId, answers: [{ questionId: asked.prompts[0]!.id, values: ['Haus'] }] };
       const answered = Effect.tap(op('answer_question', answer, TUTOR), (sent) =>
         Effect.sync(() => expect(sent.body).toMatchObject({ status: 'started' })),

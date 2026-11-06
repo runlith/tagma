@@ -132,7 +132,7 @@ export type ChatStrings = {
   cancel(): string;
   showMoreFacts(count: number): string;
   noAnswerSubmitted(): string;
-  askedOf(approver: string | null): string;
+  askedOf(approver: string | null, name: string | undefined): string;
   decidedBy(by: string, note: string | undefined): string;
   typeYourAnswer(): string;
   done(): string;

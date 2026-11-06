@@ -229,7 +229,7 @@ export function threadApprovers(
       const plugin = child?.bindings[PLUGIN_BINDING];
       if (child !== undefined && plugin !== undefined && asked.length > 0) {
         const owner = yield* plugins.owner(plugin, child.projectId);
-        return owner === null ? { approver: null, why: 'owner-away' } : { approver: owner, why: 'owner' };
+        return owner === null ? { approver: null, why: 'owner-away' } : { approver: owner.approver, why: 'owner', name: owner.name };
       }
       const { approver, why, grant } = yield* standing(child);
       if (approver === null) return { approver: null, why };

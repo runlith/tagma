@@ -177,6 +177,7 @@ export type ChatEntry =
       sending?: ChatAnswerSending;
       cleared?: boolean;
       approver?: string;
+      approverName?: string;
       decision?: { readonly by?: string; readonly note?: string };
       deliveryUnknown?: boolean;
       deliveryNote?: string;
@@ -191,6 +192,7 @@ export type ToolConfirmationEntry = {
   sending?: ChatAnswerSending;
   cleared?: boolean;
   approver?: string;
+  approverName?: string;
   decision?: { readonly by?: string; readonly note?: string };
   deliveryUnknown?: boolean;
   deliveryNote?: string;

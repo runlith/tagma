@@ -133,7 +133,7 @@
     <div class="text-small font-semibold text-primary">
       {strings.confirmation()}{prompts.length > 1 ? ` · ${prompts.length}` : ''}
     </div>
-    <p class="text-small text-muted-foreground">{strings.askedOf(confirmation.approver ?? null)}</p>
+    <p class="text-small text-muted-foreground">{strings.askedOf(confirmation.approver ?? null, confirmation.approverName)}</p>
     {#if confirmation.deliveryNote !== undefined}
       <p class="mt-1 text-small text-muted-foreground">{confirmation.deliveryNote}</p>
     {/if}

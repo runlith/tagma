@@ -16,7 +16,7 @@ export type AskedAction = { readonly action: string; readonly asked: readonly st
 
 export type ApproverWhy = 'owner' | 'owner-away' | 'taken-over' | 'parent' | 'parent-owns' | 'no-grant' | 'no-parent';
 
-export type ApproverRoute = { readonly approver: string | null; readonly why: ApproverWhy };
+export type ApproverRoute = { readonly approver: string | null; readonly why: ApproverWhy; readonly name?: string };
 
 export type ApprovalNotice = {
   readonly id: string;

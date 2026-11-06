@@ -16,8 +16,10 @@ import { ASKED_REASON, PLUGIN_BINDING } from '../contract/wire/pluginEndings.js'
 import { threadMandate } from '../store/mandate.js';
 import type { PluginOn } from './pluginOn.js';
 
+type Owner = { readonly approver: string; readonly name: string };
+
 export type PluginQuestions = {
-  readonly owner: (plugin: string, projectId: number) => Effect.Effect<string | null, { readonly message: string }>;
+  readonly owner: (plugin: string, projectId: number) => Effect.Effect<Owner | null, { readonly message: string }>;
   readonly ask: (approver: string, notice: ApprovalNotice) => boolean;
 };
 
@@ -48,10 +50,14 @@ export const makePluginQuestions = Effect.fnUntraced(function* (input: {
   const units = yield* MachineUnits;
   const runFork = yield* FiberSet.makeRuntime<never, void, never>();
 
-  const owner = Effect.fn('PluginQuestions.owner')(function* (plugin: string, projectId: number) {
-    if (on.asking(plugin) === undefined || tools.failed(plugin)) return null;
+  const owner = Effect.fn('PluginQuestions.owner')(function* (
+    plugin: string,
+    projectId: number,
+  ): Effect.fn.Return<Owner | null, { readonly message: string }> {
+    const hook = on.asking(plugin);
+    if (hook === undefined || tools.failed(plugin)) return null;
     const running = yield* enabled.held(projectId);
-    return running().includes(plugin) ? pluginCaller(plugin) : null;
+    return running().includes(plugin) ? { approver: pluginCaller(plugin), name: hook.contribution.plugin.title } : null;
   });
 
   const rerouted = Effect.fn('PluginQuestions.rerouted')(function* (bound: Bound, every: boolean) {
@@ -75,7 +81,7 @@ export const makePluginQuestions = Effect.fnUntraced(function* (input: {
     for (const row of standing) {
       if (row.declined !== null || moved.has(row.id)) continue;
       const wanted = row.projectId === null ? null : yield* owner(row.plugin, row.projectId);
-      if (every || row.approver !== wanted) moved.add(row.id);
+      if (every || row.approver !== (wanted?.approver ?? null)) moved.add(row.id);
     }
     const questions = (yield* harness).runs.questions();
     for (const threadId of moved) yield* questions.reroute(threadId);

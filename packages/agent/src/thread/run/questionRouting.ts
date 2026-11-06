@@ -9,12 +9,13 @@ export const routedTo = Effect.fnUntraced(function* (
   threadId: string,
   entry: ThreadQuestionEntry,
 ): Effect.fn.Return<ThreadQuestionEntry, ThreadBorderFailed> {
-  const { approver: _kept, ...rest } = entry;
+  const { approver: _kept, approverName: _named, ...rest } = entry;
   if (entry.declinedBy !== undefined) return rest;
   const asked = askedActionsOf(entry);
   if (asked.length === 0) return entry;
   const route = yield* approvers.route(threadId, asked);
-  return route.approver === null ? rest : { ...rest, approver: route.approver };
+  if (route.approver === null) return rest;
+  return route.name === undefined ? { ...rest, approver: route.approver } : { ...rest, approver: route.approver, approverName: route.name };
 });
 
 const promptsOf = (entry: ThreadQuestionEntry): readonly ApprovalPrompt[] | null =>

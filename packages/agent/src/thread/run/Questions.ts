@@ -552,7 +552,7 @@ export const questionsLayer = Layer.effectContext(
           const { runId, entry } = yield* located(request.threadId, request.questionId);
           if (entry === null || entry.status !== 'open') return 'unknown' as const;
           if (entry.approver !== request.caller) return 'not-the-approver' as const;
-          const { approver: _left, ...rest } = entry;
+          const { approver: _left, approverName: _named, ...rest } = entry;
           yield* rewritten(request.threadId, runId, { ...rest, declinedBy: request.caller }, 'declined');
           return 'declined' as const;
         }),

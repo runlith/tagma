@@ -310,17 +310,14 @@ export function nativeStrings(operationWords: OperationWords): ChatStrings {
     cancel: () => 'Cancel',
     showMoreFacts: (count) => `${count} more`,
     noAnswerSubmitted: () => 'No answer submitted',
-    askedOf: (approver) => {
+    askedOf: (approver, name) => {
       if (approver === null) return 'Asking you';
       const plugin = pluginOfCaller(approver);
       return plugin === null
         ? `Asking thread ${approver}, which answers for its team instead of you`
-        : `Asking the plugin ${plugin}, which owns this thread, instead of you`;
+        : `Asking ${name ?? `the plugin ${plugin}`}, which owns this thread, instead of you`;
     },
-    decidedBy: (by, note) => {
-      const plugin = pluginOfCaller(by);
-      return `Answered by ${plugin === null ? `thread ${by}` : `the plugin ${plugin}`} instead of you${note === undefined ? '' : `: ${note}`}`;
-    },
+    decidedBy: (by, note) => `Answered by thread ${by} instead of you${note === undefined ? '' : `: ${note}`}`,
     typeYourAnswer: () => 'Type your answer',
     done: () => 'Done',
 
