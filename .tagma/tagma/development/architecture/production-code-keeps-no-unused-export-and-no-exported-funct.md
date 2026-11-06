@@ -3408,10 +3408,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/speech.ts#CLOUD_SPEECH",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/speech.ts#SpeechPlace",
           "owner": "5a3bed29"
         },
@@ -18189,14 +18185,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/speech/src/engine/Speech.ts#ModelStatus",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/speech/src/engine/Speech.ts#SpeechStatus",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/speech/src/engine/catalog.ts#live",
           "owner": "5a3bed29"
         },
@@ -19132,14 +19120,6 @@ fields:
         },
         {
           "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 17,
-          "path": "apps/tagma/server/src/speech/listening/choice.ts",
-          "said": "exported type `Chosen` is imported by no production file"
-        },
-        {
-          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -19409,6 +19389,14 @@ fields:
           "line": 42,
           "path": "packages/mcp/src/sdkServer.ts",
           "said": "exported type `StdioServerInput` is imported by no production file"
+        },
+        {
+          "commit": "abfeca068863ef90ca5462166c6cddafb2170e17",
+          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 17,
+          "path": "apps/tagma/server/src/speech/listening/choice.ts",
+          "said": "exported type `Chosen` is imported by no production file"
         }
       ],
       "inspection": "dead-code",

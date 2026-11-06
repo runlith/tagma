@@ -53,11 +53,15 @@ edges:
   - kind: imports
     to: 01a174f2-3d53-77eb-b835-34ca4f0a6d9b
   - kind: imports
+    to: 01a174f2-3d55-75b3-a0ce-6ad72dc811be
+  - kind: imports
     to: 01a174f2-3d6d-78f4-877c-f76c78f56704
   - kind: imports
     to: 01a174f2-3d77-75ec-9d2c-4c481c787f5f
   - kind: imports
     to: 01a174f2-3d79-76b8-b0ac-d49d1edee1c2
+  - kind: imports
+    to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
   - kind: imports-tests
@@ -68,4 +72,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/providers
 ---
-Agents run on provider models, and the operator connects them here: accounts and instances, key and OAuth sign-in, models and their selection catalog, spend and limits.
+Agents run on provider models, and the operator connects them here: accounts and instances, key and OAuth sign-in, models and their selection catalog, spend and limits. Providers come from plugins: the screen shows a plugin whose providers failed to load with a way to its card, and adding one is the Plugins place's own field.
