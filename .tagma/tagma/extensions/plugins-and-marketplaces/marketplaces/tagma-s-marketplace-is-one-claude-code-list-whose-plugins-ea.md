@@ -12,7 +12,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/marketplaces/contract/wire/presets.ts
 ---
-The public repository `runlith/tagma-plugins` is the marketplace Tagma registers as its `tagma` preset. `composition/testing/plugins/tagma-plugins` is a copy of its published revision (`54ad879`), which the acceptance itest installs with each server's URL swapped for the test OAuth server; a change to the repository lands in that copy in the same work.
+The public repository `runlith/tagma-plugins` is the marketplace Tagma registers as its `tagma` preset. `composition/testing/plugins/tagma-plugins` is a copy of its published revision (`95718a3`), which the acceptance itest installs with each server's URL swapped for the test OAuth server; a change to the repository lands in that copy in the same work.
 
 - One list serves every client. Codex reads `.claude-plugin/marketplace.json` as well as its own `.agents/plugins/marketplace.json`, and Tagma reads either, so a second list would only drift from the first.
 - Each plugin keeps its skill and its `.mcp.json` once. `.claude-plugin/plugin.json` finds them by Claude Code's default layout, and `.codex-plugin/plugin.json` names them through `skills` and `mcpServers`. Tagma reads the plugin as Claude Code, the format its list entry declares.
