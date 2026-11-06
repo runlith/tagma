@@ -16,7 +16,7 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09415a61526
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/contract/wire/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/contract/wire/on.ts
   - kind: file
     ref: apps/tagma/server/src/threads/harness/pluginOn.ts
   - kind: file

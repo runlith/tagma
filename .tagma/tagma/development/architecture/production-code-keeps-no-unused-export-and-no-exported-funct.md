@@ -9586,10 +9586,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/threads/pinOffers.ts#PinnableViews",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/threads/presence/projection.ts#RunFacts",
           "owner": "5a3bed29"
         },
