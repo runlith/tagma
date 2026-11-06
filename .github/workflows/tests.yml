@@ -92,6 +92,7 @@ jobs:
           key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/chrome-for-testing/src/build.ts') }}
       - if: (inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')) && !(runner.os == 'Linux' && runner.arch == 'ARM64')
         name: Chrome for Testing for the engine tests
+        timeout-minutes: 10
         run: bun apps/tagma/server/scripts/fetch-browser.ts
       - if: contains(inputs.lanes, 'webkit')
         uses: actions/cache@v6
@@ -100,10 +101,12 @@ jobs:
           key: webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
       - if: contains(inputs.lanes, 'webkit')
         name: WebKit and its system libraries
+        timeout-minutes: 10
         run: bun x --no-install playwright-core install --with-deps webkit
         working-directory: packages/e2e
       - if: contains(inputs.lanes, 'electron')
         name: Electron
+        timeout-minutes: 10
         run: bun -e "require('electron/install.js')"
         working-directory: packages/e2e
       - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
@@ -117,6 +120,7 @@ jobs:
           printf 'CHROME_DEVEL_SANDBOX=%s\n' "$RUNNER_TEMP/chrome-devel-sandbox" >> "$GITHUB_ENV"
       - if: contains(inputs.lanes, 'electron') && runner.os == 'Linux'
         name: Virtual display for Electron
+        timeout-minutes: 10
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - if: contains(inputs.lanes, 'ios')
         uses: actions/setup-python@v6
