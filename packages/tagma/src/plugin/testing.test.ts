@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { action, beforeBuild, definePlugin, hook, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
 import { testPlugin } from './testing.js';
+import { toolValueOf } from './value.js';
 
 test('a definition naming a field the SDK does not take is refused with the field it means', () => {
   const misspelled = {
@@ -41,7 +42,7 @@ test('models.ask sends a Standard Schema as JSON Schema and answers the typed va
       return answer;
     },
   });
-  expect(await tested.call('grade')).toEqual({ text: '{"doubled":8}', isError: false, structured: { doubled: 8 } });
+  expect(await tested.call('grade')).toEqual({ text: '{"doubled":8}', isError: false, structured: { value: { doubled: 8 } } });
   expect(sent).toEqual([
     [
       'ask_model',
@@ -96,9 +97,39 @@ test('testPlugin runs a tick, a build step, a refusing tool and a project-keyed 
   expect(ticks).toEqual(['check:tagma:null']);
   expect(await tested.build('pin', { offer: 'head', checkout: '/c' })).toEqual({ text: '{"verdict":"go"}', isError: false });
   expect(await tested.call('move', { to: 'nowhere' })).toEqual({ text: 'there is nowhere to move to', isError: true });
-  expect(await tested.call('move', { to: 'x' })).toEqual({ text: '{"moved":"x"}', isError: false, structured: { moved: 'x' } });
+  expect(await tested.call('move', { to: 'x' })).toEqual({ text: '{"moved":"x"}', isError: false, structured: { value: { moved: 'x' } } });
   expect(await tested.read('notes://project/1')).toEqual({ text: '{"project":"1"}', isError: false });
   expect(await tested.read('notes://project/2')).toEqual({ text: 'a view reads only its own project', isError: true });
+});
+
+test('a tool answers the value it returned, so a string that looks like JSON stays a string and any other value keeps its type', async () => {
+  const returned: Readonly<Record<string, unknown>> = {
+    number: 7,
+    digits: '123',
+    flag: false,
+    word: 'false',
+    nothing: null,
+    spelledNull: 'null',
+    list: [{ id: 1 }],
+    spelledList: '[{"id":1}]',
+    record: { id: 1 },
+    spelledRecord: '{"id":1}',
+    blank: '',
+    absent: undefined,
+  };
+  const plugin = definePlugin({
+    id: 'values',
+    title: 'Values',
+    tools: Object.fromEntries(
+      Object.entries(returned).map(([name, value]) => [name, tool({ description: name, audience: 'view', run: async () => value })]),
+    ),
+  });
+  const tested = testPlugin(plugin);
+  for (const [name, value] of Object.entries(returned)) {
+    const answer = await tested.call(name);
+    expect(toolValueOf(answer.text, answer.structured)).toEqual(value);
+    if (typeof value === 'string') expect(answer.text).toBe(value);
+  }
 });
 
 test('an action is a tool Tagma alone calls, listed in actions with the chords the plugin proposes, and answers the operator one sentence', async () => {
@@ -144,7 +175,7 @@ test('a hook is a tool Tagma alone calls, listed in hooks with its match, and it
   const event = { at: 'beforeTool', threadId: 't1', cwd: '/w', tool: 'read', callId: 'c1' } as const;
   expect((await tested.check('secrets', { ...event, input: { path: '.env' } })).structured).toEqual({ deny: 'secrets stay closed' });
   expect((await tested.check('secrets', { ...event, input: { path: 'a.md' } })).structured).toEqual({
-    input: { path: 'README.md' },
+    rewrite: { path: 'README.md' },
     context: 'seen in /w',
   });
 });

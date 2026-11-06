@@ -9,7 +9,7 @@ export default definePlugin({
     sync: action({ title: 'Sync boards', run: async (_input, ctx) => `Synced from project ${ctx.project}` }),
     translate: action({
       title: 'Translate',
-      run: async ({ threadId, args }) => `${args} in German, for ${threadId}`,
+      run: async ({ args }, ctx) => `${args} in German, for ${ctx.caller.kind === 'operator' ? ctx.caller.threadId : 'nobody'}`,
     }),
     push: action({
       title: 'Push boards',

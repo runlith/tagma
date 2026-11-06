@@ -2,7 +2,7 @@ import { mcpAppResult } from '@runlith/mcp/apps';
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceUpdated } from '@runlith/mcp/resources';
 import { Effect, PubSub, Schedule, Stream } from 'effect';
-import type { McpResourceEvent } from '../mcp/contract/wire/feeds.js';
+import type { McpResourceEvent } from '@runlith/mcp/apps';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { PluginTools } from '../plugin-host/contract/service/tools.js';

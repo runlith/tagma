@@ -1,22 +1,23 @@
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import sveltePackage from 'svelte/package.json' with { type: 'json' };
-import { svelte2tsx } from 'svelte2tsx';
 import ts from 'typescript';
+import { svelteProgram } from '../src/plugin/svelteProgram.js';
 
 const root = resolve(import.meta.dir, '../../..');
 const app = join(root, 'apps/tagma/app');
 const ENTRY = join(app, 'src/lib/features/plugin-views/ui.ts');
+const COMPOSITION = join(app, 'src/lib/app/composition.ts');
 const FACADE_DIR = join(root, 'packages/tagma/src/plugin');
 
 export const FACADE = join(FACADE_DIR, 'ui.generated.d.ts');
 const SDK_SOURCES = join(root, 'packages/tagma/src');
+const realFile = (name: string): string => ts.sys.realpath?.(name) ?? name;
+const SDK_REAL = realFile(SDK_SOURCES);
+const FACADE_REAL = realFile(FACADE_DIR);
+const OTHER_SDK = /\/packages\/tagma\/src\//u;
 
 const PUBLIC_PROPS: Readonly<Record<string, readonly string[]>> = {
   Frame: ['src', 'title', 'height', 'fill', 'media'],
 };
-
-const SHIMS = ['svelte2tsx/svelte-shims-v4.d.ts', 'svelte2tsx/svelte-jsx-v4.d.ts'];
 
 const options: ts.CompilerOptions = {
   target: ts.ScriptTarget.ESNext,
@@ -39,34 +40,18 @@ const svelteTarget = (specifier: string, containing: string): string => {
   return Bun.resolveSync(specifier, dirname(containing));
 };
 
-const uiProgram = (): ts.Program => {
-  const host = ts.createCompilerHost(options);
-  const sourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (file, language, onError, create) => {
-    if (!file.endsWith('.svelte')) return sourceFile(file, language, onError, create);
-    const source = ts.sys.readFile(file);
-    if (source === undefined) return undefined;
-    const { code } = svelte2tsx(source, {
-      filename: file,
-      isTsFile: /<script[^>]*\blang\s*=\s*["']ts["']/u.test(source),
-      mode: 'ts',
-      version: sveltePackage.version,
-      emitOnTemplateError: false,
-    });
-    return ts.createSourceFile(file, code, language, true, ts.ScriptKind.TSX);
-  };
-  host.resolveModuleNameLiterals = (literals, containing, _redirected, compiler) =>
-    literals.map((literal) => {
-      if (literal.text.endsWith('.svelte')) {
-        const target = svelteTarget(literal.text, containing);
-        if (ts.sys.fileExists(target))
-          return { resolvedModule: { resolvedFileName: target, extension: ts.Extension.Tsx, isExternalLibraryImport: false } };
+const uiProgram = (): ts.Program =>
+  svelteProgram({
+    options,
+    rootNames: [ENTRY, COMPOSITION],
+    resolve: (specifier, containing, compiler, host) => {
+      if (specifier.endsWith('.svelte')) {
+        const target = svelteTarget(specifier, containing);
+        if (ts.sys.fileExists(target)) return target;
       }
-      return ts.resolveModuleName(literal.text, containing, compiler, host);
-    });
-  const shims = SHIMS.map((shim) => fileURLToPath(import.meta.resolve(shim)));
-  return ts.createProgram({ rootNames: [ENTRY, ...shims], options, host });
-};
+      return ts.resolveModuleName(specifier, containing, compiler, host);
+    },
+  }).program;
 
 type Origin = { readonly module: string | null } | 'local';
 
@@ -114,6 +99,12 @@ const facadeTypes = (program: ts.Program) => {
     if (declaration === undefined) return { module: null };
     const file = declaration.getSourceFile();
     if (program.isSourceFileDefaultLibrary(file)) return { module: null };
+    const actual = realFile(file.fileName);
+    if (actual.startsWith(`${SDK_REAL}/`)) return { module: `./${relative(FACADE_REAL, actual).replace(/\.ts$/u, '.js')}` };
+    if (OTHER_SDK.test(actual))
+      throw new Error(
+        `the facade reached the SDK's sources at ${file.fileName}, outside this checkout's ${SDK_SOURCES}, so they would be expanded`,
+      );
     if (file.fileName.includes('/node_modules/')) {
       const named = moduleOf(declaration);
       if (named !== null) return { module: named };
@@ -123,7 +114,6 @@ const facadeTypes = (program: ts.Program) => {
       const reached = ts.resolveModuleName(specifier, FACADE, options, ts.sys).resolvedModule?.resolvedFileName;
       return reached === file.fileName ? { module: specifier } : 'local';
     }
-    if (file.fileName.startsWith(`${SDK_SOURCES}/`)) return { module: `./${relative(FACADE_DIR, file.fileName).replace(/\.ts$/u, '.js')}` };
     return 'local';
   };
 
@@ -255,6 +245,14 @@ const facadeTypes = (program: ts.Program) => {
         .map((info) => `${info.isReadonly ? 'readonly ' : ''}[key: ${print(info.keyType, seen)}]: ${print(info.type, seen)}`),
       ...checker.getPropertiesOfType(type).map((property) => member(property, seen)),
     ];
+    if (
+      members.length === 0 &&
+      ((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Mapped) !== 0 &&
+      type.aliasTypeArguments?.some((one) => (one.flags & ts.TypeFlags.TypeParameter) !== 0) === true
+    )
+      throw new Error(
+        `the facade cannot print the generic mapped type ${type.aliasSymbol?.name ?? ''}: it has no members, so it would publish as {}`,
+      );
     return members.length === 0 ? '{}' : `{\n  ${indented(members.join(';\n'))};\n}`;
   };
 

@@ -21,6 +21,27 @@ export type PluginEnvelope = {
     readonly required?: boolean;
     readonly default?: string;
   })[];
+  /** The MCP servers the plugin brings: they join the MCP server list of every project running it, and its process and views call them with `servers.<name>.call`. */
+  readonly mcpServers?: {
+    readonly [key: string]: {
+      readonly type: 'stdio';
+      /** One executable name looked up on PATH, or a ./ path to a file inside the plugin. */
+      readonly command: string;
+      readonly args?: readonly string[];
+      readonly env?: {
+        readonly [key: string]: string;
+      };
+      /** Rooted at ./, ${PLUGIN_ROOT} or ${PLUGIN_DATA}; the plugin directory when omitted. */
+      readonly cwd?: string;
+    } | {
+      readonly type: 'streamable-http';
+      /** An https URL, or http to loopback only. */
+      readonly url: string;
+      readonly headers?: {
+        readonly [key: string]: string;
+      };
+    };
+  };
   readonly build: {
     /** SHA-256 over each source as its path, a NUL, its byte length, a NUL and its bytes, in the order listed. */
     readonly hash: string;
@@ -59,7 +80,7 @@ export type PluginPoints = {
     readonly name: string;
     /** What the composer’s list of commands says it does. */
     readonly description: string;
-    /** The text the command puts into the draft. */
+    /** The text the command puts into the draft. Where it holds $ARGUMENTS, the composer asks for the words after the command and puts them there. */
     readonly text: string;
   } | {
     readonly name: string;
@@ -74,9 +95,9 @@ export type PluginPoints = {
   readonly hooks: readonly ({
     /** When Tagma’s agent asks the hook. beforeTool: before a tool call runs; the hook may deny it, rewrite its input or add context. afterTool: after it ran; the hook may add context. beforeStep: when a message reaches the agent; the hook may block it or add context. beforeClose: before the agent ends its turn; a block keeps it working with the reason as its next instruction. threadStarted: on the first step of a new thread; the hook may add context. threadEnded: when the thread is archived or deleted. */
     readonly at: 'beforeTool' | 'afterTool' | 'beforeStep' | 'beforeClose' | 'threadStarted' | 'threadEnded';
-    /** Which calls reach the hook: names of Tagma’s own tools separated by |, or a regular expression over the name; startup or resume for threadStarted; archive or delete for threadEnded. Absent: every one. Claude Code’s and Codex’s own tools never reach it. */
+    /** Which calls reach the hook: names of the tools Tagma’s agent calls, its MCP and plugin tools included, separated by |, or a regular expression over the name; startup or resume for threadStarted; archive or delete for threadEnded. Absent: every one. Claude Code’s and Codex’s own tools never reach it. */
     readonly match?: string;
-    /** The tool, named in contributes.tools with audience tagma, that Tagma calls with { at, threadId, cwd } and what the point carries, and that answers { deny?, input?, context?, block? }. The call wakes a sleeping process. */
+    /** The tool, named in contributes.tools with audience tagma, that Tagma calls with { at, threadId, cwd } and what the point carries, and that answers the verdict its point takes as structured content. The call wakes a sleeping process. */
     readonly tool: string;
     /** block: a hook that fails, answers an error or times out denies the tool call, or blocks the message, instead of letting it through. Absent: the agent goes on as if the hook had not been asked. */
     readonly onFailure?: 'block';
@@ -350,15 +371,31 @@ export type BuildVerdict = {
   readonly thread?: string;
 };
 
-export type HookAnswer = {
-  /** beforeTool: the call does not run, and the agent reads this reason. */
-  readonly deny?: string;
-  /** beforeTool: the call runs with this input instead of its own. */
-  readonly input?: unknown;
-  /** Words the agent reads beside the call, the message or the new thread. */
-  readonly context?: string;
-  /** beforeStep: the message does not reach the agent, which reads this reason. beforeClose: the agent keeps working, reading this. */
-  readonly block?: string;
+export type HookVerdicts = {
+  readonly beforeTool: {
+    /** The call does not run, and the agent reads this reason. */
+    readonly deny?: string;
+    /** The call runs with this input instead of its own. */
+    readonly rewrite?: unknown;
+    /** Words the agent reads beside the call, the message or the new thread. */
+    readonly context?: string;
+  };
+  readonly afterTool: {
+    readonly context?: string;
+  };
+  readonly beforeStep: {
+    /** The message stays in the thread but does not reach the agent, which reads this reason in its place. */
+    readonly block?: string;
+    readonly context?: string;
+  };
+  readonly beforeClose: {
+    /** The agent keeps working, with this as its next instruction. */
+    readonly block?: string;
+  };
+  readonly threadStarted: {
+    readonly context?: string;
+  };
+  readonly threadEnded: {};
 };
 
 export type ViewGraph = {
@@ -375,5 +412,7 @@ export type ViewGraph = {
   /** The Tailwind class candidates of every shipped file, as Tailwind’s own scanner reads them. */
   readonly candidates: readonly string[];
 };
+
+export type ToolFaceState = 'running' | 'done' | 'refused' | 'failed';
 
 export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'commands', 'composer', 'hooks', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

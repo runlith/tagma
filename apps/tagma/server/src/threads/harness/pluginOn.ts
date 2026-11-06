@@ -1,10 +1,10 @@
 import { type ThreadBorderFailed, ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
-import type { EndingInput } from '@runlith/tagma/plugin/protocol';
+import { type EndingInput, TAGMA_REASONS } from '@runlith/tagma/plugin/protocol';
 import { Effect } from 'effect';
 import { ContributionPoint } from '../../platform/contract/service/contribution.js';
 import { PluginHost } from '../../plugin-host/contract/service/supervision.js';
 import { type PluginContribution, PluginPoints } from '../../plugins/contract/service/points.js';
-import { ENDED_REASON, ON_FACE, PLUGIN_BINDING, type ThreadOn } from '../contract/wire/on.js';
+import { ON_FACE, PLUGIN_BINDING, type ThreadOn } from '../contract/wire/on.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 
@@ -51,7 +51,7 @@ export const makePluginOn = Effect.gen(function* () {
         plugin,
         hook.tool,
         { threadId: run.threadId, runId: run.runId, status: run.status, failureReason: run.failureReason } satisfies EndingInput,
-        { caller: { kind: 'tagma', projectId: thread.projectId, reason: ENDED_REASON } },
+        { caller: { kind: 'tagma', projectId: thread.projectId, reason: TAGMA_REASONS.ended } },
       )
       .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
     if ('isError' in answer && answer.isError === true) return yield* broke(`${plugin} answered the ending of ${run.runId} with an error`);

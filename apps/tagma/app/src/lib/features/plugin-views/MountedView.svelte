@@ -20,20 +20,28 @@
   untrack(() => PluginMount.mount({ facts, shell }));
   const modules = PluginModules.use();
 
-  let loaded = $state.raw<{ readonly component: ViewComponent } | { readonly failure: string } | null>(null);
+  type Outcome = { readonly component: ViewComponent } | { readonly failure: string };
+
+  let arrived = $state.raw<{ readonly address: string; readonly outcome: Outcome } | null>(null);
+
+  const loaded = $derived.by((): Outcome | null => {
+    const settled = modules.loaded(address);
+    if (settled !== undefined) return { component: settled };
+    return arrived?.address === address ? arrived.outcome : null;
+  });
 
   const messageOf = (failure: unknown): string => (failure instanceof Error ? failure.message : String(failure));
 
   $effect(() => {
     const asked = address;
+    if (modules.loaded(asked) !== undefined) return;
     let live = true;
-    loaded = null;
     modules.load(asked).then(
       (component) => {
-        if (live) loaded = { component };
+        if (live) arrived = { address: asked, outcome: { component } };
       },
       (failure: unknown) => {
-        if (live) loaded = { failure: messageOf(failure) };
+        if (live) arrived = { address: asked, outcome: { failure: messageOf(failure) } };
       },
     );
     return () => {

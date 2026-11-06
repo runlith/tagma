@@ -17,6 +17,7 @@ export type PluginFace<W> = {
   readonly name: string;
   readonly title: string;
   readonly schema: Schema.Codec<W, unknown>;
+  readonly answer?: { readonly name: string; readonly schema: Schema.Top };
   readonly entries?: (value: W) => readonly ContributionEntry[];
   readonly uses?: (value: W) => string | null;
   readonly claims?: (value: W) => readonly string[];

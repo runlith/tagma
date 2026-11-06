@@ -3,10 +3,6 @@ import type { PluginFace } from '../../../platform/contract/wire/contribution.js
 
 export const PLUGIN_BINDING = 'plugin';
 
-export const ENDED_REASON = 'ended';
-
-export const ASKED_REASON = 'asked';
-
 const HandlerTool = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/u));
 
 export const ThreadOn = Schema.Struct({

@@ -51,6 +51,7 @@ const world = Effect.fnUntraced(function* (input: { readonly standing: readonly 
       palette: () => [],
       catalogRevision: () => 'none',
       caller: () => ({ call: unused }),
+      contributedCall: unused,
       release: unused,
       appView: unused,
       appRead: unused,

@@ -44,9 +44,9 @@ export const names: Builtin<'names', NamesParams> = {
             why: "One subject: composing the server's runtime: every module's layer with the places, ports and fillers composition alone knows, in the one order their lifetimes and dependencies need.",
           },
           {
-            lines: 728,
+            lines: 743,
             path: 'apps/tagma/server/src/mcp/serverPool.ts',
-            why: 'One subject: the project MCP pool lifecycle; declaration reconciliation, sign-in readers and the contributed sign-ins they keep, secret redaction, app calls and which pools stand open share its session ownership and scope.',
+            why: 'One subject: the project MCP pool lifecycle; declaration reconciliation, sign-in readers and the contributed sign-ins they keep, secret redaction, app calls and a contributor’s calls of its own servers, and which pools stand open share its session ownership and scope.',
           },
           {
             lines: 736,

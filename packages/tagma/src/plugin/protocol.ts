@@ -43,19 +43,32 @@ export type NotificationInput = {
 
 export type BuildStepInput = { readonly offer: 'head' | 'tree'; readonly checkout: string };
 
-export type ActionInput = { readonly threadId: string | null; readonly args: string };
+export type ActionInput = { readonly args: string };
 
-type HookPlace = { readonly threadId: string; readonly cwd: string };
+export const HOOK_POINTS = ['beforeTool', 'afterTool', 'beforeStep', 'beforeClose', 'threadStarted', 'threadEnded'] as const;
 
-export type HookInput = HookPlace &
-  (
-    | { readonly at: 'beforeTool'; readonly tool: string; readonly input: unknown; readonly callId: string }
-    | { readonly at: 'afterTool'; readonly tool: string; readonly input: unknown; readonly output: unknown; readonly callId: string }
-    | { readonly at: 'beforeStep'; readonly text: string }
-    | { readonly at: 'beforeClose'; readonly answer: string | null; readonly continued: boolean }
-    | { readonly at: 'threadStarted'; readonly resumed: boolean }
-    | { readonly at: 'threadEnded'; readonly reason: string }
-  );
+export type HookPoint = (typeof HOOK_POINTS)[number];
+
+export type HookCall =
+  | { readonly at: 'beforeTool'; readonly tool: string; readonly input: unknown; readonly callId: string }
+  | { readonly at: 'afterTool'; readonly tool: string; readonly input: unknown; readonly output: unknown; readonly callId: string }
+  | { readonly at: 'beforeStep'; readonly text: string }
+  | { readonly at: 'beforeClose'; readonly answer: string | null; readonly continued: boolean }
+  | { readonly at: 'threadStarted'; readonly resumed: boolean }
+  | { readonly at: 'threadEnded'; readonly reason: 'archive' | 'delete' };
+
+export type HookSession = { readonly threadId: string; readonly cwd: string };
+
+export type HookInput = HookCall & HookSession;
+
+export const TAGMA_REASONS = {
+  schedule: 'schedule',
+  build: 'build',
+  ended: 'ended',
+  asked: 'asked',
+  notification: 'notification',
+  hook: 'hook',
+} as const;
 
 export const PLUGIN_ENVIRONMENT = {
   server: 'TAGMA_SERVER_URL',

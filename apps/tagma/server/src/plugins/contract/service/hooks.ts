@@ -1,19 +1,19 @@
-import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
-import type { HookInput } from '@runlith/tagma/plugin/protocol';
-import { Duration, Effect, Fiber, Schema, type Scope, Stream } from 'effect';
+import { mcpAppResult } from '@runlith/mcp/apps';
+import { type HookCall, type HookInput, type HookPoint, type HookSession, TAGMA_REASONS } from '@runlith/tagma/plugin/protocol';
+import { Data, Duration, Effect, Fiber, Schema, type Scope, Stream } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
-import { HOOK_REASON, HookAnswer, type HookEntry, hookMatcher, TOOL_HOOK_TIMEOUT_MS } from '../wire/hooks.js';
-import type { PluginHookPoint } from '../wire/rows.js';
-import type { PluginHook, PluginHookAnswer, PluginHookCall, PluginHookSession, PluginIgnored, PluginPlace } from './format.js';
+import { type HookEntry, hookMatcher, HookVerdicts, TOOL_HOOK_TIMEOUT_MS } from '../wire/hooks.js';
+import type { PluginHook, PluginHookAnswer, PluginIgnored, PluginPlace } from './format.js';
 import type { LoadedHook } from './plugins.js';
+import type { PluginCaller } from './points.js';
 import { isObject, jsonOf, textOf } from './reading.js';
 
 export type HookToolNames = { readonly shown: string; readonly matched: readonly string[] };
 
 export type HookDialect = {
   readonly span: string;
-  readonly events: Readonly<Record<string, PluginHookPoint>>;
+  readonly events: Readonly<Record<string, HookPoint>>;
   readonly exactNames: boolean;
   readonly tool: (tool: string) => HookToolNames;
   readonly toolInput: (tool: string, input: unknown) => unknown;
@@ -58,8 +58,6 @@ const Output = Schema.Struct({
 
 const decodeOutput = Schema.decodeUnknownOption(Output);
 
-const decodeAnswer = Schema.decodeUnknownEffect(HookAnswer);
-
 const matcherOf = (matcher: string | undefined, exactNames: boolean): ((subject: string) => boolean) =>
   hookMatcher(matcher, exactNames) ?? (() => false);
 
@@ -68,11 +66,11 @@ const ENDINGS: ReadonlySet<string> = new Set(['clear', 'resume', 'logout', 'prom
 const endingOf = (reason: string): string => (ENDINGS.has(reason) ? reason : 'other');
 
 const subjectsOf = (
-  call: PluginHookCall,
+  call: HookCall,
   named: (tool: string) => readonly string[],
   ended: (reason: string) => string,
 ): readonly string[] | null => {
-  switch (call.point) {
+  switch (call.at) {
     case 'beforeTool':
     case 'afterTool':
       return named(call.tool);
@@ -85,9 +83,15 @@ const subjectsOf = (
   }
 };
 
-const inputOf = (dialect: HookDialect, event: string, call: PluginHookCall, session: PluginHookSession) => {
-  const common = { session_id: session.thread, transcript_path: '', cwd: session.cwd, permission_mode: 'default', hook_event_name: event };
-  switch (call.point) {
+const inputOf = (dialect: HookDialect, event: string, call: HookCall, session: HookSession) => {
+  const common = {
+    session_id: session.threadId,
+    transcript_path: '',
+    cwd: session.cwd,
+    permission_mode: 'default',
+    hook_event_name: event,
+  };
+  switch (call.at) {
     case 'beforeTool':
       return {
         ...common,
@@ -118,10 +122,10 @@ const text = <E>(bytes: Stream.Stream<Uint8Array, E>) => Stream.mkString(Stream.
 
 type Ran = { readonly status: number; readonly stdout: string; readonly stderr: string };
 
-const answerOf = (dialect: HookDialect, call: PluginHookCall, ran: Ran): PluginHookAnswer => {
+const answerOf = (dialect: HookDialect, call: HookCall, ran: Ran): PluginHookAnswer => {
   const said = ran.stderr.trim();
   if (ran.status === 2) {
-    switch (call.point) {
+    switch (call.at) {
       case 'beforeTool':
         return { deny: said || 'a hook blocked this call' };
       case 'afterTool':
@@ -138,13 +142,13 @@ const answerOf = (dialect: HookDialect, call: PluginHookCall, ran: Ran): PluginH
   const json = printed.startsWith('{') ? jsonOf(printed) : null;
   const output = json !== null && 'value' in json ? decodeOutput(json.value) : null;
   if (output === null || output._tag === 'None') {
-    return printed.length > 0 && (call.point === 'beforeStep' || call.point === 'threadStarted') ? { context: printed } : {};
+    return printed.length > 0 && (call.at === 'beforeStep' || call.at === 'threadStarted') ? { context: printed } : {};
   }
   const { decision, reason, hookSpecificOutput: specific } = output.value;
   const context = specific?.additionalContext;
   const halted = output.value.continue === false;
   const stopped = output.value.stopReason || 'a hook asked to stop';
-  switch (call.point) {
+  switch (call.at) {
     case 'beforeTool':
       if (halted) return { deny: stopped };
       return {
@@ -154,7 +158,7 @@ const answerOf = (dialect: HookDialect, call: PluginHookCall, ran: Ran): PluginH
             : specific?.permissionDecision === undefined && decision === 'block'
               ? reason || 'a hook denied this call'
               : undefined,
-        input: specific?.updatedInput === undefined ? undefined : dialect.tagmaInput(call.tool, specific.updatedInput),
+        rewrite: specific?.updatedInput === undefined ? undefined : dialect.tagmaInput(call.tool, specific.updatedInput),
         context,
       };
     case 'afterTool':
@@ -177,10 +181,10 @@ const answerOf = (dialect: HookDialect, call: PluginHookCall, ran: Ran): PluginH
   }
 };
 
-const failedBlocking = (call: PluginHookCall, answer: PluginHookAnswer): PluginHookAnswer => {
+const failedBlocking = (call: HookCall, answer: PluginHookAnswer): PluginHookAnswer => {
   if (answer.failure === undefined) return answer;
   const reason = `a hook that blocks on failure failed: ${answer.failure}`;
-  switch (call.point) {
+  switch (call.at) {
     case 'beforeTool':
       return { deny: reason };
     case 'beforeStep':
@@ -299,10 +303,10 @@ export const hooksOfEvents = Effect.fnUntraced(function* (
           continue;
         }
         hooks.push({
-          point,
+          at: point,
           label: `${event}${group.value.matcher === undefined || group.value.matcher === '' ? '' : ` ${group.value.matcher}`}: ${command}`,
           matches: (call) => {
-            if (call.point !== point) return false;
+            if (call.at !== point) return false;
             const subjects = subjectsOf(call, (tool) => dialect.tool(tool).matched, endingOf);
             return subjects === null || subjects.some(matches);
           },
@@ -313,52 +317,42 @@ export const hooksOfEvents = Effect.fnUntraced(function* (
   }
 });
 
-const hookInputOf = (call: PluginHookCall, session: PluginHookSession): HookInput => {
-  const place = { threadId: session.thread, cwd: session.cwd };
-  switch (call.point) {
-    case 'beforeTool':
-      return { at: call.point, ...place, tool: call.tool, input: call.input, callId: call.callId };
-    case 'afterTool':
-      return { at: call.point, ...place, tool: call.tool, input: call.input, output: call.output, callId: call.callId };
-    case 'beforeStep':
-      return { at: call.point, ...place, text: call.text };
-    case 'beforeClose':
-      return { at: call.point, ...place, answer: call.answer, continued: call.continued };
-    case 'threadStarted':
-      return { at: call.point, ...place, resumed: call.resumed };
-    case 'threadEnded':
-      return { at: call.point, ...place, reason: call.reason };
-  }
-};
+const verdictOf = (at: HookPoint) => Schema.decodeUnknownEffect(HookVerdicts.fields[at]);
 
-type ToolResult = Effect.Success<ReturnType<McpToolCaller['call']>>;
-
-const toolAnswerOf = (result: ToolResult): Effect.Effect<PluginHookAnswer> => {
-  if ('isError' in result && result.isError === true) {
-    const said = result.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+const toolAnswerOf = (at: HookPoint, sent: Effect.Success<ReturnType<PluginCaller['call']>>): Effect.Effect<PluginHookAnswer> => {
+  const result = mcpAppResult(sent);
+  if (result.isError === true) {
+    const said = result.content.flatMap((part) => (part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('\n');
     return Effect.succeed({ failure: said.split('\n')[0] || 'answered with an error' });
   }
-  const structured = 'structuredContent' in result ? result.structuredContent : undefined;
-  if (structured === undefined) return Effect.succeed({});
-  return decodeAnswer(structured, { onExcessProperty: 'error' }).pipe(
+  if (result.structuredContent === undefined) return Effect.succeed({ failure: 'answered no hook answer' });
+  return verdictOf(at)(result.structuredContent, { onExcessProperty: 'error' }).pipe(
     Effect.catchTag('SchemaError', (failure) =>
-      Effect.succeed<PluginHookAnswer>({ failure: `answered no hook answer: ${failure.message}` }),
+      Effect.succeed<PluginHookAnswer>({ failure: `answered no hook answer for ${at}: ${failure.message}` }),
     ),
   );
 };
 
-type ToolHookPlace = { readonly plugin: string; readonly projectId: number; readonly caller: McpToolCaller };
+export class HookWithdrawn extends Data.TaggedError('HookWithdrawn')<{}> {}
+
+type ToolHookPlace = {
+  readonly plugin: string;
+  readonly projectId: number;
+  readonly caller: PluginCaller;
+  readonly admit: Effect.Effect<void, HookWithdrawn>;
+};
 
 const unanswered = (failure: { readonly message: string }) => Effect.succeed<PluginHookAnswer>({ failure: failure.message });
 
 export const toolHook = (entry: HookEntry, place: ToolHookPlace): LoadedHook => {
   const matches = matcherOf(entry.match, true);
-  const limit = Duration.millis(entry.timeoutMs ?? TOOL_HOOK_TIMEOUT_MS);
+  const limitMs = entry.timeoutMs ?? TOOL_HOOK_TIMEOUT_MS;
+  const limit = Duration.millis(limitMs);
   return {
-    point: entry.at,
+    at: entry.at,
     label: `${entry.at}${entry.match === undefined ? '' : ` ${entry.match}`}: ${place.plugin} ${entry.tool}`,
     matches: (call) => {
-      if (call.point !== entry.at) return false;
+      if (call.at !== entry.at) return false;
       const subjects = subjectsOf(
         call,
         (tool) => [tool],
@@ -368,19 +362,19 @@ export const toolHook = (entry: HookEntry, place: ToolHookPlace): LoadedHook => 
     },
     run: (call, session) =>
       place.caller
-        .call(place.plugin, entry.tool, hookInputOf(call, session), {
-          caller: { kind: 'tagma', projectId: place.projectId, reason: HOOK_REASON },
+        .callAdmitted(place.plugin, place.admit, entry.tool, { ...call, ...session } satisfies HookInput, {
+          caller: { kind: 'tagma', projectId: place.projectId, reason: TAGMA_REASONS.hook },
+          timeoutMs: limitMs,
         })
         .pipe(
-          Effect.flatMap(toolAnswerOf),
+          Effect.flatMap((sent) => toolAnswerOf(entry.at, sent)),
           Effect.catchTags({
+            HookWithdrawn: () => Effect.succeed<PluginHookAnswer>({}),
             McpConnectFailed: unanswered,
             McpCallFailed: unanswered,
             McpTimedOut: unanswered,
             McpNotConnected: unanswered,
             McpNeedsSignIn: unanswered,
-            HoldStalled: unanswered,
-            ReentrantCall: unanswered,
           }),
           Effect.timeoutOrElse({
             duration: limit,

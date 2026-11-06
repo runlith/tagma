@@ -1,4 +1,4 @@
-import type { NotificationInput } from '@runlith/tagma/plugin/protocol';
+import { type NotificationInput, TAGMA_REASONS } from '@runlith/tagma/plugin/protocol';
 import { Context, Effect, Layer } from 'effect';
 import { PluginPoints } from '../plugins/contract/service/points.js';
 import { pluginCaller } from '../plugins/contract/wire/names.js';
@@ -29,7 +29,7 @@ export const outcomes = Layer.effectContext(
                         answer: outcome.answer,
                         at: outcome.at,
                       } satisfies NotificationInput,
-                      { caller: { kind: 'tagma', projectId: null, reason: 'notification' } },
+                      { caller: { kind: 'tagma', projectId: null, reason: TAGMA_REASONS.notification } },
                     )
                     .pipe(Effect.mapError((cause) => new OutcomeRefused({ reason: cause.message })));
                   if ('isError' in answer && answer.isError === true) {

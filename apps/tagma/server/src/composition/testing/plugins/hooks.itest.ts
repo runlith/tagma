@@ -179,10 +179,10 @@ const turn = Effect.fnUntraced(function* (threadId: string, text: string) {
 
 const KEEPS_READS = [{ at: 'beforeTool', match: 'read', tool: 'hook' }] as const;
 
-const keeper = Effect.fnUntraced(function* (id: string, hooks: readonly Readonly<Record<string, unknown>>[], failing: boolean) {
+const keeper = Effect.fnUntraced(function* (id: string, hooks: readonly Readonly<Record<string, unknown>>[], mark: string | null) {
   const { world, projectId } = yield* Guarded;
   const data = join(world.dataHome, 'agent-plugin-data', id);
-  if (failing) yield* Effect.promise(() => mkdir(data, { recursive: true }).then(() => writeFile(join(data, 'fail-hook'), '')));
+  if (mark !== null) yield* Effect.promise(() => mkdir(data, { recursive: true }).then(() => writeFile(join(data, mark), '')));
   yield* installedFixture(world, projectId, { id, contributes: { hooks } });
   return join(data, 'journal');
 });
@@ -221,7 +221,7 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
     'a beforeTool hook a Tagma-format plugin declares wakes its sleeping process and denies the matching call with its reason',
     () =>
       Effect.gen(function* () {
-        const journal = yield* keeper('keeper', KEEPS_READS, false);
+        const journal = yield* keeper('keeper', KEEPS_READS, null);
         expect(existsSync(journal)).toBe(false);
         const script = scripted('Read the kept file.', (answered) =>
           answered === 0 ? call('call-kept', 'read', { path: join(checkout, 'final.txt') }) : DONE,
@@ -240,7 +240,7 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
 
   it.effect('a Tagma-format hook that fails lets the call through, unless it declares that it blocks on failure', () =>
     Effect.gen(function* () {
-      yield* keeper('porter', KEEPS_READS, true);
+      yield* keeper('porter', KEEPS_READS, 'fail-hook');
       const open = scripted('Read past the porter.', (answered) =>
         answered === 0 ? call('call-porter', 'read', { path: join(checkout, 'final.txt') }) : DONE,
       );
@@ -248,7 +248,7 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       yield* first.ended(yield* turn(first.threadId, 'Read past the porter.'));
       expect(open.asked.at(-1)).toContain('final words');
 
-      yield* keeper('warden', [{ ...KEEPS_READS[0], onFailure: 'block' }], true);
+      yield* keeper('warden', [{ ...KEEPS_READS[0], onFailure: 'block' }], 'fail-hook');
       const closed = scripted('Read past the warden.', (answered) =>
         answered === 0 ? call('call-warden', 'read', { path: join(checkout, 'final.txt') }) : DONE,
       );
@@ -256,6 +256,19 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       yield* second.ended(yield* turn(second.threadId, 'Read past the warden.'));
       expect(closed.asked.at(-1)).toContain('read is refused: a hook that blocks on failure failed: the keeper is down');
       expect(closed.asked.at(-1)).not.toContain('final words');
+    }),
+  );
+
+  it.effect('a Tagma-format hook that blocks on failure denies the call when its tool answers no hook answer', () =>
+    Effect.gen(function* () {
+      yield* keeper('mute', [{ ...KEEPS_READS[0], onFailure: 'block' }], 'plain-hook');
+      const script = scripted('Read past the mute keeper.', (answered) =>
+        answered === 0 ? call('call-mute', 'read', { path: join(checkout, 'final.txt') }) : DONE,
+      );
+      const { threadId, ended } = yield* born('bypass');
+      yield* ended(yield* turn(threadId, 'Read past the mute keeper.'));
+      expect(script.asked.at(-1)).toContain('read is refused: a hook that blocks on failure failed: answered no hook answer');
+      expect(script.asked.at(-1)).not.toContain('final words');
     }),
   );
 

@@ -1,6 +1,13 @@
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { type PluginFormat, type PluginProcess, PluginRefused } from '../../plugins/contract/service/format.js';
+import {
+  type PluginFormat,
+  type PluginIgnored,
+  type PluginProcess,
+  PluginRefused,
+  type PluginServer,
+} from '../../plugins/contract/service/format.js';
+import { serverOf } from '../agent-plugins/servers.js';
 import { entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
 import { Envelope, MANIFEST } from './contract/wire/manifest.js';
 
@@ -30,6 +37,12 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       reason: `${MANIFEST} runs ${process.entry}, which is not a file inside the plugin: build the plugin again`,
     });
   }
+  const ignored: PluginIgnored[] = [];
+  const servers: PluginServer[] = [];
+  for (const [name, server] of Object.entries(manifest.mcpServers ?? {})) {
+    const read = yield* serverOf(root, name, server, ignored);
+    if (read !== null) servers.push(read);
+  }
   return {
     name: manifest.id,
     title: manifest.title,
@@ -39,7 +52,7 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
     skills: [],
     commands: [],
     agents: [],
-    servers: [],
+    servers,
     hooks: [],
     options: (manifest.options ?? []).map((option) => ({
       key: option.key,
@@ -57,7 +70,7 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       outputs: process === null ? [MANIFEST] : [MANIFEST, process.entry],
     },
     contributes: manifest.contributes ?? {},
-    ignored: [],
+    ignored,
   };
 });
 

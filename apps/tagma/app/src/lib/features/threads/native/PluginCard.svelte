@@ -2,6 +2,8 @@
   import type { ToolActivityEntry } from '@runlith/chat-ui/activity';
   import { useChatRendering } from '@runlith/chat-ui/renderers';
   import { toolSettled } from '@runlith/chat-ui/activity';
+  import type { Tool, ToolFace } from '@runlith/tagma/plugin';
+  import { toolValueOf } from '@runlith/tagma/plugin/value';
   import { untrack } from 'svelte';
   import PluginView from '../../plugin-views/PluginView.svelte';
   import { toolStateOf } from '../../plugin-views/transcript.js';
@@ -16,14 +18,9 @@
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
   const valueOf = (output: unknown): unknown => {
-    if (isRecord(output) && isRecord(output.structuredContent)) return output.structuredContent;
-    const text = typeof output === 'string' ? output : isRecord(output) && typeof output.text === 'string' ? output.text : undefined;
-    if (text === undefined || text === '') return undefined;
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
+    if (typeof output === 'string') return toolValueOf(output);
+    if (isRecord(output) && typeof output.text === 'string') return toolValueOf(output.text, output.structuredContent);
+    return undefined;
   };
 
   const face = $derived({
@@ -32,7 +29,7 @@
     output: toolSettled(entry) ? valueOf(entry.toolOutput) : undefined,
     state: toolStateOf(entry.toolState),
     threadId,
-  });
+  } satisfies ToolFace<{ readonly tools: Readonly<Record<string, Tool>> }, string>);
 
   $effect(() => {
     if (toolSettled(entry) && entry.truncated !== undefined) untrack(() => rendering.loadEntry(entry.id));

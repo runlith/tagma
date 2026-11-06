@@ -11,18 +11,19 @@ export const BeforeBuild = Schema.Array(
 );
 export type BeforeBuild = typeof BeforeBuild.Type;
 
-export const BEFORE_BUILD_FACE: PluginFace<BeforeBuild> = {
-  name: 'beforeBuild',
-  title: 'Checks before Tagma builds a checkout',
-  schema: BeforeBuild,
-  calls: (steps) => steps.map((step) => step.tool),
-};
-
 export const StepVerdict = Schema.Union([
   Schema.Struct({ verdict: Schema.Literal('go') }),
   Schema.Struct({ verdict: Schema.Literal('pending') }),
   Schema.Struct({ verdict: Schema.Literal('stop'), reason: Schema.NonEmptyString, thread: Schema.optional(Schema.NonEmptyString) }),
 ]);
 export type StepVerdict = typeof StepVerdict.Type;
+
+export const BEFORE_BUILD_FACE: PluginFace<BeforeBuild> = {
+  name: 'beforeBuild',
+  title: 'Checks before Tagma builds a checkout',
+  schema: BeforeBuild,
+  answer: { name: 'BuildVerdict', schema: StepVerdict },
+  calls: (steps) => steps.map((step) => step.tool),
+};
 
 export type StepAsk = { readonly offer: 'head' | 'tree'; readonly checkout: string };

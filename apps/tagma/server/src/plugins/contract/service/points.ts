@@ -1,3 +1,5 @@
+import type { McpFailure } from '@runlith/mcp/McpFailure';
+import type { McpCallOptions } from '@runlith/mcp/McpSession';
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
 import { Context, Data, type Effect, type Result, type Scope } from 'effect';
 import type { PluginFaced } from '../../../platform/contract/service/contribution.js';
@@ -11,10 +13,20 @@ export type PluginRef = {
   readonly data: string;
 };
 
+export type PluginCaller = McpToolCaller & {
+  callAdmitted<E>(
+    id: string,
+    admit: Effect.Effect<void, E>,
+    tool: string,
+    args: Readonly<Record<string, unknown>>,
+    options: McpCallOptions,
+  ): Effect.Effect<Effect.Success<ReturnType<McpToolCaller['call']>>, E | McpFailure>;
+};
+
 export type PluginContribution<W> = {
   readonly plugin: PluginRef;
   readonly value: W;
-  readonly caller: McpToolCaller;
+  readonly caller: PluginCaller;
 };
 
 export class PluginPointRefused extends Data.TaggedError('PluginPointRefused')<{
@@ -49,6 +61,6 @@ export class PluginPoints extends Context.Service<
     hold<W>(point: PluginFaced<W>): Effect.Effect<HeldContributions<W>, never, Scope.Scope>;
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
     shown(name: string, value: unknown): ContributionShown;
-    publish(plugin: PluginRef, checked: PluginChecked, caller: McpToolCaller): Effect.Effect<() => void, PluginPointRefused>;
+    publish(plugin: PluginRef, checked: PluginChecked, caller: PluginCaller): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}

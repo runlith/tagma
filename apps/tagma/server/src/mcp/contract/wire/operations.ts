@@ -320,6 +320,59 @@ The identity is the declaration the tool call ran against, as the call's display
   }),
 };
 
+const contributedName = Schema.String.check(Schema.isMinLength(1)).annotate({
+  description: 'The server as the plugin names it in mcpServers, without the `<plugin>-` prefix read_mcp_servers shows.',
+});
+
+export const MCP_CONTRIBUTED_REFUSALS = [
+  'mcp-server-unbrought',
+  'mcp-server-shadowed',
+  'mcp-plugin-unnamed',
+  'mcp-server-unavailable',
+  'mcp-call-failed',
+  'mcp-reconcile-stalled',
+  'mcp-contributions-unreadable',
+  'secret-store-failed',
+  'plugin-not-enabled',
+  'unknown-project',
+] as const;
+
+export const MCP_CONTRIBUTED_OPERATIONS = {
+  call_contributed_tool: operation('call_contributed_tool', {
+    doors: { http: true },
+    callers: 'operator',
+    external: true,
+    subject: 'none',
+    place: 'project',
+    waits: [],
+    lifetimes: [],
+    approval: ASKS_NEVER,
+    effect: 'external',
+    identity: { key: 'call' },
+    answer: arms({ ok: { result: McpAppCallResult } }),
+    meaning:
+      'Call a tool of an MCP server a plugin brought into this project, under that server’s sign-in and secrets, for the plugin’s process or one of its views.',
+    grammar:
+      'Only a server the calling plugin itself brought is reached. A plugin process calls as `plugin:<id>` and its server receives the caller tagma naming the plugin; a view names its `plugin` and `view`, and the server receives the operator acting in that view, with `threadId` when the view stands in a thread. The answer is the server’s tool result as MCP shapes it; an `isError` result is an answer, not a refusal.',
+    input: Schema.Struct({
+      project: projectField,
+      server: contributedName,
+      tool: Schema.String.check(Schema.isMinLength(1)),
+      arguments: Schema.Record(Schema.String, Schema.Unknown),
+      plugin: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+        description: 'The plugin whose view calls; a plugin’s process is its own caller and omits it.',
+      }),
+      view: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({ description: 'The view that calls.' }),
+      threadId: Schema.optional(Schema.String.annotate(placeRole('value'))),
+    }),
+    refusals: MCP_CONTRIBUTED_REFUSALS,
+    confirmation: (input) => ({ summary: `Call ${input.tool} on the MCP server ${input.server} a plugin brought?` }),
+    confirmLabel: 'Call',
+    presentation: { running: 'Calling a plugin’s MCP server', done: 'Called a plugin’s MCP server' },
+    subjects: () => [],
+  }),
+};
+
 const operatorActs = {
   doors: { http: true },
   callers: 'operator',

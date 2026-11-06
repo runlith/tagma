@@ -135,7 +135,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
 
         const caller = { kind: 'agent', projectId, agentId: 'agent', ownerId: 'owner', thread: null } as const;
         expect(yield* host.call('accept', 'echo', { text: 'hi' }, { caller })).toMatchObject({
-          structuredContent: { text: 'hi', project: projectId, pid: expect.any(Number) },
+          structuredContent: { value: { text: 'hi', project: projectId, pid: expect.any(Number) } },
         });
         expect(host.reading('accept')?.state).toBe('running');
         expect(yield* journal(data)).toEqual([expect.stringMatching(/^call \d+$/)]);

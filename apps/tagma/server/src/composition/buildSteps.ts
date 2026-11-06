@@ -1,5 +1,5 @@
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
-import type { BuildStepInput } from '@runlith/tagma/plugin/protocol';
+import { type BuildStepInput, TAGMA_REASONS } from '@runlith/tagma/plugin/protocol';
 import { Effect, Layer, Schedule, Schema } from 'effect';
 import { BEFORE_BUILD, type BeforeStep, BuildStepFailed, BuildSteps } from '../checkout-builds/contract/service/steps.js';
 import { type BeforeBuild, StepVerdict } from '../checkout-builds/contract/wire/steps.js';
@@ -51,7 +51,7 @@ export const buildSteps = Layer.effect(
       ask: Effect.fn('BuildSteps.ask')(function* (input) {
         const answer = yield* caller
           .call(plugin, entry.tool, { offer: input.offer, checkout: input.checkout } satisfies BuildStepInput, {
-            caller: { kind: 'tagma', projectId, reason: 'build' },
+            caller: { kind: 'tagma', projectId, reason: TAGMA_REASONS.build },
           })
           .pipe(
             Effect.map((answered) => ({ answered })),

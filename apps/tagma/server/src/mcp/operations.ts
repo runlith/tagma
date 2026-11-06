@@ -1,4 +1,6 @@
+import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
@@ -7,6 +9,7 @@ import { callbackOf, servedCallback } from './contract/service/door.js';
 import { McpServers } from './contract/service/servers.js';
 import {
   MCP_APP_OPERATIONS as APPS,
+  MCP_CONTRIBUTED_OPERATIONS as CONTRIBUTED,
   MCP_OPERATIONS as OPS,
   MCP_SIGN_IN_OPERATIONS as SIGN_IN,
   mcpScopeOf,
@@ -90,6 +93,35 @@ export const MCP_PAIRS = {
           projectId: project,
           view: input.resource,
           threadId: input.threadId,
+        });
+        return { status: 'ok' as const, result };
+      }),
+    }),
+  ),
+  call_contributed_tool: pair(
+    CONTRIBUTED.call_contributed_tool,
+    body(CONTRIBUTED.call_contributed_tool, {
+      execute: Effect.fnUntraced(function* (input, _prepared, caller) {
+        const project = yield* projectId;
+        const own = caller.actor.kind === 'external' ? caller.actor.plugin : null;
+        const viewed = caller.actor.kind === 'operator' && input.plugin !== undefined && input.view !== undefined;
+        const contributor = own ?? (viewed ? input.plugin : undefined);
+        if (contributor === undefined || contributor === null) {
+          return yield* new GateRefusal('mcp-plugin-unnamed', 'call_contributed_tool calls for a plugin, and this call names none.', [
+            'call from the plugin’s process as plugin:<id>, or name the plugin and view of the calling view',
+          ]);
+        }
+        const mcpCaller: McpCaller =
+          own === null
+            ? { kind: 'operator', projectId: project, view: `${contributor}/${input.view}`, threadId: input.threadId }
+            : { kind: 'tagma', projectId: project, reason: `plugin ${contributor}` };
+        const result = yield* (yield* McpServers).contributedCall({
+          projectId: project,
+          contributor,
+          server: input.server,
+          tool: input.tool,
+          args: input.arguments,
+          caller: mcpCaller,
         });
         return { status: 'ok' as const, result };
       }),

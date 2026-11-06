@@ -12,6 +12,7 @@ export type PluginFolder = {
   readonly program?: string;
   readonly resident?: boolean;
   readonly options?: readonly Readonly<Record<string, unknown>>[];
+  readonly mcpServers?: Readonly<Record<string, unknown>>;
   readonly contributes?: Readonly<Record<string, unknown>>;
   readonly build?: { readonly hash: string; readonly sources: readonly string[] };
 };
@@ -23,6 +24,7 @@ export const manifestText = (folder: PluginFolder): string =>
     version: '0.0.0',
     process: folder.program === undefined ? undefined : { entry: PROCESS_ENTRY, resident: folder.resident },
     options: folder.options,
+    mcpServers: folder.mcpServers,
     build: folder.build ?? BUILT_FROM_NOTHING,
     contributes: folder.contributes,
   });

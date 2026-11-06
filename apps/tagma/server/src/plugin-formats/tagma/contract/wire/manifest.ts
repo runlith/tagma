@@ -56,6 +56,36 @@ const Sources = Schema.Array(Inside).check(
   ),
 );
 
+const Strings = Schema.Record(Schema.String, Schema.String);
+
+const ServerName = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/u)).annotate({
+  description: 'The server as the plugin calls it, with letters, digits, _ and -; read_mcp_servers lists it as `<plugin>-<name>`.',
+});
+
+const Server = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal('stdio'),
+    command: Schema.String.check(Schema.isMinLength(1)).annotate({
+      description: 'One executable name looked up on PATH, or a ./ path to a file inside the plugin.',
+    }),
+    args: Schema.optional(Schema.Array(Schema.String)),
+    env: Schema.optional(Strings),
+    cwd: Schema.optional(Schema.String).annotate({
+      description: 'Rooted at ./, ${PLUGIN_ROOT} or ${PLUGIN_DATA}; the plugin directory when omitted.',
+    }),
+  }).annotate({
+    description:
+      'A server the plugin runs as the operator over stdio. ${PLUGIN_ROOT} and ${PLUGIN_DATA} are expanded in args, env and cwd, and the process also receives them as variables.',
+  }),
+  Schema.Struct({
+    type: Schema.Literal('streamable-http'),
+    url: Schema.String.check(Schema.isMinLength(1)).annotate({
+      description: 'An https URL, or http to loopback only.',
+    }),
+    headers: Schema.optional(Strings),
+  }).annotate({ description: 'A remote server over Streamable HTTP; one asking for OAuth signs in from its card.' }),
+]);
+
 export const Envelope = Schema.Struct({
   id: PluginLabel,
   title: Named,
@@ -72,6 +102,10 @@ export const Envelope = Schema.Struct({
     }),
   ),
   options: Schema.optional(Options),
+  mcpServers: Schema.optional(Schema.Record(ServerName, Server)).annotate({
+    description:
+      'The MCP servers the plugin brings: they join the MCP server list of every project running it, and its process and views call them with `servers.<name>.call`.',
+  }),
   build: Schema.Struct({
     hash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)).annotate({
       description: 'SHA-256 over each source as its path, a NUL, its byte length, a NUL and its bytes, in the order listed.',

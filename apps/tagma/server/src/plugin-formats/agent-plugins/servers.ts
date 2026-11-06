@@ -156,20 +156,28 @@ export const serversOf = Effect.fnUntraced(function* (root: string, ignored: Plu
         reason: 'a client extension Tagma does not implement',
       });
     }
-    if (server.type === 'sse') {
-      ignored.push({ component: 'mcp-server', name, reason: 'it uses the deprecated HTTP+SSE transport; Tagma speaks Streamable HTTP' });
-      continue;
-    }
-    const problem = server.type === 'stdio' ? yield* stdioProblem(root, server) : remoteProblem(server);
-    if (problem !== null) {
-      ignored.push({ component: 'mcp-server', name, reason: problem });
-      continue;
-    }
-    servers.push(
-      server.type === 'stdio'
-        ? { name, reach: reachOf(server, root) }
-        : { name, reach: () => Effect.succeed({ transport: 'http' as const, url: server.url, headers: server.headers }) },
-    );
+    const read = yield* serverOf(root, name, server, ignored);
+    if (read !== null) servers.push(read);
   }
   return servers;
+});
+
+type PortableServer = Omit<typeof Stdio.Type, 'extensions'> | Omit<typeof Remote.Type, 'extensions'>;
+
+export const serverOf = Effect.fnUntraced(function* (root: string, name: string, server: PortableServer, ignored: PluginIgnored[]) {
+  if (server.type === 'sse') {
+    ignored.push({ component: 'mcp-server', name, reason: 'it uses the deprecated HTTP+SSE transport; Tagma speaks Streamable HTTP' });
+    return null;
+  }
+  const problem = server.type === 'stdio' ? yield* stdioProblem(root, server) : remoteProblem(server);
+  if (problem !== null) {
+    ignored.push({ component: 'mcp-server', name, reason: problem });
+    return null;
+  }
+  return server.type === 'stdio'
+    ? ({ name, reach: reachOf(server, root) } satisfies PluginServer)
+    : ({
+        name,
+        reach: () => Effect.succeed({ transport: 'http' as const, url: server.url, headers: server.headers }),
+      } satisfies PluginServer);
 });

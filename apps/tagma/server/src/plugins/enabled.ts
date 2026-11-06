@@ -4,7 +4,7 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { type SecretOwner, SecretOwnerFailed } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { PluginRefused, PluginUnreadable } from './contract/service/format.js';
-import { toolHook } from './contract/service/hooks.js';
+import { HookWithdrawn, toolHook } from './contract/service/hooks.js';
 import {
   EnabledPlugins,
   HostedPlugins,
@@ -19,7 +19,7 @@ import { type HookEntries, HOOKS_FACE } from './contract/wire/hooks.js';
 import { pluginsDisabled, pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
 import type { Digests } from './digests.js';
 import { enablingIn } from './enabling.js';
-import { hosted } from './reader.js';
+import { hosted, type Read } from './reader.js';
 import { SECRET_KIND, type Shelf } from './shelf.js';
 
 const HOOKS = new ContributionPoint<never, HookEntries>('plugins/hooks', HOOKS_FACE);
@@ -36,10 +36,20 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   const projects = yield* Projects;
   const hooks = yield* points.hold(HOOKS);
   const toolHooks = new WeakMap<PluginContribution<HookEntries>, Map<number, readonly LoadedHook[]>>();
+  const runningIn = new Map<number, () => readonly string[]>();
+  const bound = new Map<string, { readonly read: Read; readonly version: number; readonly hooks: readonly LoadedHook[] }>();
+  let version = 0;
+  yield* Effect.forkScoped(
+    Stream.runForEach(Stream.fromPubSub(pulses), () =>
+      Effect.sync(() => {
+        version += 1;
+      }),
+    ),
+  );
 
-  const hooked = (loaded: PluginLoaded, projectId: number): PluginLoaded => {
-    const contribution = hooks.of(loaded.id);
-    if (contribution === undefined || contribution.value.length === 0) return loaded;
+  const toolHooksOf = (plugin: string, projectId: number): readonly LoadedHook[] => {
+    const contribution = hooks.of(plugin);
+    if (contribution === undefined || contribution.value.length === 0) return [];
     let made = toolHooks.get(contribution);
     if (made === undefined) {
       made = new Map();
@@ -47,11 +57,16 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     }
     let declared = made.get(projectId);
     if (declared === undefined) {
-      const place = { plugin: loaded.id, projectId, caller: contribution.caller };
+      const admit = Effect.suspend(() =>
+        hooks.of(plugin) === contribution && (runningIn.get(projectId)?.() ?? []).includes(plugin)
+          ? Effect.void
+          : Effect.fail(new HookWithdrawn()),
+      );
+      const place = { plugin, projectId, caller: contribution.caller, admit };
       declared = contribution.value.map((entry) => toolHook(entry, place));
       made.set(projectId, declared);
     }
-    return { ...loaded, hooks: [...loaded.hooks, ...declared] };
+    return declared;
   };
 
   const unreadable = (failure: { readonly message: string }) => new PluginsUnreadable({ reason: failure.message });
@@ -78,7 +93,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
       if (install === undefined) continue;
       const read = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
       if (read === null) continue;
-      loaded.push(hooked((yield* shelf.bind(read, install.root, project).pipe(Effect.mapError(unreadable))).loaded, projectId));
+      loaded.push((yield* shelf.bind(read, install.root, project).pipe(Effect.mapError(unreadable))).loaded);
     }
     return loaded;
   });
@@ -93,6 +108,35 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
       seen = { ...now, running: now.enabled.filter((id) => !now.off.includes(id)) };
       return seen.running;
     };
+  });
+
+  const hooksOf = Effect.fn('EnabledPlugins.hooks')(function* (projectId: number) {
+    let running = runningIn.get(projectId);
+    if (running === undefined) {
+      running = yield* held(projectId);
+      runningIn.set(projectId, running);
+    }
+    const enabled = running();
+    if (enabled.length === 0) return [] as readonly LoadedHook[];
+    const installed = yield* installs;
+    const now = version;
+    let project: string | null = null;
+    const found: LoadedHook[] = [];
+    for (const id of enabled) {
+      const install = installed.find((entry) => entry.id === id);
+      if (install === undefined) continue;
+      const read = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
+      if (read === null) continue;
+      const key = `${projectId}\n${id}`;
+      let standing = bound.get(key);
+      if (standing === undefined || standing.read !== read || standing.version !== now) {
+        project ??= (yield* projects.byId(projectId).pipe(Effect.mapError(unreadable))).rootPath;
+        standing = { read, version: now, hooks: yield* shelf.hooks(read, install.root, project).pipe(Effect.mapError(unreadable)) };
+        bound.set(key, standing);
+      }
+      found.push(...standing.hooks, ...toolHooksOf(id, projectId));
+    }
+    return found;
   });
 
   const anywhere = Effect.fnUntraced(function* () {
@@ -192,7 +236,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   };
 
   return {
-    enabled: EnabledPlugins.of({ of, held, changes: Stream.fromPubSub(pulses) }),
+    enabled: EnabledPlugins.of({ of, hooks: hooksOf, held, changes: Stream.fromPubSub(pulses) }),
     hosted: HostedPlugins.of({ roots, read, changes: Stream.fromPubSub(inputs) }),
     owner,
   };

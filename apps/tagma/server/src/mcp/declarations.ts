@@ -4,8 +4,10 @@ import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprin
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { McpServerReach, McpServerRow, McpSignInRow } from './contract/wire/servers.js';
 import type { Resolved } from '../settings/contract/service/values.js';
-import type { McpServerResolution } from './contract/service/servers.js';
+import { Effect } from 'effect';
+import type { McpContributedCall, McpContributedRefusal, McpServerResolution } from './contract/service/servers.js';
 import type { McpContribution } from './contract/service/contributions.js';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
 
 export type McpContributed = { readonly entries: readonly McpContribution[]; readonly off: readonly string[] };
 
@@ -34,6 +36,42 @@ export function mcpDeclared(
   }
   return [...byName.values()];
 }
+
+export const mcpBrought = (
+  call: Pick<McpContributedCall, 'projectId' | 'contributor' | 'server'>,
+  entries: readonly McpContribution[],
+  declared: readonly McpServerResolution[],
+): Effect.Effect<string, GateRefusal<McpContributedRefusal>> => {
+  const brought = entries.find((entry) => entry.contributor === call.contributor && entry.local === call.server);
+  if (brought === undefined) {
+    const own = entries.filter((entry) => entry.contributor === call.contributor).map((entry) => entry.local);
+    return Effect.fail(
+      new GateRefusal(
+        'mcp-server-unbrought',
+        `${call.contributor} brings no MCP server called ${call.server} into project ${call.projectId}${own.length === 0 ? '' : `; it brings ${own.join(', ')}`}.`,
+        ['name a server the plugin declares in mcpServers', 'call in a project where the plugin is enabled'],
+      ),
+    );
+  }
+  const name = brought.declaration.name;
+  const standing = declared.find((entry) => entry.declaration.name === name);
+  if (standing === undefined || standing.scope !== 'contributed') {
+    const scope = standing?.scope ?? 'project';
+    return Effect.fail(
+      new GateRefusal('mcp-server-shadowed', `The ${scope} declaration ${name} replaces the server ${call.contributor} brought.`, [
+        `remove_mcp_server ${name} in scope ${scope} hands the name back to the plugin`,
+      ]),
+    );
+  }
+  if (!standing.declaration.enabled) {
+    return Effect.fail(
+      new GateRefusal('mcp-server-unavailable', `${name} is switched off in project ${call.projectId}.`, [
+        `enable_mcp_server ${name} with scope contributed switches it on`,
+      ]),
+    );
+  }
+  return Effect.succeed(name);
+};
 
 export type Readied = {
   readonly declaration: McpServerDeclaration;

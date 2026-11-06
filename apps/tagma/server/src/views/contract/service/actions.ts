@@ -11,6 +11,12 @@ export class PluginActions extends Context.Service<
   PluginActions,
   {
     readonly sets: Stream.Stream<PluginActionState, PluginsUnreadable | StoreFailure>;
-    run(projectId: number, plugin: string, action: string, input: ActionInput): Effect.Effect<string | null, ActionFailure>;
+    run(
+      projectId: number,
+      plugin: string,
+      action: string,
+      threadId: string | null,
+      input: ActionInput,
+    ): Effect.Effect<string | null, ActionFailure>;
   }
 >()('tagma/views/PluginActions') {}

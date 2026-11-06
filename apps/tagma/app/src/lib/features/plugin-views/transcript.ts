@@ -1,4 +1,10 @@
-import type { TranscriptEntry, TranscriptEvent, TranscriptPage, TranscriptTail } from '@tagma/server/threads/contract/wire/transcript';
+import type {
+  TranscriptEntry,
+  TranscriptEvent,
+  TranscriptPage,
+  TranscriptTail,
+  TranscriptToolState,
+} from '@tagma/server/threads/contract/wire/transcript';
 import { appendedFrom } from '@runlith/chat-ui/appended';
 import type { ChatFold } from '@runlith/chat-ui/ChatFold.svelte';
 import { type ChatEntry, questionOpen } from '@runlith/chat-ui/entries';
@@ -16,7 +22,7 @@ type Scan = {
   readonly hungry: boolean;
 };
 
-export const toolStateOf = (state: ToolEntry['toolState']): NonNullable<TranscriptEntry['tool']>['state'] => {
+export const toolStateOf = (state: ToolEntry['toolState']): typeof TranscriptToolState.Type => {
   switch (state) {
     case 'input-streaming':
     case 'input-available':

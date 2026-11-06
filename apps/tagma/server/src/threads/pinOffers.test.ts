@@ -6,7 +6,10 @@ import { pluginPoints } from '../plugins/testing/points.js';
 import { makePinnableViews } from './pinOffers.js';
 
 const POKER = { id: 'poker', title: 'Poker', root: '/poker', data: '/poker-data' };
-const CALLER = { call: () => Effect.die('the pin contribution calls no tool') };
+const CALLER = {
+  call: () => Effect.die('the pin contribution calls no tool'),
+  callAdmitted: () => Effect.die('the pin contribution calls no tool'),
+};
 
 const pinning = Effect.gen(function* () {
   const points = pluginPoints();

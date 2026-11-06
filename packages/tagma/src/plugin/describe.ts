@@ -9,6 +9,7 @@ export type PluginDescription = {
   readonly title: PluginEnvelope['title'];
   readonly description: PluginEnvelope['description'];
   readonly options: PluginEnvelope['options'];
+  readonly mcpServers: PluginEnvelope['mcpServers'];
   readonly process: { readonly resident: boolean } | null;
   readonly tools: PluginPoints['tools'];
   readonly contributes: Partial<PluginPoints>;
@@ -24,6 +25,7 @@ export const manifestOf = (described: PluginDescription): PluginManifest => ({
   description: described.description,
   process: described.process === null ? undefined : { entry: PROCESS_ENTRY, resident: described.process.resident || undefined },
   options: described.options,
+  mcpServers: described.mcpServers,
   contributes: described.contributes,
 });
 
@@ -102,6 +104,7 @@ const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, tr
   description: true,
   resident: true,
   options: true,
+  mcpServers: true,
   tools: true,
   resources: true,
   views: true,
@@ -160,6 +163,7 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     title,
     description,
     options,
+    mcpServers,
     resident,
     resources,
     views,
@@ -208,6 +212,10 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
       ? []
       : [tagmaTool(handlerTools.notification, 'Receives the answer to a notification this plugin sent.')]),
   ];
+  for (const name of Object.keys(mcpServers ?? {})) {
+    if (named('MCP server', name) === 'in')
+      throw new PluginInvalid('the MCP server in is named as servers.in, which reaches another project');
+  }
   const shown = Object.entries(views ?? {}).map(([id, declared]) => ({ id, entry: declared.entry, live: declared.live }));
   const handled = tools.length > 0 || Object.keys(resources ?? {}).length > 0;
   const contributes: Partial<PluginPoints> = {
@@ -221,5 +229,5 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     ...(Object.keys(on).length === 0 ? {} : { on }),
     ...(onNotification === undefined ? {} : { notify: { tool: handlerTools.notification } }),
   };
-  return { id, title, description, options, process: handled ? { resident: resident ?? false } : null, tools, contributes };
+  return { id, title, description, options, mcpServers, process: handled ? { resident: resident ?? false } : null, tools, contributes };
 };

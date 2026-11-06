@@ -1,4 +1,5 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
+import type { HookCall, HookPoint, HookSession } from '@runlith/tagma/plugin/protocol';
 import { Context, Data, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -9,7 +10,6 @@ import type {
   PluginComponentKind,
   PluginDeclared,
   PluginFault,
-  PluginHookPoint,
   PluginOrigin,
   PluginPreview,
   PluginProcessRow,
@@ -17,16 +17,7 @@ import type {
   PluginSource,
 } from '../wire/rows.js';
 import type { PluginInstall } from '../wire/settings.js';
-import type {
-  PluginHookAnswer,
-  PluginHookCall,
-  PluginHookSession,
-  PluginPackage,
-  PluginPlace,
-  PluginProcess,
-  PluginRefused,
-  PluginUnreadable,
-} from './format.js';
+import type { PluginHookAnswer, PluginPackage, PluginPlace, PluginProcess, PluginRefused, PluginUnreadable } from './format.js';
 
 export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home: string }>()('tagma/plugins/PluginPlaces') {}
 
@@ -149,10 +140,10 @@ export type LoadedAgent = {
 };
 
 export type LoadedHook = {
-  readonly point: PluginHookPoint;
+  readonly at: HookPoint;
   readonly label: string;
-  readonly matches: (call: PluginHookCall) => boolean;
-  readonly run: (call: PluginHookCall, session: PluginHookSession) => Effect.Effect<PluginHookAnswer>;
+  readonly matches: (call: HookCall) => boolean;
+  readonly run: (call: HookCall, session: HookSession) => Effect.Effect<PluginHookAnswer>;
 };
 
 export type PluginLoaded = {
@@ -180,6 +171,7 @@ export class EnabledPlugins extends Context.Service<
   EnabledPlugins,
   {
     of(projectId: number): Effect.Effect<readonly PluginLoaded[], PluginsUnreadable>;
+    hooks(projectId: number): Effect.Effect<readonly LoadedHook[], PluginsUnreadable>;
     held(projectId: number): Effect.Effect<() => readonly string[], PluginsUnreadable>;
     readonly changes: Stream.Stream<number | null>;
   }

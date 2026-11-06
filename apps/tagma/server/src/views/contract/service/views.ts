@@ -2,7 +2,7 @@ import type { McpAppCallResult } from '@runlith/mcp/apps';
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceResult } from '@runlith/mcp/resources';
 import { Context, type Effect, type Stream } from 'effect';
-import type { McpResourceEvent } from '../../../mcp/contract/wire/feeds.js';
+import type { McpResourceEvent } from '@runlith/mcp/apps';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { PluginsUnreadable } from '../../../plugins/contract/service/plugins.js';

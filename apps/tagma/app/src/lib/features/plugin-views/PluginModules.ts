@@ -10,9 +10,14 @@ export class PluginModules extends Service<PluginModules>()('PluginModules', { t
   }
 
   private readonly loads = new Map<string, Promise<ViewComponent>>();
+  private readonly settled = new Map<string, ViewComponent>();
 
   constructor(private readonly origin: ServerOrigin) {
     super();
+  }
+
+  loaded(address: string): ViewComponent | undefined {
+    return this.settled.get(address);
   }
 
   load(address: string): Promise<ViewComponent> {
@@ -20,7 +25,9 @@ export class PluginModules extends Service<PluginModules>()('PluginModules', { t
     if (standing !== undefined) return standing;
     const loading = import(new URL(address, this.origin.http).href).then((module: { readonly default?: unknown }) => {
       if (typeof module.default !== 'function') throw new Error(`${address} exports no Svelte component as its default`);
-      return module.default as ViewComponent;
+      const component = module.default as ViewComponent;
+      this.settled.set(address, component);
+      return component;
     });
     loading.catch(() => this.loads.delete(address));
     this.loads.set(address, loading);

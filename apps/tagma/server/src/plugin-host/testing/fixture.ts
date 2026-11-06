@@ -61,6 +61,7 @@ await Effect.runPromise(
       if (tool === 'hook') {
         journal(`hook ${callerKind(meta)} ${JSON.stringify(args)}`);
         if (existsSync(join(data, 'fail-hook'))) return { text: 'the keeper is down', isError: true };
+        if (existsSync(join(data, 'plain-hook'))) return { text: 'fine' };
         const answer = { deny: `kept by the fixture: ${String(args.tool)}` };
         return { text: JSON.stringify(answer), structuredContent: answer };
       }

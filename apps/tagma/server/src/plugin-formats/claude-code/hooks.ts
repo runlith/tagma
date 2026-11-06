@@ -2,12 +2,12 @@ import { Duration, Effect } from 'effect';
 import type { PluginHook, PluginIgnored } from '../../plugins/contract/service/format.js';
 import { type HookDialect, hooksOfEvents, hooksOfFile } from '../../plugins/contract/service/hooks.js';
 import { declaredPath, entryOf, isObject } from '../../plugins/contract/service/reading.js';
-import type { PluginHookPoint } from '../../plugins/contract/wire/rows.js';
+import type { HookPoint } from '@runlith/tagma/plugin/protocol';
 import type { Manifest } from './manifest.js';
 import { claudeInput, claudeTool, tagmaInput, type ToolNaming } from './tools.js';
 import { optionEnvironment, pluginEnvironment, substituted } from './variables.js';
 
-const EVENTS: Readonly<Record<string, PluginHookPoint>> = {
+const EVENTS: Readonly<Record<string, HookPoint>> = {
   PreToolUse: 'beforeTool',
   PostToolUse: 'afterTool',
   UserPromptSubmit: 'beforeStep',
@@ -66,7 +66,7 @@ export const hooksOf = Effect.fnUntraced(function* (
   }
   if (replacing === null) return hooks;
   const replaced = new Set(Object.keys(replacing).flatMap((event) => EVENTS[event] ?? []));
-  const kept = hooks.filter((hook) => !replaced.has(hook.point));
+  const kept = hooks.filter((hook) => !replaced.has(hook.at));
   yield* hooksOfEvents(dialect, 'its marketplace entry', replacing, kept, ignored);
   return kept;
 });

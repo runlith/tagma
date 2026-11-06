@@ -1,4 +1,4 @@
-import type { McpResourceEvent } from '@tagma/server/mcp/contract/wire/feeds';
+import type { McpResourceEvent } from '@runlith/mcp/apps';
 import type { Stream } from 'effect';
 import type { LiveConnection, ServerClient } from '$lib/wire/Live.js';
 import type { LiveError } from '$lib/wire/liveFailure.js';

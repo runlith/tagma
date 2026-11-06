@@ -13,7 +13,7 @@ import {
   PluginRefused,
   PluginUnreadable,
 } from './contract/service/format.js';
-import type { PluginLoaded } from './contract/service/plugins.js';
+import type { LoadedHook, PluginLoaded } from './contract/service/plugins.js';
 import { PluginReads } from './contract/service/reading.js';
 import { componentName } from './contract/wire/names.js';
 import type { PluginDeclared } from './contract/wire/rows.js';
@@ -137,6 +137,19 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
     prepared.add(id);
   });
 
+  const hooksAt = (pkg: PluginPackage, place: PluginPlace): readonly LoadedHook[] =>
+    pkg.hooks.map((hook) => ({
+      at: hook.at,
+      label: hook.label,
+      matches: hook.matches,
+      run: (call, session) => Effect.provideService(hook.run(call, session, place), ChildProcessSpawner.ChildProcessSpawner, spawner),
+    }));
+
+  const hooks = Effect.fn('PluginShelf.hooks')(function* (read: Read, root: string, project: string) {
+    const { options } = yield* values(read.id, read.package);
+    return hooksAt(read.package, placeOf(read.id, root, project, options));
+  });
+
   const bind = Effect.fn('PluginShelf.bind')(function* (read: Read, root: string, project: string) {
     const { id, package: pkg } = read;
     const { options, redact } = yield* values(id, pkg);
@@ -175,12 +188,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
         tools: agent.tools,
       })),
       servers: declarations,
-      hooks: pkg.hooks.map((hook) => ({
-        point: hook.point,
-        label: hook.label,
-        matches: hook.matches,
-        run: (call, session) => Effect.provideService(hook.run(call, session, place), ChildProcessSpawner.ChildProcessSpawner, spawner),
-      })),
+      hooks: hooksAt(pkg, place),
       process: pkg.process,
       contributes: pkg.contributes,
     };
@@ -194,7 +202,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
     );
   });
 
-  return { read, look, bind, values, data: (id: string) => dataRoot(input.home, id), forget: (root: string) => cache.delete(root) };
+  return { read, look, bind, hooks, values, data: (id: string) => dataRoot(input.home, id), forget: (root: string) => cache.delete(root) };
 });
 
 export type Shelf = Effect.Success<ReturnType<typeof makeShelf>>;

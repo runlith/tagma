@@ -47,6 +47,12 @@ export const TAGMA_VIEW = [
       'Calls one of the plugin’s own `view` tools and answers the handler’s value, typed with `useTagma<typeof plugin>()`; a refusal or a failed handler throws `TagmaRefused`.',
   }),
   capability({
+    id: 'servers',
+    signature: '.<name>.call(tool, input?)',
+    description:
+      'Calls a tool of an MCP server the plugin brought in its `mcpServers`, under that server’s sign-in in the view’s project, and answers its MCP result `{content, structuredContent?, isError?}`; a refusal throws `TagmaRefused`.',
+  }),
+  capability({
     id: 'resource',
     signature: '(uri)',
     description: 'A reactive `{current, failure}` of one of the plugin’s resources, read again on each `ctx.changed(uri)`.',

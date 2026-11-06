@@ -1,9 +1,9 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
-import { type McpAppFailure, mcpAppResult, viewCsp } from '@runlith/mcp/apps';
+import { type McpAppFailure, mcpAppResult, type McpResourceEvent, viewCsp } from '@runlith/mcp/apps';
+import type { McpFailure } from '@runlith/mcp/McpFailure';
 import { McpPool } from '@runlith/mcp/McpPool';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
-import type { McpResourceEvent } from './contract/wire/feeds.js';
 import { Clock, Effect, Exit, FiberSet, Layer, PubSub, Scope, Semaphore, Stream } from 'effect';
 import { flight } from '@runlith/held/Flight';
 import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
@@ -41,6 +41,7 @@ import {
 } from '../secrets/contract/service/secrets.js';
 import {
   declinedRowOf,
+  mcpBrought,
   mcpDeclared,
   mcpDeclinedHere,
   rowOf,
@@ -134,6 +135,11 @@ const servingRefusal = (failure: McpAppFailure): GateRefusal<McpViewRefusal> => 
   }
 };
 
+const calledRefusal = (failure: McpFailure | HoldStalled | ReentrantCall): GateRefusal<'mcp-call-failed' | 'mcp-server-unavailable'> =>
+  failure._tag === 'McpCallFailed' || failure._tag === 'McpTimedOut'
+    ? new GateRefusal('mcp-call-failed', failure.message, [READ_SERVERS])
+    : new GateRefusal('mcp-server-unavailable', failure.message, [READ_SERVERS, 'enable_mcp_server to connect it again']);
+
 const makeMcpServers = Effect.fnUntraced(function* ({
   environment,
 }: {
@@ -205,7 +211,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     const read = yield* settings.read(mcpServers, projectId);
     const entries = yield* contributions.of(projectId).pipe(Effect.mapError(unreadableContributions));
     const off = yield* settings.value(mcpContributionsOff, projectId);
-    return { read, declared: mcpDeclared(read, { entries, off }) };
+    return { read, entries, declared: mcpDeclared(read, { entries, off }) };
   });
 
   const signInRow = Effect.fnUntraced(function* (given: Handouts, key: string, now: number) {
@@ -549,6 +555,15 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     return serving(mount, (pool) => Effect.map(pool.appCall(mount, tool, args, { caller }), mcpAppResult));
   });
 
+  const contributedCall: McpServers['Service']['contributedCall'] = Effect.fn('McpServers.contributedCall')(function* (call) {
+    const { entries, declared } = yield* declaredOf(call.projectId);
+    const name = yield* mcpBrought(call, entries, declared);
+    const pool = yield* reachedPool(call.projectId, name);
+    return yield* pool
+      .call(name, call.tool, call.args, { caller: call.caller })
+      .pipe(Effect.map(mcpAppResult), Effect.mapError(calledRefusal));
+  });
+
   const appWatch: McpServers['Service']['appWatch'] = (mount, uri, caller) => {
     const held = (opening: McpResourceEvent): Stream.Stream<McpResourceEvent, McpViewFailure> =>
       Stream.unwrap(
@@ -758,6 +773,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       appRead,
       appCall,
       appWatch,
+      contributedCall,
       release,
     }),
   };

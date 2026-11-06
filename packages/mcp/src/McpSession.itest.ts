@@ -125,6 +125,22 @@ describe('McpSession', () => {
   );
 
   it.live(
+    'a call that names its own timeout waits past the session’s, and one that does not still ends at it',
+    Effect.fnUntraced(function* () {
+      const answers = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const session = yield* openMcpSession(declare('patient', [], { timeoutMs: 300 }));
+          const waited = yield* session.call('sleep', { ms: 600 }, { timeoutMs: 4_000 });
+          const cut = yield* failed(session.call('sleep', { ms: 600 }));
+          return { waited: text(waited), cut };
+        }),
+      );
+      expect(answers.waited).toBe('slept');
+      expect(answers.cut?._tag === 'McpTimedOut' && answers.cut.ms).toBe(300);
+    }),
+  );
+
+  it.live(
     'fails the connect of a server whose initialize never answers, with the timeout it ran under',
     Effect.fnUntraced(function* () {
       const failure = yield* failed(Effect.scoped(openMcpSession(declare('mute', ['--hang'], { timeoutMs: 300 }))));

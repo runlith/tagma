@@ -5,7 +5,7 @@ import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { keyedServer } from '@runlith/mcp/testing/keyed';
 import { Context, Deferred, Effect, Fiber, Layer, PubSub, Stream } from 'effect';
 import { type McpContribution, McpContributions } from './contract/service/contributions.js';
-import type { McpResourceEvent } from './contract/wire/feeds.js';
+import type { McpResourceEvent } from '@runlith/mcp/apps';
 import { graphFixture } from '../composition/testing/graphFixture.js';
 import { mcpServers as mcpServersKey } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
@@ -153,6 +153,7 @@ it.live('a contributed server joins the pool below the declared ones, switches o
     const keyed = yield* keyedServer('${HOME}');
     const files: McpContribution = {
       contributor: 'plug',
+      local: 'files',
       redact: ['kept-token'],
       declaration: {
         name: 'plug-files',
@@ -227,6 +228,7 @@ it.live('a contributed server joins the pool below the declared ones, switches o
       files,
       {
         contributor: 'plug',
+        local: 'keyed',
         redact: [],
         declaration: {
           name: 'plug-keyed',

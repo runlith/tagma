@@ -1,8 +1,9 @@
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { ModelsClient } from './models.js';
+import type { PluginServers, ServerClient } from './servers.js';
 import type { ExternalOperations } from './operations.generated.js';
-import type { BuildVerdict, PluginEnvelope, PluginPoints } from './points.generated.js';
+import type { BuildVerdict, HookVerdicts, PluginEnvelope, PluginPoints, ToolFaceState } from './points.generated.js';
 import {
   type ActionInput,
   ASKED_LEFT,
@@ -11,6 +12,7 @@ import {
   type BuildStepInput,
   type EndingInput,
   type HookInput,
+  type HookPoint,
   type NotificationInput,
   type TickInput,
 } from './protocol.js';
@@ -30,6 +32,7 @@ export type PluginContext = {
   readonly projects: readonly number[];
   readonly tagma: TagmaClient;
   readonly models: ModelsClient;
+  readonly servers: PluginServers;
   readonly data: string;
   readonly dataOf: (project: number | null) => string;
   readonly options: Readonly<Record<string, string | undefined>>;
@@ -77,11 +80,15 @@ export type ViewTools<Plugin> = {
     : never;
 };
 
+type ServersOf<Plugin> = Plugin extends { readonly mcpServers: infer Servers } ? Servers : Readonly<Record<never, never>>;
+
+export type ViewServers<Plugin> = { readonly [Name in keyof ServersOf<Plugin>]: ServerClient };
+
 export type ToolFace<Plugin, Name extends keyof ToolsOf<Plugin> & string> = {
   readonly name: Name;
   readonly input: ToolIO<ToolsOf<Plugin>[Name]>['input'];
   readonly output: ToolIO<ToolsOf<Plugin>[Name]>['output'] | undefined;
-  readonly state: 'running' | 'done' | 'refused' | 'failed';
+  readonly state: ToolFaceState;
   readonly threadId: string;
 };
 
@@ -126,17 +133,6 @@ export type Action = {
 
 type HookEntry = PluginPoints['hooks'][number];
 
-export type HookPoint = HookEntry['at'];
-
-export type HookVerdicts = {
-  readonly beforeTool: { readonly deny?: string; readonly rewrite?: unknown; readonly context?: string };
-  readonly afterTool: { readonly context?: string };
-  readonly beforeStep: { readonly block?: string; readonly context?: string };
-  readonly beforeClose: { readonly block?: string };
-  readonly threadStarted: { readonly context?: string };
-  readonly threadEnded: Readonly<Record<never, never>>;
-};
-
 export type HookEvent<At extends HookPoint = HookPoint> = Extract<HookInput, { readonly at: At }>;
 
 export type Hook<At extends HookPoint = HookPoint> = {
@@ -169,6 +165,7 @@ export type PluginDefinition = PluginData & {
   readonly description?: PluginEnvelope['description'];
   readonly resident?: NonNullable<PluginEnvelope['process']>['resident'];
   readonly options?: PluginEnvelope['options'];
+  readonly mcpServers?: PluginEnvelope['mcpServers'];
   readonly tools?: Readonly<Record<string, Tool<any>>>;
   readonly resources?: Readonly<Record<string, Resource>>;
   readonly views?: Readonly<Record<string, View>>;

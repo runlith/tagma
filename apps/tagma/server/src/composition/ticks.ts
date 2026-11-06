@@ -1,4 +1,4 @@
-import type { TickInput } from '@runlith/tagma/plugin/protocol';
+import { TAGMA_REASONS, type TickInput } from '@runlith/tagma/plugin/protocol';
 import { Context, Effect, Layer } from 'effect';
 import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
 import { pluginCaller } from '../plugins/contract/wire/names.js';
@@ -33,7 +33,7 @@ export const ticks = Layer.effectContext(
                         startedAt: tick.startedAt,
                         skipped: tick.skipped,
                       } satisfies TickInput,
-                      { caller: { kind: 'tagma', projectId: null, reason: 'schedule' } },
+                      { caller: { kind: 'tagma', projectId: null, reason: TAGMA_REASONS.schedule } },
                     )
                     .pipe(Effect.mapError((cause) => new TickRefused({ reason: cause.message })));
                   if ('isError' in answer && answer.isError === true) {

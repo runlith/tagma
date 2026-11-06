@@ -30,8 +30,7 @@ export const VIEW_PAIRS = {
     OPS.run_plugin_action,
     body(OPS.run_plugin_action, {
       execute: Effect.fnUntraced(function* (input) {
-        const said = yield* (yield* PluginActions).run(yield* projectId, input.plugin, input.action, {
-          threadId: input.threadId ?? null,
+        const said = yield* (yield* PluginActions).run(yield* projectId, input.plugin, input.action, input.threadId ?? null, {
           args: input.args ?? '',
         });
         return { status: 'ok' as const, said };

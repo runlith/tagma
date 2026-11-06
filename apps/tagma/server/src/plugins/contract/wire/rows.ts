@@ -1,8 +1,5 @@
 import { Schema } from 'effect';
 
-export const PLUGIN_HOOK_POINTS = ['beforeTool', 'afterTool', 'beforeStep', 'beforeClose', 'threadStarted', 'threadEnded'] as const;
-export type PluginHookPoint = (typeof PLUGIN_HOOK_POINTS)[number];
-
 export const PLUGIN_OPTION_TYPES = ['string', 'number', 'boolean', 'directory', 'file'] as const;
 export type PluginOptionType = (typeof PLUGIN_OPTION_TYPES)[number];
 

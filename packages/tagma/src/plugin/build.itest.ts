@@ -136,7 +136,9 @@ test('a template folder builds through tagma-plugin into a manifest whose proces
       });
 
       expect(await client.callTool({ name: 'asked', arguments: { thread: 'refused' }, _meta })).toMatchObject({
-        structuredContent: { operation: 'read_statuses', code: 'thread-unknown', reason: 'No such thread.', unblock: ['list_threads'] },
+        structuredContent: {
+          value: { operation: 'read_statuses', code: 'thread-unknown', reason: 'No such thread.', unblock: ['list_threads'] },
+        },
       });
       expect(await client.callTool({ name: 'asked', arguments: { thread: 'broken' }, _meta })).toMatchObject({
         isError: true,
@@ -468,6 +470,8 @@ const typedFolder = async () => {
 const MISUSES = [
   { body: '  void tagma.storage.get(tagma.projectId.toFixed());', reason: null },
   { body: '  void tagma.tools.hello();', reason: "Property 'hello' does not exist" },
+  { body: '  void tagma.speech.status();', reason: null },
+  { body: '  void tagma.speech.nope();', reason: "Property 'nope' does not exist" },
 ] as const;
 
 test('a Svelte view is type-checked against the SDK’s own @runlith/tagma/ui and svelte, whatever its folder holds: typed tools, component props, and the file and place of a misuse', async () => {

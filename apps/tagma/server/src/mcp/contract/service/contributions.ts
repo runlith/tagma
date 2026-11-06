@@ -4,6 +4,7 @@ import { Context, Data, type Effect, type Stream } from 'effect';
 export type McpContribution = {
   readonly declaration: McpServerDeclaration;
   readonly contributor: string;
+  readonly local: string;
   readonly redact: readonly string[];
 };
 

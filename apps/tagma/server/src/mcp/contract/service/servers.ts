@@ -1,10 +1,9 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import type { McpPalette } from '@runlith/mcp/McpPool';
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
-import type { McpAppCallResult, McpAppTarget, McpAppView } from '@runlith/mcp/apps';
+import type { McpAppCallResult, McpAppTarget, McpAppView, McpResourceEvent } from '@runlith/mcp/apps';
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceResult } from '@runlith/mcp/resources';
-import type { McpResourceEvent } from '../wire/feeds.js';
 import { Context, Data, type Effect, type Scope, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
@@ -93,6 +92,7 @@ export class McpServers extends Context.Service<
       caller: McpCaller,
     ): Effect.Effect<McpAppCallResult, McpViewFailure>;
     appWatch(mount: McpMount, uri: string, caller: McpCaller): Stream.Stream<McpResourceEvent, McpViewFailure>;
+    contributedCall(call: McpContributedCall): Effect.Effect<McpAppCallResult, StoreFailure | GateRefusal<McpContributedRefusal>>;
   }
 >()('tagma/mcp/McpServers') {}
 
@@ -107,6 +107,22 @@ export type McpViewRefusal =
   | McpReconcileRefusal;
 
 export type McpViewFailure = StoreFailure | GateRefusal<McpViewRefusal>;
+
+export type McpContributedCall = {
+  readonly projectId: number;
+  readonly contributor: string;
+  readonly server: string;
+  readonly tool: string;
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly caller: McpCaller;
+};
+
+export type McpContributedRefusal =
+  | 'mcp-server-unbrought'
+  | 'mcp-server-shadowed'
+  | 'mcp-server-unavailable'
+  | 'mcp-call-failed'
+  | McpReconcileRefusal;
 
 export type McpServerResolution = {
   readonly declaration: McpServerDeclaration;

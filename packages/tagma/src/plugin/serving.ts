@@ -5,8 +5,9 @@ import type { McpServedResult, McpServedTool } from '@runlith/mcp/server';
 import { describePlugin, type PluginDescription } from './describe.js';
 import { issueText } from './issues.js';
 import { modelsClient } from './models.js';
-import { type HookVerdicts, type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
-import type { HookAnswer } from './points.generated.js';
+import { serversClient } from './servers.js';
+import { type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
+import type { HookVerdicts } from './points.generated.js';
 import {
   type ActionInput,
   type AskedInput,
@@ -18,6 +19,7 @@ import {
   PROJECTS_META_KEY,
   type TickInput,
 } from './protocol.js';
+import { toolResultOf } from './value.js';
 
 type ServingPlace = {
   readonly data: string;
@@ -111,21 +113,20 @@ const failed = (error: unknown): McpServedResult => ({
   isError: true,
 });
 
-type Verdict = Partial<HookVerdicts['beforeTool'] & HookVerdicts['beforeStep']>;
+type Verdict = HookVerdicts[keyof HookVerdicts];
 
 const hookAnswered = (verdict: Verdict | void): McpServedResult => {
-  const { rewrite, ...said } = verdict ?? {};
-  const answer: HookAnswer = rewrite === undefined ? said : { ...said, input: rewrite };
+  const answer: Readonly<Record<string, unknown>> = verdict ?? {};
   return { text: JSON.stringify(answer), structuredContent: answer };
 };
 
 const authored =
   (declared: Tool): Handler =>
   async (input, ctx) => {
-    if (declared.input === undefined) return answered(await declared.run(input, ctx));
+    if (declared.input === undefined) return toolResultOf(await declared.run(input, ctx));
     const checked = await declared.input['~standard'].validate(input);
     if (checked.issues !== undefined) return { text: `Invalid input: ${checked.issues.map(issueText).join('; ')}`, isError: true };
-    return answered(await declared.run(checked.value as never, ctx));
+    return toolResultOf(await declared.run(checked.value as never, ctx));
   };
 
 const handlersOf = (definition: PluginDefinition): ReadonlyMap<string, Handler> => {
@@ -178,6 +179,7 @@ export const servingOf = (definition: PluginDefinition, place: ServingPlace): Se
       projects,
       tagma,
       models: modelsClient(tagma),
+      servers: serversClient(tagma),
       get data() {
         return dataOf(caller.projectId);
       },

@@ -2,9 +2,9 @@ import { Duration, Effect } from 'effect';
 import type { PluginHook, PluginIgnored, PluginPlace } from '../../plugins/contract/service/format.js';
 import { type HookDialect, hooksOfEvents, hooksOfFile } from '../../plugins/contract/service/hooks.js';
 import { declaredPath, entryOf, isObject } from '../../plugins/contract/service/reading.js';
-import type { PluginHookPoint } from '../../plugins/contract/wire/rows.js';
+import type { HookPoint } from '@runlith/tagma/plugin/protocol';
 
-const EVENTS: Readonly<Record<string, PluginHookPoint>> = {
+const EVENTS: Readonly<Record<string, HookPoint>> = {
   PreToolUse: 'beforeTool',
   PostToolUse: 'afterTool',
   UserPromptSubmit: 'beforeStep',

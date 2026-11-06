@@ -6,6 +6,7 @@ export const enabledPlugins = Effect.fnUntraced(function* (initial: readonly Plu
   const moves = yield* Effect.acquireRelease(PubSub.unbounded<number | null>(), PubSub.shutdown);
   const service = EnabledPlugins.of({
     of: (projectId) => Effect.sync(() => held.get(projectId) ?? initial),
+    hooks: (projectId) => Effect.sync(() => (held.get(projectId) ?? initial).flatMap((plugin) => plugin.hooks)),
     held: (projectId) => Effect.succeed(() => (held.get(projectId) ?? initial).map((plugin) => plugin.id)),
     changes: Stream.fromPubSub(moves),
   });

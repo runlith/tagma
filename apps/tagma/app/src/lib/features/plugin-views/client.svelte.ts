@@ -1,5 +1,6 @@
 import type { McpAppCallResult } from '@runlith/mcp/apps';
 import { TagmaRefused } from '@runlith/tagma/plugin';
+import { toolValueOf } from '@runlith/tagma/plugin/value';
 import type { PresenceMissingReason, PresenceRow } from '@tagma/server/threads/contract/wire/presence';
 import { Cause, Effect, Exit } from 'effect';
 import { createSubscriber } from 'svelte/reactivity';
@@ -8,7 +9,9 @@ import type { ShellPort, ShellRefusal } from '$lib/features/workspace/ShellOps.j
 import type { LinkPort } from '$lib/shared/ExternalLinks.js';
 import type { Look, ThemePort } from '$lib/shared/Theme.js';
 import { Refusal } from '$lib/wire/refusal.js';
-import type { CapabilityOwners, ViewCapability } from './capabilities.js';
+import type { Door } from '$lib/wire/Door.js';
+import type { LiveConnection } from '$lib/wire/Live.js';
+import type { ViewCapability } from './capabilities.js';
 import { paneId, PLUGIN_PANE } from './panes.js';
 import { sectionSurface } from './surfaces.js';
 import type { TranscriptPort } from './ThreadTranscripts.js';
@@ -21,16 +24,6 @@ export type MountFacts = {
   readonly view: string;
   readonly threadId: string | null;
   readonly key: string | null;
-};
-
-export type ClientOwners = CapabilityOwners & {
-  readonly presence: ThreadPresence;
-  readonly transcripts: TranscriptPort;
-  readonly shell: ShellPort;
-  readonly sets: ViewSets;
-  readonly links: LinkPort;
-  readonly theme: ThemePort;
-  readonly capabilities: readonly ViewCapability[];
 };
 
 export type ThreadReading =
@@ -67,7 +60,15 @@ export type ClientMembers = MountFacts & {
 
 export type ViewToolCalls = Readonly<Record<string, (input?: Readonly<Record<string, unknown>>) => Promise<unknown>>>;
 
-export type TagmaClient = ClientMembers & { readonly tools: ViewToolCalls; readonly [capability: string]: unknown };
+export type ViewServerCalls = Readonly<
+  Record<string, { readonly call: (tool: string, input?: Readonly<Record<string, unknown>>) => Promise<McpAppCallResult> }>
+>;
+
+export type TagmaClient = ClientMembers & {
+  readonly tools: ViewToolCalls;
+  readonly servers: ViewServerCalls;
+  readonly [capability: string]: unknown;
+};
 
 const readingOf = (threadId: string, row: PresenceRow | undefined, missing: PresenceMissingReason | undefined): ThreadReading | null => {
   if (row === undefined) return missing === undefined ? null : { threadId, missing };
@@ -108,8 +109,19 @@ const acted = (act: Effect.Effect<void, ShellRefusal>): Promise<void> =>
     throw new Error(failure instanceof Error ? failure.message : String(failure));
   });
 
-export function makeClient(owners: ClientOwners, facts: MountFacts, ended: AbortSignal): TagmaClient {
-  const { door, live, presence, transcripts, shell, sets, links, theme } = owners;
+export function makeClient(
+  door: Door,
+  live: LiveConnection,
+  presence: ThreadPresence,
+  transcripts: TranscriptPort,
+  shell: ShellPort,
+  sets: ViewSets,
+  links: LinkPort,
+  theme: ThemePort,
+  capabilities: readonly ViewCapability[],
+  facts: MountFacts,
+  ended: AbortSignal,
+): TagmaClient {
   const lens = { project: String(facts.projectId) };
   const at = { plugin: facts.plugin, view: facts.view };
   const cached = <A>(held: Map<string, A>, key: string, make: () => A): A => {
@@ -129,11 +141,30 @@ export function makeClient(owners: ClientOwners, facts: MountFacts, ended: Abort
     if (answer.status !== 'ok') throw new Error(`call_plugin_tool answered ${answer.status}`);
     const { result } = answer;
     if (result.isError === true) throw new TagmaRefused('call_plugin_tool', 'plugin-tool-failed', textOf(result), []);
-    return result.structuredContent ?? parsed(textOf(result));
+    return toolValueOf(textOf(result), result.structuredContent);
   };
 
   const tools = new Proxy({} as TagmaClient['tools'], {
     get: (_target, name) => (typeof name === 'string' ? (input?: Readonly<Record<string, unknown>>) => call(name, input) : undefined),
+  });
+
+  const reached = async (server: string, tool: string, input: Readonly<Record<string, unknown>> = {}): Promise<McpAppCallResult> => {
+    const answer = await door
+      .perform('call_contributed_tool', { ...at, server, tool, arguments: input, threadId: facts.threadId ?? undefined }, lens, {
+        signal: ended,
+      })
+      .catch((caught: unknown) => {
+        throw refusedBy('call_contributed_tool', caught);
+      });
+    if (answer.status !== 'ok') throw new Error(`call_contributed_tool answered ${answer.status}`);
+    return answer.result;
+  };
+
+  const servers = new Proxy({} as ViewServerCalls, {
+    get: (_target, name) =>
+      typeof name === 'string'
+        ? { call: (tool: string, input?: Readonly<Record<string, unknown>>) => reached(name, tool, input) }
+        : undefined,
   });
 
   const resources = new Map<string, Reading<unknown>>();
@@ -143,17 +174,20 @@ export function makeClient(owners: ClientOwners, facts: MountFacts, ended: Abort
       let failure = $state<string | null>(null);
       const subscribe = createSubscriber(() => {
         const reading = new AbortController();
-        const read = () =>
-          door.perform('read_plugin_resource', { ...at, uri }, lens, { signal: reading.signal }).then(
+        let latest = 0;
+        const read = () => {
+          const mine = ++latest;
+          return door.perform('read_plugin_resource', { ...at, uri }, lens, { signal: reading.signal }).then(
             (answer) => {
-              if (answer.status !== 'ok') return;
+              if (mine !== latest || answer.status !== 'ok') return;
               value = valueOf(answer.contents);
               failure = null;
             },
             (caught: unknown) => {
-              if (!reading.signal.aborted) failure = caught instanceof Error ? caught.message : String(caught);
+              if (mine === latest && !reading.signal.aborted) failure = caught instanceof Error ? caught.message : String(caught);
             },
           );
+        };
         const held = live.hold(
           (client) => client['views.resource.subscribe']({ projectId: facts.projectId, ...at, uri }),
           () => void read(),
@@ -238,16 +272,14 @@ export function makeClient(owners: ClientOwners, facts: MountFacts, ended: Abort
   };
 
   const contributed = Object.fromEntries(
-    owners.capabilities.map((capability) => [
-      capability.declaration.id,
-      capability.make(owners, { ...at, projectId: facts.projectId, ended }),
-    ]),
+    capabilities.map((capability) => [capability.declaration.id, capability.make({ ...at, projectId: facts.projectId, ended })]),
   );
 
   return {
     ...contributed,
     ...facts,
     tools,
+    servers,
     storage,
     get theme() {
       return theme.look;

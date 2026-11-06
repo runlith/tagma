@@ -82,6 +82,12 @@ export const McpAppCallResult = Schema.Struct({
 });
 export type McpAppCallResult = typeof McpAppCallResult.Type;
 
+export const McpResourceEvent = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('subscribed') }),
+  Schema.Struct({ kind: Schema.Literal('updated'), uri: Schema.String, _meta: Meta }),
+]);
+export type McpResourceEvent = typeof McpResourceEvent.Type;
+
 export function mcpAppResult(result: McpSdkCallResult): McpAppCallResult {
   if ('content' in result) return result;
   return {

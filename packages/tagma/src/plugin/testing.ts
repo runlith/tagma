@@ -13,6 +13,7 @@ import {
   type HookInput,
   type NotificationInput,
   PROJECTS_META_KEY,
+  TAGMA_REASONS,
   type TickInput,
 } from './protocol.js';
 import { servingOf } from './serving.js';
@@ -39,7 +40,11 @@ export type TestedPlugin = {
   readonly end: (ending: EndingInput, project?: number | null) => Promise<TestedAnswer>;
   readonly notify: (answer: NotificationInput) => Promise<TestedAnswer>;
   readonly build: (step: string, input: BuildStepInput, project?: number | null) => Promise<TestedAnswer>;
-  readonly act: (action: string, project?: number | null, input?: Partial<ActionInput>) => Promise<TestedAnswer>;
+  readonly act: (
+    action: string,
+    project?: number | null,
+    from?: { readonly threadId?: string; readonly args?: string },
+  ) => Promise<TestedAnswer>;
   readonly check: (hook: string, event: HookInput, project?: number | null) => Promise<TestedAnswer>;
   readonly read: (uri: string, caller?: McpCaller) => Promise<TestedAnswer>;
   readonly changed: readonly string[];
@@ -84,19 +89,20 @@ export const testPlugin = (definition: PluginDefinition, given: TestPluginOption
       return call(
         handlerTools.schedule(schedule),
         { name: schedule, scheduledAt: tick.scheduledAt ?? now, startedAt: tick.startedAt ?? now, skipped: tick.skipped ?? 0 },
-        tagma(null, 'schedule'),
+        tagma(null, TAGMA_REASONS.schedule),
       );
     },
-    end: (ending, project = AGENT.projectId) => call(handlerTools.ended, ending, tagma(project, 'ended')),
-    notify: (answer) => call(handlerTools.notification, answer, tagma(null, 'notification')),
-    build: (step, input, project = AGENT.projectId) => call(handlerTools.build(step), input, tagma(project, 'build')),
-    act: (action, project = AGENT.projectId, input = {}) =>
-      call(handlerTools.action(action), { threadId: null, args: '', ...input } satisfies ActionInput, {
+    end: (ending, project = AGENT.projectId) => call(handlerTools.ended, ending, tagma(project, TAGMA_REASONS.ended)),
+    notify: (answer) => call(handlerTools.notification, answer, tagma(null, TAGMA_REASONS.notification)),
+    build: (step, input, project = AGENT.projectId) => call(handlerTools.build(step), input, tagma(project, TAGMA_REASONS.build)),
+    act: (action, project = AGENT.projectId, { threadId, args = '' }: { readonly threadId?: string; readonly args?: string } = {}) =>
+      call(handlerTools.action(action), { args } satisfies ActionInput, {
         kind: 'operator',
         projectId: project,
         view: `action:${action}`,
+        ...(threadId === undefined ? {} : { threadId }),
       }),
-    check: (hook, event, project = AGENT.projectId) => call(handlerTools.hook(hook), event, tagma(project, 'hook')),
+    check: (hook, event, project = AGENT.projectId) => call(handlerTools.hook(hook), event, tagma(project, TAGMA_REASONS.hook)),
     read: async (uri, caller = AGENT) => {
       const read = await serving.read(uri, meta(caller), new AbortController().signal);
       return 'refused' in read ? { text: read.refused, isError: true } : { text: read.text, isError: false };

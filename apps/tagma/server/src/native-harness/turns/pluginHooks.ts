@@ -1,16 +1,16 @@
 import { agentRule, type AgentDirective, type AgentRule, type AgentRuleContext } from '@runlith/agent/AgentRuntimePolicy';
 import { agentReaderInput } from '@runlith/agent/AgentSignal';
 import type { Message } from '@runlith/llm/schema/messages';
+import type { HookCall, HookSession } from '@runlith/tagma/plugin/protocol';
 import { Effect, FiberSet } from 'effect';
 import { EnabledPlugins } from '../../plugins/contract/service/plugins.js';
-import type { PluginHookCall, PluginHookSession } from '../../plugins/contract/service/format.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { ThreadContext } from './context.js';
 
 const RULE_ID = 'plugin-hooks';
 const LAST = 1_000;
 
-type Running = { readonly projectId: number; readonly session: PluginHookSession };
+type Running = { readonly projectId: number; readonly session: HookSession };
 type Held = { started: boolean; continued: boolean; readonly prompted: Set<string> };
 
 const textOf = (message: Message): string =>
@@ -26,9 +26,8 @@ export const makePluginHooks = Effect.gen(function* () {
   const running = new Map<string, Running>();
 
   const answers = Effect.fn('native-harness.pluginHooks')(
-    function* (projectId: number, call: PluginHookCall, session: PluginHookSession) {
-      const loaded = yield* plugins.of(projectId);
-      const hooks = loaded.flatMap((plugin) => plugin.hooks.filter((hook) => hook.point === call.point && hook.matches(call)));
+    function* (projectId: number, call: HookCall, session: HookSession) {
+      const hooks = (yield* plugins.hooks(projectId)).filter((hook) => hook.at === call.at && hook.matches(call));
       return yield* Effect.forEach(
         hooks,
         (hook) =>
@@ -40,14 +39,14 @@ export const makePluginHooks = Effect.gen(function* () {
         { concurrency: 'unbounded' },
       );
     },
-    (effect, projectId, call) => Effect.annotateLogs(effect, { projectId, point: call.point }),
+    (effect, projectId, call) => Effect.annotateLogs(effect, { projectId, point: call.at }),
   );
 
-  const ended = (threadId: string, reason: string) => {
+  const ended = (threadId: string, reason: 'archive' | 'delete') => {
     const was = running.get(threadId);
     if (was === undefined) return Effect.void;
     running.delete(threadId);
-    return answers(was.projectId, { point: 'threadEnded', reason }, was.session).pipe(
+    return answers(was.projectId, { at: 'threadEnded', reason }, was.session).pipe(
       Effect.catchTag('PluginsUnreadable', (unreadable) =>
         Effect.logWarning('the end hooks of a thread could not read its plugins', { threadId, reason: unreadable.reason }),
       ),
@@ -102,14 +101,14 @@ export const makePluginHooks = Effect.gen(function* () {
   const rule: AgentRule<ThreadContext> = agentRule<ThreadContext>(
     RULE_ID,
     Effect.fnUntraced(function* (ctx) {
-      const session: PluginHookSession = { thread: ctx.thread.id, cwd: ctx.world.root };
+      const session: HookSession = { threadId: ctx.thread.id, cwd: ctx.world.root };
       running.set(ctx.thread.id, { projectId: ctx.projectId, session });
       const held = ctx.run.ruleState<Held>(RULE_ID, () => ({ started: false, continued: false, prompted: new Set() }));
-      const ask = (call: PluginHookCall) => answers(ctx.projectId, call, session);
+      const ask = (call: HookCall) => answers(ctx.projectId, call, session);
       if (ctx.hook === 'beforeTool' && ctx.tool !== undefined) {
-        const answered = yield* ask({ point: 'beforeTool', tool: ctx.tool.name, input: ctx.tool.input, callId: ctx.tool.toolCallId ?? '' });
+        const answered = yield* ask({ at: 'beforeTool', tool: ctx.tool.name, input: ctx.tool.input, callId: ctx.tool.toolCallId ?? '' });
         const denied = answered.flatMap((answer) => answer.deny ?? answer.block ?? []);
-        const rewritten = answered.find((answer) => answer.input !== undefined)?.input;
+        const rewritten = answered.find((answer) => answer.rewrite !== undefined)?.rewrite;
         return [
           ...(denied.length > 0 ? [{ type: 'deny', reason: denied.join('\n') } as const] : []),
           ...(denied.length === 0 && rewritten !== undefined ? [{ type: 'rewrite', input: rewritten } as const] : []),
@@ -118,7 +117,7 @@ export const makePluginHooks = Effect.gen(function* () {
       }
       if (ctx.hook === 'afterTool' && ctx.tool !== undefined) {
         const answered = yield* ask({
-          point: 'afterTool',
+          at: 'afterTool',
           tool: ctx.tool.name,
           input: ctx.tool.input,
           output: ctx.tool.output,
@@ -131,16 +130,16 @@ export const makePluginHooks = Effect.gen(function* () {
         if (!held.started) {
           held.started = true;
           if (firstRun(ctx)) {
-            for (const answer of yield* ask({ point: 'threadStarted', resumed: false })) directives.push(...said(answer.context));
+            for (const answer of yield* ask({ at: 'threadStarted', resumed: false })) directives.push(...said(answer.context));
           }
         }
         for (const text of prompts(ctx, held)) {
-          for (const answer of yield* ask({ point: 'beforeStep', text })) directives.push(...said(answer.block), ...said(answer.context));
+          for (const answer of yield* ask({ at: 'beforeStep', text })) directives.push(...said(answer.block), ...said(answer.context));
         }
         return directives;
       }
       if (ctx.hook === 'beforeClose') {
-        const answered = yield* ask({ point: 'beforeClose', answer: ctx.steps.at(-1)?.text ?? null, continued: held.continued });
+        const answered = yield* ask({ at: 'beforeClose', answer: ctx.steps.at(-1)?.text ?? null, continued: held.continued });
         const blocked = answered.flatMap((answer) => said(answer.block));
         if (blocked.length > 0) held.continued = true;
         return blocked;

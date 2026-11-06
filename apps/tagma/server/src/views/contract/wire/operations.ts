@@ -53,7 +53,7 @@ export const VIEW_OPERATIONS = {
     meaning:
       'Run an action of a plugin for the operator, from the palette, a shortcut or a command in a thread’s composer, in this project.',
     grammar:
-      'Only an action the plugin declares in contributes.actions runs, and only while the plugin is enabled in this project; the process receives the caller operator in this project and starts if it sleeps. From a composer, `threadId` names its thread and `args` the words typed after the command; the handler receives both, null and empty otherwise. `said` is the text the handler answers — a notice from the palette, the draft from a composer — or null; a handler that fails refuses plugin-call-failed with its reason.',
+      'Only an action the plugin declares in contributes.actions runs, and only while the plugin is enabled in this project; the process receives the caller operator in this project and starts if it sleeps. From a composer, `threadId` names its thread, which the process receives in its caller as a view’s tool call does, and `args` the words typed after the command, which the handler receives as its input, empty otherwise. `said` is the text the handler answers — a notice from the palette, the draft from a composer — or null; a handler that fails refuses plugin-call-failed with its reason.',
     input: Schema.Struct({
       project: projectField,
       plugin: pluginName,

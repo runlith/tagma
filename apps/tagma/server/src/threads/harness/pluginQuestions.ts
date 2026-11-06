@@ -1,5 +1,5 @@
 import type { ApprovalNotice, ApprovalPrompt } from '@runlith/agent/thread/Approvers';
-import { ASKED_LEFT, type AskedInput, type AskedPrompt } from '@runlith/tagma/plugin/protocol';
+import { ASKED_LEFT, type AskedInput, type AskedPrompt, TAGMA_REASONS } from '@runlith/tagma/plugin/protocol';
 import { eq, sql } from 'drizzle-orm';
 import { Cause, Effect, FiberSet, Stream } from 'effect';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -12,7 +12,7 @@ import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { openQuestions } from '../approvers.js';
 import type { ThreadHarness } from '../contract/service/engine.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
-import { ASKED_REASON, PLUGIN_BINDING } from '../contract/wire/on.js';
+import { PLUGIN_BINDING } from '../contract/wire/on.js';
 import { threadMandate } from '../store/mandate.js';
 import type { PluginOn } from './pluginOn.js';
 
@@ -120,7 +120,7 @@ export const makePluginQuestions = Effect.fnUntraced(function* (input: {
       deadlineAt: notice.deadlineAt,
     };
     const answer = yield* hook.contribution.caller.call(plugin, hook.tool, asked, {
-      caller: { kind: 'tagma', projectId: thread.projectId, reason: ASKED_REASON },
+      caller: { kind: 'tagma', projectId: thread.projectId, reason: TAGMA_REASONS.asked },
     });
     if ('isError' in answer && answer.isError === true) return yield* handBack(plugin, notice, `${plugin} answered with an error`);
     const said = 'structuredContent' in answer ? answer.structuredContent : undefined;

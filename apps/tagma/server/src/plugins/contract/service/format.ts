@@ -1,6 +1,8 @@
+import type { HookCall, HookPoint, HookSession } from '@runlith/tagma/plugin/protocol';
 import { Context, Data, type Effect, type FileSystem } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
-import type { PluginHookPoint, PluginManifest, PluginOptionType } from '../wire/rows.js';
+import type { HookAnswer } from '../wire/hooks.js';
+import type { PluginManifest, PluginOptionType } from '../wire/rows.js';
 
 export type PluginClaim = 'manifest' | 'layout';
 
@@ -48,31 +50,15 @@ export type PluginServer = {
   readonly reach: (place: PluginPlace) => Effect.Effect<PluginServerReach, PluginRefused | PluginUnreadable, FileSystem.FileSystem>;
 };
 
-export type PluginHookCall =
-  | { readonly point: 'beforeTool'; readonly tool: string; readonly input: unknown; readonly callId: string }
-  | { readonly point: 'afterTool'; readonly tool: string; readonly input: unknown; readonly output: unknown; readonly callId: string }
-  | { readonly point: 'beforeStep'; readonly text: string }
-  | { readonly point: 'beforeClose'; readonly answer: string | null; readonly continued: boolean }
-  | { readonly point: 'threadStarted'; readonly resumed: boolean }
-  | { readonly point: 'threadEnded'; readonly reason: string };
-
-export type PluginHookSession = { readonly thread: string; readonly cwd: string };
-
-export type PluginHookAnswer = {
-  readonly deny?: string;
-  readonly input?: unknown;
-  readonly context?: string;
-  readonly block?: string;
-  readonly failure?: string;
-};
+export type PluginHookAnswer = HookAnswer & { readonly failure?: string };
 
 export type PluginHook = {
-  readonly point: PluginHookPoint;
+  readonly at: HookPoint;
   readonly label: string;
-  readonly matches: (call: PluginHookCall) => boolean;
+  readonly matches: (call: HookCall) => boolean;
   readonly run: (
-    call: PluginHookCall,
-    session: PluginHookSession,
+    call: HookCall,
+    session: HookSession,
     place: PluginPlace,
   ) => Effect.Effect<PluginHookAnswer, never, ChildProcessSpawner.ChildProcessSpawner>;
 };

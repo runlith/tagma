@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { McpResourceEvent } from '../../../mcp/contract/wire/feeds.js';
+import { McpResourceEvent } from '@runlith/mcp/apps';
 import { feed } from '../../../platform/contract/wire/operation.js';
 import { PluginActionState } from './actions.js';
 import { PluginViewState, pluginName, VIEW_REFUSALS } from './sets.js';

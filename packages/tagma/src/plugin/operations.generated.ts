@@ -203,6 +203,38 @@ export type ExternalOperations = {
       readonly status: 'audited';
     };
   };
+  readonly call_contributed_tool: {
+    readonly input: {
+      /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */
+      readonly project?: string | number;
+      /** The server as the plugin names it in mcpServers, without the `<plugin>-` prefix read_mcp_servers shows. */
+      readonly server: string;
+      readonly tool: string;
+      readonly arguments: {
+        readonly [key: string]: unknown;
+      };
+      /** The plugin whose view calls; a plugin’s process is its own caller and omits it. */
+      readonly plugin?: string;
+      /** The view that calls. */
+      readonly view?: string;
+      readonly threadId?: string;
+    };
+    readonly answer: {
+      readonly result: {
+        readonly content: readonly {
+          readonly [key: string]: unknown;
+        }[];
+        readonly structuredContent?: {
+          readonly [key: string]: unknown;
+        };
+        readonly isError?: boolean;
+        readonly _meta?: {
+          readonly [key: string]: unknown;
+        };
+      };
+      readonly status: 'ok';
+    };
+  };
   readonly capture_page: {
     readonly input: {
       /** Registered project name or id; global selects the shared graph, tagma the server’s source project. Omitted: the project of the block, path, checkout or thread this call names, otherwise the call’s project (a thread’s home by default). A conflicting subject refuses place-mismatch; an alias shared with a project name refuses ambiguous-project. */

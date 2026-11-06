@@ -34,6 +34,9 @@
 
   type PluginActionSet = PluginActions['sets'][number];
 
+  const ARGUMENTS = '$ARGUMENTS';
+  const WORDS = [{ id: 'args', label: 'Words', optional: true }];
+
   const sets = ViewSets.use();
   const actions = PluginActions.use();
   const door = Door.use();
@@ -95,12 +98,11 @@
     name: `${set.plugin}-${command.name}`,
     description: `${command.description} · ${set.title}`,
     order: 80,
-    ...('text' in command
-      ? { run: () => Effect.sync(() => insert(command.text)) }
-      : {
-          fields: [{ id: 'args', label: 'Words', optional: true }],
-          run: ({ values }) => ran(set, command.action, values?.args ?? ''),
-        }),
+    ...('action' in command
+      ? { fields: WORDS, run: ({ values }) => ran(set, command.action, values?.args ?? '') }
+      : command.text.includes(ARGUMENTS)
+        ? { fields: WORDS, run: ({ values }) => Effect.sync(() => insert(command.text.replaceAll(ARGUMENTS, values?.args ?? ''))) }
+        : { run: () => Effect.sync(() => insert(command.text)) }),
   });
 
   $effect.pre(() => {

@@ -53,6 +53,7 @@ export type McpCallOptions = {
   readonly caller?: McpCaller;
   readonly meta?: Readonly<Record<string, unknown>>;
   readonly roots?: readonly string[];
+  readonly timeoutMs?: number;
 };
 
 export type McpSessionFailure = McpConnectFailed | McpTimedOut | McpNeedsSignIn;
@@ -176,7 +177,7 @@ const makeMcpSession = (input: SessionInput) => {
   let documentsLength = 0;
 
   const under = (options: McpCallOptions): McpRequestOptions => ({
-    timeout: timeoutMs,
+    timeout: options.timeoutMs ?? timeoutMs,
     caller: options.caller,
     meta: options.meta,
     redact,

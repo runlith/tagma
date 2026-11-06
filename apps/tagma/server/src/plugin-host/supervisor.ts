@@ -139,6 +139,11 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     serving(server, (generation, slot) => callIn(generation, server, slot.state, tool, args, withProjects(slot, options))),
   );
 
+  const callAdmitted = Effect.fn('PluginHost.callAdmitted')(
+    <E>(id: string, admit: Effect.Effect<void, E>, tool: string, args: Readonly<Record<string, unknown>>, options: McpCallOptions) =>
+      serving(id, (generation, slot) => Effect.andThen(admit, callIn(generation, id, slot.state, tool, args, withProjects(slot, options)))),
+  );
+
   const made = (id: string, root: string, projects: readonly number[]): Slot => {
     const slot: Slot = {
       id,
@@ -406,7 +411,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
               standing.withdraw();
               slot.standing = null;
               const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
-              const published = yield* Effect.result(points.publish(ref, checked, { call }));
+              const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }));
               if (Result.isFailure(published)) {
                 yield* FiberMap.remove(quiets, slot.id);
                 yield* closed(slot);
@@ -429,7 +434,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             slot.standing = null;
             slot.rejected = false;
             const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
-            const published = yield* Effect.result(points.publish(ref, checked, { call }));
+            const published = yield* Effect.result(points.publish(ref, checked, { call, callAdmitted }));
             slot.failures = 0;
             slot.gate = 0;
             if (Result.isFailure(published)) {
@@ -516,12 +521,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     },
     stop,
     call,
-    callAdmitted: Effect.fn('PluginHost.callAdmitted')(
-      <E>(id: string, admit: Effect.Effect<void, E>, tool: string, args: Readonly<Record<string, unknown>>, options: McpCallOptions) =>
-        serving(id, (generation, slot) =>
-          Effect.andThen(admit, callIn(generation, id, slot.state, tool, args, withProjects(slot, options))),
-        ),
-    ),
+    callAdmitted,
     read: Effect.fn('PluginHost.read')((id: string, uri: string, options: McpCallOptions) =>
       serving(id, (generation, slot) =>
         within(generation, id, slot.state, (session) => session.readResource(uri, withProjects(slot, options))),

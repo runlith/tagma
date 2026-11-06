@@ -119,7 +119,10 @@ export const CommandEntry = Schema.Union([
   Schema.Struct({
     name: CommandName,
     description: CommandDescription,
-    text: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The text the command puts into the draft.' }),
+    text: Schema.String.check(Schema.isMinLength(1)).annotate({
+      description:
+        'The text the command puts into the draft. Where it holds $ARGUMENTS, the composer asks for the words after the command and puts them there.',
+    }),
   }),
   Schema.Struct({
     name: CommandName,

@@ -1,7 +1,12 @@
 import type { Heard, RecognizerAsk } from '@tagma/server/speech/contract/wire/listening';
 import type { SpeakAsk } from '@tagma/server/speech/contract/wire/speaking';
+import { SPEECH_CAPABILITY } from '@tagma/server/speech/contract/wire/view';
+import { Service } from '@runlith/layer/key';
 import { Stream } from 'effect';
-import type { CapabilityMount, CapabilityOwners } from '$lib/features/plugin-views/capabilities.js';
+import type { CapabilityMount, ViewCapability } from '$lib/features/plugin-views/capabilities.js';
+import { Door } from '$lib/wire/Door.js';
+import { Live, type LiveConnection } from '$lib/wire/Live.js';
+import { SoundChannel } from '$lib/wire/SoundChannel.js';
 import { microphoneMissing, Sender } from './dictation/Sender.js';
 import { Playback } from './Playback.js';
 
@@ -17,7 +22,7 @@ type Recognition = {
 
 const LOST = new Set(['paused', 'refused', 'closed']);
 
-export const viewSpeech = ({ door, live, sound }: CapabilityOwners, mount: CapabilityMount) => {
+const viewSpeech = (door: Door, live: LiveConnection, sound: SoundChannel, mount: CapabilityMount) => {
   const lens = { project: String(mount.projectId) };
   const playback = new Playback(live);
   const standing = new Set<() => void>();
@@ -103,3 +108,20 @@ export const viewSpeech = ({ door, live, sound }: CapabilityOwners, mount: Capab
     silence: () => playback.silence(),
   };
 };
+
+type ViewSpeech = ReturnType<typeof viewSpeech>;
+
+declare module '$lib/features/plugin-views/capabilities.js' {
+  interface ViewCapabilityMembers {
+    readonly speech: ViewSpeech;
+  }
+}
+
+export class SpeechCapability extends Service<ViewCapability>()('SpeechCapability', { tier: 'app', eager: true }) {
+  static *make() {
+    const door = yield* Door;
+    const live = yield* Live;
+    const sound = yield* SoundChannel;
+    return { declaration: SPEECH_CAPABILITY, make: (mount: CapabilityMount) => viewSpeech(door, live, sound, mount) };
+  }
+}

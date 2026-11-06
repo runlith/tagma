@@ -121,7 +121,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
           ),
         ),
       ),
-      run: Effect.fn('PluginActions.run')(function* (projectId, plugin, action, input) {
+      run: Effect.fn('PluginActions.run')(function* (projectId, plugin, action, threadId, input) {
         const declared = actions.get(plugin)?.value.find((entry) => entry.id === action);
         if (declared === undefined) return yield* unknown(plugin, action);
         const admit = Effect.gen(function* () {
@@ -129,7 +129,12 @@ export const makeActions = Effect.fnUntraced(function* (input: {
           const still = actions.get(plugin)?.value.find((entry) => entry.id === action);
           if (!running.includes(plugin) || still?.tool !== declared.tool) return yield* unknown(plugin, action);
         });
-        const caller: McpCaller = { kind: 'operator', projectId, view: `action:${action}` };
+        const caller: McpCaller = {
+          kind: 'operator',
+          projectId,
+          view: `action:${action}`,
+          ...(threadId === null ? {} : { threadId }),
+        };
         const result = yield* host
           .callAdmitted(plugin, admit, declared.tool, input, { caller })
           .pipe(Effect.mapError((failure) => (failure instanceof GateRefusal ? failure : callRefusal(failure))));

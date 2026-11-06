@@ -3,6 +3,8 @@ import { Schema } from 'effect';
 
 const threadId = Schema.String.check(Schema.isMinLength(1));
 
+export const TranscriptToolState = Schema.Literals(['running', 'done', 'refused', 'failed']);
+
 const transcriptEntrySchema = Schema.Struct({
   id: Schema.String,
   runId: Schema.NullOr(Schema.String),
@@ -12,7 +14,7 @@ const transcriptEntrySchema = Schema.Struct({
   tool: Schema.optional(
     Schema.Struct({
       name: Schema.String,
-      state: Schema.Literals(['running', 'done', 'refused', 'failed']),
+      state: TranscriptToolState,
       input: Schema.Unknown,
       output: Schema.optional(Schema.Unknown),
     }),
