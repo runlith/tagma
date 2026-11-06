@@ -45,7 +45,7 @@ import { makeTerminalHostCustody } from '../host/custody.js';
 import { hostEnvironment as backendEnvironment, makeHostEnvironment } from '../host/environmentBackend.js';
 import { executionPolicy as policyValue, executionWireLimits as wireLimitsValue } from '../host/policy.js';
 import { COMMAND_RULE_PAIRS as rulePairs } from '../operations/commandRules.js';
-import { EXECUTION_SETTING_KEYS as settingKeys } from '../settings.js';
+import { EXECUTION_SETTING_KEYS as settingKeys, EXECUTION_SETTING_SECTIONS as settingSections } from '../settings.js';
 import { commandRule as commandRuleTable } from '../store/commandRule.js';
 import { RETAINED_OPERATION_KEYS as retainedKeys } from '../store/requestKeys.js';
 import {
@@ -331,6 +331,8 @@ export const executionWireLimits = () => wireLimitsValue;
 export const COMMAND_RULE_PAIRS = () => rulePairs;
 
 export const EXECUTION_SETTING_KEYS = () => settingKeys;
+
+export const EXECUTION_SETTING_SECTIONS = () => settingSections;
 
 export const LANE_GRACE_MS = () => laneGraceMs;
 
