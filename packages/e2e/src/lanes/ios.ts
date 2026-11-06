@@ -495,7 +495,10 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (lane: Lane): Effe
   yield* Effect.addFinalizer(() =>
     selected === undefined
       ? Effect.void
-      : attempted('MobileSafari did not leave its page for about:blank', () => fixture.open('about:blank')).pipe(Effect.orDie),
+      : attempted('MobileSafari did not leave its page for about:blank', async () => {
+          await touch.release();
+          await fixture.open('about:blank');
+        }).pipe(Effect.orDie),
   );
   return { fixture, failed };
 });
