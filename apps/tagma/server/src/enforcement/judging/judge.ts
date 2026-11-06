@@ -154,14 +154,17 @@ const unread = (op: string, failure: Unread, started: number): Judgement => {
   };
 };
 
-const ungated = (root: string, why: string, started: number): Judgement => ({
+const unjudgedFor = (cause: string, started: number): Judgement => ({
   refused: null,
   watched: [],
-  unjudged: [{ gate: 'unread', cause: `the graph of ${root} could not be read: ${why}` }],
+  unjudged: [{ gate: 'unread', cause }],
   rules: [],
   inspections: 0,
   ms: Math.round(performance.now() - started),
 });
+
+const ungated = (root: string, why: string, started: number): Judgement =>
+  unjudgedFor(`the graph of ${root} could not be read: ${why}`, started);
 
 const verdictOf = (judged: Judgement): string =>
   judged.refused?.code ?? (judged.unjudged.length > 0 ? 'unjudged' : judged.watched.length > 0 ? 'watched' : 'clean');
@@ -187,7 +190,9 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
 ) {
   const started = performance.now();
   const judged = yield* Effect.result(withoutGenerated(given));
-  if (Result.isFailure(judged)) return ungated(given.root, judged.failure.message, started);
+  if (Result.isFailure(judged)) {
+    return unjudgedFor(`git could not say which files of ${given.root} are marked linguist-generated: ${judged.failure.message}`, started);
+  }
   const subject = judged.success;
   const settled = yield* Effect.result(
     Effect.gen(function* () {
