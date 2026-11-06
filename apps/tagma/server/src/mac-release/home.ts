@@ -11,9 +11,17 @@ export const isolatedHome = (home: string, tmp: string, user: string): Record<st
   LOGNAME: user,
 });
 
-export const forgetRegistered = async (dir: string): Promise<number> => {
-  const dump = await new Response(Bun.spawn([LSREGISTER, '-dump'], { stdout: 'pipe', stderr: 'ignore' }).stdout).text();
+type Forgotten = { readonly forgotten: number; readonly failed: readonly string[] };
+
+export const forgetRegistered = async (dir: string): Promise<Forgotten> => {
+  const dumping = Bun.spawn([LSREGISTER, '-dump'], { stdout: 'pipe', stderr: 'ignore' });
+  const [dump, dumped] = await Promise.all([new Response(dumping.stdout).text(), dumping.exited]);
+  if (dumped !== 0) return { forgotten: 0, failed: [`lsregister -dump exited ${dumped}, so the registrations under ${dir} were not read`] };
   const registered = [...dump.matchAll(REGISTERED)].map((match) => match[1]!).filter((path) => path.startsWith(`${dir}/`));
-  for (const bundle of registered) await Bun.spawn([LSREGISTER, '-u', bundle], { stdout: 'ignore', stderr: 'ignore' }).exited;
-  return registered.length;
+  const failed: string[] = [];
+  for (const bundle of registered) {
+    const code = await Bun.spawn([LSREGISTER, '-u', bundle], { stdout: 'ignore', stderr: 'ignore' }).exited;
+    if (code !== 0) failed.push(`${bundle} (lsregister -u exited ${code})`);
+  }
+  return { forgotten: registered.length - failed.length, failed };
 };

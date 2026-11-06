@@ -511,7 +511,10 @@ export const closed = async (world: World): Promise<string> => {
   }
   const log = await readFile(join(world.dir, 'serve.log'), 'utf8').catch(() => '');
   await rm(world.dir, { recursive: true, force: true });
-  const forgotten = await forgetRegistered(world.dir);
-  told.push(`LaunchServices forgot ${forgotten} applications of this world`, log);
+  const { forgotten, failed } = await forgetRegistered(world.dir);
+  told.push(
+    `LaunchServices forgot ${forgotten} applications of this world${failed.length === 0 ? '' : `, and kept ${failed.join('; ')}`}`,
+    log,
+  );
   return told.join('\n');
 };

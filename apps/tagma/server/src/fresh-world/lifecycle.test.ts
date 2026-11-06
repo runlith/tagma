@@ -4,7 +4,7 @@ import { Effect, FileSystem, Layer } from 'effect';
 import { HttpClient } from 'effect/http';
 import { it } from '@runlith/effect-test';
 import * as Memory from '@runlith/testbed/memory';
-import type { FreshHost, FreshProcess } from './contract/service/host.js';
+import { type FreshHost, type FreshProcess, HostFailed } from './contract/service/host.js';
 import { FreshWorld } from './contract/service/world.js';
 import { freshWorldLayer } from './lifecycle.js';
 
@@ -34,7 +34,10 @@ const machine = Effect.gen(function* () {
       said.push(`place ${bundle}`);
       return target;
     }),
-    version: (bundle) => Effect.succeed(versions.get(bundle) ?? '0.2.1'),
+    version: (bundle) => {
+      const read = versions.get(bundle);
+      return read === undefined ? Effect.fail(new HostFailed({ message: `${bundle} has no Info.plist` })) : Effect.succeed(read);
+    },
     keychain: () => Effect.void,
     launch: (bundle, _place, running) =>
       Effect.sync(() => {
@@ -72,21 +75,24 @@ const machine = Effect.gen(function* () {
       ),
     ),
   );
-  return { files, said, world, running: (pids: FreshProcess[]) => (living = pids) };
+  const placed = (version: string) =>
+    Effect.sync(() => versions.set(PLACED, version)).pipe(Effect.andThen(Effect.orDie(files.makeDirectory(PLACED, { recursive: true }))));
+  return { files, said, world, placed, running: (pids: FreshProcess[]) => (living = pids) };
 });
 
-it.effect('starting over ends every process of the world before macOS forgets it, then opens the kept release on a first launch', () =>
+it.effect('starting over a broken world with no feed ends its processes before macOS forgets it, then opens the newest kept release', () =>
   Effect.gen(function* () {
     const { files, said, world, running } = yield* machine;
     yield* Effect.orDie(files.makeDirectory(PLACED, { recursive: true }));
     yield* Effect.orDie(files.makeDirectory(KEPT, { recursive: true }));
+    yield* Effect.orDie(files.makeDirectory(join(DATA, 'fresh', 'releases', '0.2.1', 'Tagma.app'), { recursive: true }));
     running([
       { pid: 7, executable: join(PLACED, 'Contents', 'MacOS', 'Tagma') },
       { pid: 8, executable: join(ROOT, 'home', '.tagma', 'bun') },
       { pid: 9, executable: join(ROOT, 'home', '.tagma', 'executions', 'holder') },
     ]);
 
-    const opened = yield* world.open({ over: false, release: '0.2.2', from: null });
+    const opened = yield* world.open({ over: true, release: null, from: null });
 
     expect(said).toEqual([
       'SIGTERM 7',
@@ -103,8 +109,8 @@ it.effect('starting over ends every process of the world before macOS forgets it
 
 it.effect('opening a closed world launches it again as it stands, and a running one is only brought forward', () =>
   Effect.gen(function* () {
-    const { files, said, world } = yield* machine;
-    yield* Effect.orDie(files.makeDirectory(PLACED, { recursive: true }));
+    const { said, world, placed } = yield* machine;
+    yield* placed('0.2.1');
 
     const first = yield* world.open({ over: false, release: null, from: null });
     const second = yield* world.open({ over: false, release: null, from: null });

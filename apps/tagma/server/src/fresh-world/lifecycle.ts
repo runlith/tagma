@@ -2,7 +2,7 @@ import { basename, join } from 'node:path';
 import { Effect, FileSystem, Layer, Semaphore } from 'effect';
 import { HttpClient } from 'effect/http';
 import { GateRefusal, type Unblock } from '../platform/contract/wire/refusal.js';
-import { newestOf } from '../installation/contract/wire/feed.js';
+import { compareReleases, isRelease, newestOf } from '../installation/contract/wire/feed.js';
 import { readFeed } from '../release-channel/feed.js';
 import { downloaded } from '../release-channel/delivery.js';
 import { openArchive } from '../release-channel/archive.js';
@@ -63,8 +63,10 @@ const makeFreshWorld = Effect.fnUntraced(function* (options: FreshOptions) {
   const standing = Effect.fnUntraced(function* () {
     const bundle = yield* bundleIn(applications);
     const living = yield* onHost(host.processes(root));
-    return { bundle, living, release: bundle === null ? null : yield* onHost(host.version(bundle)) };
+    return { bundle, living };
   });
+
+  const releaseOf = (bundle: string | null) => (bundle === null ? Effect.succeed(null) : onHost(host.version(bundle)));
 
   const answer = (release: string | null, running: boolean): Standing => ({ root, release, running, url: options.url });
 
@@ -96,7 +98,7 @@ const makeFreshWorld = Effect.fnUntraced(function* (options: FreshOptions) {
     yield* stopped(bundle);
     if (bundle !== null) yield* onHost(host.forget(bundle));
     yield* removed(root);
-    yield* host.unregister(root);
+    yield* onHost(host.unregister(root));
   });
 
   const unpacked = Effect.fn('FreshWorld.unpack')(function* (archive: string, into: string) {
@@ -109,17 +111,36 @@ const makeFreshWorld = Effect.fnUntraced(function* (options: FreshOptions) {
 
   const keptBundle = (release: string) => bundleIn(join(kept, release));
 
+  const keptReleases = Effect.fnUntraced(function* () {
+    const names = yield* files.readDirectory(kept).pipe(
+      Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed([] as string[])),
+      Effect.mapError(disk(`${kept} could not be read`)),
+    );
+    const standing: string[] = [];
+    for (const name of names.filter(isRelease)) if ((yield* keptBundle(name)) !== null) standing.push(name);
+    return standing.toSorted((left, right) => compareReleases(right, left));
+  });
+
   const fromFeed = Effect.fn('FreshWorld.release')(function* (release: string | null) {
     const standingKept = release === null ? null : yield* keptBundle(release);
     if (standingKept !== null) return standingKept;
     const feedAt = options.feed;
+    const keptNow = yield* keptReleases();
     if (feedAt === null) {
-      return yield* refused('fresh-no-feed', 'this build was cut without a release feed, so it knows no published release', [
+      const newestKept = release === null ? keptNow[0] : undefined;
+      if (newestKept !== undefined) return (yield* keptBundle(newestKept))!;
+      return yield* refused('fresh-no-feed', 'this build was cut without a release feed, and no release it names is kept', [
         'open_fresh_world with from — a local .app, .dmg or release archive',
+        ...keptNow.map((one) => `open_fresh_world with release ${one} — kept from an earlier start`),
       ]);
     }
     const feed = yield* readFeed(client, feedAt).pipe(
-      Effect.mapError((issue) => refused('fresh-unavailable', issue.reason, issue.unblock)),
+      Effect.mapError((issue) =>
+        refused('fresh-unavailable', issue.reason, [
+          ...issue.unblock,
+          ...keptNow.map((one) => `open_fresh_world with release ${one} — kept, so it needs no feed`),
+        ]),
+      ),
     );
     const entry = release === null ? newestOf(feed) : feed.releases.find((one) => one.release === release);
     if (entry === undefined) {
@@ -185,8 +206,9 @@ const makeFreshWorld = Effect.fnUntraced(function* (options: FreshOptions) {
             const over = opening.over || opening.release !== null || opening.from !== null;
             if (!over && before.bundle !== null) {
               const running = before.living.length > 0;
+              const release = yield* releaseOf(before.bundle);
               yield* opened(before.bundle, running);
-              return { ...answer(before.release, true), started: !running };
+              return { ...answer(release, true), started: !running };
             }
             const source = yield* taken(opening);
             yield* wiped(before.bundle);
@@ -199,7 +221,10 @@ const makeFreshWorld = Effect.fnUntraced(function* (options: FreshOptions) {
           }),
         )
         .pipe(Effect.withSpan('FreshWorld.open')),
-    read: Effect.map(standing(), (now) => answer(now.release, now.living.length > 0)).pipe(Effect.withSpan('FreshWorld.read')),
+    read: Effect.gen(function* () {
+      const now = yield* standing();
+      return answer(yield* releaseOf(now.bundle), now.living.length > 0);
+    }).pipe(Effect.withSpan('FreshWorld.read')),
   });
 });
 

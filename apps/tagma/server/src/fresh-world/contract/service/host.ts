@@ -19,5 +19,5 @@ export type FreshHost = {
   readonly quit: (bundle: string, place: FreshPlace) => Effect.Effect<string | null>;
   readonly window: (bundle: string) => string;
   readonly forget: (bundle: string) => Effect.Effect<void, HostFailed>;
-  readonly unregister: (root: string) => Effect.Effect<void>;
+  readonly unregister: (root: string) => Effect.Effect<void, HostFailed>;
 };

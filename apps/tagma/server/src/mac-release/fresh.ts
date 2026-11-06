@@ -48,6 +48,8 @@ const envOf = (place: FreshPlace) => isolatedHome(place.home, place.tmp, userInf
 const plist = (bundle: string, key: string) =>
   Effect.map(ran('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, join(bundle, 'Contents', 'Info.plist')]), (read) => read.stdout.trim());
 
+const described = (bundle: string): boolean => existsSync(join(bundle, 'Contents', 'Info.plist'));
+
 const nested = (bundle: string): string[] => {
   const found = [bundle];
   const walk = (at: string): void => {
@@ -59,7 +61,7 @@ const nested = (bundle: string): string[] => {
     }
   };
   walk(join(bundle, 'Contents'));
-  return found;
+  return found.filter(described);
 };
 
 const killed = (pids: readonly number[], signal: 'SIGTERM' | 'SIGKILL') =>
@@ -96,8 +98,11 @@ export const macFresh: FreshHost = {
   }, Effect.scoped),
   place: Effect.fn('macFresh.place')(function* (bundle: string, into: string) {
     const target = join(into, basename(bundle));
-    yield* ran('/bin/cp', ['-cRp', bundle, target]);
-    return yield* signed(target);
+    const staged = `${target}.part`;
+    yield* ran('/bin/cp', ['-cRp', bundle, staged]);
+    yield* signed(staged);
+    yield* ran('/bin/mv', [staged, target]);
+    return target;
   }),
   version: (bundle) => plist(bundle, 'CFBundleShortVersionString'),
   keychain: Effect.fn('macFresh.keychain')(function* (place: FreshPlace) {
@@ -131,9 +136,16 @@ export const macFresh: FreshHost = {
   },
   window: (bundle) => `${join(bundle, 'Contents', 'MacOS')}/`,
   forget: Effect.fn('macFresh.forget')(function* (bundle: string) {
-    const ids = yield* Effect.forEach(nested(bundle), (one) => plist(one, 'CFBundleIdentifier'));
-    for (const id of ids) yield* settled('/usr/bin/tccutil', ['reset', 'All', id], UNREGISTERED);
-    yield* settled('/usr/bin/defaults', ['delete', ids[0]!], NO_DOMAIN);
+    if (!described(bundle)) return;
+    const [id, ...helpers] = yield* Effect.forEach(nested(bundle), (one) => plist(one, 'CFBundleIdentifier'));
+    const own = [id!, ...helpers.filter((one) => one.startsWith(`${id}.`))];
+    for (const one of own) yield* settled('/usr/bin/tccutil', ['reset', 'All', one], UNREGISTERED);
+    yield* settled('/usr/bin/defaults', ['delete', id!], NO_DOMAIN);
   }),
-  unregister: (root) => Effect.asVoid(Effect.promise(() => forgetRegistered(root))),
+  unregister: (root) =>
+    Effect.flatMap(
+      Effect.promise(() => forgetRegistered(root)),
+      ({ failed }) =>
+        failed.length === 0 ? Effect.void : Effect.fail(new HostFailed({ message: `LaunchServices kept ${failed.join('; ')}` })),
+    ),
 };
