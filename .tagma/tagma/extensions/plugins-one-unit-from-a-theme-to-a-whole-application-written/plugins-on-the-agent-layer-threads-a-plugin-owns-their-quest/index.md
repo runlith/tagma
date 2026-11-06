@@ -144,12 +144,12 @@ A plugin's process acts and reacts; a person looks through a view. The process t
   - The SDK handler is `onThreadAsked`, whose tool is `__asked`.
   - Its payload, in `@runlith/tagma/plugin/protocol`, is `{threadId, questionId, summary, prompts, deadlineAt}`: the `ApprovalNotice` the route already builds.
   - The handler's caller is `tagma {projectId, reason: 'asked'}`, as an ending carries `ended`.
-- **Routing.** `threadApprovers.route` answers with the thread's plugin as approver when the thread's `bindings.plugin` names a plugin whose `asked` is registered, ahead of the parent and grant cases. Otherwise it routes as today.
+- **Routing.** `threadApprovers.route` answers with the thread's plugin as approver when the thread's `bindings.plugin` names a plugin whose `asked` is registered and which runs there, ahead of the parent and grant cases. A thread bound to a plugin that cannot take it now asks the person, never its parent (why `owner-away`). An unbound thread routes as today.
   - The approver stays the kit's opaque string. The server's address `plugin:<id>` stands beside thread ids, and `ApproverWhy` gains `owner`.
   - A question with a secret prompt stays with the person.
   - Routed to the plugin, a question leaves Attention and push, as any routed question does.
 - **Delivery.** For a plugin address, `notify` calls the `asked` tool through the contribution's caller, which opens an idle process and waits through a backoff gate. A delivery that fails or answers `isError` reroutes that question to the person at once.
-- **Registration.** When the plugin's `asked` is registered or withdrawn — enabled, switched off in that project, removed, refused — the existing reroute subscription (explanation fb0986e6) reroutes the open questions of threads bound to it. A question nobody can take therefore stands with the person.
+- **Registration.** When the plugin's `asked` is registered or withdrawn — enabled, switched off in that project, removed, refused — or its process fails or recovers, the open questions of threads bound to it are rerouted over the open-question selection of explanation fb0986e6. A question nobody can take therefore stands with the person, and goes back to the plugin, delivered again, once it runs. A question the plugin left or failed to take is marked on the question itself and stays with the person.
 - **Leaving it to the person.** The handler answers either an acknowledgement or `leave()`, an answer of the SDK's protocol, as a build step answers its verdict. `leave()` reroutes that question to the person at once, into Attention and push, through the same reroute as a failed delivery.
 - **Answering.** An acknowledged question is answered with `answer_question`, sent at once or hours later (a reply from Telegram). The person may answer first from the thread. A confirmation keeps its deadline.
 - **A plugin with no `asked`** leaves its threads' questions with the person, in Attention and push. Its views still show them (presence carries `ask`), and its process may still answer them.
@@ -175,7 +175,7 @@ A plugin's process acts and reacts; a person looks through a view. The process t
   - **Its schema** is declared by `threads` (`threads/contract/wire/`), the thread's owner. The bridge in this step and `useTagma().transcript(id)` of `/ui` in step 5 therefore carry one shape.
 - **Acting.** A view acts on a thread through its plugin's process, by its `view` tools. Every act on a thread is then the plugin's and attributed to it. A view never acts as the person; the person's only interface inside a plugin is `<Thread>`.
 
-**Where a plugin's threads stand** (decided in [[d2b5f488]]). The `threads` point of `threads` holds `{listed}`, false by default. The general thread list leaves out the threads of plugins that are not listed. The plugin's section or rail entry, or otherwise its card, lists its threads by their binding.
+**Where a plugin's threads stand** (decided in [[d2b5f488]]). The `threads` point of `threads` holds `{listed}`, false by default. The general thread list leaves out the threads of a plugin only while it runs in their project without being listed; a plugin switched off or removed leaves them ordinary threads. The plugin's section or rail entry, or otherwise its card, lists its threads by their binding.
 
 ### Depth 2: our thread inside a plugin
 
