@@ -42,7 +42,14 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
 
 const contributionComponent = (points: PluginPoints['Service'], point: string, value: unknown): PluginComponent => {
   const entries = points.entries(point, value);
-  return { kind: 'contribution', name: point, title: points.title(point), ...(entries.length === 0 ? {} : { entries }) };
+  const uses = points.uses(point, value);
+  return {
+    kind: 'contribution',
+    name: point,
+    title: points.title(point),
+    ...(uses === null ? {} : { detail: uses }),
+    ...(entries.length === 0 ? {} : { entries }),
+  };
 };
 
 export const componentsOf = (

@@ -66,6 +66,12 @@ export const makePoints = () => {
       const decoded = contributionOf(face, value);
       return Result.isSuccess(decoded) && decoded.success !== undefined ? face.entries(decoded.success) : [];
     },
+    uses: (name, value) => {
+      const face = faces.get(name);
+      if (face?.uses === undefined) return null;
+      const decoded = contributionOf(face, value);
+      return Result.isSuccess(decoded) && decoded.success !== undefined ? face.uses(decoded.success) : null;
+    },
     publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
       const entries = Object.entries(checked).flatMap(([name, value]) => {
         const declared = points.get(name);

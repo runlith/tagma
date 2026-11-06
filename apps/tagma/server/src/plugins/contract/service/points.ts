@@ -37,6 +37,7 @@ export class PluginPoints extends Context.Service<
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
     title(name: string): string | undefined;
     entries(name: string, value: unknown): readonly ContributionEntry[];
+    uses(name: string, value: unknown): string | null;
     publish(plugin: PluginRef, checked: PluginChecked, caller: McpToolCaller): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}
