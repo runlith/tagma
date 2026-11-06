@@ -8,9 +8,7 @@ import { lawReading } from './rules/projectLaw.js';
 import { Git } from '@runlith/git/Git';
 import type { GraphJournal } from '../graph/contract/service/journal.js';
 import { ServedGraphs } from '../graph/contract/service/serving.js';
-import { ActState } from '../graph/contract/service/transaction.js';
-import { journalRevision } from '../graph/journal/eventLog.js';
-import { dataPathOf, type GraphStore, MachineStore } from '../platform/contract/service/store.js';
+import { dataPathOf, GraphStore, MachineStore } from '../platform/contract/service/store.js';
 import { Maintenance } from '../platform/contract/service/maintenance.js';
 import { Background } from '../platform/contract/service/background.js';
 import { RootPublished } from '../workspace/contract/service/roots.js';
@@ -22,7 +20,7 @@ import { CommitQueue, commitQueue } from './commits/queue.js';
 import { CommitRecords } from './contract/service/commitRecords.js';
 import { RuleJudgement } from './contract/service/judge.js';
 import { RuleChecks } from './contract/service/ruleChecks.js';
-import { RuleRevision } from './contract/service/ruleRevision.js';
+import { RuleRevision, storeRevision } from './contract/service/ruleRevision.js';
 import { GateMemory, gateMemoryAt } from './judging/gateMemory.js';
 import type { JudgeServices } from './judging/judge.js';
 import { ruleChecks, triggerIndex } from './judging/ruleChecks.js';
@@ -87,13 +85,7 @@ export const enforcementServingLayer = Layer.effectContext(
       Context.add(Configs, yield* Configs),
     );
 
-    const revisionOf = (context: Context.Context<GraphStore | GraphJournal>) =>
-      RuleRevision.of({
-        current: (projectId) =>
-          Effect.flatMap(Effect.serviceOption(ActState), (active) =>
-            Option.isSome(active) ? Effect.succeed(null) : Effect.provide(journalRevision(projectId), context),
-          ),
-      });
+    const revisionOf = (context: Context.Context<GraphStore>) => storeRevision(Context.get(context, GraphStore));
     const judgedBy = (freshened: boolean) => (projectId: number, cwd: string | null) =>
       inMemory
         ? Effect.succeed(Context.add(Context.merge(machineGraph, inspections), RuleRevision, revisionOf(machineGraph)))

@@ -4,9 +4,11 @@ import { UnitOpen } from './transaction.js';
 
 export class TableMoves {
   private undeclared = 0;
+  private shifts = 0;
   private readonly moved = new Map<string, number>();
 
   readonly committed = (tables: ReadonlySet<string> | null): void => {
+    this.shifts += 1;
     if (tables === null) {
       this.undeclared += 1;
       return;
@@ -19,6 +21,8 @@ export class TableMoves {
     for (const table of tables) revision += this.moved.get(table) ?? 0;
     return revision;
   };
+
+  readonly total = (): number => this.shifts;
 
   readonly answers = <K, A>(tables: readonly Table[]): TableAnswers<K, A> =>
     new TableAnswers(

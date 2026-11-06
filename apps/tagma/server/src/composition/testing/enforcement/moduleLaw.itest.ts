@@ -1,7 +1,9 @@
 import { layer } from '@runlith/effect-test';
 import { describe, expect } from 'bun:test';
-import { Effect } from 'effect';
+import { Context, Effect } from 'effect';
 import { perform, prepare } from '../../../invocation/testing/performing.js';
+import { RuleRevision, storeRevision } from '../../../enforcement/contract/service/ruleRevision.js';
+import { GraphStore } from '../../../platform/contract/service/store.js';
 import { LAYERED, LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 import { bodies, enforceFixture, operator, withEnforcement, type EnforcementFixture } from './enforceFixture.js';
 import type { InputOf } from '../../../platform/contract/service/body.js';
@@ -32,7 +34,7 @@ type Modules = InputOf<typeof ENFORCEMENT_OPERATIONS.set_module>;
 const TESTED_KEY = 'tested';
 const submitted = Effect.fnUntraced(function* (fx: EnforcementFixture) {
   const { workers } = yield* Enforcements;
-  const served = withLanes(fx.demo.context, workers);
+  const served = Context.add(withLanes(fx.demo.context, workers), RuleRevision, storeRevision(Context.get(fx.demo.context, GraphStore)));
   const checks = actChecks(checksOver({ graphOf: () => Effect.succeed(served) }), 'submit_work');
   const services = yield* Effect.provide(landingServices, fx.demo.context);
   const inst = yield* claimPreparedInstance(preparedBase(fx.demo.graph.store));

@@ -15,7 +15,6 @@ import { type JournalPayloadUnreadable, readJournal } from '../contract/wire/jou
 import { scopeCondition, subtreeIds } from '../search/selection.js';
 import { readsOf } from '../acts/reads.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
-import { mirrorRevision } from '../tree/mirror.js';
 
 export type Concerned = {
   readonly ids: number[];
@@ -403,10 +402,3 @@ export const journalLayer: Layer.Layer<GraphJournal, never, GraphStore | GraphUn
     });
   }),
 );
-
-export const journalRevision = Effect.fn('Journal.revision')(function* (projectId: number) {
-  const { identity } = yield* GraphStore;
-  const newest = (yield* (yield* GraphJournal).events({ projectId, limit: 1 }))[0]?.id ?? 0;
-  const mirror = yield* mirrorRevision();
-  return `${identity.path}\0${identity.generation}\0${projectId}\0${newest}\0${mirror}`;
-});
