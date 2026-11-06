@@ -28,6 +28,7 @@ sources:
 - The theme and the light, dark or system choice are the person's settings, so a change in one window paints every window at once. System follows each device's own light or dark.
 - A theme that comes in one look only is shown in it whatever the choice, and the menu says so.
 - A plugin theme that gives a state colour another meaning fails its build and its install, naming the colour.
+- A theme an agent makes for the person lands among the person's own plugins, outside every project, so it reaches no project's commits and follows them into every project.
 - A plugin's card lists its themes even while the plugin runs nowhere; **Use** on such a theme runs the plugin in all the person's projects and chooses the theme.
 - When the chosen theme's plugin goes away, windows paint Tagma while the choice stands, Settings offers to use Tagma, and the theme paints again when it returns.
 - A window opens in the look it last painted, before its code runs.
