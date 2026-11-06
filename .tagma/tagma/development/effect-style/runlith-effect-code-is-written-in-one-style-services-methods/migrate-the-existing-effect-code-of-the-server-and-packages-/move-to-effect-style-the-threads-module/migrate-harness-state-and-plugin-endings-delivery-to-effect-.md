@@ -12,7 +12,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/harness/state.ts
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/harness/pluginOn.ts
   - kind: symbol
     ref: apps/tagma/server/src/threads/harness/engine.ts
     symbol: threadEngineLayer

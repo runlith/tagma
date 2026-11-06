@@ -18,7 +18,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/contract/wire/pluginEndings.ts
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/harness/pluginOn.ts
   - kind: file
     ref: apps/tagma/server/src/threads/operations/acts.ts
 ---
