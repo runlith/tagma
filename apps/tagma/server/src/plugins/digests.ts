@@ -45,7 +45,10 @@ export const makeDigests = Effect.gen(function* () {
     const known = standing !== undefined && same(standing.paths, paths) ? standing : null;
     const answer = yield* link
       .ask((id) => ({ id, root, paths, known: known === null ? null : { stamp: known.stamp, digest: known.digest } }))
-      .pipe(Effect.mapError((gone) => new DigestUnread({ root, reason: gone.reason })));
+      .pipe(
+        Effect.retry({ times: 1 }),
+        Effect.mapError((gone) => new DigestUnread({ root, reason: gone.reason })),
+      );
     if ('failed' in answer) return yield* new DigestUnread({ root, reason: answer.failed });
     held.set(key, { paths, stamp: answer.stamp, digest: answer.digest });
     return answer.digest;

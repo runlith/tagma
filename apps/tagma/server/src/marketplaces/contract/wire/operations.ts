@@ -224,6 +224,7 @@ export const MARKETPLACE_OPERATIONS = {
     input: Schema.Struct({ project: projectField, id: PluginId }),
     refusals: [
       ...PREPARE_REFUSALS,
+      'plugins-unreadable',
       'plugin-not-installed',
       'plugin-without-marketplace',
       'marketplace-gone',

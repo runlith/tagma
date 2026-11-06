@@ -52,7 +52,7 @@ const answer = arms({ ok: { plugin: pluginRowSchema } });
 
 const acted = { ...declared, effect: 'write', identity: { key: 'call' } } as const;
 
-const LIST_REFUSALS = ['unknown-project', 'secret-store-failed'] as const;
+const LIST_REFUSALS = ['unknown-project', 'secret-store-failed', 'plugins-unreadable'] as const;
 const CHANGE_REFUSALS = [
   ...LIST_REFUSALS,
   'plugin-not-installed',
@@ -110,7 +110,7 @@ export const PLUGIN_OPERATIONS = {
     meaning:
       'Install a plugin — in Tagma’s format (tagma-plugin.json), Agent Plugins 1.0, Claude Code or Codex — from a folder, read in place, a git URL, cloned onto this machine, or a revision a preview prepared; installing the same source again updates it. It runs at once in this project, or with `scope: user` in every project; `enabled: false` installs it without running it in this project, and stops it here if it ran.',
     grammar:
-      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers the pool and its agents the agent library of each project running it, each named `<plugin>-<name>`; its command hooks run as the operator. A plugin in Tagma’s format publishes its contributions while any project runs it, before its process runs; its one machine-wide process starts on the first call, tick or view that needs it, sleeps when quiet, and restarts after a rebuild or an option change; its tools reach agents as `plugin__<id>__<tool>`. A manifest whose contributions no point accepts refuses. Its remote MCP servers are connected in this project at once, so one asking for a sign-in reads `needs-sign-in` in read_mcp_servers; nothing signs in. A relative folder is read from the project root.',
+      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers the pool and its agents the agent library of each project running it, each named `<plugin>-<name>`; its command hooks run as the operator. A plugin in Tagma’s format publishes its contributions while any project runs it, before its process runs; its one machine-wide process starts on the first call, tick or view that needs it and stops when quiet, or runs from the first enabling when the plugin declares it resident, and restarts after a rebuild or an option change; its tools reach agents as `plugin__<id>__<tool>`. A manifest whose contributions no point accepts refuses. Its remote MCP servers are connected in this project at once, so one asking for a sign-in reads `needs-sign-in` in read_mcp_servers; nothing signs in. A relative folder is read from the project root.',
     input: Schema.Struct({
       project: projectField,
       source: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({

@@ -171,10 +171,20 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const processOf = (id: string, pkg: PluginPackage): PluginProcessRow | undefined =>
     hosted(pkg) ? (processes().reading(id) ?? { state: 'stopped', tools: 0, restarts: 0 }) : undefined;
 
-  const outdatedOf = Effect.fnUntraced(function* (root: string, pkg: PluginPackage) {
+  const outdatedOf = Effect.fnUntraced(function* (id: string, root: string, pkg: PluginPackage) {
     const build = pkg.build;
     if (build === null) return false;
-    return (yield* digests.digest(root, build.sources, 'sources').pipe(Effect.orDie)) !== build.hash;
+    const digest = yield* digests
+      .digest(root, build.sources, 'sources')
+      .pipe(
+        Effect.mapError(
+          (failure) =>
+            new GateRefusal('plugins-unreadable', `Whether the build of ${id} is older than its sources is unknown: ${failure.message}.`, [
+              'read_plugins again: the sources are hashed afresh on the next read',
+            ]),
+        ),
+      );
+    return digest !== build.hash;
   });
 
   const boundOf = Effect.fnUntraced(function* (read: Read, root: string, projectId: number) {
@@ -314,7 +324,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       format: read.format,
       ...shownOf(read, bound, points),
       process: processOf(install.id, pkg),
-      outdated: yield* outdatedOf(install.root, pkg),
+      outdated: yield* outdatedOf(install.id, install.root, pkg),
     } satisfies PluginRow;
   });
 
