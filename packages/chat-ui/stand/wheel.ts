@@ -57,7 +57,7 @@ function settlingEnds(scrollEnds: readonly number[], writes: readonly ScrollWrit
   return [...scrollEnds]
     .sort((a, b) => a - b)
     .filter((end) => {
-      const answers = moved.some((time) => time > previous && time < end);
+      const answers = moved.some((time) => time >= previous && time < end);
       previous = end;
       return !answers;
     });
