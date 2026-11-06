@@ -15,11 +15,6 @@ fields:
           "value": 1123
         },
         {
-          "fingerprint": "F4 apps/tagma/app/src/lib/features/executions/terminal/Keymap.ts",
-          "owner": "e239d4dc",
-          "value": 791
-        },
-        {
           "fingerprint": "F4 apps/tagma/app/src/lib/features/executions/terminal/Output.ts",
           "owner": "e239d4dc",
           "value": 1134

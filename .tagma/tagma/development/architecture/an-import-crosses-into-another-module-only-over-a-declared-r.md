@@ -8,16 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "49d4a7e414c3c0ff621242cc011b93cd4fc39cb2",
-          "fingerprint": "@tagma/desktop -> @runlith/desktop-host private @ apps/tagma/desktop/src/projectWindows.ts",
-          "fix": "Import through an entry `@runlith/desktop-host` opens to `@tagma/desktop` (`packages/desktop-host/src/ExternalLinks.ts`, `packages/desktop-host/src/WindowPlacement.ts`, `packages/desktop-host/src/GlobalShortcuts.ts`), or open one covering `packages/desktop-host/src/QuickHideShortcut.ts` with `set_module`.",
-          "line": 2,
-          "path": "apps/tagma/desktop/src/projectWindows.ts",
-          "said": "imports `@runlith/desktop-host/QuickHideShortcut` of module `@runlith/desktop-host`, which no entry of `@runlith/desktop-host` opens to `@tagma/desktop`"
-        }
-      ],
+      "escaped": [],
       "inspection": "modules",
       "on": [
         {

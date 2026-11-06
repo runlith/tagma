@@ -7,7 +7,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
 ---
-Threads declares the `on` point because run ends belong to it. Delivery is a recipient `plugin endings` of the thread-events owner, not a separate queue: the owner subscribes it to the run-end notification obligation under that name, so claim, retry and `notification-exhausted` with `redeliver_ending` already exist, and already-delivered subscribers are not called on retry. It stands after the ending stages.
+Threads declares the `on` point because run ends belong to it; the point's `asked` tool takes the questions of the plugin's threads, which are delivered once with no obligation and handed back to the person on failure ([[9d7d0b8c]]). Delivery is a recipient `plugin endings` of the thread-events owner, not a separate queue: the owner subscribes it to the run-end notification obligation under that name, so claim, retry and `notification-exhausted` with `redeliver_ending` already exist, and already-delivered subscribers are not called on retry. It stands after the ending stages.
 
 - The recipient is named by the thread's `bindings.plugin`. Only runs (`turn`) are delivered; keep-warm and compaction are not.
 - The call goes through the plugin's supervisor, so it opens an idle process, waits through a restart or a crash's backoff gate, and an end that landed on a restart is picked up by the next process.

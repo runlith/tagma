@@ -21,10 +21,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated object:94060be1995795cd: apps/tagma/app/src/lib/features/speech/dictation/chord.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated literals:0bbcb0fdb836c05c: apps/tagma/app/src/lib/features/speech/values.ts",
           "owner": "5a3bed29"
         },

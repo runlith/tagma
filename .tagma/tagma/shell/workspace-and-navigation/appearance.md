@@ -1,7 +1,7 @@
 ---
 id: 01a1b1a3-f7a6-751e-9e19-4da75293f5b9
 title: Appearance
-ord: 54
+ord: 12
 tags: ["module"]
 fields:
   {
@@ -14,6 +14,7 @@ fields:
       }
     ],
     "id": "appearance",
+    "kind": "product",
     "order": [
       [
         "contract/wire/"

@@ -64,18 +64,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/keys/Keymap.svelte.ts#KeyRun",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/keys/Keymap.svelte.ts#KeyBinding",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/keys/Keymap.svelte.ts#Modifiers",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/mobile/Tabs.svelte#Tab",
           "owner": "5a3bed29"
         },
@@ -657,10 +645,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/executions/terminal/Keymap.ts#LayoutMapLike",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/executions/terminal/Keymap.ts#TerminalActTag",
           "owner": "5a3bed29"
         },
         {
@@ -2053,10 +2037,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/shared/Theme.svelte.ts#THEME_KEY",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/shared/chordSpelling.ts#SpelledChord",
           "owner": "5a3bed29"
         },
         {
@@ -8658,18 +8638,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#dictationKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#globalDictation",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#globalDictationKey",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/hearing.ts#unknownRecognition",
           "owner": "5a3bed29"
         },
@@ -14218,10 +14186,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/credential-file/src/fileFacts.ts#FileStatFailed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/desktop-host/src/QuickHideShortcut.ts#QuickHideShortcutOptions",
           "owner": "5a3bed29"
         },
         {

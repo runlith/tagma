@@ -115,7 +115,7 @@ All of it goes through the SDK ([[5067fa15]]).
 
 It is a field and not a new actor kind. A plugin and another outside program pass the same `external` gate, and differ only in the checks below. A new kind would add a case to every switch on `actor.kind`, with nothing different in any of them.
 
-**Projects.** A plugin's call placed in a project refuses `plugin-not-enabled` unless the plugin runs there (`enablingIn`, `plugins/enabling.ts`). A machine-placed call refuses unless `plugin-host` hosts the plugin: its supervisor reconciles every plugin enabled anywhere into a slot (`plugin-host/layer.ts`).
+**Projects.** A plugin's call placed in a project refuses `plugin-not-enabled` unless the plugin runs there (`EnabledPlugins.held`, read in `invocation/admission/plugin.ts`). A machine-placed call refuses unless `plugin-host` hosts the plugin: its supervisor reconciles every plugin enabled anywhere into a slot (`plugin-host/layer.ts`).
 - `invocation` asks `plugins` and `plugin-host` directly. It already sits above both through `threads`, so these are new relations on its card, not ports.
 - Admission reads only the enabled set, never a plugin's directory: `EnabledPlugins.of` reads directories and stays off this path.
 - This makes the scope table of [[d2b5f488]] true at the door. It is the meaning of "off here", not a guard.
@@ -169,7 +169,7 @@ A plugin's process acts and reacts; a person looks through a view. The process t
 **Views see threads through the window.**
 - **What a thread does now:** `tagma/thread`, unchanged. Presence serves any set of threads over one shared subscription.
 - **One thread's transcript:** the new bridge methods `transcript {threadId}`, `transcript/older` and `transcript/unwatch`, declared by `views` beside `thread`.
-  - **Served by the window,** from the thread's chat session, opened through `ThreadChats` as a pane's is. One pure projection in `plugin-views` maps the chat kit's folded entries, never the wire events, so no second fold exists (rule 51c66cb6).
+  - **Served by the window,** from a chat session of its own, opened through `ThreadChats` as a pane's is, not shared with a pane on the same thread. One pure projection in `plugin-views` maps the chat fold's entries and the changes it reports since a revision, never the wire events, so no second fold exists (rule 51c66cb6).
   - **Events:** an initial page `{entries, more}`; then `entry` when one is added or changes; `removed`, for a withdrawal or a rewind; and `tail`, for the assistant's text and the tool calls in flight.
   - **An entry** is `{id, runId, role: user | assistant | tool | question | notice, sender?, text?, tool?: {name, state, input, output?}, question?: {id, prompts, answered}}`.
   - **Its schema** is declared by `threads` (`threads/contract/wire/`), the thread's owner. The bridge in this step and `useTagma().transcript(id)` of `/ui` in step 5 therefore carry one shape.
@@ -268,7 +268,7 @@ view ─ its own view tools ─→ process ─→ POST /api/op
 
 Each check goes through its real caller's door: the SDK's client over `/api/op` for a process, the bridge from a mounted view, the composer for a slash command (rule 571311f8).
 
-**Step 4 of [[d2b5f488]]: depth 1.**
+**Step 4 of [[d2b5f488]]: depth 1.** Built; listing's section and rail entry wait on step 5's module host ([[96ba6027]]), so until then the card lists a plugin's threads.
 1. **Callers and ownership.**
    - A plugin's call naming a project where it is off refuses `plugin-not-enabled`.
    - A thread it creates carries `bindings.plugin` from the caller, and a `plugin` binding in the input refuses.
@@ -297,11 +297,6 @@ The window of four threads on four providers is step 10, and stays in [[d2b5f488
 ## Not established
 
 Reasoned from the code, not run or read through:
-- that `ThreadChats` shares one subscription between a view's transcript and a pane on the same thread, which is reasoned from its per-project `ChatConnection`;
-- that the chat kit's session tells which entries changed; if it hands only the whole list, the projection maps one bounded page per change;
-- that the kit treats an approver as opaque everywhere — the matching of `answer_approval`, rerouting, the question entry's display — beyond `Approvers.ts` and `threads/approvers.ts`, which were read;
-- how a turn with an `external` sender is framed to the model; the framing of a thread's sender (`senderAddress`, `inboxItems.ts`) was read, the rest of the render was not;
-- that `enablingIn` costs a cached settings read on every call, and that the machine-call check can read the supervisor's slots without walking every project, as `PluginHost.pending` does through `HostedPlugins.roots`;
 - that `Conversation` draws correctly in a seat without a pane, reasoned from `ThreadSlot`'s arguments.
 
 Not measured: the latency that a process start adds to a hook on an idle plugin.
