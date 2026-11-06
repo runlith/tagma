@@ -10,7 +10,8 @@ fields:
         "at": "."
       }
     ],
-    "id": "app-shortcuts"
+    "id": "app-shortcuts",
+    "kind": "product"
   }
 edges:
   - kind: imports
