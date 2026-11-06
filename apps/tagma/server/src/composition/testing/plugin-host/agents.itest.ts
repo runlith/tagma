@@ -5,7 +5,7 @@ import { layer } from '@runlith/effect-test';
 import type { LLMEvent } from '@runlith/llm/schema/events';
 import { Clock, Context, Data, Deferred, Effect, Fiber, FileSystem, Layer, Schedule, Stream } from 'effect';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
-import { manifestText, writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
+import { entryText, manifestText, PROCESS_ENTRY, writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { PluginHost } from '../../../plugin-host/contract/service/supervision.js';
 import { fixtureEntries } from '../../../plugin-host/testing/tools.js';
 import { Settings } from '../../../settings/contract/service/values.js';
@@ -185,6 +185,7 @@ layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       yield* until(Effect.sync(() => toolsOf.has(runId)));
 
       const held = yield* Effect.forkChild(host.call('fixture', 'hold', {}, {}));
+      yield* files.writeFileString(join(plugin, PROCESS_ENTRY), `${entryText(FIXTURE)}\n`);
       yield* files.writeFileString(join(plugin, MANIFEST), manifestText(folder('Fixture again')));
       yield* until(Effect.sync(() => host.title('fixture') === 'Fixture again'));
 
