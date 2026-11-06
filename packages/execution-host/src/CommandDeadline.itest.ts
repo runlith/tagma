@@ -750,6 +750,7 @@ layer(fixture)("a command's deadline", (it) => {
           admission: { ...admissionOf(), limits: { executionMs: 60_000, origin: 'default', foregroundMs: 600_000 } },
         });
         yield* running(witness);
+        yield* armed(open, execution);
         expect((yield* open.hostCommands.command(execution))?.deadline).toMatchObject({
           foregroundMs: 600_000,
           origin: 'default',
