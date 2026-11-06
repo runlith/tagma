@@ -78,6 +78,13 @@ jobs:
           path: packages/execution-host/native/target
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/execution-host/native/Cargo.lock', 'packages/execution-host/native/**/Cargo.toml', 'packages/execution-host/native/**/*.rs') }}
           restore-keys: native-${{ runner.os }}-${{ runner.arch }}-
+      - if: runner.os == 'macOS' && (inputs.script == 'test:integration' || inputs.script == 'test:e2e')
+        id: whisper
+        uses: actions/cache/restore@v6
+        with:
+          path: packages/speech-whisper/native/.build/whisper.artifact
+          key: whisper-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/speech-whisper/native/**', 'packages/speech-whisper/scripts/**', 'packages/speech-whisper/src/artifact.ts') }}
+          restore-keys: whisper-${{ runner.os }}-${{ runner.arch }}-
       - if: (inputs.script == 'test:integration' || contains(inputs.lanes, 'chromium')) && !(runner.os == 'Linux' && runner.arch == 'ARM64')
         uses: actions/cache@v6
         with:
@@ -149,6 +156,11 @@ jobs:
             display=(xvfb-run -a)
           fi
           "${display[@]}" bun run test:all --stream --script '${{ inputs.script }}' --shard ${{ matrix.shard }}/${{ inputs.shards }} ${PACKAGE:+--package "$PACKAGE"} ${TEST_PATTERN:+--test-name-pattern "$TEST_PATTERN"} --report "$RUNNER_TEMP/report/report.json"
+      - if: ${{ !cancelled() && steps.whisper.outcome == 'success' && steps.whisper.outputs.cache-hit != 'true' && hashFiles('packages/speech-whisper/native/.build/whisper.artifact') != '' }}
+        uses: actions/cache/save@v6
+        with:
+          path: packages/speech-whisper/native/.build/whisper.artifact
+          key: ${{ steps.whisper.outputs.cache-primary-key }}
       - if: ${{ !cancelled() && inputs.test-pattern == '' }}
         name: this shard's timings
         run: bun scripts/change/timings.ts collect "$RUNNER_TEMP/timings"
