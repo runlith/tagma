@@ -33,7 +33,7 @@ const TYPESCRIPT = /\.ts$/u;
 
 type Located = { readonly message: string; readonly start?: { readonly line: number; readonly column: number } | null };
 
-const messageOf = (error: unknown): string => {
+export const messageOf = (error: unknown): string => {
   const { message, start } = error as Located;
   if (typeof message !== 'string') return String(error);
   return start === undefined || start === null ? message : `${message} (${start.line}:${start.column + 1})`;

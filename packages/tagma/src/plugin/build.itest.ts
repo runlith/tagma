@@ -227,7 +227,7 @@ const SIDE = [
   "  import logo from './logo.png';",
   "  import { counter } from './counter.svelte';",
   '</script>',
-  '<img src={logo} alt="" /><Frame src="https://meet.example" media />{counter.n}',
+  '<img src={logo} alt="" /><Frame src="https://meet.example" title="Meet" media />{counter.n}',
   '',
 ].join('\n');
 
@@ -258,7 +258,6 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 
 const viewsFolder = async () => {
   const { root, plugin } = await folder('board');
-  await symlink(join(sdk, 'node_modules/svelte'), join(plugin, 'node_modules/svelte'));
   await mkdir(join(plugin, 'node_modules/glyphs/icons'), { recursive: true });
   await writeFile(join(plugin, 'node_modules/glyphs/package.json'), JSON.stringify({ name: 'glyphs', version: '1.2.3' }));
   await writeFile(join(plugin, 'node_modules/glyphs/icons/star.svelte'), '<svg viewBox="0 0 1 1"><path d="M0 0" /></svg>\n');
@@ -360,7 +359,7 @@ const VIEW_REFUSED = [
   {
     file: 'ui/compiled.js',
     text: "import { push } from 'svelte/internal/client';\nexport const compiled = push;\n",
-    import: "  import { compiled } from './compiled';",
+    import: "  import './compiled';",
     reason: "ui/compiled.js imports svelte/internal/client, which only Svelte's compiler writes",
   },
   {
@@ -407,6 +406,92 @@ test('a view the window could not load stops the build with the reason, naming t
       expect(built.out).toContain(refused.reason);
       expect(await Bun.file(join(plugin, 'tagma-plugin.json')).exists()).toBe(false);
       await rm(join(plugin, refused.file));
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const TYPED_DEFINITION = [
+  "import { definePlugin, tool, view } from '@runlith/tagma/plugin';",
+  "import { z } from 'zod';",
+  '',
+  'export default definePlugin({',
+  "  id: 'board',",
+  "  title: 'Board',",
+  '  tools: {',
+  "    peek: tool({ description: 'Peek.', audience: 'view', input: z.object({ id: z.string() }), run: async ({ id }) => ({ seen: id }) }),",
+  "    hello: tool({ description: 'Hello.', audience: 'agents', run: async () => 'hello' }),",
+  '  },',
+  "  views: { board: view('./ui/Board.svelte') },",
+  "  surfaces: [{ view: 'board', title: 'Board' }],",
+  '});',
+  '',
+].join('\n');
+
+const FRAME = '<Frame src="https://meet.example" title="Meet" height={200} fill media />';
+
+const TYPED_BOARD = (body: string): string =>
+  [
+    '<script lang="ts">',
+    "  import { Button, Frame, useTagma } from '@runlith/tagma/ui';",
+    "  import type plugin from '../plugin';",
+    '  const tagma = useTagma<typeof plugin>();',
+    body,
+    '</script>',
+    '<Button variant="outline" onclick={() => void tagma.tools.peek({ id: "a" })}>peek</Button>',
+    FRAME,
+    '',
+  ].join('\n');
+
+const SDK_ONLY_PLUGIN = JSON.stringify({
+  name: '@runlith/tagma',
+  type: 'module',
+  exports: {
+    './plugin': { types: './src/plugin/plugin.ts', default: './src/plugin/plugin.ts' },
+    './testing': { types: './src/plugin/testing.ts', default: './src/plugin/testing.ts' },
+  },
+});
+
+const typedFolder = async () => {
+  const { root, plugin } = await folder('board');
+  const stub = join(plugin, 'node_modules/@runlith/tagma');
+  await rm(stub);
+  await mkdir(stub, { recursive: true });
+  await writeFile(join(stub, 'package.json'), SDK_ONLY_PLUGIN);
+  await symlink(join(sdk, 'src'), join(stub, 'src'));
+  await mkdir(join(plugin, 'ui'), { recursive: true });
+  await writeFile(join(plugin, 'plugin.ts'), TYPED_DEFINITION);
+  return { root, plugin };
+};
+
+const MISUSES = [
+  { body: '', reason: null },
+  { body: '  void tagma.tools.hello();', reason: "Property 'hello' does not exist" },
+] as const;
+
+test('a Svelte view is type-checked against the SDK’s own @runlith/tagma/ui and svelte, whatever its folder holds: typed tools, component props, and the file and place of a misuse', async () => {
+  const { root, plugin } = await typedFolder();
+  try {
+    expect(await Bun.file(join(plugin, 'node_modules/svelte')).exists()).toBe(false);
+    for (const { body, reason } of MISUSES) {
+      await writeFile(join(plugin, 'ui/Board.svelte'), TYPED_BOARD(body));
+      const built = await run([process.execPath, cli, 'build', plugin], root);
+      if (reason === null) {
+        expect(built).toMatchObject({ code: 0 });
+        continue;
+      }
+      expect(built.code).toBe(1);
+      expect(built.out).toContain('The build stopped at types');
+      expect(built.out).toMatch(/ui\/Board\.svelte\(\d+,\d+\): error TS\d+/u);
+      expect(built.out).toContain(reason);
+    }
+    const props = ['<Button variant="nope">x</Button>', '<Frame src="https://meet.example" title="Meet" sandbox="" />'];
+    for (const markup of props) {
+      await writeFile(join(plugin, 'ui/Board.svelte'), TYPED_BOARD('').replace(FRAME, markup));
+      const built = await run([process.execPath, cli, 'build', plugin], root);
+      expect(built.code).toBe(1);
+      expect(built.out).toMatch(/ui\/Board\.svelte\(\d+,\d+\): error TS\d+/u);
     }
   } finally {
     await rm(root, { recursive: true, force: true });

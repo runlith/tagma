@@ -31,7 +31,7 @@ if (previousHost !== hostText) await writeFile(hostEntry, hostText);
 const manifest = manifests.get('@runlith/tagma');
 type Conditions = { readonly types: string; readonly browser?: string; readonly default: string | null };
 const CREATE = './adapter/create';
-const PLUGIN_DOOR = /^\.\/(?:plugin(?:\/|$)|testing$)/u;
+const PLUGIN_DOOR = /^\.\/(?:plugin(?:\/|$)|testing$|ui$)/u;
 const CLI = join(packageRoot, manifest.bin['tagma-plugin']);
 const doors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
   .filter(([key]) => (key.startsWith('./adapter/') && key !== CREATE) || PLUGIN_DOOR.test(key))
@@ -39,7 +39,9 @@ const doors = Object.entries(manifest.exports as Readonly<Record<string, Conditi
 const adapterDoors = doors.filter((door) => door.key.startsWith('./adapter/'));
 const pluginDoors = doors.filter((door) => PLUGIN_DOOR.test(door.key));
 const PLUGIN_SOURCES = join(packageRoot, 'src/plugin');
-const builtFile = (source: string): string => `./${dirname(source) === PLUGIN_SOURCES ? 'plugin' : 'adapter'}/${basename(source, '.ts')}`;
+const isDeclaration = (source: string): boolean => source.endsWith('.d.ts');
+const builtFile = (source: string): string =>
+  `./${dirname(source) === PLUGIN_SOURCES ? 'plugin' : 'adapter'}/${basename(source).replace(/(?:\.d)?\.ts$/u, '')}`;
 const ruleDoors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
   .filter(([key]) => key === './rules' || key.startsWith('./rules/'))
   .map(([key, conditions]) => ({ key, source: join(packageRoot, conditions.types) }));
@@ -130,7 +132,7 @@ const internalName = (file: string): string => {
   names.set(file, name);
   return name;
 };
-const pending = [...declarations.keys()];
+const pending = [...new Set([...declarations.keys(), ...roots])];
 const queued = new Set(pending);
 const rewritten = new Map<string, string>();
 for (let index = 0; index < pending.length; index++) {
@@ -287,7 +289,7 @@ const runtime = await Bun.build({
 });
 if (!runtime.success) throw new AggregateError(runtime.logs, 'The author kit did not build');
 const plugins = await Bun.build({
-  entrypoints: [...pluginDoors.map((door) => door.source), CLI],
+  entrypoints: [...pluginDoors.filter((door) => !isDeclaration(door.source)).map((door) => door.source), CLI],
   root: join(packageRoot, 'src'),
   outdir: out,
   naming: { entry: '[dir]/[name].js', chunk: 'plugin/[name]-[hash].js' },
@@ -324,6 +326,7 @@ await writeFile(
         ...Object.fromEntries(
           doors.map(({ key, conditions, source }) => {
             const file = builtFile(source);
+            if (isDeclaration(source)) return [key, { types: `${file}.d.ts` }];
             return [
               key,
               {

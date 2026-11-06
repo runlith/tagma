@@ -115,6 +115,10 @@
       "types": "./src/plugin/template.ts",
       "default": "./src/plugin/template.ts"
     },
+    "./ui": {
+      "types": "./src/plugin/ui.generated.d.ts",
+      "default": "./src/plugin/ui.generated.d.ts"
+    },
     "./testing": {
       "types": "./src/plugin/testing.ts",
       "bun": "./src/plugin/testing.ts",

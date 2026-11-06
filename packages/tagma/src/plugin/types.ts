@@ -2,9 +2,16 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sveltePackage from 'svelte/package.json' with { type: 'json' };
 import ts from 'typescript';
+import { messageOf } from './bundling.js';
 import { BuildFailed } from './failure.js';
 
 const SHIMS = ['svelte2tsx/svelte-shims-v4.d.ts', 'svelte2tsx/svelte-jsx-v4.d.ts'];
+
+const SDK_FILE = fileURLToPath(import.meta.url);
+
+const UI_DOOR = '@runlith/tagma/ui';
+
+const SVELTE = /^svelte(?:\/|$)/u;
 
 const AMBIENT = 'tagma-svelte.d.ts';
 
@@ -71,7 +78,12 @@ export const typeCheck = async (directory: string): Promise<void> => {
   if (read.error !== undefined) throw new BuildFailed('types', wording(read.error));
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, directory, undefined, path);
   const svelteRoots = ts.sys.readDirectory(directory, ['.svelte'], ['**/node_modules', '**/dist'], ['**/*.svelte']);
-  const options: ts.CompilerOptions = { ...parsed.options, noEmit: true, allowNonTsExtensions: true };
+  const options: ts.CompilerOptions = {
+    ...parsed.options,
+    noEmit: true,
+    allowNonTsExtensions: true,
+    noUncheckedSideEffectImports: false,
+  };
   const host = ts.createCompilerHost(options);
   const maps = new Map<string, Mapped>();
   if (svelteRoots.length > 0) {
@@ -89,23 +101,38 @@ export const typeCheck = async (directory: string): Promise<void> => {
       if (!file.endsWith('.svelte')) return files(file, language, onError, shouldCreate);
       const source = ts.sys.readFile(file);
       if (source === undefined) return undefined;
-      const { code, map } = svelte2tsx(source, {
-        filename: file,
-        isTsFile: /<script[^>]*\blang\s*=\s*["']ts["']/u.test(source),
-        mode: 'ts',
-        version: sveltePackage.version,
-        emitOnTemplateError: false,
-      });
-      maps.set(file, { mappings: decoded((map as unknown as { readonly mappings: string }).mappings) });
-      return ts.createSourceFile(file, code, language, true, ts.ScriptKind.TSX);
+      try {
+        const { code, map } = svelte2tsx(source, {
+          filename: file,
+          isTsFile: /<script[^>]*\blang\s*=\s*["']ts["']/u.test(source),
+          mode: 'ts',
+          version: sveltePackage.version,
+          emitOnTemplateError: false,
+        });
+        maps.set(file, { mappings: decoded((map as unknown as { readonly mappings: string }).mappings) });
+        return ts.createSourceFile(file, code, language, true, ts.ScriptKind.TSX);
+      } catch (error) {
+        if ((error as { readonly name?: unknown }).name !== 'CompileError') throw error;
+        throw new BuildFailed('views', `${relative(directory, file)}: ${messageOf(error)}`);
+      }
     };
+    const own: ts.CompilerOptions = { moduleResolution: ts.ModuleResolutionKind.Bundler };
     host.resolveModuleNameLiterals = (literals, containing, _redirected, compiler) =>
       literals.map((literal) => {
+        if (literal.text === UI_DOOR || SVELTE.test(literal.text))
+          return ts.resolveModuleName(literal.text, SDK_FILE, { ...compiler, ...own }, host);
         if (!literal.text.endsWith('.svelte')) return ts.resolveModuleName(literal.text, containing, compiler, host);
         const target = literal.text.startsWith('.') || isAbsolute(literal.text) ? resolve(dirname(containing), literal.text) : null;
         if (target !== null && inside(directory, target) && ts.sys.fileExists(target))
           return { resolvedModule: { resolvedFileName: target, extension: ts.Extension.Tsx, isExternalLibraryImport: false } };
         return target === null ? { resolvedModule: undefined } : ts.resolveModuleName(literal.text, containing, compiler, host);
+      });
+    host.resolveTypeReferenceDirectiveReferences = (references, containing, redirected, compiler) =>
+      references.map((reference) => {
+        const name = typeof reference === 'string' ? reference : reference.fileName;
+        return name === 'svelte'
+          ? ts.resolveTypeReferenceDirective(name, SDK_FILE, { ...compiler, ...own }, host, redirected)
+          : ts.resolveTypeReferenceDirective(name, containing, compiler, host, redirected);
       });
     svelteRoots.push(ambient, ...SHIMS.map((shim) => fileURLToPath(import.meta.resolve(shim))));
   }

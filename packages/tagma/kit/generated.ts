@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { signatureOf } from '@tagma/inspection/signature';
 import { Schema } from 'effect';
 import ts from 'typescript';
+import { FACADE, uiText } from './ui.js';
 
 const root = resolve(import.meta.dir, '../../..');
 const server = join(root, 'apps/tagma/server/src');
@@ -20,6 +21,7 @@ const GENERATED = {
   checks: join(plugin, 'checks.generated.js'),
   checksTypes: join(plugin, 'checks.generated.d.ts'),
   operations: join(plugin, 'operations.generated.ts'),
+  ui: FACADE,
 } as const;
 
 type Located = { readonly name: string; readonly file: string; readonly binding: string };
@@ -268,7 +270,8 @@ const canonicalTs = (text: string): string => {
   };
   visit(ts.createSourceFile('generated.ts', text, ts.ScriptTarget.Latest, true));
   const docs = [...text.matchAll(/\/\*\*[\s\S]*?\*\//gu)].map((doc) => doc[0].replace(/\s+/gu, ' '));
-  return [...parts, ...docs].join(' ');
+  const directives = [...text.matchAll(/^\/\/\/.*$/gmu)].map((one) => one[0]);
+  return [...parts, ...docs, ...directives].join(' ');
 };
 
 const sameGenerated = (written: string, expected: string): boolean => canonicalTs(written) === canonicalTs(expected);
@@ -280,6 +283,7 @@ export const syncGenerated = async ({ write }: { readonly write: boolean }): Pro
     [GENERATED.checks, await checksText(faces)],
     [GENERATED.checksTypes, CHECKS_TYPES],
     [GENERATED.operations, await operationsText()],
+    [GENERATED.ui, uiText()],
   ];
   const changed: string[] = [];
   for (const [path, text] of texts) {
