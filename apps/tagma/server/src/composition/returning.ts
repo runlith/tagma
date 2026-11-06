@@ -1,9 +1,10 @@
 import { basename, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Clock, Context, Data, Deferred, Effect, Exit, Layer, Result } from 'effect';
+import { Clock, Context, Data, Deferred, Effect, Exit, Layer, Result, type Scope } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { idleStates } from '../executions/host/idle.js';
 import { holdingProcess } from '../installation/closure/leases.js';
+import type { InstallHeld, MoveFailed } from '../installation/closure/moves.js';
 import type { PendingUnreadable } from '../installation/closure/pending.js';
 import { releaseAt } from '../installation/closure/manifests.js';
 import { Succession, type SuccessorLaunch } from '../installation/contract/service/succession.js';
@@ -21,6 +22,7 @@ import {
   journalsMarked,
   type ReturnPlace,
   stepBackAsked,
+  type StepBackFailed,
   stepBackCarried,
   stepBackDecided,
   stepBackHanded,
@@ -86,7 +88,9 @@ export const stepBackSettledAt = (installRoot: string, release: string, storePat
     ),
   );
 
-export const returnedBeforeServing = Effect.fn('composition.returning')(function* (build: Build) {
+export const returnedBeforeServing = Effect.fn('composition.returning')(function* (
+  build: Build,
+): Effect.fn.Return<void, InstallHeld | MoveFailed | PendingUnreadable | StepBackFailed, Scope.Scope> {
   const store = databasePathIn(build.channel, process.env);
   const installRoot = installationRootIn(build.channel, process.env);
   if (Result.isFailure(store) || Result.isFailure(installRoot)) return;

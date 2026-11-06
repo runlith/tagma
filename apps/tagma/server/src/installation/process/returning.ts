@@ -35,7 +35,7 @@ import { STEP_BACK_SUFFIX, type StepBack } from '../contract/wire/stepBack.js';
 
 export type StoreFile = { readonly path: string; readonly chain: string; readonly fills?: ChainFills | undefined };
 
-class StepBackFailed extends Data.TaggedError('StepBackFailed')<{ readonly detail: string; readonly words?: Words }> {
+export class StepBackFailed extends Data.TaggedError('StepBackFailed')<{ readonly detail: string; readonly words?: Words }> {
   override get message(): string {
     return this.detail;
   }
