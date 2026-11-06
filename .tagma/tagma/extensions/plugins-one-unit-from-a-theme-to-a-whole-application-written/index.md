@@ -212,7 +212,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
 
 **Windows and shortcuts.** Any window Tagma opens loads Tagma's client, so a plugin's window shows real threads, as the main window does.
 - **Window entries.** A plugin declares windows: plain, frameless, or always on top. On the web, where there is no shell, they open as floating panels.
-- **Shortcut entries.** A plugin declares shortcuts that open one of its sections or panes, or run one of its actions, either local or global ([[ba083eb0]]).
+- **Shortcut entries.** A plugin declares shortcuts that open one of its sections or panes, or run one of its actions, either local or global; a global one works in every app only once the person allows it on the plugin's card ([[ba083eb0]]).
 - **The shell grants them.** It already holds frameless, always-on-top windows and global shortcuts for its own dictation pill and quick hide (`apps/tagma/desktop/src/main.ts`, `projectWindows.ts`). It grants the declared entries, never Electron itself.
 - **Conflicts.** A shortcut is a proposal. One table over every action resolves it, in the window's keymap `app-keys`: the person's own keys win, then Tagma's, then plugins in install order. A proposal on a taken chord stays unbound and is named on the plugin's card, with **Rebind** in place; the plugin itself is never refused for it.
 

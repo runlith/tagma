@@ -38,9 +38,13 @@ Child of [[d2b5f488]], detailing its step 3 for shortcuts and actions. Read from
 
 ## Outcome
 
-A person presses a key and something he can name happens, wherever the key came from: Tagma, a plugin, or himself. One screen lists every key, says what each one does and what took a key from whom, and changes any of them in one act. Nothing is lost silently: a key that cannot work says why on its row and on its plugin's card, with **Rebind** in place. A key marked global works in every app on the machine while Tagma runs.
+A person presses a key and something he can name happens, wherever the key came from: Tagma, a plugin, or himself. One screen lists every key, says what each one does and what took a key from whom, and changes any of them in one act. Nothing is lost silently: a key that cannot work says why on its row and on its plugin's card, with **Rebind** in place. A key marked global works in every app on the machine while Tagma runs. A plugin's key works in every app only once the person allows it with one click on the plugin's card; until then it works inside Tagma.
 
 The person never types a chord in text and never reads a keymap file: he presses the chord he wants.
+
+## Decided with the operator on 2026-11-06
+
+A plugin's global shortcut is off until the person turns it on with one click on the plugin's card; its local shortcuts work as soon as the plugin is enabled. A global chord takes its keys from every app on the machine, and a person who never reads code would not tie a chord that broke in another app to a Tagma plugin.
 
 ## What stands
 
@@ -83,7 +87,7 @@ The effective table comes from one pure function, `resolveKeys`, over four layer
    The layer is a port, `ShellKeys`, that `app-keys` declares and composition fills per host (rule 6f758080). The desktop's list is declared by main, beside the menu it builds, and read through the bridge.
 2. **The person**: `shortcuts.bindings`.
 3. **Tagma**: the defaults of Tagma's actions.
-4. **Plugins**: their proposed chords, plugin by plugin, in the order of the machine's `plugins.installed` list.
+4. **Plugins**: their proposed chords, plugin by plugin, in the order of the machine's `plugins.installed` list. This layer yields window chords only: a chord a plugin asks to have in every app becomes global through the person's layer, once he allows it.
 
 **Holding and displacing.** A chord taken in a layer is held there. The same chord proposed lower, in the same place, is displaced: it is left unbound and reported with its holder. A place is the window or one region; a global chord shares every place, because the OS catches it before any window.
 
@@ -117,6 +121,12 @@ The effective table comes from one pure function, `resolveKeys`, over four layer
   - An action listed with no chord means he removed its keys.
   - An unlisted action keeps its defaults.
   - Entries for a removed plugin's actions stay, and apply again if the plugin returns.
+- **A plugin's global is kept as the person's own binding.**
+  - **Work in every app**, on the plugin's card or the action's row, writes his entry for the action: the plugin's chords, with `global` on the one it asked for. No second key records the grant: the row menu's **Work in every app** already writes this choice for any action, and a separate list would hold it twice.
+  - The entry carries the chord, so a plugin update that asks for another chord never goes global unasked: the action keeps the chord he allowed.
+  - **Only in Tagma** clears `global`, and an entry left equal to the action's defaults is dropped.
+  - Allowing a global follows the capture's rule for a taken chord. A global shares every place, so when it would take a chord another action holds anywhere (a terminal's, say), the line asks first, with **Use here** and **Cancel**.
+  - The grant stays with his entries, so a plugin he removes and brings back keeps it.
 - **Writing and reading.** It is written through `write_setting_layer` with `scope: user`, like every other settings write. Every window learns of a change through `settings.watch {keys}`, a feed of `settings` that the themes spec [[ca575591]] defines and this one shares: the effective values of keys whose only settable scope is `user`, then one event per change, fed by the existing `SettingChanges` port (`settings/contract/service/changes.ts`). The shortcuts feature holds its own subscription through `Live` and decodes `shortcuts.bindings` with the key's own schema. The catalog read (`SettingsRepo.catalog`) is a plain query and is not live.
 - **Dictation's settings go.** `speech.dictation.key`, `speech.dictation.global` and `speech.dictation.globalKey` are removed (rule 0528876d). Dictation is the `dictation.hold` action, and its window key and global key are the person's bindings like any other.
 
@@ -131,9 +141,9 @@ A binding marked global is registered by the shell, never by its owner.
   - with no window open, main opens one and delivers the action once that window stands on the surface.
 - **Which set.** Every window computes the same set, and main takes the newest publication. Main keeps the last set when windows close, so a global works while Tagma runs with no window.
 - **The registrar.** `QuickHideShortcut` gives way to one registrar in `desktop-host`, `GlobalShortcuts`, which registers a set and reports refusals instead of logging them.
-- **Plugins** never touch Electron. They propose, the table decides, and the shell registers.
+- **Plugins** never touch Electron. They propose, the person allows a global, the table decides, and the shell registers. A plugin's chord the person has not allowed in every app is never in the global set the window publishes.
 - **On the web** there is no global. A global binding acts while the tab is focused, and the row says so.
-- **Limits.** A region action is never global. A plugin's shortcuts are window actions.
+- **Limits.** A region action is never global, and a plugin's actions never act in a region.
 
 ### Which keys win inside a window
 
@@ -164,13 +174,14 @@ A binding marked global is registered by the shell, never by its owner.
 
 **`shortcuts`**: `[{keys, action, global?}]`, face title "Shortcuts".
 - `action` names one of its `actions`, `section:<view>` of its `surfaces`, or `pane:<view>` of its `panes`.
+- `global` asks for every app. It is a request: the chord works inside Tagma until the person allows it.
 - `refuses` an unknown name and a chord listed twice in the plugin; the platform schema checks the chord.
 - A chord is no claim. Claims refuse a plugin's whole publication (`plugins/points.ts`), and a proposal is never a reason to refuse a plugin.
 
 **The feed `views.actions`** is machine-wide, for the operator. It lists every published plugin in `plugins.installed` order, with:
 - the projects that enable it (`HostedPlugins.roots`);
 - its actions: its own, and the open-section and open-pane acts of its sections and panes, with their titles;
-- each action's proposed chords.
+- each action's proposed chords, those asked for every app marked.
 
 It is one feed, because shortcuts belong to the person in every window (the scope table of [[d2b5f488]]).
 
@@ -213,13 +224,15 @@ A press answers at once (rule c57e2aa9), so it asks nothing.
   - a displaced proposal: the proposed chord dimmed, with "taken by Find or ask";
   - a global the OS refused: "Another app holds ⌥⌘G";
   - a hold global without Accessibility: the speech card's sentence, with **Open System Settings**;
+  - on desktop, a plugin's chord asked for every app and not yet allowed: "Offered in every app", with **Work in every app**;
   - in a browser tab, a chord the browser keeps: "Your browser keeps this chord";
   - in a browser tab, a global row: "Works only while this tab is focused".
-- **Region rows** say where they act ("In a terminal"). That is how shadowing reads.
+- **Region rows** say where they act ("In a terminal"), and global rows say "In every app". That is how shadowing and a grant read.
 
 **The plugin card** (`app-plugins`):
 - It names what the plugin brings by the face titles: "Shortcuts" and "Actions you run from the palette or a shortcut".
 - Each displaced or refused shortcut stands as one sentence with **Rebind**, which opens the Shortcuts section at that action, already in capture.
+- On desktop, each chord the plugin asks to have in every app stands as one sentence with its one act. Not yet allowed: "⌥⌘G opens Boards in Tagma; the plugin offers it in every app." with **Work in every app**. Allowed: "⌥⌘G opens Boards in every app." with **Only in Tagma**. A browser tab, which has no global, shows neither.
 
 **Every shown chord comes from the table.** Each tooltip, menu tail and hint that shows a chord reads it by action id (`Keymap.keysOf(id)`). The palette's action rows show their chord in the tail (the menu grammar's `keys`, explanation 88d717d0), so the person learns a key where he runs its action.
 
@@ -249,11 +262,11 @@ A press answers at once (rule c57e2aa9), so it asks nothing.
   - it reads `Actions`, `shortcuts.bindings` through `settings.watch`, and `ShellKeys`;
   - it computes the table with `resolveKeys` and hands it to `Keymap`;
   - it owns the Shortcuts section and the chord control;
-  - it answers `displaced(plugin)` for the plugin card.
+  - it answers the plugin card: `displaced(plugin)`, and `globals(plugin)` — the chords the plugin asks to have in every app, each allowed or not.
 - **`executions`:** the terminal's acts become actions; `TerminalKeymap` keeps the encodings and the policy.
 - **`speech`:** the `dictation.hold` action. `dictation/Global.svelte.ts` arms the desktop with the global chord the table gives.
 - **`plugin-views`:** contributes plugin actions from the feed.
-- **`app-plugins`:** the card's lines with **Rebind**.
+- **`app-plugins`:** the card's lines with **Rebind**, **Work in every app** and **Only in Tagma**.
 - **Desktop:**
   - `GlobalShortcuts` in `desktop-host`;
   - main's global set, and its answer for each chord;
@@ -276,7 +289,7 @@ A press answers at once (rule c57e2aa9), so it asks nothing.
 1. **The mechanism.** The chord grammar and matcher at `platform`; `Actions` with keys; `Keymap` by action id. Tagma's own keys move into the table — the shell's list, the terminal, close and reopen, dictation, hide and show — and chord labels come from the table.
 2. **The person's keys.** `shortcuts.bindings`, `settings.watch`, the Shortcuts section and its conflicts.
 3. **The desktop.** The globals grant, interception where the menu collides, and served frames.
-4. **Plugins.** The `actions` and `shortcuts` points, `views.actions`, `run_plugin_action`, the SDK fields, a stable install order, and the `plugins` skill.
+4. **Plugins.** The `actions` and `shortcuts` points, `views.actions`, `run_plugin_action`, the person's grant of a plugin's global, the SDK fields, a stable install order, and the `plugins` skill.
 
 ## Acceptance
 
@@ -288,7 +301,8 @@ Performer checks, each through the door its real caller uses.
   - a displaced proposal names its holder;
   - a global displaces every local binding on its chord;
   - a region binding shadows a window binding, and no conflict is reported;
-  - a capture that takes a held chord returns the person's layer with the move recorded.
+  - a capture that takes a held chord returns the person's layer with the move recorded;
+  - a plugin's chord asked for every app resolves as a window chord, and as a global once the person's entry allows it.
 - **No double hold.** No two of Tagma's own defaults hold one chord, on any host — macOS, Linux and Windows desktop, and a browser tab — measured against each host's shell list. The test runs over the composed `Actions` point, and it settles ⌘R on macOS desktop, held today by the terminal's rename and the menu's reload.
 - **One matcher.** The terminal's layout cases (`terminal/Keymap.test.ts`) pass against the platform matcher. The desktop's interception judges the same presses the same way, in a unit test over Electron `Input`.
 
@@ -307,6 +321,7 @@ Performer checks, each through the door its real caller uses.
   - an update keeps the rank.
 - **A taken chord.** A plugin's shortcut on ⌘K stays unbound. Its card says what holds the chord, with **Rebind**, and **Rebind** opens the Shortcuts section at that action, in capture.
 - **Where a press acts.** A plugin section's shortcut pressed in a project that does not enable the plugin opens the section in the first project of the project list that does.
+- **A global waits for the person** (an app test that mounts the graph, desktop host). Right after `enable_plugin`, the plugin's local shortcut works. Its chord asked for every app acts inside Tagma and is absent from the global set the window publishes. **Work in every app** on the card writes the person's entry through `write_setting_layer`, and the published set gains the chord; **Only in Tagma** removes it.
 
 **The desktop** (unit tests with Electron's `globalShortcut` mocked, as in `projectWindows.test.ts`):
 - a published global registers;
@@ -314,10 +329,6 @@ Performer checks, each through the door its real caller uses.
 - the set survives the last window closing;
 - a press with no window open opens one and runs the action there;
 - ⌘W is intercepted because the menu holds it, and reaches `tab.close`'s chain.
-
-## Open for the operator
-
-- **A plugin's global shortcut.** Does it work as soon as the plugin is enabled, or only once the person switches it on? A global chord takes that key from every other app on the machine. Recommendation: it works at once, since an agent built the plugin at the person's request, and its card says "works in every app" with one click to make it Tagma-only.
 
 ## Not established
 

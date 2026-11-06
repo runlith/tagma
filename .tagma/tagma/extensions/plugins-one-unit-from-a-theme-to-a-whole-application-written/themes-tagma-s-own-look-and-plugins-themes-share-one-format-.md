@@ -17,7 +17,13 @@ Child of [[d2b5f488]]; details its step 3 for themes. Read from the code at `eb8
 
 ## Outcome
 
-A person changes how Tagma looks by picking a theme and light or dark, and the choice holds in every window and on every device that reaches their Tagma. A theme comes from a plugin: one from a marketplace, or one an agent writes when the person says "make Tagma look like Nord" or "warmer background". Tagma's own look is the first theme, in the same format. Whatever theme is in force, red still means failure, blue a change or waiting on you, green done, amber work, and gold "you are here" (rule bb5ca896: the person never edits a colour by hand or reads a file).
+A person changes how Tagma looks by picking a theme and light or dark, and the choice holds in every window and on every device that reaches their Tagma. Tagma ships one theme, its own look, in the format every other theme uses. Every other theme comes from a plugin: one from a marketplace, or one an agent writes when the person says "make Tagma look like Nord" or "warmer background". Whatever theme is in force, red still means failure, blue a change or waiting on you, green done, amber work, and gold "you are here" (rule bb5ca896: the person never edits a colour by hand or reads a file).
+
+## Decided with the operator on 2026-11-06
+
+- **The theme follows the person.** The theme and light or dark are one choice for every window and device of theirs, kept as `user`-scope settings. On System each device follows its own system setting. The per-browser choice is given up.
+- **Tagma ships only its own theme.** High-contrast, colour-blind-safe and every other look come from plugins.
+- **Geist stays the only typeface.** The person chooses no interface or code font.
 
 ## What a person can change
 
@@ -29,7 +35,7 @@ Decided for all users:
 Left out, and why:
 - **No colour editor.** A custom look is a theme an agent writes on request. Its colours pass the same check as every other theme, and the person reads no values.
 - **No separate code-colour theme.** Code is coloured by roles that stand off the state hues (explanation 412bbac1). A vendor code theme would put keywords back onto red and green, so syntax colours come only from the theme.
-- **No fonts, sizes, radii or density in a theme.** A theme carries colours only. Metrics change every measured row (explanation 8b7128c3) and every layout, and the token rule 55b5437b fixes the sizes. Text size is the window's zoom, which is per window by design (explanation 91b1d2af). The terminal keeps its own font settings.
+- **No fonts, sizes, radii or density in a theme.** A theme carries colours only, and the type stays Geist. Metrics change every measured row (explanation 8b7128c3) and every layout, and the token rule 55b5437b fixes the sizes. Text size is the window's zoom, which is per window by design (explanation 91b1d2af). The terminal keeps its own font settings.
 - **No accent choice.** Gold is the one sign of "you are here". An accent the person picks would either replace it or add a second one.
 
 ## What stands
@@ -90,7 +96,7 @@ The `themes` face's schema carries a filter. It judges every resolved variant, T
 5. **Marks.** Every project and worktree mark has a chroma of at most 0.08. A mark with a chroma of 0.03 or more stands at least 21° from every signal hue (explanations f0e82349, 646a9782).
 6. **Surfaces and text.** Their chroma stays at most half the variant's lowest signal chroma, so a tinted theme such as Nord or Solarized stays, and nothing but a signal reads as one. Tagma's own neutral dark (explanation f671eb5f) is Tagma's choice, not a rule on other themes.
 
-The windows leave room for a theme safe for colour-blind people: done can move toward teal, and failure toward crimson. The filter is the face's own code, so the SDK build gives the author the same reason the install gives (explanation 09039173).
+The windows leave room for a colour-blind-safe theme a plugin brings: done can move toward teal, and failure toward crimson. The filter is the face's own code, so the SDK build gives the author the same reason the install gives (explanation 09039173).
 
 **After an update.** A Tagma update can move a base value and make an installed theme fail. That plugin then reads broken with the reason, and Fix with an agent retunes it ([[5067fa15]], Versions).
 
@@ -113,7 +119,7 @@ Tagma's look becomes data: `appearance/contract/wire/tagma.ts` holds both varian
 - **Resolving the mode.** A theme with one variant shows that variant. Otherwise `appearance.mode`, with `system` read from the device's `prefers-color-scheme`. Every device therefore follows its own system while the person's choice is one.
 - **A theme no longer offered.** Removed, off everywhere, or broken: the window paints Tagma in the resolved mode. The Theme row says the chosen theme is not installed, with **Use Tagma** in place, and the setting stays, so turning the plugin back on restores it (rule ea465bed: the loss is shown, not hidden).
 - **When a theme is offered.** While its plugin is on in any project or for all my projects — the publication rule of explanation 7d2dc40e. **Use** on a theme turns its plugin on for all my projects, when it is on nowhere, and sets `appearance.theme`, as one act. "Off here" leaves the theme while the plugin stays on elsewhere.
-- **Storage moves** from the browser to the server. The old `mode-watcher-mode` key is dropped (rule 0528876d): the first start after the change paints the system mode until the feed answers.
+- **Storage moves** from the browser to the server, so every window and device of the person shows the same choice. The old `mode-watcher-mode` key is dropped (rule 0528876d): the first start after the change paints the system mode until the feed answers.
 
 ## How a theme reaches each place
 
@@ -168,7 +174,7 @@ Following the design skill, the person meets the theme in four places:
 
 - **The SDK field.** `themes` in `definePlugin` ([[5067fa15]]) is typed from the point's schema, through the kit. Each key carries its meaning as its description, so an agent writes a theme from the types: `themes: { nord: { title: 'Nord', dark: { surfaces: { background: '#2e3440' }, signals: { here: '#ebcb8b' } } } }`. A plugin made only of themes runs no process.
 - **The `plugins` skill** (rule 7cb3c1cf) gains the theme: the groups, the check, and setting `appearance.theme` after installing.
-- **Where a person's theme lives.** A theme the person asks for is theirs, not the project's, so it goes among the person's own plugins (`<data>/plugins/<id>/`, [[d2b5f488]]). `create_plugin` must take that place as well as `.tagma-plugins/<id>/`. A project may still ship a theme for its team.
+- **Where a person's theme lives.** A theme the person asks for is theirs, not the project's, so it goes among the person's own plugins (`<data>/plugins/<id>/`, [[d2b5f488]]). `create_plugin` writes there for the person's own plugin, and into `.tagma-plugins/<id>/` for a project's. A project may still ship a theme for its team.
 - **VS Code themes are not read.** Their token colours sit on the state hues and would fail the check. An agent ports one on request, retuning what the check names.
 
 ## Modules and data flow
@@ -233,17 +239,10 @@ Performer checks, each through its real caller's door:
 
 These are rewritten when the code lands:
 - the `tagma-design` skill (where values live) and the `plugins` skill;
-- feature 1727a3f5, which today names `mode-watcher` and says that returning to System clears the choice, while the code writes `system` through Tagma's own `Theme` and paints from `Window.svelte`;
+- feature 1727a3f5, whose Behaviour and Limits describe a per-browser choice of light, dark or System kept under `mode-watcher-mode`: it becomes the person's theme and mode for every device, with System per device, and its sources move to `app-appearance`;
 - feature b84c2d57;
 - explanations 1ec33fbf (retired), f671eb5f (Tagma's own theme), 412bbac1 and f0e82349 (values now in `tagma.ts`, checked by the filter), and bdc83669 (re-sent on `look`);
 - the cards of `app-shared` and `app-routes`.
-
-## Open for the operator
-
-Product questions:
-- **The theme follows the person.** It becomes one choice for every window and device that reaches their Tagma, while each device still follows its own system on System. Until now it was kept per browser (feature 1727a3f5, Limits). The reason is that agents can then set it and every window agrees. Is the device-local behaviour given up?
-- **Looks of Tagma's own.** Should Tagma ship more than its default — a high-contrast theme and one safe for colour-blind people — as built-in themes, or should every other look come from plugins?
-- **Fonts.** Does Geist stay Tagma's only type, or may a person choose the interface and code fonts?
 
 ## Not established
 
