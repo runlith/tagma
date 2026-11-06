@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { PluginId } from '../../../plugins/contract/wire/names.js';
+import { CommandEntry } from './points.js';
 
 const PluginActionKey = Schema.Struct({
   keys: Schema.String.annotate({ description: 'The chord as the plugin wrote it, like Mod+Alt+G.' }),
@@ -31,6 +32,7 @@ export const PluginActionSet = Schema.Struct({
   rank: Schema.Int.annotate({ description: 'Its index in the machine’s installed list: the earlier plugin keeps a contested chord.' }),
   projects: Schema.Array(Schema.Int).annotate({ description: 'The projects that enable the plugin.' }),
   actions: Schema.Array(PluginActionRow),
+  commands: Schema.Array(CommandEntry).annotate({ description: 'The commands the plugin offers a thread’s composer.' }),
 });
 export type PluginActionSet = typeof PluginActionSet.Type;
 

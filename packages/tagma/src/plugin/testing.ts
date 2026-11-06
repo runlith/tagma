@@ -6,9 +6,11 @@ import type { McpServedResult } from '@runlith/mcp/server';
 import { manifestOf } from './describe.js';
 import type { OperationId, PluginDefinition, TagmaClient } from './plugin.js';
 import {
+  type ActionInput,
   type BuildStepInput,
   type EndingInput,
   handlerTools,
+  type HookInput,
   type NotificationInput,
   PROJECTS_META_KEY,
   type TickInput,
@@ -37,7 +39,8 @@ export type TestedPlugin = {
   readonly end: (ending: EndingInput, project?: number | null) => Promise<TestedAnswer>;
   readonly notify: (answer: NotificationInput) => Promise<TestedAnswer>;
   readonly build: (step: string, input: BuildStepInput, project?: number | null) => Promise<TestedAnswer>;
-  readonly act: (action: string, project?: number | null) => Promise<TestedAnswer>;
+  readonly act: (action: string, project?: number | null, input?: Partial<ActionInput>) => Promise<TestedAnswer>;
+  readonly check: (hook: string, event: HookInput, project?: number | null) => Promise<TestedAnswer>;
   readonly read: (uri: string, caller?: McpCaller) => Promise<TestedAnswer>;
   readonly changed: readonly string[];
 };
@@ -87,8 +90,13 @@ export const testPlugin = (definition: PluginDefinition, given: TestPluginOption
     end: (ending, project = AGENT.projectId) => call(handlerTools.ended, ending, tagma(project, 'ended')),
     notify: (answer) => call(handlerTools.notification, answer, tagma(null, 'notification')),
     build: (step, input, project = AGENT.projectId) => call(handlerTools.build(step), input, tagma(project, 'build')),
-    act: (action, project = AGENT.projectId) =>
-      call(handlerTools.action(action), {}, { kind: 'operator', projectId: project, view: `action:${action}` }),
+    act: (action, project = AGENT.projectId, input = {}) =>
+      call(handlerTools.action(action), { threadId: null, args: '', ...input } satisfies ActionInput, {
+        kind: 'operator',
+        projectId: project,
+        view: `action:${action}`,
+      }),
+    check: (hook, event, project = AGENT.projectId) => call(handlerTools.hook(hook), event, tagma(project, 'hook')),
     read: async (uri, caller = AGENT) => {
       const read = await serving.read(uri, meta(caller), new AbortController().signal);
       return 'refused' in read ? { text: read.refused, isError: true } : { text: read.text, isError: false };

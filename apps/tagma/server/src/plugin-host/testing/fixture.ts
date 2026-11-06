@@ -58,6 +58,12 @@ await Effect.runPromise(
         if (existsSync(join(data, 'leave'))) return { text: '', structuredContent: { question: 'left' } };
         return { text: 'taken' };
       }
+      if (tool === 'hook') {
+        journal(`hook ${callerKind(meta)} ${JSON.stringify(args)}`);
+        if (existsSync(join(data, 'fail-hook'))) return { text: 'the keeper is down', isError: true };
+        const answer = { deny: `kept by the fixture: ${String(args.tool)}` };
+        return { text: JSON.stringify(answer), structuredContent: answer };
+      }
       if (tool === 'environment') {
         return {
           text: JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([name]) => name.startsWith('TAGMA_')))),

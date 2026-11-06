@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { action, beforeBuild, definePlugin, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
+import { action, beforeBuild, definePlugin, hook, type PluginDefinition, Refusal, resource, schedule, tool } from './plugin.js';
 import { testPlugin } from './testing.js';
 
 test('a definition naming a field the SDK does not take is refused with the field it means', () => {
@@ -106,7 +106,7 @@ test('an action is a tool Tagma alone calls, listed in actions with the chords t
     id: 'boards',
     title: 'Boards',
     actions: {
-      sync: action({ title: 'Sync boards', run: async (ctx) => `Synced in project ${ctx.project}` }),
+      sync: action({ title: 'Sync boards', run: async (_input, ctx) => `Synced in project ${ctx.project}` }),
       quiet: action({ title: 'Do nothing', run: async () => undefined }),
     },
     shortcuts: [{ keys: 'Mod+Alt+S', action: 'sync', global: true }],
@@ -119,4 +119,32 @@ test('an action is a tool Tagma alone calls, listed in actions with the chords t
   expect(tested.manifest.contributes?.shortcuts).toEqual([{ keys: 'Mod+Alt+S', action: 'sync', global: true }]);
   expect(await tested.act('sync', 7)).toEqual({ text: 'Synced in project 7', isError: false });
   expect(await tested.act('quiet')).toEqual({ text: '', isError: false });
+});
+
+test('a hook is a tool Tagma alone calls, listed in hooks with its match, and its rewrite answers the input the runner reads', async () => {
+  const plugin = definePlugin({
+    id: 'keeper',
+    title: 'Keeper',
+    hooks: {
+      secrets: hook({
+        at: 'beforeTool',
+        match: 'read|edit',
+        onFailure: 'block',
+        run: async (event) =>
+          String((event.input as { path?: string }).path).endsWith('.env')
+            ? { deny: 'secrets stay closed' }
+            : { rewrite: { path: 'README.md' }, context: `seen in ${event.cwd}` },
+      }),
+    },
+  });
+  const tested = testPlugin(plugin);
+  expect(tested.manifest.contributes?.hooks).toEqual([
+    { at: 'beforeTool', match: 'read|edit', tool: '__hook_secrets', onFailure: 'block' },
+  ]);
+  const event = { at: 'beforeTool', threadId: 't1', cwd: '/w', tool: 'read', callId: 'c1' } as const;
+  expect((await tested.check('secrets', { ...event, input: { path: '.env' } })).structured).toEqual({ deny: 'secrets stay closed' });
+  expect((await tested.check('secrets', { ...event, input: { path: 'a.md' } })).structured).toEqual({
+    input: { path: 'README.md' },
+    context: 'seen in /w',
+  });
 });

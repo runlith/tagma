@@ -10,6 +10,7 @@ const server = join(root, 'apps/tagma/server/src');
 const plugin = join(root, 'packages/tagma/src/plugin');
 const ENVELOPE = { file: join(server, 'plugin-formats/tagma/contract/wire/manifest.ts'), binding: 'Envelope' };
 const VERDICT = { file: join(server, 'checkout-builds/contract/wire/steps.ts'), binding: 'StepVerdict' };
+const HOOK_ANSWER = { file: join(server, 'plugins/contract/wire/hooks.ts'), binding: 'HookAnswer' };
 const CONTRIBUTIONS = { file: join(server, 'plugins/contract/wire/contributions.ts'), binding: 'contributionsRefusal' };
 const LABEL = { file: join(server, 'plugins/contract/wire/names.ts'), binding: 'PluginLabel' };
 const GRAPH = { file: join(server, 'views/contract/wire/graph.ts'), binding: 'ViewGraph' };
@@ -128,6 +129,7 @@ const declaredFaces = async (): Promise<readonly Face[]> => {
 const pointsText = async (faces: readonly Face[]): Promise<string> => {
   const envelope = schemaOf(await loaded(ENVELOPE.file, ENVELOPE.binding), 'the plugin manifest envelope');
   const verdict = schemaOf(await loaded(VERDICT.file, VERDICT.binding), 'the build step verdict');
+  const hookAnswer = schemaOf(await loaded(HOOK_ANSWER.file, HOOK_ANSWER.binding), 'the hook answer');
   const graph = schemaOf(await loaded(GRAPH.file, GRAPH.binding), 'the view graph');
   const indent = (text: string) => text.replaceAll('\n', '\n  ');
   return [
@@ -138,6 +140,8 @@ const pointsText = async (faces: readonly Face[]): Promise<string> => {
     '};',
     '',
     `export type BuildVerdict = ${signatureOf(verdict)};`,
+    '',
+    `export type HookAnswer = ${signatureOf(hookAnswer)};`,
     '',
     `export type ViewGraph = ${signatureOf(graph)};`,
     '',

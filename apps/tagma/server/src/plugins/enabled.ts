@@ -1,31 +1,58 @@
 import { Effect, PubSub, Stream } from 'effect';
+import { ContributionPoint } from '../platform/contract/service/contribution.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { type SecretOwner, SecretOwnerFailed } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { PluginRefused, PluginUnreadable } from './contract/service/format.js';
+import { toolHook } from './contract/service/hooks.js';
 import {
   EnabledPlugins,
   HostedPlugins,
+  type LoadedHook,
   type PluginHostedRoot,
   type PluginLoaded,
   PluginsUnreadable,
   PluginUnhosted,
 } from './contract/service/plugins.js';
+import type { PluginContribution, PluginPoints } from './contract/service/points.js';
+import { type HookEntries, HOOKS_FACE } from './contract/wire/hooks.js';
 import { pluginsDisabled, pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
 import type { Digests } from './digests.js';
 import { enablingIn } from './enabling.js';
 import { hosted } from './reader.js';
 import { SECRET_KIND, type Shelf } from './shelf.js';
 
+const HOOKS = new ContributionPoint<never, HookEntries>('plugins/hooks', HOOKS_FACE);
+
 export const makeEnabled = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
   readonly digests: Digests;
+  readonly points: PluginPoints['Service'];
   readonly pulses: PubSub.PubSub<number | null>;
   readonly inputs: PubSub.PubSub<string>;
 }) {
-  const { shelf, digests, pulses, inputs } = input;
+  const { shelf, digests, points, pulses, inputs } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
+  const hooks = yield* points.hold(HOOKS);
+  const toolHooks = new WeakMap<PluginContribution<HookEntries>, Map<number, readonly LoadedHook[]>>();
+
+  const hooked = (loaded: PluginLoaded, projectId: number): PluginLoaded => {
+    const contribution = hooks.of(loaded.id);
+    if (contribution === undefined || contribution.value.length === 0) return loaded;
+    let made = toolHooks.get(contribution);
+    if (made === undefined) {
+      made = new Map();
+      toolHooks.set(contribution, made);
+    }
+    let declared = made.get(projectId);
+    if (declared === undefined) {
+      const place = { plugin: loaded.id, projectId, caller: contribution.caller };
+      declared = contribution.value.map((entry) => toolHook(entry, place));
+      made.set(projectId, declared);
+    }
+    return { ...loaded, hooks: [...loaded.hooks, ...declared] };
+  };
 
   const unreadable = (failure: { readonly message: string }) => new PluginsUnreadable({ reason: failure.message });
 
@@ -51,7 +78,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
       if (install === undefined) continue;
       const read = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
       if (read === null) continue;
-      loaded.push((yield* shelf.bind(read, install.root, project).pipe(Effect.mapError(unreadable))).loaded);
+      loaded.push(hooked((yield* shelf.bind(read, install.root, project).pipe(Effect.mapError(unreadable))).loaded, projectId));
     }
     return loaded;
   });

@@ -54,6 +54,31 @@ export type PluginPoints = {
     /** What the update card shows while the step runs. */
     readonly title: string;
   }[];
+  readonly commands: readonly ({
+    /** What the person types after / in a thread’s composer, named within its plugin: lowercase letters, digits and inner hyphens. */
+    readonly name: string;
+    /** What the composer’s list of commands says it does. */
+    readonly description: string;
+    /** The text the command puts into the draft. */
+    readonly text: string;
+  } | {
+    readonly name: string;
+    readonly description: string;
+    /** An id of contributes.actions. The composer runs it with the thread and the words typed after the command, and its answer fills the draft. */
+    readonly action: string;
+  })[];
+  readonly hooks: readonly ({
+    /** When Tagma’s agent asks the hook. beforeTool: before a tool call runs; the hook may deny it, rewrite its input or add context. afterTool: after it ran; the hook may add context. beforeStep: when a message reaches the agent; the hook may block it or add context. beforeClose: before the agent ends its turn; a block keeps it working with the reason as its next instruction. threadStarted: on the first step of a new thread; the hook may add context. threadEnded: when the thread is archived or deleted. */
+    readonly at: 'beforeTool' | 'afterTool' | 'beforeStep' | 'beforeClose' | 'threadStarted' | 'threadEnded';
+    /** Which calls reach the hook: names of Tagma’s own tools separated by |, or a regular expression over the name; startup or resume for threadStarted; archive or delete for threadEnded. Absent: every one. Claude Code’s and Codex’s own tools never reach it. */
+    readonly match?: string;
+    /** The tool, named in contributes.tools with audience tagma, that Tagma calls with { at, threadId, cwd } and what the point carries, and that answers { deny?, input?, context?, block? }. The call wakes a sleeping process. */
+    readonly tool: string;
+    /** block: a hook that fails, answers an error or times out denies the tool call, or blocks the message, instead of letting it through. Absent: the agent goes on as if the hook had not been asked. */
+    readonly onFailure?: 'block';
+    /** How long Tagma waits for the answer, in milliseconds, a process start included; 10000 when absent. Past it the hook has failed. */
+    readonly timeoutMs?: number;
+  })[];
   readonly launchers: readonly {
     /** The view it opens in a window, one of contributes.views. The plugin needs no process for it. */
     readonly view: string;
@@ -321,6 +346,17 @@ export type BuildVerdict = {
   readonly thread?: string;
 };
 
+export type HookAnswer = {
+  /** beforeTool: the call does not run, and the agent reads this reason. */
+  readonly deny?: string;
+  /** beforeTool: the call runs with this input instead of its own. */
+  readonly input?: unknown;
+  /** Words the agent reads beside the call, the message or the new thread. */
+  readonly context?: string;
+  /** beforeStep: the message does not reach the agent, which reads this reason. beforeClose: the agent keeps working, reading this. */
+  readonly block?: string;
+};
+
 export type ViewGraph = {
   readonly files: {
     readonly [key: string]: {
@@ -336,4 +372,4 @@ export type ViewGraph = {
   readonly candidates: readonly string[];
 };
 
-export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];
+export const POINT_NAMES = ['actions', 'agents', 'beforeBuild', 'commands', 'hooks', 'launchers', 'notify', 'on', 'panes', 'pins', 'results', 'schedule', 'shortcuts', 'surfaces', 'themes', 'threads', 'tools', 'views'] as const satisfies readonly (keyof PluginPoints)[];

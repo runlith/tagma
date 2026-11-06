@@ -4,11 +4,13 @@ import type { ModelsClient } from './models.js';
 import type { ExternalOperations } from './operations.generated.js';
 import type { BuildVerdict, PluginEnvelope, PluginPoints } from './points.generated.js';
 import {
+  type ActionInput,
   ASKED_LEFT,
   type AskedInput,
   type AskedLeft,
   type BuildStepInput,
   type EndingInput,
+  type HookInput,
   type NotificationInput,
   type TickInput,
 } from './protocol.js';
@@ -104,8 +106,33 @@ export type BuildStep = {
 
 export type Action = {
   readonly title: PluginPoints['actions'][number]['title'];
-  readonly run: (ctx: PluginContext) => Promise<string | void>;
+  readonly run: (input: ActionInput, ctx: PluginContext) => Promise<string | void>;
 };
+
+type HookEntry = PluginPoints['hooks'][number];
+
+export type HookPoint = HookEntry['at'];
+
+export type HookVerdicts = {
+  readonly beforeTool: { readonly deny?: string; readonly rewrite?: unknown; readonly context?: string };
+  readonly afterTool: { readonly context?: string };
+  readonly beforeStep: { readonly block?: string; readonly context?: string };
+  readonly beforeClose: { readonly block?: string };
+  readonly threadStarted: { readonly context?: string };
+  readonly threadEnded: Readonly<Record<never, never>>;
+};
+
+export type HookEvent<At extends HookPoint = HookPoint> = Extract<HookInput, { readonly at: At }>;
+
+export type Hook<At extends HookPoint = HookPoint> = {
+  readonly at: At;
+  readonly match?: HookEntry['match'];
+  readonly onFailure?: HookEntry['onFailure'];
+  readonly timeoutMs?: HookEntry['timeoutMs'];
+  readonly run: (event: HookEvent<At>, ctx: PluginContext) => Promise<HookVerdicts[At] | void>;
+};
+
+type AnyHook = { readonly [At in HookPoint]: Hook<At> }[HookPoint];
 
 export type EndingHandler = (ending: EndingInput, ctx: PluginContext) => Promise<void>;
 
@@ -117,7 +144,7 @@ type ViewPoint = PluginPoints['views'][number];
 
 export type View = { readonly entry: ViewPoint['entry']; readonly live?: ViewPoint['live'] };
 
-export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify' | 'actions' | 'views';
+export type HandledPoint = 'tools' | 'schedule' | 'beforeBuild' | 'on' | 'notify' | 'actions' | 'hooks' | 'views';
 
 export type PluginData = { readonly [Point in Exclude<keyof PluginPoints, HandledPoint>]?: PluginPoints[Point] };
 
@@ -133,6 +160,7 @@ export type PluginDefinition = PluginData & {
   readonly schedules?: Readonly<Record<string, Schedule>>;
   readonly beforeBuild?: Readonly<Record<string, BuildStep>>;
   readonly actions?: Readonly<Record<string, Action>>;
+  readonly hooks?: Readonly<Record<string, AnyHook>>;
   readonly onThreadEnded?: EndingHandler;
   readonly onThreadAsked?: AskedHandler;
   readonly onNotification?: NotificationHandler;
@@ -156,6 +184,8 @@ export const schedule = (declared: Schedule): Schedule => declared;
 export const beforeBuild = (declared: BuildStep): BuildStep => declared;
 
 export const action = (declared: Action): Action => declared;
+
+export const hook = <const At extends HookPoint>(declared: Hook<At>): Hook<At> => declared;
 
 export const onThreadEnded = (handler: EndingHandler): EndingHandler => handler;
 

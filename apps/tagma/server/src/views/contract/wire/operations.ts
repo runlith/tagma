@@ -50,10 +50,17 @@ export const VIEW_OPERATIONS = {
     effect: 'external',
     identity: { key: 'call' },
     answer: arms({ ok: { said: Schema.NullOr(Schema.String) } }),
-    meaning: 'Run an action of a plugin for the operator, from the palette or a shortcut, in this project.',
+    meaning:
+      'Run an action of a plugin for the operator, from the palette, a shortcut or a command in a thread’s composer, in this project.',
     grammar:
-      'Only an action the plugin declares in contributes.actions runs, and only while the plugin is enabled in this project; the process receives the caller operator in this project and starts if it sleeps. `said` is the one sentence the handler answers for the person, or null; a handler that fails refuses plugin-call-failed with its reason.',
-    input: Schema.Struct({ project: projectField, plugin: pluginName, action: ViewId }),
+      'Only an action the plugin declares in contributes.actions runs, and only while the plugin is enabled in this project; the process receives the caller operator in this project and starts if it sleeps. From a composer, `threadId` names its thread and `args` the words typed after the command; the handler receives both, null and empty otherwise. `said` is the text the handler answers — a notice from the palette, the draft from a composer — or null; a handler that fails refuses plugin-call-failed with its reason.',
+    input: Schema.Struct({
+      project: projectField,
+      plugin: pluginName,
+      action: ViewId,
+      threadId: Schema.optional(Schema.String.annotate(placeRole('value'))),
+      args: Schema.optional(Schema.String.annotate({ description: 'The words typed after the command in the composer.' })),
+    }),
     refusals: ACTION_REFUSALS,
     confirmation: (input) => ({ summary: `Run ${input.action} of the plugin ${input.plugin}?` }),
     confirmLabel: 'Run',

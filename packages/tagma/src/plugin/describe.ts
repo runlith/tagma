@@ -90,6 +90,7 @@ const HANDLED_BY: Readonly<Record<HandledPoint, keyof PluginDefinition>> = {
   on: 'onThreadEnded',
   notify: 'onNotification',
   actions: 'actions',
+  hooks: 'hooks',
   views: 'views',
 };
 
@@ -107,6 +108,7 @@ const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, tr
   schedules: true,
   beforeBuild: true,
   actions: true,
+  hooks: true,
   onThreadEnded: true,
   onThreadAsked: true,
   onNotification: true,
@@ -164,6 +166,7 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     schedules,
     beforeBuild,
     actions,
+    hooks,
     onThreadEnded,
     onThreadAsked,
     onNotification,
@@ -186,11 +189,19 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     title: declared.title,
     tool: handlerTools.action(name),
   }));
+  const checks = Object.entries(hooks ?? {}).map(([name, declared]) => ({
+    at: declared.at,
+    match: declared.match,
+    tool: handlerTools.hook(named('hook', name)),
+    onFailure: declared.onFailure,
+    timeoutMs: declared.timeoutMs,
+  }));
   const tools: ToolEntry[] = [
     ...Object.entries(definition.tools ?? {}).map(([name, declared]) => authored(name, declared)),
     ...scheduled.map((entry) => tagmaTool(entry.tool, `Runs the schedule ${entry.name}.`)),
     ...steps.map((entry) => tagmaTool(entry.tool, `Runs the build step ${entry.title}.`)),
     ...acts.map((entry) => tagmaTool(entry.tool, `Runs the action ${entry.title}.`)),
+    ...checks.map((entry) => tagmaTool(entry.tool, `Checks Tagma’s agent at ${entry.at}.`)),
     ...(onThreadEnded === undefined ? [] : [tagmaTool(handlerTools.ended, 'Receives the end of a turn of a thread bound to this plugin.')]),
     ...(onThreadAsked === undefined ? [] : [tagmaTool(handlerTools.asked, 'Takes a question of a thread bound to this plugin.')]),
     ...(onNotification === undefined
@@ -206,6 +217,7 @@ export const describePlugin = (definition: PluginDefinition): PluginDescription 
     ...(scheduled.length === 0 ? {} : { schedule: scheduled }),
     ...(steps.length === 0 ? {} : { beforeBuild: steps }),
     ...(acts.length === 0 ? {} : { actions: acts }),
+    ...(checks.length === 0 ? {} : { hooks: checks }),
     ...(Object.keys(on).length === 0 ? {} : { on }),
     ...(onNotification === undefined ? {} : { notify: { tool: handlerTools.notification } }),
   };

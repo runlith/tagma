@@ -1,4 +1,6 @@
 import { expect } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
@@ -9,6 +11,7 @@ import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
 import { nativeLeads, subscriptionLogin } from '../claudeLogin.js';
+import { installedFixture } from '../plugin-host/installed.js';
 
 const GUARD = `
 const event = JSON.parse(await Bun.stdin.text());
@@ -174,6 +177,16 @@ const turn = Effect.fnUntraced(function* (threadId: string, text: string) {
   return (started.body as { runId: string }).runId;
 });
 
+const KEEPS_READS = [{ at: 'beforeTool', match: 'read', tool: 'hook' }] as const;
+
+const keeper = Effect.fnUntraced(function* (id: string, hooks: readonly Readonly<Record<string, unknown>>[], failing: boolean) {
+  const { world, projectId } = yield* Guarded;
+  const data = join(world.dataHome, 'agent-plugin-data', id);
+  if (failing) yield* Effect.promise(() => mkdir(data, { recursive: true }).then(() => writeFile(join(data, 'fail-hook'), '')));
+  yield* installedFixture(world, projectId, { id, contributes: { hooks } });
+  return join(data, 'journal');
+});
+
 const until = <A, E, R>(found: Effect.Effect<A | undefined, E, R>) =>
   Effect.retry(
     Effect.flatMap(found, (value) => (value === undefined ? Effect.fail(new AwaitedStateNever()) : Effect.succeed(value))),
@@ -202,6 +215,48 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
         expect(last).not.toContain('draft words');
         expect(last).toContain('Read of final.txt noted');
       }),
+  );
+
+  it.effect(
+    'a beforeTool hook a Tagma-format plugin declares wakes its sleeping process and denies the matching call with its reason',
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* keeper('keeper', KEEPS_READS, false);
+        expect(existsSync(journal)).toBe(false);
+        const script = scripted('Read the kept file.', (answered) =>
+          answered === 0 ? call('call-kept', 'read', { path: join(checkout, 'final.txt') }) : DONE,
+        );
+        const { threadId, ended } = yield* born('bypass');
+        yield* ended(yield* turn(threadId, 'Read the kept file.'));
+
+        expect(script.asked.at(-1)).toContain('read is refused: kept by the fixture: read');
+        expect(script.asked.at(-1)).not.toContain('final words');
+        const lines = (yield* Effect.promise(() => readFile(journal, 'utf8'))).trim().split('\n');
+        expect(lines[0]).toStartWith('start ');
+        const asked = lines.find((line) => line.startsWith('hook tagma '))?.slice('hook tagma '.length) ?? 'null';
+        expect(JSON.parse(asked)).toMatchObject({ at: 'beforeTool', threadId, tool: 'read', callId: 'call-kept' });
+      }),
+  );
+
+  it.effect('a Tagma-format hook that fails lets the call through, unless it declares that it blocks on failure', () =>
+    Effect.gen(function* () {
+      yield* keeper('porter', KEEPS_READS, true);
+      const open = scripted('Read past the porter.', (answered) =>
+        answered === 0 ? call('call-porter', 'read', { path: join(checkout, 'final.txt') }) : DONE,
+      );
+      const first = yield* born('bypass');
+      yield* first.ended(yield* turn(first.threadId, 'Read past the porter.'));
+      expect(open.asked.at(-1)).toContain('final words');
+
+      yield* keeper('warden', [{ ...KEEPS_READS[0], onFailure: 'block' }], true);
+      const closed = scripted('Read past the warden.', (answered) =>
+        answered === 0 ? call('call-warden', 'read', { path: join(checkout, 'final.txt') }) : DONE,
+      );
+      const second = yield* born('bypass');
+      yield* second.ended(yield* turn(second.threadId, 'Read past the warden.'));
+      expect(closed.asked.at(-1)).toContain('read is refused: a hook that blocks on failure failed: the keeper is down');
+      expect(closed.asked.at(-1)).not.toContain('final words');
+    }),
   );
 
   it.effect('a Codex PreToolUse hook sees Codex tool names and environment and blocks a shell call through the shared runner', () =>

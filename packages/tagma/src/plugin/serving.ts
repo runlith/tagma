@@ -5,11 +5,14 @@ import type { McpServedResult, McpServedTool } from '@runlith/mcp/server';
 import { describePlugin, type PluginDescription } from './describe.js';
 import { issueText } from './issues.js';
 import { modelsClient } from './models.js';
-import { type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
+import { type HookVerdicts, type PluginContext, type PluginDefinition, Refusal, type TagmaClient, type Tool } from './plugin.js';
+import type { HookAnswer } from './points.generated.js';
 import {
+  type ActionInput,
   type AskedInput,
   type BuildStepInput,
   type EndingInput,
+  type HookInput,
   handlerTools,
   type NotificationInput,
   PROJECTS_META_KEY,
@@ -108,6 +111,14 @@ const failed = (error: unknown): McpServedResult => ({
   isError: true,
 });
 
+type Verdict = Partial<HookVerdicts['beforeTool'] & HookVerdicts['beforeStep']>;
+
+const hookAnswered = (verdict: Verdict | void): McpServedResult => {
+  const { rewrite, ...said } = verdict ?? {};
+  const answer: HookAnswer = rewrite === undefined ? said : { ...said, input: rewrite };
+  return { text: JSON.stringify(answer), structuredContent: answer };
+};
+
 const authored =
   (declared: Tool): Handler =>
   async (input, ctx) => {
@@ -127,7 +138,13 @@ const handlersOf = (definition: PluginDefinition): ReadonlyMap<string, Handler> 
       text: JSON.stringify(await step.run(input as unknown as BuildStepInput, ctx)),
     }));
   for (const [name, declared] of Object.entries(definition.actions ?? {}))
-    handlers.set(handlerTools.action(name), async (_input, ctx) => answered(await declared.run(ctx)));
+    handlers.set(handlerTools.action(name), async (input, ctx) => answered(await declared.run(input as unknown as ActionInput, ctx)));
+  for (const [name, declared] of Object.entries(definition.hooks ?? {}))
+    handlers.set(handlerTools.hook(name), async (input, ctx) =>
+      hookAnswered(
+        await (declared.run as (event: HookInput, ctx: PluginContext) => Promise<Verdict | void>)(input as unknown as HookInput, ctx),
+      ),
+    );
   const { onThreadEnded, onThreadAsked, onNotification } = definition;
   if (onThreadEnded !== undefined)
     handlers.set(handlerTools.ended, async (input, ctx) => answered(await onThreadEnded(input as unknown as EndingInput, ctx)));

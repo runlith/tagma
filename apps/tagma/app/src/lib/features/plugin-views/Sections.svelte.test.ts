@@ -118,6 +118,7 @@ test("a plugin section's act opens the section in the context project when it en
     rank: 0,
     projects: [3, 2],
     actions: [{ id: 'section:list', kind: 'section', view: 'list', title: 'Merge requests', keys: [{ keys: 'Mod+Alt+G', global: false }] }],
+    commands: [],
   };
   const projects = [1, 2, 3].map((id) => ({ id, name: `p${id}`, kind: 'folder' }));
   const world = stand({ actions: [set], workspace: soloWorkspace({ projects }) });

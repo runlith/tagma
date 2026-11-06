@@ -6,9 +6,9 @@ import { PluginHost } from '../plugin-host/contract/service/supervision.js';
 import { EnabledPlugins, HostedPlugins, Plugins } from '../plugins/contract/service/plugins.js';
 import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
 import { PluginActions } from './contract/service/actions.js';
-import { ACTIONS, SHORTCUTS } from './contract/service/points.js';
+import { ACTIONS, COMMANDS, SHORTCUTS } from './contract/service/points.js';
 import type { PluginActionRow, PluginActionSet, PluginActionState } from './contract/wire/actions.js';
-import type { ActionEntries, ShortcutEntries } from './contract/wire/points.js';
+import type { ActionEntries, CommandEntries, ShortcutEntries } from './contract/wire/points.js';
 import { callRefusal, READ_PLUGINS, refusal, unreadable } from './refusals.js';
 import type { Sections } from './sections.js';
 
@@ -28,6 +28,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
   const host = yield* PluginHost;
   const actions = new Map<string, Held<ActionEntries>>();
   const shortcuts = new Map<string, Held<ShortcutEntries>>();
+  const commands = new Map<string, Held<CommandEntries>>();
 
   const holding =
     <W extends readonly unknown[]>(held: Map<string, Held<W>>) =>
@@ -78,10 +79,13 @@ export const makeActions = Effect.fnUntraced(function* (input: {
     const listed: PluginActionSet[] = [];
     for (const [rank, install] of (yield* plugins.installs()).entries()) {
       const there = roots.get(install.id);
-      const ref = actions.get(install.id)?.plugin ?? shortcuts.get(install.id)?.plugin ?? known.get(install.id);
+      const ref =
+        actions.get(install.id)?.plugin ?? shortcuts.get(install.id)?.plugin ?? commands.get(install.id)?.plugin ?? known.get(install.id);
       if (there === undefined || ref === undefined) continue;
       const rows = rowsOf(install.id);
-      if (rows.length > 0) listed.push({ plugin: install.id, title: ref.title, rank, projects: there.projects, actions: rows });
+      const typed = commands.get(install.id)?.value ?? [];
+      if (rows.length > 0 || typed.length > 0)
+        listed.push({ plugin: install.id, title: ref.title, rank, projects: there.projects, actions: rows, commands: typed });
     }
     return { plugins: listed } satisfies PluginActionState;
   });
@@ -106,6 +110,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
     contributions: {
       actions: { point: ACTIONS, register: holding(actions) },
       shortcuts: { point: SHORTCUTS, register: holding(shortcuts) },
+      commands: { point: COMMANDS, register: holding(commands) },
     },
     service: PluginActions.of({
       sets: Stream.unwrap(
@@ -116,7 +121,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
           ),
         ),
       ),
-      run: Effect.fn('PluginActions.run')(function* (projectId, plugin, action) {
+      run: Effect.fn('PluginActions.run')(function* (projectId, plugin, action, input) {
         const declared = actions.get(plugin)?.value.find((entry) => entry.id === action);
         if (declared === undefined) return yield* unknown(plugin, action);
         const admit = Effect.gen(function* () {
@@ -126,7 +131,7 @@ export const makeActions = Effect.fnUntraced(function* (input: {
         });
         const caller: McpCaller = { kind: 'operator', projectId, view: `action:${action}` };
         const result = yield* host
-          .callAdmitted(plugin, admit, declared.tool, {}, { caller })
+          .callAdmitted(plugin, admit, declared.tool, input, { caller })
           .pipe(Effect.mapError((failure) => (failure instanceof GateRefusal ? failure : callRefusal(failure))));
         return yield* answered(mcpAppResult(result));
       }),

@@ -14,6 +14,7 @@ export const FIXTURE_TOOLS: readonly McpServedTool[] = [
   { name: 'hold', description: 'Answers once the release file stands in the data directory.', inputSchema: object },
   { name: 'ended', description: 'Takes the end of a turn of a thread bound to this plugin.', inputSchema: object },
   { name: 'asked', description: 'Takes a question of a thread bound to this plugin.', inputSchema: object },
+  { name: 'hook', description: 'Denies the tool call it is asked about.', inputSchema: object },
 ];
 
 export const KEYED_TOOLS: readonly McpServedTool[] = [

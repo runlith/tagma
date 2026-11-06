@@ -81,7 +81,7 @@ export const pluginsLayer: Layer.Layer<
     });
     const faultsOf = (id: string) => [...(found.get(id) ?? [])].map(([point, reason]) => ({ point, reason }));
     const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched, faults: faultsOf });
-    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses, inputs });
+    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);
     let seen: Options | null = null;

@@ -95,6 +95,35 @@ type ActionEntry = typeof ActionEntry.Type;
 export const ActionEntries = Schema.Array(ActionEntry).check(Schema.makeFilter(unique((entry: ActionEntry) => entry.id, 'action')));
 export type ActionEntries = typeof ActionEntries.Type;
 
+const CommandName = ViewId.annotate({
+  description:
+    'What the person types after / in a thread’s composer, named within its plugin: lowercase letters, digits and inner hyphens.',
+});
+
+const CommandDescription = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120)).annotate({
+  description: 'What the composer’s list of commands says it does.',
+});
+
+export const CommandEntry = Schema.Union([
+  Schema.Struct({
+    name: CommandName,
+    description: CommandDescription,
+    text: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The text the command puts into the draft.' }),
+  }),
+  Schema.Struct({
+    name: CommandName,
+    description: CommandDescription,
+    action: ViewId.annotate({
+      description:
+        'An id of contributes.actions. The composer runs it with the thread and the words typed after the command, and its answer fills the draft.',
+    }),
+  }),
+]);
+export type CommandEntry = typeof CommandEntry.Type;
+
+export const CommandEntries = Schema.Array(CommandEntry).check(Schema.makeFilter(unique((entry: CommandEntry) => entry.name, 'command')));
+export type CommandEntries = typeof CommandEntries.Type;
+
 const ShortcutEntry = Schema.Struct({
   keys: HeldChordText.annotate({ description: 'The chord this plugin proposes, like Mod+Alt+G.' }),
   action: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(60)).annotate({
@@ -174,6 +203,19 @@ export const ACTIONS_FACE: PluginFace<ActionEntries> = {
   title: 'Actions you run from the palette or a shortcut',
   schema: ActionEntries,
   calls: (entries) => entries.map((entry) => entry.tool),
+};
+
+export const COMMANDS_FACE: PluginFace<CommandEntries> = {
+  name: 'commands',
+  title: 'Commands you type in a thread',
+  schema: CommandEntries,
+  refuses: (commands, { sibling }) => {
+    const declared = new Set((sibling(ACTIONS_FACE) ?? []).map((entry) => entry.id));
+    const lost = [
+      ...new Set(commands.flatMap((command) => ('action' in command && !declared.has(command.action) ? [command.action] : []))),
+    ];
+    return lost.length === 0 ? null : `names the action ${lost.join(', ')}, which contributes.actions does not declare`;
+  },
 };
 
 const SECTION = 'section:';

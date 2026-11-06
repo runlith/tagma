@@ -6,7 +6,11 @@ export default definePlugin({
   views: { board: view('ui/Board.svelte') },
   surfaces: [{ view: 'board', title: 'Boards' }],
   actions: {
-    sync: action({ title: 'Sync boards', run: async (ctx) => `Synced from project ${ctx.project}` }),
+    sync: action({ title: 'Sync boards', run: async (_input, ctx) => `Synced from project ${ctx.project}` }),
+    translate: action({
+      title: 'Translate',
+      run: async ({ threadId, args }) => `${args} in German, for ${threadId}`,
+    }),
     push: action({
       title: 'Push boards',
       run: async () => {
@@ -17,5 +21,9 @@ export default definePlugin({
   shortcuts: [
     { keys: 'Mod+Alt+S', action: 'sync' },
     { keys: 'Mod+Alt+G', action: 'section:board', global: true },
+  ],
+  commands: [
+    { name: 'translate', description: 'Translate the words into German', action: 'translate' },
+    { name: 'greet', description: 'Start with a greeting', text: 'Guten Tag!' },
   ],
 });

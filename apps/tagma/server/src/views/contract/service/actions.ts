@@ -1,3 +1,4 @@
+import type { ActionInput } from '@runlith/tagma/plugin/protocol';
 import { Context, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -10,6 +11,6 @@ export class PluginActions extends Context.Service<
   PluginActions,
   {
     readonly sets: Stream.Stream<PluginActionState, PluginsUnreadable | StoreFailure>;
-    run(projectId: number, plugin: string, action: string): Effect.Effect<string | null, ActionFailure>;
+    run(projectId: number, plugin: string, action: string, input: ActionInput): Effect.Effect<string | null, ActionFailure>;
   }
 >()('tagma/views/PluginActions') {}

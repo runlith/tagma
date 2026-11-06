@@ -1,8 +1,12 @@
+import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
+import type { HookInput } from '@runlith/tagma/plugin/protocol';
 import { Duration, Effect, Fiber, Schema, type Scope, Stream } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
+import { HOOK_REASON, HookAnswer, type HookEntry, hookMatcher, TOOL_HOOK_TIMEOUT_MS } from '../wire/hooks.js';
 import type { PluginHookPoint } from '../wire/rows.js';
 import type { PluginHook, PluginHookAnswer, PluginHookCall, PluginHookSession, PluginIgnored, PluginPlace } from './format.js';
+import type { LoadedHook } from './plugins.js';
 import { isObject, jsonOf, textOf } from './reading.js';
 
 export type HookToolNames = { readonly shown: string; readonly matched: readonly string[] };
@@ -54,40 +58,28 @@ const Output = Schema.Struct({
 
 const decodeOutput = Schema.decodeUnknownOption(Output);
 
-const LIST = /^[A-Za-z0-9_ ,|-]*$/u;
+const decodeAnswer = Schema.decodeUnknownEffect(HookAnswer);
 
-const matcherOf = (matcher: string | undefined, exactNames: boolean): ((subject: string) => boolean) => {
-  if (matcher === undefined || matcher === '' || matcher === '*') return () => true;
-  if (exactNames && LIST.test(matcher)) {
-    const names = new Set(
-      matcher
-        .split(/[|,]/u)
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0),
-    );
-    return (subject) => names.has(subject);
-  }
-  try {
-    const pattern = new RegExp(matcher, 'u');
-    return (subject) => pattern.test(subject);
-  } catch {
-    return () => false;
-  }
-};
+const matcherOf = (matcher: string | undefined, exactNames: boolean): ((subject: string) => boolean) =>
+  hookMatcher(matcher, exactNames) ?? (() => false);
 
 const ENDINGS: ReadonlySet<string> = new Set(['clear', 'resume', 'logout', 'prompt_input_exit', 'other']);
 
 const endingOf = (reason: string): string => (ENDINGS.has(reason) ? reason : 'other');
 
-const subjectsOf = (dialect: HookDialect, call: PluginHookCall): readonly string[] | null => {
+const subjectsOf = (
+  call: PluginHookCall,
+  named: (tool: string) => readonly string[],
+  ended: (reason: string) => string,
+): readonly string[] | null => {
   switch (call.point) {
     case 'beforeTool':
     case 'afterTool':
-      return dialect.tool(call.tool).matched;
+      return named(call.tool);
     case 'threadStarted':
       return [call.resumed ? 'resume' : 'startup'];
     case 'threadEnded':
-      return [endingOf(call.reason)];
+      return [ended(call.reason)];
     default:
       return null;
   }
@@ -311,7 +303,7 @@ export const hooksOfEvents = Effect.fnUntraced(function* (
           label: `${event}${group.value.matcher === undefined || group.value.matcher === '' ? '' : ` ${group.value.matcher}`}: ${command}`,
           matches: (call) => {
             if (call.point !== point) return false;
-            const subjects = subjectsOf(dialect, call);
+            const subjects = subjectsOf(call, (tool) => dialect.tool(tool).matched, endingOf);
             return subjects === null || subjects.some(matches);
           },
           run: runner(dialect, event, handler.value),
@@ -320,6 +312,85 @@ export const hooksOfEvents = Effect.fnUntraced(function* (
     }
   }
 });
+
+const hookInputOf = (call: PluginHookCall, session: PluginHookSession): HookInput => {
+  const place = { threadId: session.thread, cwd: session.cwd };
+  switch (call.point) {
+    case 'beforeTool':
+      return { at: call.point, ...place, tool: call.tool, input: call.input, callId: call.callId };
+    case 'afterTool':
+      return { at: call.point, ...place, tool: call.tool, input: call.input, output: call.output, callId: call.callId };
+    case 'beforeStep':
+      return { at: call.point, ...place, text: call.text };
+    case 'beforeClose':
+      return { at: call.point, ...place, answer: call.answer, continued: call.continued };
+    case 'threadStarted':
+      return { at: call.point, ...place, resumed: call.resumed };
+    case 'threadEnded':
+      return { at: call.point, ...place, reason: call.reason };
+  }
+};
+
+type ToolResult = Effect.Success<ReturnType<McpToolCaller['call']>>;
+
+const toolAnswerOf = (result: ToolResult): Effect.Effect<PluginHookAnswer> => {
+  if ('isError' in result && result.isError === true) {
+    const said = result.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+    return Effect.succeed({ failure: said.split('\n')[0] || 'answered with an error' });
+  }
+  const structured = 'structuredContent' in result ? result.structuredContent : undefined;
+  if (structured === undefined) return Effect.succeed({});
+  return decodeAnswer(structured, { onExcessProperty: 'error' }).pipe(
+    Effect.catchTag('SchemaError', (failure) =>
+      Effect.succeed<PluginHookAnswer>({ failure: `answered no hook answer: ${failure.message}` }),
+    ),
+  );
+};
+
+type ToolHookPlace = { readonly plugin: string; readonly projectId: number; readonly caller: McpToolCaller };
+
+const unanswered = (failure: { readonly message: string }) => Effect.succeed<PluginHookAnswer>({ failure: failure.message });
+
+export const toolHook = (entry: HookEntry, place: ToolHookPlace): LoadedHook => {
+  const matches = matcherOf(entry.match, true);
+  const limit = Duration.millis(entry.timeoutMs ?? TOOL_HOOK_TIMEOUT_MS);
+  return {
+    point: entry.at,
+    label: `${entry.at}${entry.match === undefined ? '' : ` ${entry.match}`}: ${place.plugin} ${entry.tool}`,
+    matches: (call) => {
+      if (call.point !== entry.at) return false;
+      const subjects = subjectsOf(
+        call,
+        (tool) => [tool],
+        (reason) => reason,
+      );
+      return subjects === null || subjects.some(matches);
+    },
+    run: (call, session) =>
+      place.caller
+        .call(place.plugin, entry.tool, hookInputOf(call, session), {
+          caller: { kind: 'tagma', projectId: place.projectId, reason: HOOK_REASON },
+        })
+        .pipe(
+          Effect.flatMap(toolAnswerOf),
+          Effect.catchTags({
+            McpConnectFailed: unanswered,
+            McpCallFailed: unanswered,
+            McpTimedOut: unanswered,
+            McpNotConnected: unanswered,
+            McpNeedsSignIn: unanswered,
+            HoldStalled: unanswered,
+            ReentrantCall: unanswered,
+          }),
+          Effect.timeoutOrElse({
+            duration: limit,
+            orElse: () => Effect.succeed<PluginHookAnswer>({ failure: `timed out after ${Duration.format(limit)}` }),
+          }),
+          Effect.map((answer) => (entry.onFailure === 'block' ? failedBlocking(call, answer) : answer)),
+          Effect.withSpan('plugins.toolHook', { attributes: { plugin: place.plugin, at: entry.at } }),
+        ),
+  };
+};
 
 export const hooksOfFile = Effect.fnUntraced(function* (
   dialect: HookDialect,

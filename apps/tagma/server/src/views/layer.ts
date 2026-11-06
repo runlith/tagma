@@ -38,6 +38,7 @@ export const viewsLayer: Layer.Layer<
     yield* Effect.acquireRelease(points.declare(launchers.point, launchers.register), withdrawn);
     yield* Effect.acquireRelease(points.declare(acting.contributions.actions.point, acting.contributions.actions.register), withdrawn);
     yield* Effect.acquireRelease(points.declare(acting.contributions.shortcuts.point, acting.contributions.shortcuts.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(acting.contributions.commands.point, acting.contributions.commands.register), withdrawn);
     return Context.make(PluginViews, shelf).pipe(
       Context.add(ViewStorage, makeValues({ shelf })),
       Context.add(PluginActions, acting.service),

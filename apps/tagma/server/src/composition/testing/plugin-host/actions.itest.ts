@@ -75,8 +75,13 @@ it.live(
           projects: [projectId],
           actions: [
             { id: 'sync', kind: 'action', title: 'Sync boards', keys: [{ keys: 'Mod+Alt+S', global: false }] },
+            { id: 'translate', kind: 'action', title: 'Translate', keys: [] },
             { id: 'push', kind: 'action', title: 'Push boards', keys: [] },
             { id: 'section:board', kind: 'section', view: 'board', title: 'Boards', keys: [{ keys: 'Mod+Alt+G', global: true }] },
+          ],
+          commands: [
+            { name: 'translate', description: 'Translate the words into German', action: 'translate' },
+            { name: 'greet', description: 'Start with a greeting', text: 'Guten Tag!' },
           ],
         },
       ]);
@@ -87,6 +92,11 @@ it.live(
         said: `Synced from project ${projectId}`,
       });
       expect(host.reading('keys')?.state).toBe('running');
+      const typed = { plugin: 'keys', action: 'translate', threadId: 'thread-7', args: 'good morning' };
+      expect((yield* world.op('run_plugin_action', typed, scope)).body).toEqual({
+        status: 'ok',
+        said: 'good morning in German, for thread-7',
+      });
       expect((yield* world.op('run_plugin_action', { plugin: 'keys', action: 'push' }, scope)).body).toMatchObject({
         code: 'plugin-call-failed',
         reason: 'The board service is down',
@@ -139,6 +149,10 @@ it.live(
         {
           contributes: { tools: [tool('tagma')], actions: [action], shortcuts: [{ keys: 'S', action: 'sync' }] },
           reason: 'needs Mod, Cmd, Ctrl or Alt',
+        },
+        {
+          contributes: { tools: [tool('tagma')], actions: [action], commands: [{ name: 'push', description: 'Push.', action: 'push' }] },
+          reason: 'contributes.commands: names the action push, which contributes.actions does not declare',
         },
       ].entries()) {
         const root = yield* world.directory(`refused-${at}`);

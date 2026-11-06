@@ -2,6 +2,8 @@ import { ContributionPoint } from '../../../platform/contract/service/contributi
 import {
   type ActionEntries,
   ACTIONS_FACE,
+  type CommandEntries,
+  COMMANDS_FACE,
   type LauncherEntries,
   LAUNCHERS_FACE,
   PANES_FACE,
@@ -28,3 +30,5 @@ export const LAUNCHERS = new ContributionPoint<never, LauncherEntries>('views/la
 export const ACTIONS = new ContributionPoint<never, ActionEntries>('views/actions', ACTIONS_FACE);
 
 export const SHORTCUTS = new ContributionPoint<never, ShortcutEntries>('views/shortcuts', SHORTCUTS_FACE);
+
+export const COMMANDS = new ContributionPoint<never, CommandEntries>('views/commands', COMMANDS_FACE);
