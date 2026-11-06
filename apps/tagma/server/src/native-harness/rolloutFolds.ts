@@ -192,8 +192,8 @@ export const makeNativeFolds = Effect.gen(function* () {
     returned: {
       writes: RETURNED,
       columns: [
-        { table: 'thread_entry', column: 'entry', record: 'entry' },
-        { table: 'thread_history_item', column: 'message', record: 'message' },
+        { table: 'thread_entry', column: 'entry', thread: 'thread_id', record: 'entry' },
+        { table: 'thread_history_item', column: 'message', thread: 'thread_id', record: 'message' },
       ],
     },
     writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),

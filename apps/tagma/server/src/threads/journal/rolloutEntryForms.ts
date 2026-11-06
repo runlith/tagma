@@ -501,13 +501,14 @@ export const returnedRollout = Effect.fnUntraced(function* (
   sources: FormSource,
   steps: readonly ThreadFormStep[],
   onto: string | null,
+  cast: boolean,
 ): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
   for (;;) {
     if (path === undefined) return yield* markedOnto(db, write, threadId, path, kinds, steps, onto);
     const done = yield* rolloutFormOf(db, threadId);
     if (done?.publishing != null && (yield* publishedHere(path, done.publishing)))
       yield* settledWith(db, write, threadId, path, done.publishing, sources);
-    const state = yield* rolloutStateOf(path);
+    const state = cast ? yield* rolloutStateOf(path) : null;
     if (state === null) return yield* markedOnto(db, write, threadId, path, kinds, steps, onto);
     const staging = yield* stagedPass(db, write, threadId, path, kinds, stage, sources, false, state, {
       pending: steps,

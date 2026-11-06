@@ -65,7 +65,7 @@ const guarded = (step: ThreadFormStep): ThreadFormStep => ({
   name: step.name,
   samples: step.samples,
   ...guardedForms(step.name, step),
-  back: step.back === undefined ? undefined : guardedForms(step.name, step.back),
+  back: step.back === undefined ? undefined : { ...guardedForms(step.name, step.back), holds: step.back.holds },
 });
 
 export const JOURNAL_BASE: ThreadFormBase | null = null;

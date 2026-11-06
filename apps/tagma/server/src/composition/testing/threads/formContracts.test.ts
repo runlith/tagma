@@ -23,6 +23,7 @@ for (const step of ENTRY_KINDS.steps)
       expect(step[record]!(formed) ?? formed).toEqual(formed);
       const back = step.back?.[record];
       if (back === undefined) continue;
+      expect((step.back!.holds ?? []).some((text) => JSON.stringify(formed).includes(text))).toBe(true);
       const held = structuredClone(formed);
       const returned = back(held) ?? held;
       expect(held).toEqual(formed);

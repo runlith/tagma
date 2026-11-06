@@ -156,9 +156,7 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     rewritten: rewrites.follow,
     returnOnto: (plan) =>
       returnOnto(plan).pipe(
-        Effect.catchTag(['ThreadFormRefused', 'RolloutUnreadable'], (cause) =>
-          Effect.fail(new ThreadStorageFailed({ call: 'ThreadRollout.returnOnto', cause })),
-        ),
+        Effect.catchTag('RolloutUnreadable', (cause) => Effect.fail(new ThreadStorageFailed({ call: 'ThreadRollout.returnOnto', cause }))),
       ),
 
     appendRecord: (threadId, record) => {

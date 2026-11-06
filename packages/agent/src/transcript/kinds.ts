@@ -125,10 +125,12 @@ export type ThreadFormRecord = 'entry' | 'payload' | 'message' | 'reading' | 'me
 
 export type ThreadFormForms = { readonly [record in ThreadFormRecord]?: (held: Held) => Held | null };
 
+type ThreadFormBack = ThreadFormForms & { readonly holds?: readonly [string, ...string[]] };
+
 export type ThreadFormStep = {
   readonly name: string;
   readonly samples: Readonly<Partial<Record<ThreadFormRecord, Held>>>;
-  readonly back?: ThreadFormForms | undefined;
+  readonly back?: ThreadFormBack | undefined;
 } & ThreadFormForms;
 
 export const reversed = (step: ThreadFormStep): ThreadFormStep => ({ name: step.name, samples: {}, ...step.back });

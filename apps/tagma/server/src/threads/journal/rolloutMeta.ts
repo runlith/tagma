@@ -151,9 +151,11 @@ export type NativeFolds = {
   readonly writes: WriteSet;
 };
 
+export type ReturnedColumn = { readonly table: string; readonly column: string; readonly thread: string };
+
 type ReturnedColumns = {
   readonly writes: WriteSet;
-  readonly columns: ReadonlyArray<{ readonly table: string; readonly column: string; readonly record: 'entry' | 'message' }>;
+  readonly columns: ReadonlyArray<ReturnedColumn & { readonly record: 'entry' | 'message' }>;
 };
 
 export type RolloutParts = { readonly native: RolloutPart & { readonly folds: NativeFolds }; readonly external: RolloutPart };

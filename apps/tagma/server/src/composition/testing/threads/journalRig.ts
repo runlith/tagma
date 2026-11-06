@@ -9,11 +9,21 @@ const renamed = (from: string, to: string) => (entry: Readonly<Record<string, un
     ? { ...entry, toolName: `${to}${entry.toolName.slice(from.length)}` }
     : null;
 
+export const RIG_REFUSED = 'rigged__refused';
+
+const returned = renamed('rigged__', 'rig__');
+
 export const RIG_STEP: ThreadFormStep = {
   name: '29991231000000_rigged_tools',
   samples: { entry: { type: 'tool', id: 'e', toolName: 'rig__deal', toolCallId: 'c' } },
   entry: renamed('rig__', 'rigged__'),
-  back: { entry: renamed('rigged__', 'rig__') },
+  back: {
+    entry: (entry) => {
+      if (entry.toolName === RIG_REFUSED) throw new Error('this rigged tool has no name to return to');
+      return returned(entry);
+    },
+    holds: ['rigged__'],
+  },
 };
 
 export const RIG_MODULES = [...MODULES, manifest({ id: 'journal-rig', formSteps: [RIG_STEP] })];

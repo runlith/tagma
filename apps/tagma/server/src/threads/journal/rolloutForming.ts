@@ -107,8 +107,8 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
 
   return {
     formedHere,
-    returnedHere: (threadId: string, path: string | undefined, steps: readonly ThreadFormStep[], onto: string | null) =>
-      returnedRollout(db, write, threadId, path, kinds, stage, sources, steps, onto),
+    returnedHere: (threadId: string, path: string | undefined, steps: readonly ThreadFormStep[], onto: string | null, cast: boolean) =>
+      returnedRollout(db, write, threadId, path, kinds, stage, sources, steps, onto, cast),
     reformedHere: (threadId: string, path: string): Effect.Effect<void, RolloutFormFailure> =>
       units
         .write(UNREFUSING, (unit) =>
