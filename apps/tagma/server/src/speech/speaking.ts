@@ -2,6 +2,7 @@ import { AudioDevices } from '@runlith/audio/port/devices';
 import type { Player } from '@runlith/audio/port/player';
 import type { DeviceRefused } from '@runlith/audio/port/refusal';
 import type { SynthesisChoice } from '@runlith/speech/engine/choose';
+import type { SpeechSet } from '@runlith/speech/engine/set';
 import { Speech } from '@runlith/speech/engine/Speech';
 import type { SpeechFailure } from '@runlith/speech/wire/failure';
 import { Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from 'effect';
@@ -53,6 +54,7 @@ export const makeSpeaking = Effect.gen(function* () {
   const fibers = yield* FiberSet.make<void, GateRefusal | StoreFailure>();
 
   const chosen = Effect.fn('Speaking.chosen')(function* (
+    set: SpeechSet,
     ask: VoiceAsk,
   ): Effect.fn.Return<SynthesisChoice, GateRefusal<'no-model'> | StoreFailure> {
     const standing = yield* settings.value(voiceChoice);
@@ -63,12 +65,13 @@ export const makeSpeaking = Effect.gen(function* () {
       voice: ask.voice ?? (named ? standing.voice : undefined),
       language: ask.language ?? standing.language,
     };
-    return yield* Effect.mapError(speech.voice(need, ask.account), noModel);
+    return yield* Effect.mapError(set.voice(need, ask.account), noModel);
   });
 
   const speaking: Speaking['Service'] = Speaking.of({
     open: Effect.fn('Speaking.open')(function* (ask) {
-      const choice = yield* chosen(ask);
+      const set = yield* speech.now;
+      const choice = yield* chosen(set, ask);
       const session = yield* Scope.make();
       sessions.set(session, undefined);
       yield* Effect.addFinalizer(() =>
@@ -78,7 +81,7 @@ export const makeSpeaking = Effect.gen(function* () {
         ),
       );
       const live = Effect.suspend(() => (sessions.has(session) ? Effect.void : Effect.fail(silenced)));
-      const synthesis = yield* Effect.mapError(speech.synthesize(choice, { account: ask.account }), failed).pipe(Scope.provide(session));
+      const synthesis = yield* Effect.mapError(set.synthesize(choice, { account: ask.account }), failed).pipe(Scope.provide(session));
       const player = yield* Effect.mapError(devices.play(synthesis.format), refused).pipe(Scope.provide(session));
       if (sessions.has(session)) sessions.set(session, player);
       const pumped = yield* Effect.forkIn(
@@ -133,8 +136,9 @@ export const makeSpeaking = Effect.gen(function* () {
     audio: (ask) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const choice = yield* chosen(ask);
-          const synthesis = yield* Effect.mapError(speech.synthesize(choice, {}), failed);
+          const set = yield* speech.now;
+          const choice = yield* chosen(set, ask);
+          const synthesis = yield* Effect.mapError(set.synthesize(choice, {}), failed);
           const writing = Stream.fromEffect(Effect.andThen(synthesis.say(ask.text), synthesis.end).pipe(Effect.mapError(failed))).pipe(
             Stream.drain,
           );

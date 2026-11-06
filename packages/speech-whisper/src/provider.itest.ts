@@ -10,6 +10,8 @@ import { chunk } from '@runlith/audio/sound/chunk';
 import { ended, type Track } from '@runlith/audio/sound/track';
 import { Speech } from '@runlith/speech/engine/Speech';
 import { SpeechCredentials } from '@runlith/speech/engine/SpeechCredentials';
+import { SpeechSources } from '@runlith/speech/engine/SpeechSources';
+import { DuplexTransport } from '@runlith/speech/protocol/transport';
 import { LIVE } from '@runlith/speech/wire/capabilities';
 import { layer } from '@runlith/effect-test';
 import { Clock, Effect, Layer, Stream } from 'effect';
@@ -65,10 +67,20 @@ const whisper = Layer.unwrap(
 
 const credentials = Layer.succeed(SpeechCredentials, { get: () => Effect.die('whisper takes no key') });
 
-const speech = Layer.unwrap(Effect.map(whisperProvider, (provider) => Speech.layer([provider]))).pipe(
-  Layer.provide(Layer.mergeAll(detectorLayer, credentials)),
-  Layer.provide(whisper),
+const sources = Layer.effect(
+  SpeechSources,
+  Effect.map(whisperProvider, (provider) => SpeechSources.of({ parts: Stream.succeed([{ owner: 'whisper', providers: [provider] }]) })),
 );
+
+const unreached = Layer.mergeAll(
+  Layer.succeed(DuplexTransport, { open: () => Effect.die('whisper opens no socket') }),
+  Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make(() => Effect.die('whisper reaches no server')),
+  ),
+);
+
+const speech = Speech.layer.pipe(Layer.provide(Layer.mergeAll(sources, detectorLayer, credentials, unreached)), Layer.provide(whisper));
 
 const format = { rate: 16_000, channels: 1 };
 
@@ -80,7 +92,7 @@ const finiteTrack = (ms: number): Track => {
 layer(speech, { excludeTestServices: true })('local Whisper recognition', (it) => {
   it.effect('a finite track ends with Finished, its segments timed on the session scale', () =>
     Effect.gen(function* () {
-      const speech = yield* Speech;
+      const speech = yield* (yield* Speech).now;
       const choice = yield* speech.recognizer({ kinds: LIVE, provider: 'whisper', model: artifact.id });
       const heard = yield* Stream.runCollect(speech.recognize(choice, finiteTrack(1_000), { track: 'mic', origin: 0n }));
       const closed = heard.filter((one) => one._tag === 'Utterance' && one.closed);
@@ -97,7 +109,7 @@ layer(speech, { excludeTestServices: true })('local Whisper recognition', (it) =
 
   it.effect('a hinted listening transcribes in the hinted language and its units carry it', () =>
     Effect.gen(function* () {
-      const speech = yield* Speech;
+      const speech = yield* (yield* Speech).now;
       const choice = yield* speech.recognizer({ kinds: LIVE, provider: 'whisper', model: artifact.id, languages: ['de'] });
       const heard = yield* Stream.runCollect(speech.recognize(choice, finiteTrack(1_000), { track: 'mic', origin: 0n }));
       const units = heard.flatMap((one) => (one._tag === 'Utterance' && one.closed ? one.units : []));

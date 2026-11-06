@@ -76,4 +76,16 @@ export const SYNTHESIS_FEED = feed('speech.synthesize', {
   callers: 'operator',
 });
 
-export const SPEECH_FEEDS = [RECOGNIZE_FEED, INSTALL_FEED, CAPTURES_FEED, SYNTHESIS_FEED] as const;
+export const CatalogEvent = Schema.Struct({
+  providers: Schema.Array(Schema.String).annotate({ description: 'The speech providers standing in the catalog, in its order.' }),
+});
+export type CatalogEvent = typeof CatalogEvent.Type;
+
+const CATALOG_FEED = feed('speech.catalog.subscribe', {
+  input: Schema.Struct({}),
+  event: CatalogEvent,
+  refusals: [],
+  callers: 'operator',
+});
+
+export const SPEECH_FEEDS = [RECOGNIZE_FEED, INSTALL_FEED, CAPTURES_FEED, SYNTHESIS_FEED, CATALOG_FEED] as const;

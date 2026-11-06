@@ -25,7 +25,7 @@ const devices = AudioDevices.none('headless server');
 it.effect('synthesis streams its chosen format and PCM to a caller without opening a server player', () =>
   inWorld([provider], (world) =>
     Effect.gen(function* () {
-      const speaker = yield* makeSpeaking.pipe(Effect.provideService(Speech, world.speech), Effect.provideService(Settings, settings));
+      const speaker = yield* makeSpeaking.pipe(Effect.provideService(Speech, world.service), Effect.provideService(Settings, settings));
       const output = yield* Effect.forkChild(Stream.runCollect(speaker.audio({ text: 'Bonjour' })));
       const link = yield* world.transport.next;
       yield* link.receive(ready);
@@ -44,7 +44,7 @@ it.effect('synthesis streams its chosen format and PCM to a caller without openi
 it.effect('unsubscribing from synthesized audio releases the provider while it is still producing', () =>
   inWorld([provider], (world) =>
     Effect.gen(function* () {
-      const speaker = yield* makeSpeaking.pipe(Effect.provideService(Speech, world.speech), Effect.provideService(Settings, settings));
+      const speaker = yield* makeSpeaking.pipe(Effect.provideService(Speech, world.service), Effect.provideService(Settings, settings));
       const output = yield* Effect.forkChild(Stream.runDrain(speaker.audio({ text: 'Bonjour' })));
       const link = yield* world.transport.next;
       yield* link.receive(ready);

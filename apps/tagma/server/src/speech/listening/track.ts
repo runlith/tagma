@@ -3,7 +3,7 @@ import { Meter } from '@runlith/audio/sound/level';
 import type { Track } from '@runlith/audio/sound/track';
 import type { RecognitionChoice } from '@runlith/speech/engine/choose';
 import type { ListeningSettings } from '@runlith/speech/engine/settings';
-import type { Speech } from '@runlith/speech/engine/Speech';
+import type { SpeechSet } from '@runlith/speech/engine/set';
 import type { Heard as Spoken } from '@runlith/speech/wire/heard';
 import { Effect, type Scope, Stream } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -79,7 +79,7 @@ export const listened = <E>(captured: Captured, origin: bigint, ears: Ears<E>): 
 });
 
 export const recognized = Effect.fnUntraced(function* <E extends { readonly message: string }>(
-  speech: Speech['Service'],
+  speech: SpeechSet,
   choice: RecognitionChoice,
   captured: Captured,
   origin: bigint,

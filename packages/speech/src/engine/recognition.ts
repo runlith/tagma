@@ -11,7 +11,7 @@ import { clips } from './clips.ts';
 import { fitsRecognition } from './fits.ts';
 import { listen } from './listen.ts';
 import { listeningDefaults } from './settings.ts';
-import type { RecognitionOptions } from './Speech.ts';
+import type { RecognitionOptions } from './set.ts';
 import type { SpeechCredentials } from './SpeechCredentials.ts';
 import { type Detection, SpeechDetector } from './SpeechDetector.ts';
 

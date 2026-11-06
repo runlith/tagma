@@ -1,6 +1,6 @@
 import type { AudioDevices, Availability } from '@runlith/audio/port/devices';
 import { offeredTurns } from '@runlith/speech/engine/choose';
-import type { Speech } from '@runlith/speech/engine/Speech';
+import type { SpeechSet } from '@runlith/speech/engine/set';
 import type { RecognitionModel, SynthesisModel } from '@runlith/speech/wire/capabilities';
 import { Effect } from 'effect';
 import type { StoreFailure } from '../platform/contract/service/store.js';
@@ -52,7 +52,7 @@ const synthesisOf = (provider: string, model: SynthesisModel, judged: Judged): M
 });
 
 export const statusOf = Effect.fnUntraced(function* (
-  speech: Speech['Service'],
+  speech: SpeechSet,
   devices: AudioDevices['Service'],
   models: Models['Service'],
   settings: Settings['Service'],

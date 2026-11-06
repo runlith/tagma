@@ -9,7 +9,6 @@ import { SpeechEvent, type Unit } from '../wire/events.ts';
 import type { Utterance } from '../wire/heard.ts';
 import type { RecognitionChoice } from './choose.ts';
 import { listeningDefaults } from './settings.ts';
-import { Speech } from './Speech.ts';
 import { SpeechDetector } from './SpeechDetector.ts';
 
 const live = streaming('live');
@@ -160,10 +159,53 @@ it.effect('a batch model hears the track in clips cut by the Segmenter, each tim
   }),
 );
 
-it.effect('inconsistent capabilities throw when the catalog is built, and the choice explains every rejected model', () =>
+it.effect('a provider with inconsistent capabilities or a taken id is left out with its fault, and the others stand', () =>
   Effect.gen(function* () {
-    expect(() => Speech.layer([scriptedProvider({ id: 'a', recognition: [streaming('x', { turns: [] })] })])).toThrow();
-    expect(() => Speech.layer([provider, provider])).toThrow();
+    const broken = scriptedProvider({ id: 'broken', recognition: [streaming('x', { turns: [] })] });
+    const set = yield* inWorld([broken, provider], (world) =>
+      world.reload([
+        { owner: 'first', providers: [broken, provider] },
+        { owner: 'second', providers: [scriptedProvider({ id: 'scripted', recognition: [streaming('other')] })] },
+      ]),
+    );
+    expect(set.recognition.map((offer) => `${offer.provider}/${offer.model.id}`)).toEqual(['scripted/live']);
+    expect(set.faults.map((fault) => [fault.owner, fault.provider])).toEqual([
+      ['first', 'broken'],
+      ['second', 'scripted'],
+    ]);
+    expect(set.faults[1]?.reason).toContain('first');
+  }),
+);
+
+it.effect('a recognition keeps the set it started on through a reload, and the next work reads the new set', () =>
+  Effect.gen(function* () {
+    const choice: RecognitionChoice = { provider: 'scripted', model: live, turns: 'provider', wants: {} };
+    const seen = yield* inWorld([provider], (world) =>
+      Effect.gen(function* () {
+        const listening = yield* world.listen(choice);
+        yield* speak(listening, [[4, 2_000]]);
+        const link = yield* world.transport.next;
+        const next = yield* world.reload([]);
+        for (const frame of [
+          incoming({ type: 'ready' }),
+          event(SpeechEvent.final('t', [word('kept', 0, 1_200)])),
+          event(SpeechEvent.turnEnd('t')),
+        ])
+          yield* link.receive(frame);
+        yield* settle;
+        const refused = yield* Effect.flip(Stream.runDrain(next.recognize(choice, listening.track.track, { track: 'mic', origin: 0n })));
+        return { told: utterances(listening), offered: next.recognition.length, refused: refused.message };
+      }),
+    );
+    expect(seen.told.at(-1)?.text).toBe('kept');
+    expect(seen.told.at(-1)?.closed).toBe(true);
+    expect(seen.offered).toBe(0);
+    expect(seen.refused).toContain('not a registered recognizer');
+  }),
+);
+
+it.effect('the choice explains every rejected model', () =>
+  Effect.gen(function* () {
     const cloud = scriptedProvider({ id: 'cloud', recognition: [streaming('only-provider', { turns: ['provider'] })] });
     const local = scriptedProvider({ id: 'local', recognition: [batching('whisper')], batch: () => Stream.empty });
     const missing = scriptedProvider({

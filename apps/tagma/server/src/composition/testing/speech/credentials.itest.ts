@@ -29,7 +29,7 @@ const world = credentialsLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
-      Layer.succeed(KeyedProviders, { ids: ['soniox', 'elevenlabs'] }),
+      Layer.succeed(KeyedProviders, { ids: () => ['soniox', 'elevenlabs'] }),
       Layer.succeed(QuotaProviders, { providers: [] }),
       Layer.succeed(BuiltinAdapters, { sources: [] }),
       sessionlessLayer,

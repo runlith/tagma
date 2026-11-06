@@ -1,120 +1,57 @@
-import type { Availability } from '@runlith/audio/port/devices';
-import type { Format } from '@runlith/audio/sound/format';
-import type { Track } from '@runlith/audio/sound/track';
-import { Context, Effect, Layer, type Scope, Semaphore, type Stream } from 'effect';
-import type { Recorded, Synthesis } from '../protocol/adapter.ts';
-import type { RecognitionModel, SynthesisModel } from '../wire/capabilities.ts';
-import type { SpeechFailure } from '../wire/failure.ts';
-import type { Heard, Transcribed } from '../wire/heard.ts';
-import type { RecognitionNeed, SynthesisNeed } from '../wire/requests.ts';
-import { conditions } from './access.ts';
-import { type AnyProvider, type Offer, speechCatalog } from './catalog.ts';
-import { chooseRecognition, chooseSynthesis, type NoModel, type RecognitionChoice, type SynthesisChoice } from './choose.ts';
-import { recognition } from './recognition.ts';
-import type { ListeningSettings } from './settings.ts';
+import { Context, Deferred, Effect, Layer, PubSub, Semaphore, Stream } from 'effect';
+import { type AnyProvider, type SpeechPart, speechCatalog } from './catalog.ts';
+import { type SpeechSet, speechSet } from './set.ts';
 import type { SpeechCredentials } from './SpeechCredentials.ts';
-import { SpeechDetector } from './SpeechDetector.ts';
-import { synthesis } from './synthesis.ts';
-import { discarding, type TranscriptionOptions, transcription } from './transcription.ts';
-
-export type RecognitionOptions = {
-  readonly track: string;
-  readonly origin: bigint;
-  readonly account?: string | undefined;
-  readonly settings?: ListeningSettings | undefined;
-  readonly cut?: Effect.Effect<void> | undefined;
-  readonly recorded?: boolean | undefined;
-};
-
-export type SynthesisOptions = {
-  readonly account?: string | undefined;
-  readonly rate?: number | undefined;
-};
-
-export type ModelStatus = {
-  readonly provider: string;
-  readonly model: string;
-  readonly kind: 'recognition' | 'synthesis';
-  readonly availability: Availability;
-};
-
-export type SpeechStatus = {
-  readonly detector: Availability;
-  readonly models: ReadonlyArray<ModelStatus>;
-};
+import type { SpeechDetector } from './SpeechDetector.ts';
+import { type SpeechHost, SpeechSources } from './SpeechSources.ts';
 
 export class Speech extends Context.Service<
   Speech,
   {
-    readonly recognition: ReadonlyArray<Offer<RecognitionModel>>;
-    readonly synthesis: ReadonlyArray<Offer<SynthesisModel>>;
-    readonly status: (account?: string) => Effect.Effect<SpeechStatus>;
-    readonly recognizer: (need: RecognitionNeed, account?: string) => Effect.Effect<RecognitionChoice, NoModel>;
-    readonly voice: (need: SynthesisNeed, account?: string) => Effect.Effect<SynthesisChoice, NoModel>;
-    readonly recognize: (choice: RecognitionChoice, track: Track, options: RecognitionOptions) => Stream.Stream<Heard, SpeechFailure>;
-    readonly transcribe: (
-      choice: RecognitionChoice,
-      recorded: Recorded,
-      options: TranscriptionOptions,
-    ) => Stream.Stream<Transcribed, SpeechFailure>;
-    readonly resume: (
-      choice: RecognitionChoice,
-      token: string,
-      format: Format,
-      options: TranscriptionOptions,
-    ) => Stream.Stream<Transcribed, SpeechFailure>;
-    readonly discard: (provider: string, token: string, account?: string) => Effect.Effect<void, SpeechFailure>;
-    readonly synthesize: (choice: SynthesisChoice, options: SynthesisOptions) => Effect.Effect<Synthesis, SpeechFailure, Scope.Scope>;
+    readonly now: Effect.Effect<SpeechSet>;
+    readonly changes: Stream.Stream<SpeechSet>;
   }
 >()('speech/Speech') {
-  static layer<R>(providers: ReadonlyArray<AnyProvider<R>>): Layer.Layer<Speech, never, R | SpeechCredentials | SpeechDetector> {
-    const catalog = speechCatalog(providers);
-    return Layer.effect(
-      Speech,
-      Effect.gen(function* () {
-        const context = yield* Effect.context<R | SpeechCredentials | SpeechDetector>();
-        const detector = yield* SpeechDetector;
-        const limited = new Map<string, Semaphore.Semaphore>();
-        for (const offer of catalog.synthesis) {
-          const streams = offer.model.synthesis.limits.streams;
-          if (streams !== undefined) limited.set(`${offer.provider}\u0000${offer.model.id}`, yield* Semaphore.make(streams));
+  static readonly layer: Layer.Layer<Speech, never, SpeechSources | SpeechHost | SpeechCredentials | SpeechDetector> = Layer.effect(
+    Speech,
+    Effect.gen(function* () {
+      const sources = yield* SpeechSources;
+      const context = yield* Effect.context<SpeechHost | SpeechCredentials | SpeechDetector>();
+      const permits = new WeakMap<AnyProvider<SpeechHost>, Map<string, Semaphore.Semaphore>>();
+      const limited = Effect.fnUntraced(function* (provider: AnyProvider<SpeechHost>) {
+        const known = permits.get(provider);
+        if (known !== undefined) return known;
+        const own = new Map<string, Semaphore.Semaphore>();
+        for (const model of provider.synthesizer?.models ?? []) {
+          const streams = model.synthesis.limits.streams;
+          if (streams !== undefined) own.set(model.id, yield* Semaphore.make(streams));
         }
-        const streams = (provider: string, model: string) => limited.get(`${provider}\u0000${model}`);
-        const judged = (account: string | undefined) =>
-          Effect.flatMap(detector.availability, (availability) =>
-            Effect.provideContext(conditions(catalog, availability, account), context),
-          );
-        return {
-          recognition: catalog.recognition,
-          synthesis: catalog.synthesis,
-          status: (account) =>
-            Effect.map(judged(account), (known) => ({
-              detector: known.detector,
-              models: [
-                ...catalog.recognition.map((offer) => ({
-                  provider: offer.provider,
-                  model: offer.model.id,
-                  kind: 'recognition' as const,
-                  availability: known.model(offer.provider, offer.model.id),
-                })),
-                ...catalog.synthesis.map((offer) => ({
-                  provider: offer.provider,
-                  model: offer.model.id,
-                  kind: 'synthesis' as const,
-                  availability: known.model(offer.provider, offer.model.id),
-                })),
-              ],
-            })),
-          recognizer: (need, account) =>
-            Effect.flatMap(judged(account), (known) => Effect.fromResult(chooseRecognition(catalog, need, known))),
-          voice: (need, account) => Effect.flatMap(judged(account), (known) => Effect.fromResult(chooseSynthesis(catalog, need, known))),
-          recognize: (choice, track, options) => recognition(catalog, context, choice, track, options),
-          transcribe: (choice, recorded, options) => transcription(catalog, context, choice, { _tag: 'recorded', recorded }, options),
-          resume: (choice, token, format, options) => transcription(catalog, context, choice, { _tag: 'job', token, format }, options),
-          discard: (provider, token, account) => discarding(catalog, context, provider, token, account),
-          synthesize: (choice, options) => synthesis(catalog, context, streams, choice, options),
-        };
-      }),
-    );
-  }
+        permits.set(provider, own);
+        return own;
+      });
+      const setOf = Effect.fnUntraced(function* (parts: ReadonlyArray<SpeechPart<SpeechHost>>) {
+        const catalog = speechCatalog(parts);
+        const limits = new Map<string, Map<string, Semaphore.Semaphore>>();
+        for (const provider of catalog.providers) limits.set(provider.id, yield* limited(provider));
+        return speechSet({ catalog, context, streams: (provider, model) => limits.get(provider)?.get(model) });
+      });
+      const sets = yield* Effect.acquireRelease(PubSub.sliding<SpeechSet>({ capacity: 1, replay: 1 }), PubSub.shutdown);
+      const first = yield* Deferred.make<SpeechSet>();
+      let current: SpeechSet | undefined;
+      yield* Effect.forkScoped(
+        Stream.runForEach(sources.parts, (parts) =>
+          Effect.flatMap(setOf(parts), (set) => {
+            current = set;
+            return Effect.andThen(PubSub.publish(sets, set), Deferred.succeed(first, set));
+          }),
+        ).pipe(Effect.ensuring(Effect.flatMap(setOf([]), (empty) => Deferred.succeed(first, empty)))),
+      );
+      const opening = yield* Deferred.await(first);
+      const standing = (): SpeechSet => current ?? opening;
+      return Speech.of({
+        now: Effect.sync(standing),
+        changes: Stream.fromPubSub(sets),
+      });
+    }),
+  );
 }

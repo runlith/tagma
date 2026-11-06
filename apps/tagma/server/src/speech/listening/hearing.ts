@@ -72,8 +72,9 @@ export const makeRecognitions = Effect.fnUntraced(function* ({ captures }: { rea
         }
         const entry = yield* admitted(ask.id);
         const tracks = named(ask.tracks, yield* settings.value(microphone));
+        const set = yield* speech.now;
         const { choice, recognizer } = yield* chosen(
-          speech,
+          set,
           settings,
           ask.recognizer,
           ask.purpose === 'dictation' ? dictationRecognizer : undefined,
@@ -99,7 +100,7 @@ export const makeRecognitions = Effect.fnUntraced(function* ({ captures }: { rea
           spoken: (spoken) => Effect.asVoid(Queue.offer(out, heardOf(spoken, 0, speakerOf(spoken)))),
         };
         const fibers = yield* Effect.forEach(captured, (one) =>
-          Effect.forkScoped(recognized(speech, choice, listened(one, origin, ears), origin, tuned, recognizer.account, ears)),
+          Effect.forkScoped(recognized(set, choice, listened(one, origin, ears), origin, tuned, recognizer.account, ears)),
         );
         yield* Effect.forkScoped(Effect.andThen(Fiber.joinAll(fibers), Queue.end(out)));
         yield* Deferred.succeed(entry.ready, { captured, scope: yield* Effect.scope, cut: Effect.asVoid(Queue.end(out)) });

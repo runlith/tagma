@@ -9,8 +9,11 @@ import { helperClientLayer } from '@runlith/audio/helper/client';
 import { AudioDevices } from '@runlith/audio/port/devices';
 import { capabilities } from '@runlith/audio-darwin/capabilities';
 import { DarwinChannel, LocalSockets } from '@runlith/audio-darwin/channel';
+import type { SpeechPart } from '@runlith/speech/engine/catalog';
 import { Speech } from '@runlith/speech/engine/Speech';
 import { SpeechDetector } from '@runlith/speech/engine/SpeechDetector';
+import { type SpeechHost, SpeechSources } from '@runlith/speech/engine/SpeechSources';
+import type { SpeechProvider } from '@runlith/speech/protocol/adapter';
 import { webSocketTransport } from '@runlith/speech/transport/websocket';
 import { openai } from '@runlith/speech-openai/provider';
 import { soniox } from '@runlith/speech-soniox/provider';
@@ -18,7 +21,7 @@ import { detectorLayer } from '@runlith/speech-whisper/detector';
 import { Engine } from '@runlith/speech-whisper/Engine';
 import { ModelStore } from '@runlith/speech-whisper/ModelStore';
 import { unbuiltProvider, whisperProvider } from '@runlith/speech-whisper/provider';
-import { Effect, Layer, Stream } from 'effect';
+import { Context, Effect, Layer, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import {
   AUDIO_HELPER,
@@ -34,12 +37,7 @@ import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { speech } from '../speech/speech.js';
 import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/service/models.js';
-
-export const CLOUD_SPEECH = [soniox, openai] as const;
-
-export const KEYED_SPEECH: ReadonlyArray<string> = CLOUD_SPEECH.filter((provider) => provider.credential._tag === 'required').map(
-  (provider) => provider.id,
-);
+import { KeyedProviders } from '../providers/contract/service/credentials.js';
 
 export type SpeechPlace = {
   readonly hostApp: string;
@@ -82,7 +80,7 @@ const devices = (place: SpeechPlace): Layer.Layer<AudioDevices> =>
 
 const store = (place: SpeechPlace) => ModelStore.layer(place.models).pipe(Layer.provide(Layer.mergeAll(host, FetchHttpClient.layer)));
 
-const local = Layer.effect(
+const localModels = Layer.effect(
   LocalModels,
   Effect.map(ModelStore, (models) =>
     LocalModels.of({
@@ -120,26 +118,62 @@ const local = Layer.effect(
   ),
 );
 
-const recognizers = (place: SpeechPlace) => {
-  if (!existsSync(place.engine) || !existsSync(place.silero)) {
-    const recorded = existsSync(place.absence) ? readFileSync(place.absence, 'utf8').trim() : '';
-    const reason = recorded !== '' ? recorded : `the Whisper engine is not built at ${place.engine}`;
-    return Speech.layer([...CLOUD_SPEECH, unbuiltProvider(reason)]).pipe(
-      Layer.provideMerge(SpeechDetector.none(reason, ['build it with bun run --cwd packages/speech-whisper build'])),
-    );
-  }
-  const engine = Engine.layer({ engine: place.engine, silero: place.silero }).pipe(Layer.provide(spawner));
-  return Layer.unwrap(Effect.map(whisperProvider, (whisper) => Speech.layer([...CLOUD_SPEECH, whisper]))).pipe(
-    Layer.provideMerge(detectorLayer),
-    Layer.provide(engine),
-  );
+type Local = { readonly built: true; readonly engine: Layer.Layer<Engine> } | { readonly built: false; readonly reason: string };
+
+const localOf = (place: SpeechPlace): Local => {
+  if (existsSync(place.engine) && existsSync(place.silero))
+    return { built: true, engine: Engine.layer({ engine: place.engine, silero: place.silero }).pipe(Layer.provide(spawner)) };
+  const recorded = existsSync(place.absence) ? readFileSync(place.absence, 'utf8').trim() : '';
+  return { built: false, reason: recorded !== '' ? recorded : `the Whisper engine is not built at ${place.engine}` };
 };
 
-const speechBindings = (place: SpeechPlace) =>
-  Layer.mergeAll(recognizers(place), devices(place), local).pipe(
-    Layer.provide(store(place)),
-    Layer.provide(Layer.mergeAll(webSockets, FetchHttpClient.layer)),
+const keyedOf = (parts: ReadonlyArray<SpeechPart<SpeechHost>>): ReadonlyArray<string> =>
+  parts.flatMap((part) => part.providers.filter((provider) => provider.credential._tag === 'required').map((provider) => provider.id));
+
+const sourcesWith = <R>(whisperOf: Effect.Effect<SpeechProvider<undefined>, never, R>) =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const whisper = yield* whisperOf;
+      const parts: ReadonlyArray<SpeechPart<SpeechHost>> = [
+        { owner: 'soniox', providers: [soniox] },
+        { owner: 'openai', providers: [openai] },
+        { owner: 'whisper', providers: [whisper] },
+      ];
+      return Context.make(SpeechSources, SpeechSources.of({ parts: Stream.succeed(parts) })).pipe(
+        Context.add(KeyedProviders, KeyedProviders.of({ ids: () => keyedOf(parts) })),
+      );
+    }),
   );
 
-export const speechInstallation = <A, E, R>(input: { readonly place: SpeechPlace; readonly credentials: Layer.Layer<A, E, R> }) =>
-  speech.lifetimes.installation.pipe(Layer.provideMerge(speechBindings(input.place).pipe(Layer.provide(input.credentials))));
+const sourcesOf = (local: Local, models: Layer.Layer<ModelStore>): Layer.Layer<SpeechSources | KeyedProviders> =>
+  local.built
+    ? sourcesWith(whisperProvider).pipe(Layer.provide(local.engine), Layer.provide(models))
+    : sourcesWith(Effect.succeed(unbuiltProvider(local.reason)));
+
+const installationOf = <A, E, R>(
+  place: SpeechPlace,
+  local: Local,
+  models: Layer.Layer<ModelStore>,
+  sources: Layer.Layer<SpeechSources | KeyedProviders>,
+  credentials: Layer.Layer<A, E, R>,
+) => {
+  const detector = local.built
+    ? detectorLayer.pipe(Layer.provide(local.engine))
+    : SpeechDetector.none(local.reason, ['build it with bun run --cwd packages/speech-whisper build']);
+  const recognizers = Speech.layer.pipe(Layer.provideMerge(detector), Layer.provide(sources));
+  const bindings = Layer.mergeAll(recognizers, devices(place), localModels).pipe(
+    Layer.provide(models),
+    Layer.provide(Layer.mergeAll(webSockets, FetchHttpClient.layer)),
+  );
+  return speech.lifetimes.installation.pipe(Layer.provideMerge(bindings.pipe(Layer.provide(credentials))));
+};
+
+export const speechComposition = (place: SpeechPlace) => {
+  const local = localOf(place);
+  const models = store(place);
+  const sources = sourcesOf(local, models);
+  return {
+    sources,
+    installation: <A, E, R>(credentials: Layer.Layer<A, E, R>) => installationOf(place, local, models, sources, credentials),
+  };
+};

@@ -12,7 +12,7 @@ export class QuotaProviders extends Context.Service<QuotaProviders, { readonly p
   'tagma/providers/QuotaProviders',
 ) {}
 
-export class KeyedProviders extends Context.Service<KeyedProviders, { readonly ids: ReadonlyArray<string> }>()(
+export class KeyedProviders extends Context.Service<KeyedProviders, { readonly ids: () => ReadonlyArray<string> }>()(
   'tagma/providers/KeyedProviders',
 ) {}
 

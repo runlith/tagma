@@ -1,5 +1,6 @@
 import { speech as declaration } from './contract/wire/module.js';
 import { join } from 'node:path';
+import { Speech } from '@runlith/speech/engine/Speech';
 import { Context, Effect } from 'effect';
 import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manifest.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
@@ -20,6 +21,7 @@ const live: SpeechLive = liveOf(SPEECH_FEEDS, async (door) =>
     captures: Context.get(door, Captures),
     models: Context.get(door, Models),
     speaking: Context.get(door, Speaking),
+    speech: Context.get(door, Speech),
   }),
 );
 

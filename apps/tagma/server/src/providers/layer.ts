@@ -58,7 +58,7 @@ const credentials = Layer.effect(
   Effect.gen(function* () {
     const { tokensPath } = yield* CredentialFiles;
     const store = yield* MachineStore;
-    const keyed = Option.match(yield* Effect.serviceOption(KeyedProviders), { onNone: () => [], onSome: ({ ids }) => ids });
+    const keyed = Option.match(yield* Effect.serviceOption(KeyedProviders), { onNone: () => () => [], onSome: ({ ids }) => ids });
     const registry = yield* ProviderRegistry;
     const bound = yield* Effect.serviceOption(VendorWires);
     const wire = Option.match(bound, { onNone: () => vendorWire, onSome: ({ wire }) => wire });
@@ -100,7 +100,7 @@ const credentials = Layer.effect(
             .current()
             .wires.providers.filter((provider) => provider.auth === 'api-key')
             .map((provider) => provider.id),
-          ...keyed,
+          ...keyed(),
         ]),
       ],
     };

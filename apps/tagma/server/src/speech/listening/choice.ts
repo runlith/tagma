@@ -1,7 +1,7 @@
 import type { NoModel, RecognitionChoice } from '@runlith/speech/engine/choose';
 import { speaks } from '@runlith/speech/engine/fits';
 import { type ListeningSettings, listeningDefaults } from '@runlith/speech/engine/settings';
-import type { Speech } from '@runlith/speech/engine/Speech';
+import type { SpeechSet } from '@runlith/speech/engine/set';
 import { LIVE, RECORDED } from '@runlith/speech/wire/capabilities';
 import type { RecognitionNeed } from '@runlith/speech/wire/requests';
 import { Effect } from 'effect';
@@ -36,7 +36,7 @@ const needOf = (recognizer: Recognizer): RecognitionNeed => ({
   tuning: Object.keys(recognizer.tuning).length === 0 ? undefined : recognizer.tuning,
 });
 
-export const again = (speech: Speech['Service'], recognizer: Recognizer): Effect.Effect<RecognitionChoice, GateRefusal<'no-model'>> =>
+export const again = (speech: SpeechSet, recognizer: Recognizer): Effect.Effect<RecognitionChoice, GateRefusal<'no-model'>> =>
   Effect.mapError(speech.recognizer(needOf(recognizer), recognizer.account), noModel);
 
 const standingOf = Effect.fn('Speech.standingOf')(function* (
@@ -51,7 +51,7 @@ const standingOf = Effect.fn('Speech.standingOf')(function* (
 });
 
 export const chosen = Effect.fn('Speech.chosen')(function* (
-  speech: Speech['Service'],
+  speech: SpeechSet,
   settings: Settings['Service'],
   ask: RecognizerAsk | undefined,
   preferred?: SettingKey<RecognizerPick>,
@@ -91,7 +91,7 @@ export const chosen = Effect.fn('Speech.chosen')(function* (
 type ModelPick = { readonly provider?: string | undefined; readonly model?: string | undefined };
 
 export const recordedChoice = Effect.fn('Speech.recordedChoice')(function* (
-  speech: Speech['Service'],
+  speech: SpeechSet,
   ask: ModelAsk | undefined,
   standing: ModelPick,
   spoken: readonly string[],
@@ -123,7 +123,7 @@ export const recordedChoice = Effect.fn('Speech.recordedChoice')(function* (
 });
 
 export const dictationReadiness = Effect.fn('Speech.dictationReadiness')(function* (
-  speech: Speech['Service'],
+  speech: SpeechSet,
   settings: Settings['Service'],
 ): Effect.fn.Return<DictationReadiness, StoreFailure> {
   return yield* chosen(speech, settings, undefined, dictationRecognizer).pipe(

@@ -1,12 +1,13 @@
 import type { Format } from '@runlith/audio/sound/format';
-import { Effect, Exit, Fiber, Layer, type Scope, Stream } from 'effect';
+import { Effect, Exit, Fiber, Layer, PubSub, type Scope, Stream } from 'effect';
 import { HttpClient } from 'effect/http';
-import type { AnyProvider } from '../engine/catalog.ts';
+import type { AnyProvider, SpeechPart } from '../engine/catalog.ts';
 import type { RecognitionChoice } from '../engine/choose.ts';
-import { type RecognitionOptions, Speech } from '../engine/Speech.ts';
+import type { RecognitionOptions, SpeechSet } from '../engine/set.ts';
+import { Speech } from '../engine/Speech.ts';
 import { SpeechCredentials } from '../engine/SpeechCredentials.ts';
 import { SpeechDetector } from '../engine/SpeechDetector.ts';
-import type { DuplexTransport } from '../protocol/transport.ts';
+import { type SpeechHost, SpeechSources } from '../engine/SpeechSources.ts';
 import type { SpeechEvent, Unit } from '../wire/events.ts';
 import type { SpeechFailure } from '../wire/failure.ts';
 import { incoming } from './scriptedProvider.ts';
@@ -24,7 +25,9 @@ export type Listening = {
 
 export type World = {
   readonly transport: ScriptedTransport;
-  readonly speech: Speech['Service'];
+  readonly service: Speech['Service'];
+  readonly speech: SpeechSet;
+  readonly reload: (parts: ReadonlyArray<SpeechPart<SpeechHost>>) => Effect.Effect<SpeechSet>;
   readonly listen: (
     choice: RecognitionChoice,
     options?: Partial<RecognitionOptions>,
@@ -60,20 +63,31 @@ export const credentials = Layer.succeed(SpeechCredentials, {
 export const offline = HttpClient.make((request) => Effect.die(new Error(`the scripted world reaches no server: ${request.url}`)));
 
 export const inWorld = Effect.fnUntraced(function* <A, E>(
-  providers: ReadonlyArray<AnyProvider<DuplexTransport | HttpClient.HttpClient>>,
+  providers: ReadonlyArray<AnyProvider<SpeechHost>>,
   body: (world: World) => Effect.Effect<A, E, Scope.Scope>,
   detector: Layer.Layer<SpeechDetector> = fakeDetector(),
   keys: Layer.Layer<SpeechCredentials> = credentials,
 ): Effect.fn.Return<A, E, Scope.Scope> {
   const transport = yield* scriptedTransport;
-  const layer = Speech.layer(providers).pipe(
-    Layer.provide(Layer.mergeAll(transport.layer, keys, detector, Layer.succeed(HttpClient.HttpClient, offline))),
+  const parts = yield* PubSub.sliding<ReadonlyArray<SpeechPart<SpeechHost>>>({ capacity: 1, replay: 1 });
+  yield* PubSub.publish(parts, [{ owner: 'world', providers }]);
+  const sources = Layer.succeed(SpeechSources, { parts: Stream.fromPubSub(parts) });
+  const layer = Speech.layer.pipe(
+    Layer.provide(Layer.mergeAll(sources, transport.layer, keys, detector, Layer.succeed(HttpClient.HttpClient, offline))),
   );
   return yield* Effect.gen(function* () {
-    const speech = yield* Speech;
+    const service = yield* Speech;
+    const speech = yield* service.now;
     const world: World = {
       transport,
+      service,
       speech,
+      reload: Effect.fnUntraced(function* (next) {
+        const before = yield* service.now;
+        yield* PubSub.publish(parts, next);
+        const after = yield* Stream.runHead(Stream.filter(service.changes, (set) => set !== before));
+        return yield* Effect.fromOption(after).pipe(Effect.orDie);
+      }),
       listen: Effect.fnUntraced(function* (
         choice: RecognitionChoice,
         options?: Partial<RecognitionOptions>,

@@ -43,9 +43,9 @@ import type { AccountQuotaProvider } from '../providers/quota/ledger.js';
 import { AccountQuota } from '../providers/contract/service/quota.js';
 import { AccountCredentials, ModelAccess } from '../providers/contract/service/access.js';
 import { DefaultAccounts } from '../providers/contract/service/accounts.js';
-import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
+import { CredentialFiles, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
 import { credentialsLayer } from '../speech/credentials.js';
-import { KEYED_SPEECH, speechInstallation, speechPlace } from './speech.js';
+import { speechComposition, speechPlace } from './speech.js';
 import { browserBindings, browserRuns, cookieSourcesLayer } from './browser.js';
 import { browser } from '../browser/browser.js';
 import { images } from '../images/images.js';
@@ -445,9 +445,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     ),
   );
   const instrumentedTraces = commandLedger({ instanceId }).pipe(Layer.provideMerge(measured));
+  const spoken = speechComposition(speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)));
   const providerLayer = providers.lifetimes.installation.pipe(
     Layer.provide(Layer.succeed(CredentialFiles, { tokensPath: options.tokensPath })),
-    Layer.provide(Layer.succeed(KeyedProviders, { ids: KEYED_SPEECH })),
+    Layer.provide(spoken.sources),
     Layer.provide(Layer.succeed(BuiltinAdapters, { sources: options.adapters ?? BUILTIN_ADAPTERS })),
     Layer.provide(Layer.succeed(AdapterPlaces, adapterPlaces(dataPath))),
     Layer.provide(packageHoldersLayer.pipe(Layer.provide(Layer.succeed(HarnessAdapters, adapters)))),
@@ -655,10 +656,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               : Layer.succeed(Sender, options.sender),
             closing(
               'speech',
-              speechInstallation({
-                place: speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)),
-                credentials: credentialsLayer,
-              }).pipe(Layer.provide(readyProviders), Layer.provide(BunFileSystem.layer)),
+              spoken.installation(credentialsLayer).pipe(Layer.provide(readyProviders), Layer.provide(BunFileSystem.layer)),
             ),
             browsers,
             images.lifetimes.installation.pipe(Layer.provide(readyProviders)),

@@ -8,7 +8,7 @@ import { credentialOf, rateFor, within } from './access.ts';
 import type { SpeechCatalog } from './catalog.ts';
 import type { SynthesisChoice } from './choose.ts';
 import { fitsSynthesis } from './fits.ts';
-import type { SynthesisOptions } from './Speech.ts';
+import type { SynthesisOptions } from './set.ts';
 import type { SpeechCredentials } from './SpeechCredentials.ts';
 import type { SpeechDetector } from './SpeechDetector.ts';
 

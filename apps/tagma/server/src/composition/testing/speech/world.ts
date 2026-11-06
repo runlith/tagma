@@ -7,13 +7,15 @@ import type { EndReason } from '@runlith/audio/sound/track';
 import type { SpeechProvider } from '@runlith/speech/protocol/adapter';
 import type { DuplexTransport } from '@runlith/speech/protocol/transport';
 import { Speech } from '@runlith/speech/engine/Speech';
+import { SpeechSources } from '@runlith/speech/engine/SpeechSources';
 import { fakeDetector } from '@runlith/speech/testing/fakeDetector';
 import { streaming, voiced } from '@runlith/speech/testing/models';
 import { type Key, scriptedProvider } from '@runlith/speech/testing/scriptedProvider';
 import { type ScriptedLink, scriptedTransport } from '@runlith/speech/testing/ScriptedTransport';
-import { credentials } from '@runlith/speech/testing/world';
+import { credentials, offline } from '@runlith/speech/testing/world';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { type Cause, Clock, Context, Deferred, Effect, Exit, FileSystem, Layer, Queue, Scope, Stream } from 'effect';
+import { HttpClient } from 'effect/http';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { Captures } from '../../../speech/contract/service/captures.js';
 import { Recognitions } from '../../../speech/contract/service/recognitions.js';
@@ -104,7 +106,17 @@ export const heardIn = Effect.fnUntraced(function* (opening: Opening, scope: Sco
   const clock = yield* Clock.Clock;
   const at = [0n, 0n, 0n];
   const heard = yield* Layer.buildWithScope(
-    Speech.layer([opening.provider ?? scripted]).pipe(Layer.provide(Layer.mergeAll(transport.layer, credentials, fakeDetector()))),
+    Speech.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(SpeechSources, { parts: Stream.succeed([{ owner: 'world', providers: [opening.provider ?? scripted] }]) }),
+          transport.layer,
+          credentials,
+          fakeDetector(),
+          Layer.succeed(HttpClient.HttpClient, offline),
+        ),
+      ),
+    ),
     scope,
   );
   const audio = yield* Layer.buildWithScope(devices.layer, scope);
@@ -126,7 +138,9 @@ export const heardIn = Effect.fnUntraced(function* (opening: Opening, scope: Sco
     captures: Context.get(spoken, Captures),
     speaking: Context.get(spoken, Speaking),
     models: Context.get(spoken, Models),
-    status: statusOf(Context.get(heard, Speech), Context.get(audio, AudioDevices), Context.get(spoken, Models), settings, 'server'),
+    status: Effect.flatMap(Context.get(heard, Speech).now, (set) =>
+      statusOf(set, Context.get(audio, AudioDevices), Context.get(spoken, Models), settings, 'server'),
+    ),
     devices,
     links: transport.next,
     play: (capture, chunks) =>

@@ -11,10 +11,22 @@ export type Offer<Model> = {
 export const live = (offer: Offer<RecognitionModel>): offer is Offer<RecognitionModel<LiveRecognition>> =>
   offer.model.recognition.kind !== 'file';
 
+export type SpeechPart<R> = {
+  readonly owner: string;
+  readonly providers: ReadonlyArray<AnyProvider<R>>;
+};
+
+export type SpeechFault = {
+  readonly owner: string;
+  readonly provider: string;
+  readonly reason: string;
+};
+
 export type SpeechCatalog<R> = {
   readonly providers: ReadonlyArray<AnyProvider<R>>;
   readonly recognition: ReadonlyArray<Offer<RecognitionModel>>;
   readonly synthesis: ReadonlyArray<Offer<SynthesisModel>>;
+  readonly faults: ReadonlyArray<SpeechFault>;
   readonly provider: (id: string) => AnyProvider<R> | undefined;
 };
 
@@ -119,17 +131,39 @@ const providerConsistent = <R>(provider: AnyProvider<R>) => {
   }
 };
 
-export const speechCatalog = <R>(providers: ReadonlyArray<AnyProvider<R>>): SpeechCatalog<R> => {
-  unique(
-    providers.map((provider) => provider.id),
-    'Speech provider',
-  );
-  for (const provider of providers) providerConsistent(provider);
+const refusalOf = <R>(provider: AnyProvider<R>, holders: ReadonlyMap<string, string>): string | undefined => {
+  if (typeof provider.id !== 'string' || provider.id === '') return 'Speech provider has an empty id.';
+  const holder = holders.get(provider.id);
+  if (holder !== undefined) return `Speech provider "${provider.id}" is already declared by ${holder}.`;
+  try {
+    providerConsistent(provider);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+};
+
+export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>): SpeechCatalog<R> => {
+  const holders = new Map<string, string>();
+  const providers: Array<AnyProvider<R>> = [];
+  const faults: Array<SpeechFault> = [];
+  for (const part of parts) {
+    for (const provider of part.providers) {
+      const reason = refusalOf(provider, holders);
+      if (reason !== undefined) {
+        faults.push({ owner: part.owner, provider: typeof provider.id === 'string' ? provider.id : '', reason });
+        continue;
+      }
+      holders.set(provider.id, part.owner);
+      providers.push(provider);
+    }
+  }
   const byId = new Map(providers.map((provider) => [provider.id, provider]));
   return {
     providers,
     recognition: providers.flatMap((provider) => (provider.recognizer?.models ?? []).map((model) => ({ provider: provider.id, model }))),
     synthesis: providers.flatMap((provider) => (provider.synthesizer?.models ?? []).map((model) => ({ provider: provider.id, model }))),
+    faults,
     provider: (id) => byId.get(id),
   };
 };

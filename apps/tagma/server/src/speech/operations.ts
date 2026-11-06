@@ -77,7 +77,7 @@ export const SPEECH_PAIRS: { readonly [K in SpeechOperationId]: OperationPair<(t
         const mic = caller.actor.kind === 'operator' && caller.actor.deviceId !== undefined ? 'caller' : 'server';
         return {
           status: 'read' as const,
-          speech: yield* statusOf(yield* Speech, yield* AudioDevices, yield* Models, yield* Settings, mic),
+          speech: yield* statusOf(yield* (yield* Speech).now, yield* AudioDevices, yield* Models, yield* Settings, mic),
         };
       }),
     }),

@@ -1,4 +1,8 @@
+import type { SpeechSet } from '@runlith/speech/engine/set';
+import type { Speech } from '@runlith/speech/engine/Speech';
+import { Stream } from 'effect';
 import { refusingStream } from '../platform/contract/service/body.js';
+import type { CatalogEvent } from './contract/wire/feeds.js';
 import type { Captures } from './contract/service/captures.js';
 import type { Models } from './contract/service/models.js';
 import type { Recognitions } from './contract/service/recognitions.js';
@@ -11,9 +15,15 @@ export type SpeechOwners = {
   readonly captures: Captures['Service'];
   readonly models: Models['Service'];
   readonly speaking: Speaking['Service'];
+  readonly speech: Speech['Service'];
 };
 
-export const speechChannels = ({ recognitions, captures, models, speaking }: SpeechOwners) => ({
+const standing = (set: SpeechSet): CatalogEvent => ({
+  providers: [...new Set([...set.recognition, ...set.synthesis].map((offer) => offer.provider))],
+});
+
+export const speechChannels = ({ recognitions, captures, models, speaking, speech }: SpeechOwners) => ({
+  'speech.catalog.subscribe': () => Stream.map(speech.changes, standing),
   'speech.synthesize': (ask: SpeakAsk) => refusingStream(speaking.audio(ask)),
   'speech.install.subscribe': () => models.progress,
   'speech.captures.subscribe': () => captures.events,
