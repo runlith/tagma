@@ -26,9 +26,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/viewWindows.ts
   - kind: file
-    ref: apps/tagma/server/src/views/launchers.ts
-  - kind: file
-    ref: apps/tagma/server/src/views/sections.ts
+    ref: apps/tagma/server/src/views/shelf.ts
 ---
 **Value.** A plugin becomes part of the Tagma window: its own project section, a side pane next to the thread, or a separate window, opened from the rail and the palette.
 
@@ -38,6 +36,6 @@ sources:
 - A view window on desktop is a bare OS window, on the web a floating project panel. The same view does not open twice but is brought forward; what the view asks to show (a thread) is shown by the main window, and if there is no main window, one opens on that path.
 - A section does not follow the operator to another project and is not remembered as the last place: the plugin may be disabled there.
 - A side pane closes when the plugin is disabled or stops contributing it; a transient crash or restart does not wipe the saved layout.
-- A view may open its own section or pane itself — only on a click inside the view and only what the plugin contributes.
+- A view may open its own section or pane itself, but only one the plugin contributes.
 
 **Limits.** Views appear in a project where the plugin is enabled and running. The phone shell offers no plugin views.

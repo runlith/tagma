@@ -12,7 +12,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/viewWindows.ts
   - kind: file
-    ref: apps/tagma/server/src/views/launchers.ts
+    ref: apps/tagma/server/src/views/shelf.ts
 ---
 Launching a view without a process is the `launchers` point (`{view, title}`): a palette action and a rail button open a plugin view in a "window". A window is one `ViewWindows` port with two adapters, and the client core never branches by platform: composition picks the adapter by `window.tagmaDesktop`.
 

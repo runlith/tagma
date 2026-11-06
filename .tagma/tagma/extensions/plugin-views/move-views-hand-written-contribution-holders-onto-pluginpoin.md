@@ -5,7 +5,7 @@ ord: 12
 tags: ["task"]
 fields:
   {
-    "holder": "tagma:01a1ac4f-c0e3-7a05-b151-84b158ca12a4",
+    "holder": "tagma:01a1b184-4d43-711b-995e-9495cdfbe445",
     "status": "in_work"
   }
 edges:
@@ -14,9 +14,5 @@ edges:
 sources:
   - kind: file
     ref: apps/tagma/server/src/views/shelf.ts
-  - kind: file
-    ref: apps/tagma/server/src/views/sections.ts
-  - kind: file
-    ref: apps/tagma/server/src/views/launchers.ts
 ---
 `results` in `views/shelf.ts`, `surfaces` and `panes` in `views/sections.ts`, and `launchers` in `views/launchers.ts` each keep their own map, register and disposer. `PluginPoints.hold` already does exactly that, so one mechanism should serve all of them, the `composer` point spec-agents adds included. Start after spec-agents lands f1d5e981, which touches `views/shelf.ts`.
