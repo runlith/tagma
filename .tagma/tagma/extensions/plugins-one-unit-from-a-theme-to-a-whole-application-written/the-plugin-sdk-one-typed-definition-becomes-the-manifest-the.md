@@ -79,9 +79,9 @@ export default definePlugin({
 | `themes` | `appearance` ([[ca575591]]) |
 | `schedules` | `schedule` |
 | `notifications` | `notify` |
-| `onThreadEnded`, `onQuestion`, `threads` (`listed`) | `threads` |
+| `onThreadEnded`, `onThreadAsked`, `threads` (`listed`) | `threads` |
 | `beforeBuild` | `checkout-builds` |
-| `hooks` | the `plugin-hooks` rule ([[c4451a7e]]) |
+| `hooks` | `plugins`; the `plugin-hooks` rule runs them ([[c4451a7e]]) |
 | `providers` | `/adapter/provider` and the speech contract |
 
 **Input schemas.** Tool and resource inputs take any validator that implements both Standard Schema, for checking, and Standard JSON Schema, for the JSON Schema an agent reads. Zod 4.2 and later, ArkType and Valibot implement both; the plugin template uses zod. Input that fails its check answers the call as `isError` with the validator's message, and the process keeps running.
@@ -162,9 +162,7 @@ The protocol between the runtime and the host belongs to the SDK: the shape of t
 - a refusal throws `TagmaRefused`, with `code`, `reason` and `unblock`;
 - keyed acts such as `start_turn` take their `key` as a field.
 
-On top of the generated calls the SDK owns what is not a plain operation:
-- `threads.events(since)`, an async iterator over the projection of the child spec, with `since` a map from thread id to that thread's position;
-- `models.ask(prompt, {model, schema})`.
+On top of the generated calls the SDK owns one call that is not a plain operation: `models.ask(prompt, {model, schema})`. It turns a Standard Schema into the JSON Schema `ask_model` takes, and parses the answer with it, so the value comes typed. A process receives threads' run ends and questions as deliveries to its handlers, never as a stream ([[c4451a7e]]).
 
 Typing `op` by operation id, rather than mapping operations to method names by hand, keeps the client from drifting from the catalog.
 
@@ -175,7 +173,8 @@ Typing `op` by operation id, rather than mapping operations to method names by h
 | `tagma.tools.<name>(input)` | Calls one of the plugin's own `view` tools, typed from `typeof plugin` (`import type plugin from '../plugin'`) |
 | `tagma.resource(uri)` | A reactive value |
 | `tagma.storage` | The view's key-value storage |
-| `tagma.threadEvents(ids)` | The reactive projection of threads |
+| `tagma.thread(id)` | What a thread does now — its run, open question, streaming line and outcome — as a reactive value |
+| `tagma.transcript(id)` | One thread's transcript, with its tool calls in flight, as a reactive value paged back on demand ([[c4451a7e]]) |
 | `<Thread id>` | The whole thread, drawn by the host |
 | `tagma.speech` | Listening and speaking, as the speech bridge offers views now |
 | `tagma.openLink(url)` | Opens a link, during a click |

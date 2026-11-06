@@ -119,7 +119,7 @@ Tagma's format is the superset that translation into it needs. Each part is a po
 - `agents` and `tools`;
 - `views`, `sections`, `panes`, `windows`, `launchers`, `results`, `pins`, `shortcuts` and `actions`, whose schemas `views` owns;
 - `themes`, whose schema and meaning check `appearance` owns ([[ca575591]]);
-- `schedules`, `notifications`, `onThreadEnded`, `onQuestion`, `beforeBuild` and `hooks`;
+- `schedules`, `notifications`, `onThreadEnded`, `onThreadAsked`, `beforeBuild` and `hooks`;
 - `resources`;
 - `providers`.
 
@@ -152,7 +152,7 @@ The graph, threads, law and gates are never plugins: the product's guarantees st
 - **Removing** keeps the plugin's data, and the card says so; a separate act deletes the data. Its pins stay, drawn as a gone view. Threads bound to it, and threads typed as one of its agents, stay as ordinary threads.
 
 **Process life.** Contributions are published from the manifest while the plugin is enabled, with or without a running process. A process generation only executes them, and a broken plugin's tools are withdrawn from agents' catalogs while it stays broken. The supervisor gains an `idle` state:
-- **Demands.** A call, a tick, an owed ending or question, a view's subscription, an open `threads.events` stream of the plugin's own, or a matching hook opens a generation under the plugin's lock.
+- **Demands.** A call, a tick, an owed ending or question, a view's subscription, or a matching hook opens a generation under the plugin's lock.
 - **Idle stop.** After a quiet period with none of these, the process stops through the same six-step transition as a restart (explanation 38074044).
 - **A demand during idle stop** waits for the stop to finish, then opens a new generation.
 - **A crash.** A plugin that is not resident goes to `idle` behind a backoff gate. A demand during backoff is deferred until the gate opens: a tick runs then, an ending or question is delivered then. A `resident` plugin restarts on its own, as apps do today.
@@ -231,7 +231,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
   - installed directories, their leases and the sweep, and each plugin's data directory;
   - `create_plugin`, which writes the SDK's template into `.tagma-plugins/<id>/` for a project's plugin, or into `<data>/plugins/<id>/` for the person's own, such as a theme he asked for.
 
-  Adapter fetching moves into it. "Enabled in this project" is an `invocation` port that `plugins` fills.
+  Adapter fetching moves into it. Admission in `invocation` checks a plugin caller against the enabled set `plugins` owns, which it reads directly from above ([[c4451a7e]]).
 - **`plugin-host` (server), today `tagma-apps`,** keeps process life only: the supervisor, its generations, `idle`, the backoff gate, and the `caller` each contribution carries for executing it, hooks included. It imports `plugins`, never the other way.
 - **One in-server loader** is extracted from `providers/adapters`: `importAdapter`, host modules, run pinning. It imports from a directory `plugins` gives it, and registers its runs as holders through `plugins`' lease port. `providers` and `speech` both load through it, each declaring its own port for installed packages. Speech becomes a reloadable catalog, and a listening session pins the catalog it started with.
 - **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the link step, the utilities sheet, the module route, the slot faces and `<Frame>`. `views` owns the schemas of every window point but `themes`.
