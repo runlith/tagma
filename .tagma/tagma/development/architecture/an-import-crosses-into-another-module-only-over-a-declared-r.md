@@ -8,32 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "faa89ddb916591576f4fcbd7b1cd48ffa3d00dae",
-          "fingerprint": "views -> mcp @ apps/tagma/server/src/views/contract/service/views.ts",
-          "fix": "Where `views` truly depends on `mcp`, add the relation `views → mcp` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `views` declares and composition fills.",
-          "line": 5,
-          "path": "apps/tagma/server/src/views/contract/service/views.ts",
-          "said": "imports `../../../mcp/contract/wire/feeds.js` of module `mcp`, which `views` has no relation to"
-        },
-        {
-          "commit": "faa89ddb916591576f4fcbd7b1cd48ffa3d00dae",
-          "fingerprint": "views -> mcp @ apps/tagma/server/src/views/contract/wire/feeds.ts",
-          "fix": "Where `views` truly depends on `mcp`, add the relation `views → mcp` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `views` declares and composition fills.",
-          "line": 2,
-          "path": "apps/tagma/server/src/views/contract/wire/feeds.ts",
-          "said": "imports `../../../mcp/contract/wire/feeds.js` of module `mcp`, which `views` has no relation to"
-        },
-        {
-          "commit": "faa89ddb916591576f4fcbd7b1cd48ffa3d00dae",
-          "fingerprint": "views -> mcp @ apps/tagma/server/src/views/shelf.ts",
-          "fix": "Where `views` truly depends on `mcp`, add the relation `views → mcp` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `views` declares and composition fills.",
-          "line": 5,
-          "path": "apps/tagma/server/src/views/shelf.ts",
-          "said": "imports `../mcp/contract/wire/feeds.js` of module `mcp`, which `views` has no relation to"
-        }
-      ],
+      "escaped": [],
       "inspection": "modules",
       "on": [
         {
