@@ -67,4 +67,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/settings
 ---
-The operator changes Tagma behaviour in settings, and the module owns their surface and language: server and browser keys, the project and all-projects layer, sections declared by features, and value controls. Catalog choices arrive through the `ModelChoices` port and the model picker of an `ask` control or field through the `ModelFields` port, both filled by composition.
+The operator changes Tagma behaviour in settings, and the module owns their surface and language: server and browser keys, the project and all-projects layer, sections declared by features, and value controls. It also owns `UserSettings`, the window's one reader and writer of the person's own keys: one `settings.watch` per window over the keys its readers ask for, each value decoded by its key's schema, and a write of the user layer that names no project and drops only its own failed edit. Catalog choices arrive through the `ChoiceSets` point each owner fills with its set's id and entries, and the model picker of an `ask` control or field through the `ModelFields` port, filled by composition.
