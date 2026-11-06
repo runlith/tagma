@@ -196,6 +196,8 @@ const until = Effect.fnUntraced(function* <A, E, R>(read: Effect.Effect<A, E, R>
   return value;
 });
 const running = (path: string) => until(witnessed(path), (value) => value !== '');
+const armed = (host: Host, execution: ExecutionId) =>
+  until(host.hostCommands.command(execution), (row) => row?.deadline.armed !== undefined);
 const stopped = Effect.fnUntraced(function* (host: Host, execution: ExecutionId) {
   const row = yield* until(host.hostCommands.command(execution), (row) => row?.state.phase === 'ended');
   yield* TestClock.adjust(STOP_LADDER.reapMs);
@@ -266,6 +268,7 @@ layer(fixture)("a command's deadline", (it) => {
         const witness = `${open.directory}/ceiling`;
         const execution = yield* accept(open, keyOf('deadline-ceiling'), { witness });
         yield* running(witness);
+        yield* armed(open, execution);
         expect(yield* revise(open, keyOf('revise-above'), execution, 0, { _tag: 'Total', executionMs: 400_000 })).toMatchObject({
           _tag: 'Refused',
           reason: 'above-ceiling',
@@ -319,6 +322,7 @@ layer(fixture)("a command's deadline", (it) => {
         const witness = `${open.directory}/remaining`;
         const execution = yield* accept(open, keyOf('deadline-remaining'), { witness });
         yield* running(witness);
+        yield* armed(open, execution);
         yield* TestClock.adjust(Duration.seconds(10));
         expect(yield* revise(open, keyOf('revise-remaining'), execution, 0, { _tag: 'Remaining', remainingMs: 5_000 })).toMatchObject({
           _tag: 'Revised',
@@ -340,7 +344,7 @@ layer(fixture)("a command's deadline", (it) => {
         const witness = `${open.directory}/inventory`;
         const execution = yield* accept(open, keyOf('deadline-inventory'), { witness });
         yield* running(witness);
-        yield* until(open.hostCommands.command(execution), (row) => row?.deadline.armed !== undefined);
+        yield* armed(open, execution);
         const before = yield* open.hostExecutions.inventoryRevision();
         expect((yield* revise(open, keyOf('revise-inventory'), execution, 0, { _tag: 'Total', executionMs: 45_000 }))._tag).toBe('Revised');
         const after = yield* open.hostExecutions.inventoryRevision();
@@ -361,6 +365,7 @@ layer(fixture)("a command's deadline", (it) => {
         const key = keyOf('deadline-lowered');
         const execution = yield* accept(open, key, { witness });
         yield* running(witness);
+        yield* armed(open, execution);
         yield* TestClock.adjust(Duration.seconds(20));
         expect((yield* revise(open, keyOf('revise-lowered'), execution, 0, { _tag: 'Total', executionMs: 1_000 }))._tag).toBe('Revised');
         const answer = yield* decided(open, key);
@@ -383,6 +388,7 @@ layer(fixture)("a command's deadline", (it) => {
         const key = keyOf('deadline-reached');
         const execution = yield* accept(open, key, { witness, admission: admissionOf({ executionMs: 5_000 }) });
         yield* running(witness);
+        yield* armed(open, execution);
         yield* TestClock.adjust(Duration.seconds(5));
         expect((yield* revise(open, keyOf('revise-reached'), execution, 0, { _tag: 'Total', executionMs: 300_000 }))._tag).toBe('Ended');
         expect(yield* decided(open, key)).toMatchObject({
@@ -403,6 +409,7 @@ layer(fixture)("a command's deadline", (it) => {
         const key = keyOf('deadline-refused');
         const execution = yield* accept(open, key, { witness });
         yield* running(witness);
+        yield* armed(open, execution);
         yield* TestClock.adjust(Duration.seconds(10));
         const asking = yield* Effect.forkChild(
           Effect.flip(revise(open, keyOf('revise-refused'), execution, 0, { _tag: 'Total', executionMs: 1_000 })),
@@ -430,6 +437,7 @@ layer(fixture)("a command's deadline", (it) => {
         const key = keyOf('deadline-latency');
         const execution = yield* accept(open, key, { witness });
         yield* running(witness);
+        yield* armed(open, execution);
         const asking = yield* Effect.forkChild(
           revise(open, keyOf('revise-latency'), execution, 0, { _tag: 'Remaining', remainingMs: 5_000 }),
         );
@@ -794,9 +802,9 @@ layer(fixture)("a command's deadline", (it) => {
         ).toBe('Revised');
         yield* Deferred.succeed(gate.held, undefined);
         yield* running(witness);
-        const armed = (yield* until(open.hostCommands.command(execution), (row) => row?.deadline.armed !== undefined))?.deadline;
-        expect(armed).toMatchObject({ origin: 'default', executionMs: 60_000, armed: 'native-acquired' });
-        expect(armed?.foregroundMs).toBeUndefined();
+        const deadline = (yield* armed(open, execution))?.deadline;
+        expect(deadline).toMatchObject({ origin: 'default', executionMs: 60_000, armed: 'native-acquired' });
+        expect(deadline?.foregroundMs).toBeUndefined();
         expect((yield* revise(open, keyOf('revise-bound-armed'), execution, 1, { _tag: 'Total', executionMs: 900_000 }))._tag).toBe(
           'Revised',
         );
@@ -814,6 +822,7 @@ layer(fixture)("a command's deadline", (it) => {
           admission: { ...admissionOf(), limits: { executionMs: 60_000, origin: 'caller', foregroundMs: 600_000 } },
         });
         yield* running(witness);
+        yield* armed(open, execution);
         expect(yield* revise(open, keyOf('revise-foreground-armed'), execution, 0, { _tag: 'Total', executionMs: 600_001 })).toMatchObject({
           _tag: 'Refused',
           reason: 'above-ceiling',
