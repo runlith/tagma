@@ -34,8 +34,8 @@ it.live('files of a language no adapter reads land alone, and a writer whose lin
       class: 'answer',
       value: { submitted: { status: 'landed', committed: ['one.txt', 'two.txt'], carried: [] } },
     });
-    yield* write(peer.threadId, 'two.txt', 'two, see one and three\n');
-    yield* write(caller.threadId, 'two.txt', 'two, see one and three, again\n');
+    yield* write(peer.threadId, 'two.txt', 'two, see one\nand three\n');
+    yield* write(caller.threadId, 'two.txt', 'two, see one, again\nand three\n');
     expect(yield* doors.atNative('submit_work', { subject: 'land the second note', tasks: [] }, caller)).toMatchObject({
       class: 'answer',
       value: {
@@ -48,6 +48,21 @@ it.live('files of a language no adapter reads land alone, and a writer whose lin
           ],
         },
       },
+    });
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
+it.live('a writer whose recorded lines no longer stand in a selected file brings none of its other changed files', () =>
+  Effect.gen(function* () {
+    const { born, doors, write } = yield* nativeLanding({ 'one.txt': 'one\ntwo\n', 'peer.txt': 'peer\n' });
+    const caller = yield* born();
+    const peer = yield* born();
+    yield* write(peer.threadId, 'one.txt', 'one\ntwo\npeer line\n');
+    yield* write(peer.threadId, 'peer.txt', 'peer, changed\n');
+    yield* write(caller.threadId, 'one.txt', 'one\ntwo\ncaller line\n');
+    expect(yield* doors.atNative('submit_work', { subject: 'land one', paths: ['one.txt'], tasks: [] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['one.txt'], carried: [] } },
     });
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );

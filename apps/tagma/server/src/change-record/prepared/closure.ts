@@ -36,6 +36,36 @@ const importing = Effect.fn('prepared.importing')(function* <Row extends Prepare
   return found;
 });
 
+const standingHolders = Effect.fn('prepared.standingHolders')(function* <Row extends PreparedRow>(
+  landing: Landing<Row>,
+  paths: readonly string[],
+  rows: ReadonlyMap<string, readonly Row[]>,
+  team: ReadonlySet<string>,
+) {
+  const holders = new Map(paths.map((path) => [path, unique((rows.get(path) ?? []).map((row) => row.threadId))] as const));
+  const asked = paths.filter((path) => holders.get(path)!.some((holder) => !team.has(holder)));
+  if (asked.length === 0) return holders;
+  const { git, root, store, units, checkout, fns } = landing;
+  const judged = yield* Effect.result(fns.judged({ git, root, store, units, checkout }, asked));
+  if (judged._tag === 'Failure') {
+    yield* Effect.logWarning('the recorded writers of these files are all counted: whose lines stand in them could not be judged', {
+      paths: asked.length,
+      reason: judged.failure.reason,
+    });
+    return holders;
+  }
+  for (const path of asked) {
+    const verdict = judged.success.get(path)?.verdict;
+    if (verdict?.verdict !== 'proven') continue;
+    const hands = new Set(verdict.hands.map((hand) => hand.holder));
+    holders.set(
+      path,
+      holders.get(path)!.filter((holder) => team.has(holder) || hands.has(holder)),
+    );
+  }
+  return holders;
+});
+
 export const closed = Effect.fn('prepared.closed')(function* <Row extends PreparedRow>(
   landing: Landing<Row>,
   base: string | null,
@@ -57,8 +87,9 @@ export const closed = Effect.fn('prepared.closed')(function* <Row extends Prepar
     const grouped = yield* reads.evidenceInGroups(units, store, placesIn(checkout, frontier), (evidence) => Effect.succeed([...evidence]));
     for (const [path, held] of grouped) rows.set(path, held);
     const fresh = new Set<string>();
+    const standing = yield* standingHolders(landing, frontier, rows, team);
     for (const path of frontier) {
-      const found = unique((rows.get(path) ?? []).map((row) => row.threadId));
+      const found = standing.get(path) ?? [];
       writers.set(
         path,
         found.filter((holder) => !team.has(holder)),
