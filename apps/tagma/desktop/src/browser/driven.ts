@@ -30,7 +30,7 @@ const injectedTypes = (command: Command): readonly string[] => {
   return [];
 };
 
-export const probeFrame = (contents: WebContents): Promise<unknown> => contents.executeJavaScriptInIsolatedWorld(1000, [{ code: '0' }]);
+export const probeFrame = (contents: WebContents): Promise<unknown> => contents.mainFrame.executeJavaScript('0');
 
 export type Probed = {
   readonly share: () => number;
