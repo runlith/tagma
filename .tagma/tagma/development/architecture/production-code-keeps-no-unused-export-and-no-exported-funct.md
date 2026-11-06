@@ -3372,18 +3372,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/sites.ts#framedBy",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/sites.ts#localSiteOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/sites.ts#sandboxRoutes",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/status.ts#ServedEnforcement",
           "owner": "5a3bed29"
         },

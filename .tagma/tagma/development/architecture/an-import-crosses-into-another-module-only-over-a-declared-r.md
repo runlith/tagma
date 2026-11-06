@@ -8,16 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "cd8bbfc8bcf433b6d570830dda17e9495a54cbdf",
-          "fingerprint": "composition -> views private @ apps/tagma/server/src/composition/http/sites.ts",
-          "fix": "Import through an entry `views` opens to `composition` (`apps/tagma/server/src/views/contract/`, `apps/tagma/server/src/views/views.ts`), or open one covering `apps/tagma/server/src/views/files.ts` with `set_module`.",
-          "line": 11,
-          "path": "apps/tagma/server/src/composition/http/sites.ts",
-          "said": "imports `../../views/files.js` of module `views`, which no entry of `views` opens to `composition`"
-        }
-      ],
+      "escaped": [],
       "inspection": "modules",
       "on": [
         {

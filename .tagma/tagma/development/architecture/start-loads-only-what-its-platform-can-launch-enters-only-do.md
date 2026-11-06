@@ -8,17 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "d3b63780f6a2a3115c248662977003ee288ce730",
-          "fingerprint": "@tagma/app/theme [browser] -> unresolved ./theme @ apps/tagma/app/package.json",
-          "fix": "Point the `exports` entry `./theme` of `apps/tagma/app/package.json` at a file the tree holds, or name `@tagma/app` in `compiled` where its build emits it.",
-          "holder": "01a1b110-e4ac-7664-8239-25b90aaf5ade",
-          "line": 1,
-          "path": "apps/tagma/app/package.json",
-          "said": "The declared door resolves to no file"
-        }
-      ],
+      "escaped": [],
       "inspection": "platforms",
       "on": [
         {

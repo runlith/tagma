@@ -30,8 +30,6 @@ sources:
   - kind: dir
     ref: apps/tagma/app/scripts
   - kind: file
-    ref: apps/tagma/app/compilerOptions.js
-  - kind: file
     ref: apps/tagma/app/surfaceOut.js
   - kind: file
     ref: apps/tagma/app/svelte.config.js
