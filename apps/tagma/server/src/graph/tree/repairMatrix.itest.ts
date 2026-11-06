@@ -188,6 +188,16 @@ layer(mirrors, { excludeTestServices: true })('mirror repair contracts', (it) =>
     ),
   );
 
+  it.effect('a path reported deleted whose file stands again keeps its block', () =>
+    withMirror(({ byUuid, repair }) =>
+      Effect.gen(function* () {
+        const ledger = yield* byUuid(B);
+        expect((yield* repair([{ status: 'D', path: 'root-hall/ledger.md' }])).removed).toBe(0);
+        expect(yield* byUuid(B)).toMatchObject({ id: ledger.id, path: 'root-hall/ledger.md', deletedAt: null });
+      }),
+    ),
+  );
+
   it.effect('a mass external change lands every arrival and reads a vanished modified path as gone', () =>
     withMirror(({ tree, fs, file, byUuid, repair }) =>
       Effect.gen(function* () {

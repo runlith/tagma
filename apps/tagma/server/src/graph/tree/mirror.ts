@@ -418,12 +418,12 @@ export const repairMirror = Effect.fnUntraced(function* (
       new MirrorFailed({ message: `${other.length} changed path(s) are not block files: ${other[0]?.path ?? ''}` }),
     );
   }
-  const gone = changed.filter((change) => change.status === 'D').map((change) => change.path);
+  const gone: string[] = [];
   const arrivals: { path: string; file: BlockFile }[] = [];
   const reads = yield* unreadable(
     readBlocks(
       roots,
-      changed.filter((change) => change.status !== 'D').map((change) => change.path),
+      changed.map((change) => change.path),
     ),
   );
   for (const read of reads) {
