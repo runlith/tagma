@@ -2,12 +2,12 @@ import { humanInput, type HumanInput, type Pointer } from '@runlith/cdp/input';
 import { type Domains, shareDomains } from '@runlith/cdp/domains';
 import type { Ring } from '@runlith/cdp/ring';
 import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, SessionEnded } from '@runlith/cdp/session';
-import type { Protocol } from 'devtools-protocol';
-import { Clock, Deferred, Effect, Exit, PubSub, Scope, Semaphore, Stream } from 'effect';
+import { Clock, Deferred, Effect, Exit, Fiber, PubSub, Scope, Semaphore, Stream } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
-import { type FrameTarget, hostRefusal, type Pages } from '../contract/service/pages.js';
+import { hostRefusal, type Pages } from '../contract/service/pages.js';
+import type { ProfileRecord } from '../contract/service/hosts.js';
 import type { Profiles } from '../contract/service/profiles.js';
 import type { ThreadRuns } from '../contract/service/runs.js';
 import { NO_EMULATION, type Emulation, type Viewport } from '../contract/wire/emulation.js';
@@ -16,18 +16,9 @@ import type { InputMode } from '../contract/wire/profile.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
 import { makeChooser, type Chooser } from './chooser.js';
-import { adoptPicking, type Mark } from './cursor.js';
-import {
-  applyConditions,
-  applyEmulation,
-  effectiveOf,
-  makeMetrics,
-  type Metrics,
-  nativeMetrics,
-  resizedMetrics,
-  syncMetrics,
-} from './emulate.js';
-import { commitFrame, detachFrame, type Frame, joinChild, leaveChild, readTree, retireChild } from './frames.js';
+import type { Mark } from './cursor.js';
+import { applyEmulation, effectiveOf, makeMetrics, type Metrics, nativeMetrics, resizedMetrics, syncMetrics } from './emulate.js';
+import { type Frame, frameEvent, readTree } from './frames.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
 import { makePictures, type Pictures } from './pictures.js';
@@ -73,6 +64,14 @@ export type Attached = {
   cursor: Mark | null;
 };
 
+type Attaching = {
+  readonly revision: number;
+  readonly input: InputMode;
+  readonly scope: Scope.Closeable;
+  readonly ready: Deferred.Deferred<Attached | null, Refusal>;
+  fiber: Fiber.Fiber<void, Refusal> | null;
+};
+
 export type Paged = {
   readonly pointer: Pointer;
   readonly page: PageId;
@@ -86,7 +85,9 @@ export type Paged = {
   emulation: Emulation;
   layout: Viewport | null;
   attached: Attached | null;
-  attaching: Deferred.Deferred<Attached, Refusal> | null;
+  attaching: Attaching | null;
+  retiring: Deferred.Deferred<void> | null;
+  revision: number;
   used: number;
   busy: number;
   picking: number;
@@ -102,6 +103,7 @@ export type DriveOptions<A> = {
   readonly recovers?: true;
   readonly replays?: false;
   readonly agent?: boolean;
+  readonly fast?: string;
 };
 
 export const makeDrive = Effect.fnUntraced(function* (input: {
@@ -132,6 +134,8 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           layout: null,
           attached: null,
           attaching: null,
+          retiring: null,
+          revision: 0,
           used: 0,
           busy: 0,
           picking: 0,
@@ -172,26 +176,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       }),
     );
 
-  const adoptChild = Effect.fnUntraced(function* (state: Paged, attached: Attached, child: string, adopted: Scope.Closeable) {
-    yield* attached.emulating.withPermits(1)(Effect.suspend(() => applyConditions(attached.session, state.emulation, undefined, child)));
-    const domains =
-      attached.input === 'human'
-        ? (['Page', 'DOM', 'Accessibility'] as const)
-        : (['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const);
-    for (const domain of domains) yield* Scope.provide(attached.domains.enable(domain, child), adopted);
-    if (attached.runtime !== null) yield* Scope.provide(attached.domains.enable('Runtime', child), attached.runtime);
-    yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true }, child);
-    yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, child);
-    if (!(yield* readTree(attached, child))) return;
-    yield* adoptPicking(state, attached, child);
-  });
-
-  const navigated = Effect.fnUntraced(function* (state: Paged, attached: Attached, frame: Protocol.Page.Frame, child: string | undefined) {
-    if (!commitFrame(state, attached, frame, child)) return;
-    if (frame.parentId === undefined && child === undefined) yield* syncRuntime(state, attached);
-    yield* PubSub.publish(attached.joined, frame.id);
-  });
-
   const syncNavigation = Effect.fnUntraced(function* (attached: Attached) {
     const moved = yield* PubSub.subscribe(attached.joined);
     const stopped = Effect.flatMap(attached.session.ended, (end) =>
@@ -210,26 +194,19 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   }, Effect.scoped);
 
   const onEvent = Effect.fnUntraced(function* (state: Paged, attached: Attached, event: CdpEvent) {
+    const frame = yield* frameEvent(state, attached, event, pages);
+    if (frame !== null) {
+      if (frame !== 'handled') {
+        yield* syncRuntime(state, attached);
+        yield* PubSub.publish(attached.joined, frame.navigation);
+      }
+      return;
+    }
     switch (event.method) {
       case 'Page.fileChooserOpened':
         return yield* attached.chooser.arrive(event);
       case 'Page.frameResized':
         return event.child === undefined ? yield* resizedMetrics(attached) : undefined;
-      case 'Page.frameNavigated': {
-        const { frame } = yield* eventParams('Page.frameNavigated', event);
-        return yield* navigated(state, attached, frame, event.child);
-      }
-      case 'Page.frameStartedNavigating': {
-        const { frameId } = yield* eventParams('Page.frameStartedNavigating', event);
-        if (frameId !== attached.main || event.child !== undefined) return;
-        attached.navigations += 1;
-        return yield* PubSub.publish(attached.joined, frameId);
-      }
-      case 'Page.frameDetached': {
-        const detached = yield* eventParams('Page.frameDetached', event);
-        if (!detachFrame(state, attached, detached, event.child)) return;
-        return yield* PubSub.publish(attached.joined, detached.frameId);
-      }
       case 'Page.javascriptDialogOpening': {
         const opened = yield* eventParams('Page.javascriptDialogOpening', event);
         return yield* pages.mark(state.page, {
@@ -247,46 +224,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         const { backendNodeId } = yield* eventParams('Overlay.inspectNodeRequested', event);
         return yield* PubSub.publish(attached.picks, { node: backendNodeId, child: event.child });
       }
-      case 'Target.attachedToTarget': {
-        const joined = yield* eventParams('Target.attachedToTarget', event);
-        if (attached.pictures.accepts(joined.targetInfo)) return;
-        if (joined.targetInfo.type !== 'iframe') {
-          yield* Effect.exit(attached.session.send('Target.detachFromTarget', { sessionId: joined.sessionId }));
-          return;
-        }
-        joinChild(state, attached, joined.sessionId, joined.targetInfo.targetId, event.child);
-        const adopted = yield* Scope.fork(attached.scope);
-        attached.adopted.set(joined.sessionId, adopted);
-        const target: FrameTarget = { session: joined.sessionId, frame: joined.targetInfo.targetId, url: joined.targetInfo.url };
-        yield* Scope.addFinalizer(adopted, pages.mark(state.page, { responsive: true }, target));
-        yield* adoptChild(state, attached, joined.sessionId, adopted).pipe(
-          Effect.catchTags({
-            SessionEnded: () => Effect.void,
-            CommandRefused: (refused) =>
-              Effect.logDebug(`browser: an out-of-process frame of ${state.page} was not adopted: ${refused.method}: ${refused.message}`),
-          }),
-          Effect.ensuring(
-            Effect.suspend(() => {
-              attached.settled.add(joined.sessionId);
-              return PubSub.publish(attached.joined, joined.targetInfo.targetId);
-            }),
-          ),
-          Effect.forkIn(adopted),
-        );
-        return;
-      }
-      case 'Target.detachedFromTarget': {
-        const { sessionId } = yield* eventParams('Target.detachedFromTarget', event);
-        if (sessionId === undefined) return;
-        for (const { child, frame } of leaveChild(attached, sessionId)) {
-          yield* PubSub.publish(attached.joined, frame);
-          retireChild(state, attached, child);
-          const adopted = attached.adopted.get(child);
-          attached.adopted.delete(child);
-          if (adopted !== undefined) yield* Scope.close(adopted, Exit.void);
-        }
-        return;
-      }
       default:
         return yield* capture(state, attached, event);
     }
@@ -300,12 +237,30 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     });
 
   const detach = Effect.fnUntraced(function* (state: Paged) {
+    const retired = yield* Deferred.make<void>();
+    if (state.retiring !== null) return yield* Deferred.await(state.retiring);
     const attached = state.attached;
-    if (attached === null) return;
+    const pending = state.attaching;
+    state.retiring = retired;
     state.attached = null;
-    yield* Scope.close(attached.scope, Exit.void);
-    yield* drove(state, null);
-  });
+    state.attaching = null;
+    yield* Effect.gen(function* () {
+      if (pending !== null) {
+        yield* Deferred.succeed(pending.ready, null);
+        if (pending.fiber !== null) yield* Fiber.interrupt(pending.fiber);
+        yield* Scope.close(pending.scope, Exit.void);
+      }
+      if (attached !== null) yield* Scope.close(attached.scope, Exit.void);
+      yield* drove(state, null);
+    }).pipe(
+      Effect.onExit((exit) =>
+        Effect.gen(function* () {
+          yield* Deferred.done(retired, exit);
+          if (state.retiring === retired) state.retiring = null;
+        }),
+      ),
+    );
+  }, Effect.uninterruptible);
 
   const retake = Effect.fnUntraced(
     function* (state: Paged) {
@@ -341,9 +296,14 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     yield* syncRuntime(state, attached);
   });
 
-  const connect = Effect.fnUntraced(function* (state: Paged, thread: string | null): Effect.fn.Return<Attached, Refusal> {
+  const connect = Effect.fnUntraced(function* (
+    state: Paged,
+    thread: string | null,
+    pending: Attaching,
+  ): Effect.fn.Return<Attached | null, Refusal> {
+    if (state.attaching !== pending) return null;
     const host = yield* pages.hold(state.page);
-    const attachment = yield* Scope.fork(scope);
+    const attachment = pending.scope;
     const opened = yield* Effect.gen(function* () {
       const session = yield* Scope.provide(host.pages.session(state.page), attachment).pipe(
         Effect.catchTags({
@@ -388,14 +348,16 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       });
       const profile = pages.profileOf(state.page);
       if (profile === undefined) return yield* unknownPage(state.page);
-      const record = yield* profiles.record(profile);
       const attached: Attached = {
         profile,
         page: state.page,
         session,
-        input: record.input,
+        input: pending.input,
         human: humanInput(session, state.pointer),
-        chooser: yield* Scope.provide(makeChooser(session), attachment),
+        chooser: yield* Scope.provide(
+          makeChooser(session, state.page, () => pages.operated(state.page)),
+          attachment,
+        ),
         domains,
         pictures: yield* Scope.provide(makePictures(session), attachment),
         scope: attachment,
@@ -454,37 +416,62 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       );
       return attached;
     }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attachment, Exit.void) : Effect.void)));
+    const profile = pages.profileOf(state.page);
+    if (profile === undefined) return yield* unknownPage(state.page);
+    const record = yield* profiles.record(profile);
+    if (state.attaching !== pending || state.revision !== pending.revision || record.input !== pending.input) {
+      yield* Scope.close(attachment, Exit.void);
+      return null;
+    }
     state.attached = opened;
     yield* drove(state, thread);
     return opened;
   });
 
   const attach = Effect.fnUntraced(function* (state: Paged, thread: string | null): Effect.fn.Return<Attached, Refusal> {
-    const profile = pages.profileOf(state.page);
-    if (profile === undefined) return yield* unknownPage(state.page);
-    const record = yield* profiles.record(profile);
-    if (state.input !== record.input) {
-      yield* detach(state);
-      state.emulation = NO_EMULATION;
-      state.layout = null;
-      state.input = record.input;
+    for (;;) {
+      if (state.retiring !== null) yield* Deferred.await(state.retiring);
+      const revision = state.revision;
+      const profile = pages.profileOf(state.page);
+      if (profile === undefined) return yield* unknownPage(state.page);
+      const record = yield* profiles.record(profile);
+      if (state.revision !== revision) continue;
+      if (state.input !== record.input) {
+        yield* detach(state);
+        state.emulation = NO_EMULATION;
+        state.layout = null;
+        state.input = record.input;
+      }
+      if (state.attached !== null) return state.attached;
+      let pending = state.attaching;
+      if (pending === null) {
+        const life = yield* Scope.fork(scope);
+        const ready = yield* Deferred.make<Attached | null, Refusal>();
+        if (state.attaching !== null || state.retiring !== null || state.revision !== revision || state.input !== record.input) {
+          yield* Scope.close(life, Exit.void);
+          continue;
+        }
+        const next: Attaching = { revision: state.revision, input: record.input, scope: life, ready, fiber: null };
+        state.attaching = next;
+        pending = next;
+        const fiber = yield* connect(state, thread, next).pipe(
+          Effect.onExit((exit) =>
+            Effect.gen(function* () {
+              if (Exit.isFailure(exit)) yield* Scope.close(next.scope, Exit.void);
+              if (state.attaching !== next) return;
+              state.attaching = null;
+              yield* Deferred.done(ready, exit);
+            }),
+          ),
+          Effect.asVoid,
+          Effect.forkIn(scope),
+        );
+        next.fiber = fiber;
+        if (state.attaching !== next && state.attached === null) yield* Fiber.interrupt(fiber);
+      }
+      const attached = yield* Deferred.await(pending.ready);
+      if (attached !== null) return attached;
     }
-    if (state.attached !== null) return state.attached;
-    if (state.attaching !== null) return yield* Deferred.await(state.attaching);
-    const attaching = yield* Deferred.make<Attached, Refusal>();
-    state.attaching = attaching;
-    yield* connect(state, thread).pipe(
-      Effect.onExit((exit) =>
-        Effect.andThen(
-          Deferred.done(attaching, exit),
-          Effect.sync(() => {
-            state.attaching = null;
-          }),
-        ),
-      ),
-      Effect.forkIn(scope),
-    );
-    return yield* Deferred.await(attaching);
   });
 
   let groups = 0;
@@ -530,6 +517,13 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     return Effect.void;
   };
 
+  const fast = Effect.fn('browser.fast')(function* (page: PageId, action: string, attached: Attached | null) {
+    const profile = pages.profileOf(page);
+    if (profile === undefined) return yield* unknownPage(page);
+    const record = yield* profiles.record(profile);
+    if (record.input === 'human' || attached?.input === 'human') return yield* inputMode(profile, action);
+  });
+
   const guard = Effect.fnUntraced(function* <A, E>(
     state: Paged,
     thread: string | null,
@@ -569,6 +563,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         if (options.agent === true) yield* operatorQuiet(pages, page);
         const navigation = options.agent === undefined ? null : yield* pages.navigation(page, options.agent);
         const attached = unavailable ? null : attaching ? yield* attach(state, thread) : state.attached;
+        if (options.fast !== undefined) yield* fast(page, options.fast, attached);
         state.used = yield* Clock.currentTimeMillis;
         if (thread !== null) state.driver = thread;
         const working = Effect.gen(function* () {
@@ -659,17 +654,21 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
 
   yield* drive('browser-idle-pages', Effect.forever(Effect.andThen(Effect.sleep(SWEEP), sweep())));
 
-  const resync = (profile: ProfileId) =>
-    Effect.forEach(
-      [...held.values()].filter((state) => pages.profileOf(state.page) === profile),
+  const resync = Effect.fnUntraced(function* (record: ProfileRecord) {
+    const states = [...held.values()].filter((state) => pages.profileOf(state.page) === record.id);
+    for (const state of states) state.revision += 1;
+    yield* Effect.forEach(
+      states,
       (state) =>
         state.queue.withPermits(1)(
           Effect.gen(function* () {
-            const record = yield* profiles.record(profile);
-            if (record.input !== state.input) {
+            if (record.input !== state.input || state.attaching !== null) {
+              const changed = record.input !== state.input;
               yield* detach(state);
-              state.emulation = NO_EMULATION;
-              state.layout = null;
+              if (changed) {
+                state.emulation = NO_EMULATION;
+                state.layout = null;
+              }
               state.input = record.input;
             } else if (state.attached !== null) yield* syncRuntime(state, state.attached);
           }).pipe(
@@ -684,15 +683,20 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         ),
       { discard: true },
     );
+  });
 
   yield* Effect.flatMap(profiles.changes, (changes) => Stream.runForEach(changes, resync)).pipe(Effect.forkScoped);
 
   return {
-    fast: Effect.fn('browser.fast')(function* (page: PageId, action: string) {
-      const profile = pages.profileOf(page);
-      if (profile === undefined) return yield* unknownPage(page);
-      const record = yield* profiles.record(profile);
-      if (record.input === 'human') return yield* inputMode(profile, action);
+    read: Effect.fnUntraced(function* <A>(page: PageId, action: string, work: (state: Paged) => A) {
+      const state = yield* paged(page);
+      return yield* state.queue.withPermits(1)(
+        Effect.gen(function* () {
+          if (pages.live(page) === undefined) return yield* unknownPage(page);
+          yield* fast(page, action, null);
+          return work(state);
+        }),
+      );
     }),
     paged,
     attach,

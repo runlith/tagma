@@ -31,6 +31,6 @@ export class Profiles extends Context.Service<
     clear(id: ProfileId): Effect.Effect<boolean, StoreFailure | GateRefusal<'profile-unknown'>>;
     readonly connected: Effect.Effect<readonly ProfileId[], StoreFailure>;
     exclusive<A, E, R>(id: ProfileId, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
-    readonly changes: Effect.Effect<Stream.Stream<ProfileId>, never, Scope.Scope>;
+    readonly changes: Effect.Effect<Stream.Stream<ProfileRecord>, never, Scope.Scope>;
   }
 >()('tagma/browser/Profiles') {}

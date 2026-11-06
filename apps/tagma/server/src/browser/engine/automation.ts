@@ -193,53 +193,51 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         );
     }),
     emulate: Effect.fn('Automation.emulate')(function* (page, change, thread) {
-      yield* drive.fast(page, 'device emulation');
-      return yield* drive.drive(page, thread, (state, attached) =>
-        Effect.gen(function* () {
-          if (thread !== null) yield* operatorQuiet(pages, page);
-          const previous = state.emulation;
-          const next = nextEmulation(previous, change);
-          return yield* Effect.gen(function* () {
-            yield* applyEmulation(attached, effectiveOf(next, state.layout), effectiveOf(previous, state.layout));
-            if (next.cpu !== previous.cpu || next.network !== previous.network || next.geolocation !== previous.geolocation)
-              yield* changeConditions(state, attached, next, thread).pipe(
-                Effect.provideService(Pages, pages),
-                Effect.provideService(ThreadRuns, runs),
-              );
-            else state.emulation = next;
-            yield* syncMetrics(attached);
-            return { page: pages.glance(page, false), emulation: effectiveOf(next, state.layout) };
-          }).pipe(
-            Effect.onExit((exit) =>
-              Exit.isFailure(exit)
-                ? applyEmulation(attached, effectiveOf(previous, state.layout), effectiveOf(next, state.layout)).pipe(
-                    Effect.andThen(syncMetrics(attached)),
-                    Effect.catchIf(isCommandFailure, (failure) =>
-                      Effect.logWarning(`browser: layout on ${page} could not be restored after refused emulation: ${failure.message}`),
-                    ),
-                    Effect.andThen(
-                      Effect.sync(() => {
-                        state.emulation = {
-                          ...state.emulation,
-                          viewport: previous.viewport,
-                          device: previous.device,
-                          scheme: previous.scheme,
-                        };
-                      }),
-                    ),
-                  )
-                : Effect.void,
-            ),
-          );
-        }),
+      return yield* drive.drive(
+        page,
+        thread,
+        (state, attached) =>
+          Effect.gen(function* () {
+            if (thread !== null) yield* operatorQuiet(pages, page);
+            const previous = state.emulation;
+            const next = nextEmulation(previous, change);
+            return yield* Effect.gen(function* () {
+              yield* applyEmulation(attached, effectiveOf(next, state.layout), effectiveOf(previous, state.layout));
+              if (next.cpu !== previous.cpu || next.network !== previous.network || next.geolocation !== previous.geolocation)
+                yield* changeConditions(state, attached, next, thread).pipe(
+                  Effect.provideService(Pages, pages),
+                  Effect.provideService(ThreadRuns, runs),
+                );
+              else state.emulation = next;
+              yield* syncMetrics(attached);
+              return { page: pages.glance(page, false), emulation: effectiveOf(next, state.layout) };
+            }).pipe(
+              Effect.onExit((exit) =>
+                Exit.isFailure(exit)
+                  ? applyEmulation(attached, effectiveOf(previous, state.layout), effectiveOf(next, state.layout)).pipe(
+                      Effect.andThen(syncMetrics(attached)),
+                      Effect.catchIf(isCommandFailure, (failure) =>
+                        Effect.logWarning(`browser: layout on ${page} could not be restored after refused emulation: ${failure.message}`),
+                      ),
+                      Effect.andThen(
+                        Effect.sync(() => {
+                          state.emulation = {
+                            ...state.emulation,
+                            viewport: previous.viewport,
+                            device: previous.device,
+                            scheme: previous.scheme,
+                          };
+                        }),
+                      ),
+                    )
+                  : Effect.void,
+              ),
+            );
+          }),
+        { fast: 'device emulation' },
       );
     }),
     capture: Effect.fn('Automation.capture')(function* (page, kind, ref, thread) {
-      if (kind === 'full')
-        yield* drive.fast(
-          page,
-          'full-page capture that resizes the rendering surface; use a viewport or visible-element screenshot in human mode',
-        );
       if (kind === 'pdf') {
         const host = yield* pages.hold(page);
         const bytes = yield* drive.run(page, thread, false, () =>
@@ -257,8 +255,16 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       if (kind === 'element' && ref === undefined) {
         return yield* new GateRefusal('action-shape', 'an element capture names the `ref` of the element', ['send `ref` from a snapshot']);
       }
-      const shot = yield* drive.drive(page, thread, (state, attached) =>
-        Effect.scoped(Effect.andThen(painted(page), screenshot(state, attached, kind, ref))),
+      const shot = yield* drive.drive(
+        page,
+        thread,
+        (state, attached) => Effect.scoped(Effect.andThen(painted(page), screenshot(state, attached, kind, ref))),
+        {
+          fast:
+            kind === 'full'
+              ? 'full-page capture that resizes the rendering surface; use a viewport or visible-element screenshot in human mode'
+              : undefined,
+        },
       );
       const file = yield* Effect.orDie(keep(page, shot.bytes, 'png'));
       return {
@@ -272,7 +278,6 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     }),
     picture: (file) => Effect.orDie(files.readFile(file)),
     evaluate: Effect.fn('Automation.evaluate')(function* (page, expression, thread, agent = thread !== null) {
-      yield* drive.fast(page, 'running page script');
       return yield* drive.drive(
         page,
         thread,
@@ -308,7 +313,11 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
             const [value, cut] = told.result.value as [string, boolean];
             return { page: pages.glance(page, false), value, cut };
           }),
-        { opened: (opened) => Effect.succeed({ page: pages.glance(opened, false), value: 'undefined', cut: false }), agent },
+        {
+          opened: (opened) => Effect.succeed({ page: pages.glance(opened, false), value: 'undefined', cut: false }),
+          agent,
+          fast: 'running page script',
+        },
       );
     }),
     wait: Effect.fn('Automation.wait')(function* (page, until, timeoutMs, thread) {
@@ -344,78 +353,83 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return { page: pages.glance(page, false), waitedMs: (yield* Clock.currentTimeMillis) - started };
     }),
     console: Effect.fn('Automation.console')(function* (page, query: ConsoleQuery, thread) {
-      yield* drive.fast(page, 'console capture and reading');
-      const profile = pages.profileOf(page);
-      if (profile === undefined) return yield* unknownPage(page);
-      const record = yield* profiles.record(profile).pipe(Effect.catchTag('GateRefusal', () => Effect.fail(unknownPage(page))));
-      if (record.console === 'never') return yield* consoleOff(page);
-      return yield* drive.drive(page, thread, (state: Paged, attached) =>
-        Effect.gen(function* () {
-          state.asked = true;
-          yield* drive.syncRuntime(state, attached);
-          yield* attached.syncEvents();
-          const floor = query.level === undefined ? CONSOLE_LEVELS.length - 1 : severity(query.level);
-          const match = query.match;
-          const named = query.seq === undefined ? undefined : state.console.at(query.seq);
-          const read =
-            query.seq === undefined
-              ? state.console.read({
-                  limit: query.limit,
-                  after: query.after,
-                  keep: (entry) =>
-                    severity(entry.level) <= floor &&
-                    (match === undefined || entry.text.includes(match) || (entry.url ?? '').includes(match)),
-                })
-              : {
-                  entries: named === undefined ? [] : [{ seq: query.seq, entry: named }],
-                  total: named === undefined ? 0 : 1,
-                  dropped: state.console.dropped,
-                };
-          return {
-            entries: read.entries.map(({ seq, entry: { stack, ...entry } }) =>
-              query.stack ? { ...entry, seq, stack: stack ?? null } : { ...entry, seq },
-            ),
-            total: read.total,
-            dropped: read.dropped,
-            capturing: attached.runtime !== null,
-          };
-        }),
+      return yield* drive.drive(
+        page,
+        thread,
+        (state: Paged, attached) =>
+          Effect.gen(function* () {
+            const record = yield* profiles
+              .record(attached.profile)
+              .pipe(Effect.catchTag('GateRefusal', () => Effect.fail(unknownPage(page))));
+            if (record.console === 'never') return yield* consoleOff(page);
+            state.asked = true;
+            yield* drive.syncRuntime(state, attached);
+            yield* attached.syncEvents();
+            const floor = query.level === undefined ? CONSOLE_LEVELS.length - 1 : severity(query.level);
+            const match = query.match;
+            const named = query.seq === undefined ? undefined : state.console.at(query.seq);
+            const read =
+              query.seq === undefined
+                ? state.console.read({
+                    limit: query.limit,
+                    after: query.after,
+                    keep: (entry) =>
+                      severity(entry.level) <= floor &&
+                      (match === undefined || entry.text.includes(match) || (entry.url ?? '').includes(match)),
+                  })
+                : {
+                    entries: named === undefined ? [] : [{ seq: query.seq, entry: named }],
+                    total: named === undefined ? 0 : 1,
+                    dropped: state.console.dropped,
+                  };
+            return {
+              entries: read.entries.map(({ seq, entry: { stack, ...entry } }) =>
+                query.stack ? { ...entry, seq, stack: stack ?? null } : { ...entry, seq },
+              ),
+              total: read.total,
+              dropped: read.dropped,
+              capturing: attached.runtime !== null,
+            };
+          }),
+        { fast: 'console capture and reading' },
       );
     }),
     network: Effect.fn('Automation.network')(function* (page, query: NetworkQuery) {
-      yield* drive.fast(page, 'network reading');
-      if (pages.live(page) === undefined) return yield* unknownPage(page);
-      const state = yield* drive.paged(page);
-      const match = query.match;
-      const read = state.network.read({
-        limit: query.limit,
-        after: query.after,
-        keep: (entry) =>
-          (match === undefined || entry.url.includes(match)) &&
-          (!query.failed || entry.failure !== null || (entry.status !== null && entry.status >= 400)),
+      return yield* drive.read(page, 'network reading', (state) => {
+        const match = query.match;
+        const read = state.network.read({
+          limit: query.limit,
+          after: query.after,
+          keep: (entry) =>
+            (match === undefined || entry.url.includes(match)) &&
+            (!query.failed || entry.failure !== null || (entry.status !== null && entry.status >= 400)),
+        });
+        return { entries: read.entries.map(({ seq, entry }) => ({ ...entry, seq })), total: read.total, dropped: read.dropped };
       });
-      return { entries: read.entries.map(({ seq, entry }) => ({ ...entry, seq })), total: read.total, dropped: read.dropped };
     }),
     body: Effect.fn('Automation.body')(function* (page, request, thread) {
-      yield* drive.fast(page, 'network response reading');
       const unavailable = (why: string) =>
         new GateRefusal('body-unavailable', `the page no longer holds the body of request ${request}: ${why}`, [
           'load the page again and read the body before it navigates away',
         ]);
-      return yield* drive.drive(page, thread, (state, attached) =>
-        Effect.gen(function* () {
-          const known = state.requests.get(request);
-          const target = known?.target;
-          const child = target === undefined ? undefined : [...attached.children].find(([, root]) => root === target)?.[0];
-          if (known === undefined ? request.includes(':') : target !== undefined && child === undefined)
-            return yield* unavailable('its frame is gone');
-          const text = yield* attached.session
-            .reply('Network.getResponseBody', { requestId: known?.id ?? request }, child)
-            .pipe(Effect.catchTag('CommandRefused', (refused) => Effect.fail(unavailable(refused.message))));
-          const reply = (yield* parsed(text, BODY_CHARS + 1)) as { readonly result: Protocol.Network.GetResponseBodyResponse };
-          const { body, base64Encoded } = reply.result;
-          return { body: body.slice(0, BODY_CHARS), base64: base64Encoded, cut: body.length > BODY_CHARS };
-        }),
+      return yield* drive.drive(
+        page,
+        thread,
+        (state, attached) =>
+          Effect.gen(function* () {
+            const known = state.requests.get(request);
+            const target = known?.target;
+            const child = target === undefined ? undefined : [...attached.children].find(([, root]) => root === target)?.[0];
+            if (known === undefined ? request.includes(':') : target !== undefined && child === undefined)
+              return yield* unavailable('its frame is gone');
+            const text = yield* attached.session
+              .reply('Network.getResponseBody', { requestId: known?.id ?? request }, child)
+              .pipe(Effect.catchTag('CommandRefused', (refused) => Effect.fail(unavailable(refused.message))));
+            const reply = (yield* parsed(text, BODY_CHARS + 1)) as { readonly result: Protocol.Network.GetResponseBodyResponse };
+            const { body, base64Encoded } = reply.result;
+            return { body: body.slice(0, BODY_CHARS), base64: base64Encoded, cut: body.length > BODY_CHARS };
+          }),
+        { fast: 'network response reading' },
       );
     }),
     answer: Effect.fn('Automation.answer')(function* (page, accept, text, thread) {
@@ -436,27 +450,34 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return pages.glance(page, false);
     }),
     pick: Effect.fn('Automation.pick')(function* (page, projectId) {
-      yield* drive.fast(page, 'framework source inspection');
-      const attached = yield* drive.drive(page, null, (_state, held) => Effect.succeed(held));
+      const attached = yield* drive.drive(page, null, (_state, held) => Effect.succeed(held), { fast: 'framework source inspection' });
       const subscription = yield* PubSub.subscribe(attached.picks);
       const scope = yield* Effect.scope;
-      yield* drive.drive(page, null, (state, now) =>
-        Effect.gen(function* () {
-          yield* Scope.provide(painted(page), scope);
-          yield* Scope.provide(picking(state, now), scope);
-        }),
+      yield* drive.drive(
+        page,
+        null,
+        (state, now) =>
+          Effect.gen(function* () {
+            yield* Scope.provide(painted(page), scope);
+            yield* Scope.provide(picking(state, now), scope);
+          }),
+        { fast: 'framework source inspection' },
       );
       return Stream.fromSubscription(subscription).pipe(
         Stream.interruptWhen(attached.session.ended),
         Stream.mapEffect((picking) =>
           drive
-            .drive(page, null, (held, now) =>
-              describePick(held, now, page, pages.urlOf(page), picking, projectId).pipe(
-                Effect.provideService(FileSystem.FileSystem, files),
-                Effect.provideService(CheckoutPaths, checkoutPaths),
-                Effect.provideService(ServedRoots, servedRoots),
-                Effect.provideService(Path.Path, path),
-              ),
+            .drive(
+              page,
+              null,
+              (held, now) =>
+                describePick(held, now, page, pages.urlOf(page), picking, projectId).pipe(
+                  Effect.provideService(FileSystem.FileSystem, files),
+                  Effect.provideService(CheckoutPaths, checkoutPaths),
+                  Effect.provideService(ServedRoots, servedRoots),
+                  Effect.provideService(Path.Path, path),
+                ),
+              { fast: 'framework source inspection' },
             )
             .pipe(
               Effect.catchIf(

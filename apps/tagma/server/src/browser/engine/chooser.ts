@@ -1,10 +1,20 @@
 import { type CdpEvent, eventParams, type Session } from '@runlith/cdp/session';
-import { Effect, PubSub, Semaphore } from 'effect';
+import { Deferred, Effect, PubSub, Semaphore } from 'effect';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import type { PageId } from '../contract/wire/ids.js';
 
 type FileChoice = { readonly node: number; readonly child: string | undefined; readonly multiple: boolean };
-type Pending = { choice: FileChoice | null };
+type FileField = { readonly node: number; readonly child: string | undefined };
+type Pending = {
+  readonly stamp: number | undefined;
+  readonly expected: FileField | null;
+  readonly ready: Deferred.Deferred<FileChoice | null>;
+  active: boolean;
+  choice: FileChoice | null;
+  supplied: boolean;
+};
 
-export const makeChooser = Effect.fnUntraced(function* (session: Session) {
+export const makeChooser = Effect.fnUntraced(function* (session: Session, page: PageId, operated: () => number | undefined) {
   const counts = new Map<string, number>();
   const lock = yield* Semaphore.make(1);
   const changes = yield* Effect.acquireRelease(PubSub.unbounded<FileChoice | null>(), PubSub.shutdown);
@@ -40,31 +50,68 @@ export const makeChooser = Effect.fnUntraced(function* (session: Session) {
     changes,
     current: () => current,
     intercept,
-    arm: Effect.fnUntraced(function* (children: readonly string[]) {
+    arm: Effect.fnUntraced(function* (children: readonly string[], expected: FileField | null) {
+      const stamp = operated();
       yield* intercept();
       for (const child of children) yield* intercept(child);
-      return yield* Effect.acquireRelease(
+      const ready = yield* Deferred.make<FileChoice | null>();
+      const next = yield* Effect.acquireRelease(
         Effect.sync(() => {
-          const next: Pending = { choice: null };
+          const next: Pending = { stamp, expected, ready, active: false, choice: null, supplied: false };
           pending = next;
           return next;
         }),
-        () =>
-          Effect.sync(() => {
-            pending = null;
+        (next) =>
+          Effect.gen(function* () {
+            if (pending === next) pending = null;
+            if (next.choice === null || next.supplied || current !== null) return;
+            current = next.choice;
+            yield* PubSub.publish(changes, current);
           }),
       );
+      const check = Effect.suspend(() =>
+        next.stamp === operated()
+          ? Effect.void
+          : Effect.fail(
+              new GateRefusal(
+                'operator-input',
+                `operator input interrupted the upload on page ${page}; its chooser remains with the operator`,
+                ['snapshot_page — read the page again before uploading'],
+              ),
+            ),
+      );
+      return {
+        check,
+        begin: Effect.gen(function* () {
+          yield* check;
+          if (current !== null)
+            return yield* new GateRefusal('action-failed', 'the page has an unanswered operator file chooser', [
+              'answer the file chooser before uploading',
+            ]);
+          next.active = true;
+        }),
+        wait: Deferred.await(ready),
+        choice: () => next.choice,
+      };
     }),
     arrive: Effect.fnUntraced(function* (event: CdpEvent) {
       const opened = yield* eventParams('Page.fileChooserOpened', event);
       if (opened.backendNodeId === undefined) return yield* Effect.logWarning('browser: the file chooser has no input node');
       const choice: FileChoice = { node: opened.backendNodeId, child: event.child, multiple: opened.mode === 'selectMultiple' };
-      if (pending !== null) {
-        pending.choice = choice;
+      const next = pending;
+      if (
+        next !== null &&
+        next.active &&
+        next.stamp === operated() &&
+        (next.expected === null || (next.expected.node === choice.node && next.expected.child === choice.child))
+      ) {
+        next.choice = choice;
+        yield* Deferred.succeed(next.ready, choice);
         return;
       }
       current = choice;
       yield* PubSub.publish(changes, choice);
+      if (next !== null) yield* Deferred.succeed(next.ready, null);
     }),
     take: Effect.fnUntraced(function* () {
       const choice = current;
@@ -72,8 +119,10 @@ export const makeChooser = Effect.fnUntraced(function* (session: Session) {
       if (choice !== null) yield* PubSub.publish(changes, null);
       return choice;
     }),
-    supply: (choice: FileChoice, files: readonly string[]) =>
-      session.send('DOM.setFileInputFiles', { files: [...files], backendNodeId: choice.node }, choice.child),
+    supply: Effect.fnUntraced(function* (choice: FileChoice, files: readonly string[]) {
+      yield* session.send('DOM.setFileInputFiles', { files: [...files], backendNodeId: choice.node }, choice.child);
+      if (pending?.choice === choice) pending.supplied = true;
+    }),
   };
 });
 

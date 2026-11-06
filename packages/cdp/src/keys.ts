@@ -105,7 +105,17 @@ export const MODIFIERS = { Alt: 1, Control: 2, Meta: 4, Shift: 8 } as const;
 
 export type Modifier = keyof typeof MODIFIERS;
 
-export const keyOf = (name: string): KeyDefinition | undefined => LAYOUT.get(name);
+export const keyOf = (name: string): KeyDefinition | undefined => {
+  const known = LAYOUT.get(name);
+  if (known !== undefined) return known;
+  const glyph = name.normalize('NFC');
+  if (
+    !/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]$/u.test(glyph) ||
+    /[\p{Extended_Pictographic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(glyph)
+  )
+    return undefined;
+  return { key: glyph, code: '', keyCode: 0, text: name, shifted: false, location: 0 };
+};
 
 export type Chord = { readonly modifiers: readonly Modifier[]; readonly key: KeyDefinition };
 

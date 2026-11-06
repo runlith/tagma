@@ -167,8 +167,7 @@ export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) 
     const c2 = { x: from.x + dx * 0.76 + normal.x * bend * 0.5, y: from.y + dy * 0.76 + normal.y * bend * 0.5 };
     const duration = between(160, 280) + Math.sqrt(distance) * between(8, 14);
     const steps = Math.max(12, Math.ceil(duration / 16));
-    const overshoot = Math.min(5, distance * 0.015);
-    const end = { x: to.x + (dx / distance) * overshoot, y: to.y + (dy / distance) * overshoot };
+    const end = to;
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
       const eased = t * t * (3 - 2 * t);
@@ -192,19 +191,6 @@ export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) 
       pointer.at = { x: at.x + offset.x, y: at.y + offset.y };
       yield* rest((duration / steps) * 0.7, (duration / steps) * 1.3);
     }
-    yield* rest(20, 55);
-    yield* session.send(
-      'Input.dispatchMouseEvent',
-      {
-        type: 'mouseMoved',
-        x: to.x,
-        y: to.y,
-        modifiers,
-        button: held ? 'left' : 'none',
-        buttons: held ? 1 : 0,
-      },
-      child,
-    );
     pointer.at = { x: to.x + offset.x, y: to.y + offset.y };
   });
 
@@ -256,7 +242,7 @@ export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) 
       !shortcut && chord.key.shifted && !chord.modifiers.includes('Shift') ? [...chord.modifiers, 'Shift' as const] : chord.modifiers;
     const down: Modifier[] = [];
     const mask = modifierMask(modifiers, false);
-    const definition = shortcut && !modifiers.includes('Shift') ? keyOf(chord.key.code)! : chord.key;
+    const definition = shortcut && !modifiers.includes('Shift') ? (keyOf(chord.key.code) ?? chord.key) : chord.key;
     const shared = {
       modifiers: mask,
       key: definition.key,
@@ -309,8 +295,11 @@ export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) 
     type: Effect.fn('cdp.type')(function* (text: string) {
       for (const { segment: glyph } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
         const known = keyOf(glyph === '\n' ? 'Enter' : glyph);
-        if (known === undefined) yield* session.send('Input.insertText', { text: glyph });
-        else yield* key({ key: known, modifiers: [] });
+        if (known === undefined) {
+          yield* session.send('Input.imeSetComposition', { text: glyph, selectionStart: glyph.length, selectionEnd: glyph.length });
+          yield* rest(90, 190);
+          yield* session.send('Input.insertText', { text: glyph });
+        } else yield* key({ key: known, modifiers: [] });
         yield* rest(25, 135);
         if (/\s|[.,;:!?]/u.test(glyph)) yield* rest(65, 220);
       }

@@ -1,7 +1,7 @@
 import { Clock, Effect, Layer, PubSub, Schema, Semaphore, Stream } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { type Host, HostAdapters, Hosts } from './contract/service/hosts.js';
+import { type Host, HostAdapters, Hosts, type ProfileRecord } from './contract/service/hosts.js';
 import { Pages } from './contract/service/pages.js';
 import { Profiles } from './contract/service/profiles.js';
 import { ProfileId } from './contract/wire/ids.js';
@@ -16,7 +16,7 @@ export const makeProfiles = Effect.gen(function* () {
   const settings = yield* Settings;
   const { all: adapters } = yield* HostAdapters;
   const now = new Date(yield* Clock.currentTimeMillis);
-  const changed = yield* PubSub.unbounded<ProfileId>();
+  const changed = yield* PubSub.unbounded<ProfileRecord>();
   const locks = new Map<ProfileId, Semaphore.Semaphore>();
 
   yield* Effect.orDie(
@@ -127,7 +127,7 @@ export const makeProfiles = Effect.gen(function* () {
       const unchanged = change.name === undefined && change.console === undefined && change.input === undefined;
       const row = unchanged ? yield* ledger.profile(id) : yield* ledger.changeProfile(id, change);
       if (row === undefined) return yield* unknown(id);
-      if (change.console !== undefined || change.input !== undefined) yield* PubSub.publish(changed, id);
+      if (change.console !== undefined || change.input !== undefined) yield* PubSub.publish(changed, row);
       return wire(row);
     }),
     remove: Effect.fn('Profiles.remove')(function* (id) {

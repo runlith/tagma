@@ -12,7 +12,7 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { DeclaredAnswer } from '../platform/contract/wire/operation.js';
 import type { CurrentProject } from '../projects/contract/service/caller.js';
 import { Automation } from './contract/service/automation.js';
-import type { Host, Moved } from './contract/service/hosts.js';
+import type { Host, Moved, ProfileRecord } from './contract/service/hosts.js';
 import { Pages } from './contract/service/pages.js';
 import { Screencast } from './contract/service/screencast.js';
 import { browserChannels } from './feeds.js';
@@ -32,7 +32,7 @@ import { makeAutomation } from './engine/automation.js';
 import { makeAnalysis } from './engine/analysis.js';
 import { makeDrive } from './engine/drive.js';
 import { makeScreencast } from './engine/screencast.js';
-import { PAGE_PAIRS } from './operations.js';
+import { PAGE_PAIRS, PROFILE_PAIRS } from './operations.js';
 
 type Act = typeof PAGE_OPERATIONS.act_on_page;
 type Call = Effect.Effect<DeclaredAnswer<Act['answer']>, Refused<Act>, Automation | Pages | CurrentProject>;
@@ -64,7 +64,9 @@ const engine = Effect.fnUntraced(function* (
     | 'viewport'
     | 'viewport-quantized'
     | 'screencast'
-    | 'silent-frame',
+    | 'silent-frame'
+    | 'mode-attach'
+    | 'mode-queue',
 ) {
   const incoming = yield* Queue.unbounded<string>();
   const frameTrees = yield* Queue.unbounded<string>();
@@ -78,7 +80,7 @@ const engine = Effect.fnUntraced(function* (
   let native = { width: 1280, height: 800 };
   let viewport = native;
   let overridden = false;
-  const sizing = mode === 'viewport' || mode === 'viewport-quantized';
+  const sizing = mode === 'viewport' || mode === 'viewport-quantized' || mode === 'mode-attach';
   let holdViewport = false;
   let viewportRead: { readonly id: number; readonly sessionId: string | undefined } | null = null;
   const resizing = yield* Deferred.make<void>();
@@ -90,6 +92,7 @@ const engine = Effect.fnUntraced(function* (
   let pictures = 0;
   let pointerX = 0;
   const inspecting = new Set<string>();
+  const enabled = new Set<string>();
   const rates = new Map<string, number>();
   const strains = new Set<Strain>();
   const connection = yield* connect({
@@ -112,6 +115,16 @@ const engine = Effect.fnUntraced(function* (
           readonly matchedNetworkConditions?: readonly { readonly latency: number }[];
         };
       };
+      if (mode === 'mode-attach' && command.method === 'Page.enable' && !Deferred.isDoneUnsafe(started)) {
+        yield* Deferred.succeed(started, undefined);
+        yield* Deferred.await(release);
+      }
+      if (mode === 'mode-queue' && command.method === 'Runtime.evaluate' && command.params?.expression === 'hold') {
+        yield* Deferred.succeed(started, undefined);
+        yield* Deferred.await(release);
+      }
+      if (command.method.endsWith('.enable')) enabled.add(command.method.split('.')[0]!);
+      if (command.method.endsWith('.disable')) enabled.delete(command.method.split('.')[0]!);
       if (command.method === 'Page.startScreencast') {
         castSession += 1;
         framesInFlight = 0;
@@ -308,7 +321,7 @@ const engine = Effect.fnUntraced(function* (
       geolocation: unused,
       answer: unused,
       events: unused(),
-      paint: () => (mode === 'pick-detach' || mode === 'screencast' ? Effect.void : unused()),
+      paint: () => (mode === 'pick-detach' || mode === 'screencast' || mode === 'mode-attach' ? Effect.void : unused()),
       session: () => Effect.succeed(session),
     },
     profiles: { prepare: unused, session: unused, remove: unused },
@@ -346,27 +359,51 @@ const engine = Effect.fnUntraced(function* (
     profileOf: () => record.profile,
     urlOf: () => record.url,
   });
+  const changed = yield* PubSub.unbounded<ProfileRecord>();
+  let inputMode: 'human' | 'fast' = 'fast';
   const profiles = Profiles.of({
     list: unused(),
     record: () =>
-      Effect.succeed({
+      Effect.sync(() => ({
         id: record.profile,
         name: 'Test',
         adapter: 'test',
         document: {},
         console: 'never' as const,
-        input: 'fast' as const,
+        input: inputMode,
         removal: null,
         createdAt: new Date(0),
-      }),
+      })),
     chosen: unused,
     create: unused,
-    update: unused,
+    update: Effect.fnUntraced(function* (_id, change) {
+      inputMode = change.input ?? inputMode;
+      yield* PubSub.publish(changed, {
+        id: record.profile,
+        name: 'Test',
+        adapter: 'test',
+        document: {},
+        console: 'never',
+        input: inputMode,
+        removal: null,
+        createdAt: new Date(0),
+      });
+      return {
+        id: record.profile,
+        name: 'Test',
+        adapter: 'test',
+        console: 'never',
+        input: inputMode,
+        connected: true,
+        removal: null,
+        createdAt: new Date(0).toISOString(),
+      };
+    }),
     remove: unused,
     clear: unused,
     connected: unused(),
     exclusive: unused,
-    changes: Effect.succeed(Stream.empty),
+    changes: Effect.map(PubSub.subscribe(changed), Stream.fromSubscription),
   });
   const drive = yield* makeDrive({
     pages,
@@ -433,10 +470,19 @@ const engine = Effect.fnUntraced(function* (
   );
   return {
     act,
+    changeMode: () =>
+      (
+        PROFILE_PAIRS.update_profile.body.execute({ profile: record.profile, input: 'human' }, undefined, caller) as Effect.Effect<
+          unknown,
+          unknown,
+          Profiles
+        >
+      ).pipe(Effect.provideService(Profiles, profiles)),
     screencast,
     screencasting: Deferred.await(screencasting),
     silent: Deferred.await(silent),
     pointerX: () => pointerX,
+    enabled,
     capture: (picture: string) =>
       Effect.suspend(() => {
         if (framesInFlight > CHROMIUM_FRAMES_IN_FLIGHT) return Effect.succeed(undefined);
@@ -539,6 +585,35 @@ const engine = Effect.fnUntraced(function* (
     join: join('child'),
   };
 });
+
+it.effect('changing to human while a viewer attaches retires the pending fast connection', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('mode-attach');
+    yield* Effect.forkChild(Stream.runDrain(browser.screencast.watch(PAGE, { width: 400, height: 300, scale: 1 })));
+    yield* Deferred.await(browser.started);
+    yield* browser.changeMode();
+    yield* browser.release;
+    yield* browser.screencasting;
+    yield* browser.snapshot();
+    expect([...browser.enabled].filter((domain) => ['Network', 'Log', 'Runtime'].includes(domain))).toEqual([]);
+  }),
+);
+
+it.effect('an evaluation queued before a human mode change refuses on the attachment it acquires', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('mode-queue');
+    const first = yield* Effect.forkChild(browser.evaluate('hold'));
+    yield* Deferred.await(browser.started);
+    const next = yield* Effect.forkChild(Effect.flip(browser.evaluate('second')), { startImmediately: true });
+    yield* TestClock.adjust(0);
+    yield* browser.changeMode();
+    yield* browser.release;
+    yield* Fiber.join(first);
+    const refused = yield* Fiber.join(next);
+    if (!(refused instanceof GateRefusal)) return yield* Effect.die(refused);
+    expect(refused.code).toBe('input-mode');
+  }),
+);
 
 it.effect('a viewer that took no frame while Chromium ran out of frame credit still receives the last picture', () =>
   Effect.gen(function* () {

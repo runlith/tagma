@@ -228,8 +228,7 @@ export const makeAudit = Effect.fnUntraced(function* (input: { readonly drive: D
   }, Effect.scoped);
 
   return Effect.fn('Automation.audit')(function* (page: PageId, query: AuditQuery, thread: string | null) {
-    yield* drive.fast(page, 'page audits');
-    const read = yield* drive.drive(page, thread, (state, attached) => audited(state, attached, query));
+    const read = yield* drive.drive(page, thread, (state, attached) => audited(state, attached, query), { fast: 'page audits' });
     return { page: pages.glance(page, false), ...read };
   });
 });

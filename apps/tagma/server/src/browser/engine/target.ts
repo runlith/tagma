@@ -171,6 +171,82 @@ export const boxOf = Effect.fn('browser.box')(function* (
   return box;
 });
 
+type Reveal = {
+  readonly visible: Box | null;
+  readonly scroll: { readonly at: Point; readonly delta: Point } | null;
+  readonly stamp: string;
+};
+
+const REVEAL = `function (bounds, center) {
+  const rect = this.getBoundingClientRect();
+  const offset = { x: center.x-rect.x-rect.width/2, y: center.y-rect.y-rect.height/2 };
+  bounds = { ...bounds, x: bounds.x-offset.x, y: bounds.y-offset.y };
+  const intersect = (a, b) => ({ x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), width: Math.max(0, Math.min(a.x+a.width, b.x+b.width)-Math.max(a.x,b.x)), height: Math.max(0, Math.min(a.y+a.height, b.y+b.height)-Math.max(a.y,b.y)) });
+  const doc = this.ownerDocument, win = doc.defaultView, root = doc.scrollingElement;
+  const chain = [{ box: bounds, x: root.scrollWidth > win.innerWidth, y: root.scrollHeight > win.innerHeight, left: root.scrollLeft, top: root.scrollTop }];
+  const parents = [];
+  for (let node = this.parentElement || this.getRootNode().host; node; node = node.parentElement || node.getRootNode().host) {
+    if (node === root) continue;
+    const style = win.getComputedStyle(node), rect = node.getBoundingClientRect();
+    const x = /auto|scroll|hidden|clip/.test(style.overflowX), y = /auto|scroll|hidden|clip/.test(style.overflowY);
+    if (!x && !y) continue;
+    parents.push({ box: { x: x ? rect.x+node.clientLeft : bounds.x, y: y ? rect.y+node.clientTop : bounds.y, width: x ? node.clientWidth : bounds.width, height: y ? node.clientHeight : bounds.height }, x: /auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth, y: /auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight, left: node.scrollLeft, top: node.scrollTop });
+  }
+  chain.push(...parents.reverse());
+  let clip = bounds;
+  for (const held of chain) { clip = intersect(clip, held.box); held.visible = clip; }
+  const visible = intersect(rect, clip);
+  const stamp = chain.map(held => [held.left, held.top, held.visible.x, held.visible.y, held.visible.width, held.visible.height].join(',')).join(';') + ':' + [rect.x,rect.y,rect.width,rect.height].join(',');
+  if (visible.width > 0 && visible.height > 0) return { visible: { ...visible, x: visible.x+offset.x, y: visible.y+offset.y }, scroll: null, stamp };
+  for (const held of chain.reverse()) {
+    const box = held.visible;
+    if (box.width <= 0 || box.height <= 0) continue;
+    const x = held.x && (rect.right <= box.x || rect.left >= box.x+box.width);
+    const y = held.y && (rect.bottom <= box.y || rect.top >= box.y+box.height);
+    if (x || y) return { visible: null, scroll: { at: { x: box.x+box.width/2+offset.x, y: box.y+box.height/2+offset.y }, delta: { x: x ? rect.x+rect.width/2-box.x-box.width/2 : 0, y: y ? rect.y+rect.height/2-box.y-box.height/2 : 0 } }, stamp };
+  }
+  return { visible: null, scroll: null, stamp };
+}`;
+
+export const reveal = Effect.fn('browser.reveal')(function* (
+  attached: Attached,
+  located: Located,
+): Effect.fn.Return<PlacedBox & { readonly visible: Box }, CommandFailure | GateRefusal<'action-failed' | 'stale-ref'>> {
+  if (attached.input === 'fast') {
+    const box = yield* boxOf(attached, located);
+    return { ...box, visible: box };
+  }
+  let previous: string | null = null;
+  for (;;) {
+    const parent = attached.frames.get(located.anchor.frame)?.parent;
+    let bounds: Box;
+    if (parent === null || parent === undefined) {
+      const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics');
+      bounds = { x: 0, y: 0, width: view.clientWidth, height: view.clientHeight };
+    } else {
+      const context = yield* world(attached, parent);
+      const child = attached.frames.get(parent)!.child;
+      const { backendNodeId } = yield* attached.session.send('DOM.getFrameOwner', { frameId: located.anchor.frame }, child);
+      const { object } = yield* attached.session.send(
+        'DOM.resolveNode',
+        { backendNodeId, executionContextId: context, objectGroup: attached.group },
+        child,
+      );
+      const anchor = anchorOf(attached, parent, backendNodeId);
+      if (object.objectId === undefined || anchor === undefined) return yield* staleRef(located.ref);
+      bounds = (yield* reveal(attached, { ref: located.ref, anchor, child, object: object.objectId })).visible;
+    }
+    const box = yield* boxOf(attached, located, false);
+    const read = yield* call<Reveal>(attached, located, REVEAL, [bounds, box.center]);
+    if (read.visible !== null) return { ...box, visible: read.visible };
+    if (read.scroll === null || read.stamp === previous)
+      return yield* actionFailed(`${located.ref} cannot be reached through its scroll containers`);
+    previous = read.stamp;
+    yield* attached.human.wheel(read.scroll.at, read.scroll.delta);
+    yield* attached.pictures.paint;
+  }
+});
+
 export const pointOf = (attached: Attached, located: Located): Effect.Effect<Point, CommandFailure | GateRefusal<'action-failed'>> =>
   Effect.map(boxOf(attached, located), (box) => box.localCenter);
 

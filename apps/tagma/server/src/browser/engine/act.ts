@@ -7,9 +7,22 @@ import type { Action, Aim } from '../contract/service/automation.js';
 import { erase, fade, mark } from './cursor.js';
 import { inputMode } from './refusal.js';
 import type { Attached, Paged } from './drive.js';
-import { actionFailed, type Box, boxOf, call, coverOf, describe, locate, locateAt, type Located, pointOf, world } from './target.js';
+import {
+  actionFailed,
+  type Box,
+  boxOf,
+  call,
+  coverOf,
+  describe,
+  locate,
+  locateAt,
+  type Located,
+  pointOf,
+  reveal,
+  world,
+} from './target.js';
 
-type Refused = GateRefusal<'stale-ref' | 'element-obscured' | 'action-failed' | 'action-shape' | 'input-mode'>;
+type Refused = GateRefusal<'stale-ref' | 'element-obscured' | 'action-failed' | 'action-shape' | 'input-mode' | 'operator-input'>;
 
 const shape = (reason: string) => new GateRefusal('action-shape', reason, ['send the fields this action takes']);
 
@@ -59,37 +72,6 @@ const markFocused = Effect.fnUntraced(function* (state: Paged, attached: Attache
   yield* focused === null ? erase(attached) : mark(state, attached, { kind: 'box', box: focused });
 });
 
-const reveal = Effect.fn('browser.reveal')(function* (attached: Attached, located: Located) {
-  if (attached.input === 'fast') return yield* boxOf(attached, located);
-  let box = yield* boxOf(attached, located, false);
-  const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics', undefined, located.child);
-  for (;;) {
-    const local = box.localCenter;
-    const width = box.width;
-    const height = box.height;
-    if (
-      local.x + width / 2 > 0 &&
-      local.x - width / 2 < view.clientWidth &&
-      local.y + height / 2 > 0 &&
-      local.y - height / 2 < view.clientHeight
-    )
-      return box;
-    const offset = { x: box.center.x - local.x, y: box.center.y - local.y };
-    yield* attached.human.wheel(
-      { x: Math.max(1, offset.x + view.clientWidth / 2), y: Math.max(1, offset.y + view.clientHeight / 2) },
-      {
-        x: local.x < 0 || local.x > view.clientWidth ? local.x - view.clientWidth / 2 : 0,
-        y: local.y < 0 || local.y > view.clientHeight ? local.y - view.clientHeight / 2 : 0,
-      },
-    );
-    yield* attached.pictures.paint;
-    const next = yield* boxOf(attached, located, false);
-    if (next.center.x === box.center.x && next.center.y === box.center.y)
-      return yield* actionFailed(`${located.ref} cannot be reached by scrolling its viewport`);
-    box = next;
-  }
-});
-
 const aimAt = Effect.fnUntraced(function* (
   state: Paged,
   attached: Attached,
@@ -105,16 +87,10 @@ const aimAt = Effect.fnUntraced(function* (
   yield* mark(state, attached, { kind: 'box', box });
   let point = box.center;
   if (attached.input === 'human') {
-    const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics');
-    const { cssVisualViewport: local } =
-      located.child === undefined
-        ? { cssVisualViewport: view }
-        : yield* attached.session.send('Page.getLayoutMetrics', undefined, located.child);
-    const offset = { x: box.center.x - box.localCenter.x, y: box.center.y - box.localCenter.y };
-    const left = Math.max(0, box.x, offset.x);
-    const top = Math.max(0, box.y, offset.y);
-    const right = Math.min(view.clientWidth, box.x + box.width, offset.x + local.clientWidth);
-    const bottom = Math.min(view.clientHeight, box.y + box.height, offset.y + local.clientHeight);
+    const left = box.visible.x;
+    const top = box.visible.y;
+    const right = left + box.visible.width;
+    const bottom = top + box.visible.height;
     if (right <= left || bottom <= top) return yield* actionFailed(`${aim.ref} is outside the visible viewport`);
     const across = (Math.random() < 0.5 ? 0.2 : 0.6) + Math.random() * 0.2;
     point = { x: left + (right - left) * across, y: top + (bottom - top) * (0.2 + Math.random() * 0.6) };
@@ -240,17 +216,59 @@ const SELECT_INFO = `function () {
 const CUSTOM_OPTION = `function (wanted) {
   const controlled = (this.getAttribute('aria-controls') || this.getAttribute('aria-owns') || '').split(/\\s+/).filter(Boolean).map(id => this.ownerDocument.getElementById(id)).filter(Boolean);
   const roots = this.getAttribute('role') === 'listbox' ? [this] : controlled;
-  for (const root of roots) for (const option of root.querySelectorAll('[role="option"]')) {
-    if (option.getAttribute('aria-disabled') === 'true') continue;
-    if ([option.getAttribute('value'), option.getAttribute('data-value'), option.getAttribute('aria-label'), option.textContent.trim()].includes(wanted)) return option;
-  }
-  return null;
+  const options = roots.flatMap(root => Array.from(root.querySelectorAll('[role="option"]'))).filter(option => option.getAttribute('aria-disabled') !== 'true');
+  return options.find(option => [option.getAttribute('value'), option.getAttribute('data-value')].includes(wanted)) || options.find(option => [option.getAttribute('aria-label'), option.textContent.trim()].includes(wanted)) || null;
 }`;
 
 const humanKey = Effect.fnUntraced(function* (attached: Attached, key: string) {
   const chord = chordOf(key);
   if (!('key' in chord)) return yield* shape(`${JSON.stringify(key)} is not a keyboard key`);
   yield* attached.human.press(chord);
+});
+
+const focusKey = Effect.fnUntraced(function* (attached: Attached) {
+  let frame = attached.main;
+  for (;;) {
+    const context = yield* world(attached, frame);
+    const child = attached.frames.get(frame)!.child;
+    const { result } = yield* attached.session.send(
+      'Runtime.evaluate',
+      {
+        expression:
+          '(() => { let at = document.activeElement; while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement; return at; })()',
+        contextId: context,
+        objectGroup: attached.group,
+      },
+      child,
+    );
+    if (result.objectId === undefined) return `${frame}:none`;
+    let objectId = result.objectId;
+    for (;;) {
+      const { node } = yield* attached.session.send('DOM.describeNode', { objectId, depth: 1, pierce: true }, child);
+      const shadow = node.shadowRoots?.[0];
+      if (shadow !== undefined) {
+        const { object } = yield* attached.session.send(
+          'DOM.resolveNode',
+          { backendNodeId: shadow.backendNodeId, executionContextId: context, objectGroup: attached.group },
+          child,
+        );
+        if (object.objectId === undefined) return yield* actionFailed('the focused shadow root could not be read');
+        const { result: inner } = yield* attached.session.send(
+          'Runtime.callFunctionOn',
+          { objectId: object.objectId, functionDeclaration: 'function () { return this.activeElement; }', objectGroup: attached.group },
+          child,
+        );
+        if (inner.objectId !== undefined) {
+          objectId = inner.objectId;
+          continue;
+        }
+      }
+      if (node.frameId === undefined || !attached.frames.has(node.frameId) || !['IFRAME', 'FRAME'].includes(node.nodeName))
+        return `${frame}:${node.backendNodeId}`;
+      frame = node.frameId;
+      break;
+    }
+  }
 });
 
 const select = Effect.fnUntraced(function* (
@@ -271,14 +289,14 @@ const select = Effect.fnUntraced(function* (
   if (values.length !== 1 || info.multiple)
     return yield* inputMode(attached.profile, 'replacing a multiple selection; choose its options with explicit clicks and modifier keys');
   const wanted = values[0]!;
+  const chosen =
+    info.options.find((option) => option.value === wanted) ??
+    info.options.find((option) => option.label === wanted || option.text === wanted);
   const options = info.options.filter((option) => !option.disabled);
-  const index = options.findIndex((option) => option.value === wanted || option.label === wanted || option.text === wanted);
+  const index = chosen === undefined ? -1 : options.indexOf(chosen);
   if (info.native && index < 0) return yield* actionFailed(`${aim.ref} has no enabled option ${JSON.stringify(wanted)}`);
   if (!info.native && info.role !== 'combobox' && info.role !== 'listbox')
-    return yield* inputMode(
-      attached.profile,
-      'selecting a custom control without an accessible combobox or listbox; click its visible options by ref',
-    );
+    return yield* actionFailed(`${aim.ref} is not a native select or an accessible combobox or listbox`);
   if (info.native) {
     const label = options[index]!.label || options[index]!.text;
     const folded = label.toLowerCase();
@@ -297,18 +315,17 @@ const select = Effect.fnUntraced(function* (
         'choosing a native option without a unique keyboard prefix in the current key layout; choose it at the screen',
       );
     yield* reveal(attached, located);
-    const count = yield* call<number>(
-      attached,
-      located,
-      `function () { return this.ownerDocument.querySelectorAll('input,textarea,select,button,a[href],[tabindex],iframe').length; }`,
-    );
     let focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
     if (focused) {
       yield* humanKey(attached, 'Tab');
       yield* humanKey(attached, 'Shift+Tab');
       focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
     }
-    for (let step = 0; !focused && step <= count; step += 1) {
+    const seen = new Set<string>();
+    while (!focused) {
+      const at = yield* focusKey(attached);
+      if (seen.has(at)) break;
+      seen.add(at);
       yield* humanKey(attached, 'Tab');
       focused = yield* call<boolean>(attached, located, `function () { return this.matches(':focus'); }`);
     }
@@ -335,10 +352,7 @@ const select = Effect.fnUntraced(function* (
     located.child,
   );
   if (reply.result.objectId === undefined || reply.result.subtype === 'null')
-    return yield* inputMode(
-      attached.profile,
-      'selecting an option outside the custom control’s accessible listbox; click its visible option by ref',
-    );
+    return yield* actionFailed(`${aim.ref} has no accessible enabled option ${JSON.stringify(wanted)}`);
   const { node } = yield* attached.session.send('DOM.describeNode', { objectId: reply.result.objectId }, located.child);
   const ref = state.refs.issue({ ...located.anchor, node: node.backendNodeId });
   const option = yield* aimAt(state, attached, { ref }, true);
@@ -366,21 +380,33 @@ const upload = Effect.fnUntraced(function* (
     return yield* inputMode(attached.profile, 'clearing a file input without a file choice; use the page’s remove control');
   if (attached.chooser.current() !== null) return yield* actionFailed('the page already has an unanswered file chooser');
   const aimed = yield* aimAt(state, attached, aim, true);
-  const pending = yield* attached.chooser.arm([...attached.children.keys()]);
-  yield* attached.human.click(aimed.local, {}, located.child, { x: aimed.point.x - aimed.local.x, y: aimed.point.y - aimed.local.y });
-  yield* attached.session.send('Page.getFrameTree');
-  yield* attached.syncEvents();
-  const choice = pending.choice;
-  if (choice === null)
-    return yield* inputMode(
-      attached.profile,
-      'uploading without a chooser opened by the clicked control; name the visible file-chooser control',
-    );
+  const native = yield* call<boolean>(attached, located, FILE_INPUT);
+  const pending = yield* attached.chooser.arm(
+    [...attached.children.keys()],
+    native ? { node: located.anchor.node, child: located.child } : null,
+  );
+  const offset = { x: aimed.point.x - aimed.local.x, y: aimed.point.y - aimed.local.y };
+  yield* attached.human.move(aimed.local, 0, located.child, offset);
+  yield* pending.begin;
+  yield* attached.human.click(aimed.local, {}, located.child, offset);
+  const expired = Effect.gen(function* () {
+    while (
+      yield* call<boolean>(attached, located, 'function () { return this.ownerDocument.defaultView.navigator.userActivation.isActive; }')
+    )
+      yield* Effect.sleep(50);
+    yield* attached.session.send('Page.getFrameTree');
+    yield* attached.syncEvents();
+    return pending.choice();
+  });
+  const choice = yield* Effect.raceFirst(pending.wait, expired);
+  yield* pending.check;
+  if (choice === null) return yield* actionFailed(`${aim.ref} opened no file chooser during its click activation`);
   const { node } = yield* attached.session.send('DOM.describeNode', { backendNodeId: choice.node }, choice.child);
   if (node.attributes?.some((name, index) => index % 2 === 0 && name === 'webkitdirectory'))
-    return yield* inputMode(attached.profile, 'choosing a directory; upload takes individual files from a file chooser');
+    return yield* actionFailed('the opened chooser takes directories; upload names individual files');
   if (!choice.multiple && files.length > 1) return yield* actionFailed('the opened file chooser takes only one file');
   yield* attached.human.pause();
+  yield* pending.check;
   yield* attached.chooser.supply(choice, files);
 }, Effect.scoped);
 
@@ -524,7 +550,7 @@ const performed = Effect.fnUntraced(function* (
     case 'press': {
       const chord = chordOf(action.key);
       if (!('key' in chord))
-        return yield* shape(`${JSON.stringify(chord.unknown)} is not a key of the US layout, like Enter, Tab, ArrowDown, a or Control+A`);
+        return yield* shape(`${JSON.stringify(chord.unknown)} is not a supported key or chord, like Enter, Tab, ArrowDown, a or Control+A`);
       yield* focusOn(state, attached, action.aim);
       return yield* attached.input === 'human' ? attached.human.press(chord) : press(session, chord);
     }
