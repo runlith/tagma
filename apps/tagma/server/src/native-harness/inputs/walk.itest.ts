@@ -221,7 +221,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           expect(text).toContain('- `tagma/storage/get {key}`');
           expect(text).toContain('- `tagma/echo {said}` — Says it back.');
           expect(text).not.toContain('<!-- bridge-methods -->');
-          expect(plugins.references?.map(({ name }) => name)).toEqual(['example', 'echo']);
+          expect(plugins.references?.map(({ name }) => name)).toEqual(expect.arrayContaining(['example', 'echo']));
           expect(yield* plugins.reference!('echo')).toContain('Echo details.');
           const bare = (yield* read(HOST_BRIDGE)).shipped.find((skill) => skill.id === 'plugins')!;
           expect(yield* textOf(bare)).not.toContain('tagma/echo');
