@@ -230,10 +230,6 @@ export default defineConfig({
             WIRE,
             { path: SERVICE_WORKER, why: 'The worker runs without the graph.' },
             {
-              path: 'apps/tagma/app/src/lib/features/views/reach.ts',
-              why: "Probes whether the browser reaches a plugin view's own origin, not the server.",
-            },
-            {
               path: 'apps/tagma/app/src/lib/features/browser/pick/Picks.ts',
               why: 'Fetches a `data:` URL to decode a picture; no network.',
             },

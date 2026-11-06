@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { UNAVAILABLE, ViewBridge, type ViewHost, type ViewParams } from './ViewBridge.js';
+import { ViewBridge, type ViewHost, type ViewParams } from './ViewBridge.js';
 
 const ORIGIN = 'http://127.0.0.1:5636';
 
@@ -99,7 +99,7 @@ test('a capability the mount does not hold answers unavailable', async () => {
   mount.send({ jsonrpc: '2.0', id: 'store', method: 'tagma/storage', params: {} });
   await mount.answer('store');
   expect(mount.posted).toEqual([
-    { jsonrpc: '2.0', id: 'store', error: { code: UNAVAILABLE, message: 'unavailable', data: { method: 'tagma/storage' } } },
+    { jsonrpc: '2.0', id: 'store', error: { code: -32601, message: 'unavailable', data: { method: 'tagma/storage' } } },
   ]);
 });
 

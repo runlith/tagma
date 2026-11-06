@@ -8,7 +8,6 @@
   import { innerHeight, innerWidth } from 'svelte/reactivity/window';
   import Frame, { type FrameProtocol, tallest } from '$lib/shared/frame/Frame.svelte';
   import { hostStyles } from './hostStyles.js';
-  import { reaches } from './reach.js';
   import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
   import { ViewBridge, type ViewDocument, type ViewHost } from './ViewBridge.js';
 
@@ -33,22 +32,15 @@
   const platform = Platform.use();
 
   const CONTEXT_CHANGED = 'ui/notifications/host-context-changed';
-  const PROXY_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
-  const SITE_SANDBOX = `${PROXY_SANDBOX} allow-popups`;
-  const PROXY_ALLOWS = 'fullscreen; autoplay';
-  const SITE_ALLOWS = `${PROXY_ALLOWS}; encrypted-media; picture-in-picture`;
+  const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
+  const ALLOWS = 'fullscreen; autoplay';
 
   let frame = $state<HTMLIFrameElement | null>(null);
   let reported = $state<number | null>(null);
   let ready = $state(false);
-  let reachable = $state<boolean | null>(null);
 
-  const page = $derived('src' in view ? new URL(view.src) : null);
-  const origin = $derived(page?.origin ?? server.sandbox);
-  const src = $derived.by(() => {
-    if ('src' in view) return reachable === true ? view.src : null;
-    return server.sandbox === null ? null : `${server.sandbox}/?csp=${encodeURIComponent(JSON.stringify(view.csp))}`;
-  });
+  const origin = $derived(server.sandbox);
+  const src = $derived(server.sandbox === null ? null : `${server.sandbox}/?csp=${encodeURIComponent(JSON.stringify(view.csp))}`);
   const height = $derived(Math.min(reported ?? TOOL_VIEW_PX, tallest(ceiling)));
 
   const contextOf = (target: HTMLIFrameElement) => () => ({
@@ -84,25 +76,6 @@
     return () => {
       cancelAnimationFrame(told);
       resizing?.disconnect();
-    };
-  });
-
-  $effect(() => {
-    const at = page;
-    if (at === null) return;
-    let live = true;
-    const probe = () =>
-      void reaches(at).then((answered) => {
-        if (live) reachable = answered;
-      });
-    reachable = null;
-    probe();
-    window.addEventListener('focus', probe);
-    window.addEventListener('online', probe);
-    return () => {
-      live = false;
-      window.removeEventListener('focus', probe);
-      window.removeEventListener('online', probe);
     };
   });
 
@@ -158,14 +131,8 @@
     {protocol}
     {fill}
     {height}
-    sandbox={page === null ? PROXY_SANDBOX : SITE_SANDBOX}
-    allow={page === null ? PROXY_ALLOWS : SITE_ALLOWS}
+    sandbox={SANDBOX}
+    allow={ALLOWS}
     class={['bg-transparent', bordered ? 'rounded-lg border border-border' : 'border-0']}
   />
-{:else if page !== null && reachable === false}
-  <p class="text-small text-muted-foreground">
-    This browser does not reach {page.host}, where the view is served{page.hostname.endsWith('.localhost')
-      ? ': it does not resolve names under localhost. Open Tagma in its app, Chrome or Firefox.'
-      : '.'}
-  </p>
 {/if}

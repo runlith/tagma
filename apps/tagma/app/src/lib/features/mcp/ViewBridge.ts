@@ -1,8 +1,8 @@
 import type { McpAppCsp, McpAppPermissions } from '@runlith/mcp/apps';
 
-export const VIEW_PROTOCOL = '2026-01-26';
+const VIEW_PROTOCOL = '2026-01-26';
 
-export const UNAVAILABLE = -32601;
+const UNAVAILABLE = -32601;
 
 export const INVALID_PARAMS = -32602;
 
@@ -28,7 +28,7 @@ type ViewCall = {
 
 export type ViewMethod = (params: ViewParams, call: ViewCall) => Promise<unknown>;
 
-export type ViewUpdate = { readonly uri: string; readonly _meta?: Readonly<Record<string, unknown>> | undefined };
+type ViewUpdate = { readonly uri: string; readonly _meta?: Readonly<Record<string, unknown>> | undefined };
 
 export type ViewSubscription = {
   readonly updated: (update: ViewUpdate) => void;
@@ -55,22 +55,23 @@ export class ViewRefusal extends Error {
 export type ViewDocument = {
   readonly csp: McpAppCsp;
   readonly permissions: McpAppPermissions;
-} & ({ readonly html: string } | { readonly src: string });
+  readonly html: string;
+};
 
-export type ViewFrame = {
+type ViewFrame = {
   readonly origin: string;
   readonly source: () => unknown;
   readonly post: (message: unknown) => void;
 };
 
-export type ViewSize = { readonly width?: number; readonly height?: number };
+type ViewSize = { readonly width?: number; readonly height?: number };
 
-export type ViewEvents = {
+type ViewEvents = {
   readonly initialized?: () => void;
   readonly resized?: (size: ViewSize) => void;
 };
 
-export type ViewMessage = { readonly source: unknown; readonly origin: string; readonly data: unknown };
+type ViewMessage = { readonly source: unknown; readonly origin: string; readonly data: unknown };
 
 type Id = string | number;
 

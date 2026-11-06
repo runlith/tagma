@@ -4,7 +4,7 @@ import type { LiveConnection, ServerClient } from '$lib/wire/Live.js';
 import type { LiveError } from '$lib/wire/liveFailure.js';
 import type { ViewHost, ViewSubscription } from './ViewBridge.js';
 
-export type ResourceFeed = (uri: string) => (client: ServerClient) => Stream.Stream<McpResourceEvent, LiveError>;
+type ResourceFeed = (uri: string) => (client: ServerClient) => Stream.Stream<McpResourceEvent, LiveError>;
 
 export const resourceSubscription =
   (live: LiveConnection, feed: ResourceFeed): NonNullable<ViewHost['subscribe']> =>

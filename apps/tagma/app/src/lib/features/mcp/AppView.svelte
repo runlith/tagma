@@ -5,10 +5,10 @@
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
-  import { argumentsOf, needed, openLink } from '../views/params.js';
-  import { resourceSubscription } from '../views/resourceFeed.js';
-  import ResultFrame from '../views/ResultFrame.svelte';
-  import type { ViewDocument, ViewHost } from '../views/ViewBridge.js';
+  import { argumentsOf, needed, openLink } from './params.js';
+  import { resourceSubscription } from './resourceFeed.js';
+  import ResultFrame from './ResultFrame.svelte';
+  import type { ViewDocument, ViewHost } from './ViewBridge.js';
 
   let { entry, projectId, threadId }: { entry: ToolActivityEntry; projectId: number; threadId: string | null } = $props();
 

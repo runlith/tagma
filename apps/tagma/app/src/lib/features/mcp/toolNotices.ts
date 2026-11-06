@@ -1,7 +1,7 @@
 import { toolCancelled, toolInterrupted, toolSettled, type ToolActivityEntry } from '@runlith/chat-ui/activity';
 import type { ViewParams } from './ViewBridge.js';
 
-export type ToolNotice = { readonly method: string; readonly params: ViewParams };
+type ToolNotice = { readonly method: string; readonly params: ViewParams };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
