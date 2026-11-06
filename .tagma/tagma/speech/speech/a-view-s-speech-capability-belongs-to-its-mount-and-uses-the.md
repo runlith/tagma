@@ -11,7 +11,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/speech/contract/wire/view.ts
 ---
-Speech contributes the `speech` member to the window's `ViewCapabilities` point, declared in its own server wire; `plugin-views` names no speech. The member offers `status`, `recognize`, `speak` and `silence`.
+Speech contributes the `speech` member to the window's `ViewCapabilities` point, declared in its own server wire. Its window service builds the member from the `Door`, `Live` and `SoundChannel` speech resolves itself; `plugin-views` names no speech and hands it no service. The member offers `status`, `recognize`, `speak` and `silence`.
 
 `recognize` picks the microphone from `speech_status`. On the server's machine the server captures; on a tethered device (`caller`), the window's existing `Sender` does. The client makes the recognition's id, so another view cannot finish it from a guessed one. The `speech.recognize` feed is held through the live connection; the listener's `ended(failure)` is called once, with `null` for a clean end. A recognition also ends with a failure when the live connection pauses, is refused or closes, and it does not reopen by itself. `finish` is accepted only after the `state: live` event: it calls `finish_recognition`, rereads the tail and lets the recognition end by itself. `stop` cuts it at once. The mount's end stops every recognition of that mount and silences its playback.
 

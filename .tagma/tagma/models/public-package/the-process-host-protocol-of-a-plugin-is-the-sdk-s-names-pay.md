@@ -31,6 +31,13 @@ The caller stays `@runlith/mcp`'s `McpCaller`, under `runlith/caller`, which Tag
 
 The points name these tools, and the host treats them like any other tool. An author's tool may not start with `__`, so the two never collide. A build step answers its verdict as JSON text. A hook answers its verdict as structured content, the author's `rewrite` sent as the answer's `input`; an error or no answer within its timeout is a failure the runner passes over unless the hook blocks on failure. An action answers nothing or text the person sees as a notice, or as the draft from a command; its `isError` makes `run_plugin_action` refuse `plugin-call-failed` with the handler's reason, and the action is not run again. The question handler answers nothing to take the question, or `ASKED_LEFT` (`leave()`) to hand it to the person; there `isError` also hands it to the person, for good, and is never delivered again. The schedule, ending and notification handlers answer nothing, and only `isError` tells the host to deliver again.
 
+**An author's tool answers its value unambiguously.** `value.ts` (`@runlith/tagma/plugin/value`) holds the pair that encodes and decodes it, so the host, the view client and the tool card read what a tool returned the same way:
+- a string is the answer's text alone, readable as it is to an agent;
+- nothing is empty text with empty structured content;
+- any other value is its JSON as text and the value itself as `structuredContent.value`.
+
+The decoder takes the answer's text and structured content and gives back the authored value; it never parses the text, so a string such as `'123'`, `'false'` or `'[{"id":1}]'` stays a string. Handler tools do not use it: the host reads their answers, a hook's verdict and the question handler's `ASKED_LEFT` among them, as their own structured content. The thread record keeps a tool answer as its text, or `{text, structuredContent}` when structured content stands, so the card decodes the same two parts.
+
 **What the runtime does that a hand-written process had to.**
 - It answers every failure as `isError`, a thrown `Refusal` with its reason, so a handler's error never becomes a protocol fault.
 - `stdio.ts`, the first module the process evaluates, sends `console.log` and writes to `process.stdout` to stderr and keeps the original stdout for the protocol alone. So nothing printed while the plugin's modules load reaches the stream; the build's entry imports the runtime before `plugin.ts` for this.

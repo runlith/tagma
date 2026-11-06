@@ -30,6 +30,8 @@ fields:
 edges:
   - kind: imports
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
+  - kind: imports
+    to: 01a18921-850b-74c0-a119-c016a939df5d
 sources:
   - kind: dir
     ref: apps/tagma/server/src/plugin-formats/tagma
