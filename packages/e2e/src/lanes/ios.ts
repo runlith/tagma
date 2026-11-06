@@ -364,7 +364,14 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (lane: Lane): Effe
     const scale = frame.width / viewport.width;
     return (point) => ({ x: frame.x + (point.x - viewport.x) * scale, y: frame.y + (point.y - viewport.y) * scale });
   };
-  const touch = yield* makeTouch<Point>({ frame: mapping, send: held.touch });
+  const rendered = 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))';
+  const touch = yield* makeTouch<Point>({
+    frame: mapping,
+    send: async (phase, point) => {
+      if (phase === 'press') await evaluateChannel(rendered);
+      await held.touch(phase, point);
+    },
+  });
   const fixture: IOSSession = {
     touch,
     udid,
@@ -445,14 +452,17 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (lane: Lane): Effe
     },
     evaluate: async (expression, schema) => decode(schema, await evaluateChannel(expression)),
     swipe: async (gesture) => {
-      await evaluateChannel(`void (window.__runlithSwipePressed = new Promise(resolve => {
-        const pressed = event => {
-          if (!event.isTrusted) return;
-          document.removeEventListener('touchstart', pressed, true);
-          resolve();
-        };
-        document.addEventListener('touchstart', pressed, { capture: true, passive: true });
-      }))`);
+      await evaluateChannel(`(() => {
+        window.__runlithSwipePressed = new Promise(resolve => {
+          const pressed = event => {
+            if (!event.isTrusted) return;
+            document.removeEventListener('touchstart', pressed, true);
+            resolve();
+          };
+          document.addEventListener('touchstart', pressed, { capture: true, passive: true });
+        });
+        return ${rendered};
+      })()`);
       await held.swipe(gesture, async () => {
         await evaluateChannel('window.__runlithSwipePressed');
       });
