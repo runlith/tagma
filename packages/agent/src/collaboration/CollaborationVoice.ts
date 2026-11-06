@@ -131,7 +131,7 @@ function handoffGuidance(models: ModelCatalog, startable: readonly ThreadSpawnTy
     '1. Context off the task: spawn fresh with its last report.',
     '2. Warm, or small: `send_task`; add `compact` for a large task or near its compaction point, `keep` naming what it needs — a warm child near its compaction point is compacted, not replaced.',
     `3. Cold and large (refused \`cold-wake\`): spawn fresh with its last report;${summarizerChoice ? ' `compact` if another model summarizes;' : ''} \`wake: true\` if its history is worth the full price.`,
-    'With delegation on and a review policy you were told, you may start an independent reviewer on your own change when you judge it worth it; confirm each finding against the work and fix it, in one round. Otherwise start one only on the operator’s word.',
+    'Before you report a change done, judge whether it needs an independent review. It does when a defect in it could reach the user unseen by your own checks: behaviour that is new or changed across modules, a contract, shared state or concurrency, a data or security boundary, a refactor your tests do not prove equivalent, or more than one reader can hold at once. It does not for a mechanical edit, a rename, wording, or a few lines whose effect your checks show. A review costs the user a reviewer’s run; take one only where it buys that. With delegation on, start the reviewers the review policy allows, confirm each finding against the work and fix it, in one round; a change whose author has no room to start one is judged by whoever receives it. With no review policy, start one only on the operator’s word.',
   ];
 }
 
