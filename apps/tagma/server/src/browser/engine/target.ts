@@ -243,7 +243,13 @@ export const reveal = Effect.fn('browser.reveal')(function* (
       return yield* actionFailed(`${located.ref} cannot be reached through its scroll containers`);
     previous = read.stamp;
     yield* attached.human.wheel(read.scroll.at, read.scroll.delta);
-    yield* attached.pictures.paint;
+    let shown: string | null = null;
+    for (;;) {
+      yield* attached.pictures.paint;
+      const now = (yield* call<Reveal>(attached, located, REVEAL, [bounds, box.center])).stamp;
+      if (now === shown) break;
+      shown = now;
+    }
   }
 });
 

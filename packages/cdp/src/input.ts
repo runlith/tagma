@@ -152,11 +152,28 @@ const between = (low: number, high: number) => low + Math.random() * (high - low
 const rest = (low: number, high: number) => Effect.sleep(between(low, high));
 const ORIGIN: Point = { x: 0, y: 0 };
 
-export type Pointer = { at: Point };
+export type Pointer = { at: Point | null };
 
-export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) => {
+const ENTRY_MARGIN = 0.15;
+
+const entry = Effect.fnUntraced(function* (session: Session, target: Point) {
+  const { cssVisualViewport: view } = yield* session.send('Page.getLayoutMetrics');
+  const low = { x: view.clientWidth * ENTRY_MARGIN, y: view.clientHeight * ENTRY_MARGIN };
+  const high = { x: view.clientWidth * (1 - ENTRY_MARGIN), y: view.clientHeight * (1 - ENTRY_MARGIN) };
+  const at = { x: between(low.x, high.x), y: between(low.y, high.y) };
+  if (Math.hypot(at.x - target.x, at.y - target.y) >= Math.min(view.clientWidth, view.clientHeight) / 4) return at;
+  const corner = {
+    x: Math.abs(low.x - target.x) > Math.abs(high.x - target.x) ? low.x : high.x,
+    y: Math.abs(low.y - target.y) > Math.abs(high.y - target.y) ? low.y : high.y,
+  };
+  return { x: corner.x + (at.x - corner.x) * 0.2, y: corner.y + (at.y - corner.y) * 0.2 };
+});
+
+export const humanInput = (session: Session, pointer: Pointer = { at: null }) => {
   const travel = Effect.fn('cdp.travel')(function* (to: Point, modifiers = 0, child?: string, offset: Point = ORIGIN, held = false) {
-    const from = { x: pointer.at.x - offset.x, y: pointer.at.y - offset.y };
+    const start = pointer.at ?? (yield* entry(session, { x: to.x + offset.x, y: to.y + offset.y }));
+    pointer.at = start;
+    const from = { x: start.x - offset.x, y: start.y - offset.y };
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const distance = Math.hypot(dx, dy);
@@ -344,8 +361,8 @@ export const humanInput = (session: Session, pointer: Pointer = { at: ORIGIN }) 
           down
             ? session.post('Input.dispatchMouseEvent', {
                 type: 'mouseReleased',
-                x: pointer.at.x,
-                y: pointer.at.y,
+                x: pointer.at?.x ?? from.x,
+                y: pointer.at?.y ?? from.y,
                 button: 'left',
                 buttons: 0,
                 clickCount: 1,

@@ -49,7 +49,8 @@ far.addEventListener('change', event => traversed.textContent = 'far=' + far.val
 attachment.addEventListener('change', event => { choices++; uploaded.textContent = 'file=' + attachment.files[0]?.name + ';size=' + attachment.files[0]?.size + ';clicked=' + uploadClicked + ';trusted=' + event.isTrusted + ';choices=' + choices; });
 const points = [], paths = [], holds = [], clicks = [], keys = [], chars = []; let trusted = true, presses = 0, ups = 0, ticks = 0, scroll = 0, pressed = 0;
 addEventListener('wheel', (event) => { ticks++; scroll += event.deltaY; points.length = 0; });
-addEventListener('mousemove', (event) => points.push([event.clientX, event.clientY, event.timeStamp]));
+let entered = null;
+addEventListener('mousemove', (event) => { entered ??= event.clientX > innerWidth * 0.1 && event.clientX < innerWidth * 0.9 && event.clientY > innerHeight * 0.1 && event.clientY < innerHeight * 0.9; points.push([event.clientX, event.clientY, event.timeStamp]); });
 addEventListener('mousedown', event => { paths.push(points.splice(0)); pressed = event.timeStamp; });
 addEventListener('mouseup', event => holds.push(event.timeStamp - pressed));
 addEventListener('click', (event) => { const box = event.target.getBoundingClientRect(); clicks.push(Math.abs(event.clientX - box.x - box.width / 2) > 1 || Math.abs(event.clientY - box.y - box.height / 2) > 1); }, true);
@@ -59,7 +60,7 @@ submit.addEventListener('click', () => {
  const forward = paths.every(path => { if(path.length < 2) return false; const first=path[0],last=path.at(-1),dx=last[0]-first[0],dy=last[1]-first[1],distance=Math.hypot(dx,dy); return path.slice(1).every((point,index)=>((point[0]-path[index][0])*dx+(point[1]-path[index][1])*dy)/distance >= -Math.SQRT2); });
  fetch('/motion', {method:'POST',body:JSON.stringify({paths,holds})}).then(()=>motionSaved.textContent='Motion saved');
  const eased = paths.every(path => { const speeds = path.slice(1).map((point, index) => Math.hypot(point[0]-path[index][0], point[1]-path[index][1])/(point[2]-path[index][2])); return speeds.length > 2 && Math.max(...speeds) > speeds[0] && Math.max(...speeds) > speeds.at(-1); });
- result.textContent = 'value=' + field.value + ';keys=' + keys.length + ';chars=' + chars.length + ';press=' + presses + ';up=' + ups + ';ticks=' + (ticks >= 3) + ';scroll=' + Math.round(scroll) + ';moves=' + paths.reduce((sum, path) => sum + path.length, 0) + ';curved=' + curved + ';offcenter=' + clicks.every(Boolean) + ';trusted=' + trusted + ';eased=' + eased + ';held=' + holds.every(duration => duration > 0) + ';forward=' + forward;
+ result.textContent = 'value=' + field.value + ';keys=' + keys.length + ';chars=' + chars.length + ';press=' + presses + ';up=' + ups + ';ticks=' + (ticks >= 3) + ';scroll=' + Math.round(scroll) + ';moves=' + paths.reduce((sum, path) => sum + path.length, 0) + ';curved=' + curved + ';offcenter=' + clicks.every(Boolean) + ';trusted=' + trusted + ';eased=' + eased + ';held=' + holds.every(duration => duration > 0) + ';forward=' + forward + ';entry=' + entered;
 });
 </script>`;
 
@@ -222,7 +223,7 @@ export const inputScenarios = (input: EngineHost): void => {
           );
           const human = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
           expect(human.text).toContain('value=aBéЯю;keys=5;chars=5;press=5;up=5;ticks=true;scroll=120;');
-          expect(human.text).toContain(';curved=true;offcenter=true;trusted=true;eased=true;held=true;forward=true');
+          expect(human.text).toContain(';curved=true;offcenter=true;trusted=true;eased=true;held=true;forward=true;entry=true');
           yield* calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'fill', ref: field, text: 'Жé🙂' }] }, undefined, agent));
           expect((yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent))).text).toContain('value="Жé🙂"');
           expect(

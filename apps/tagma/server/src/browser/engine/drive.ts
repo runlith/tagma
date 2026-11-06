@@ -121,7 +121,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       if (known !== undefined) return Effect.succeed(known);
       return Effect.map(Semaphore.make(1), (queue) => {
         const fresh: Paged = {
-          pointer: { at: { x: 0, y: 0 } },
+          pointer: { at: null },
           page,
           queue,
           console: consoleRing(),
