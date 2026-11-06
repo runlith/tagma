@@ -1,42 +1,24 @@
 import { Effect, Layer, PubSub, Stream } from 'effect';
-import type { PluginContribution, PluginRef } from '../plugins/contract/service/points.js';
 import { PluginPoints } from '../plugins/contract/service/points.js';
 import { THEMES, Themes } from './contract/service/themes.js';
 import type { ThemeCatalog } from './contract/wire/feeds.js';
-import { type ThemeEntries, themeIdOf } from './contract/wire/format.js';
-
-type Offered = { readonly plugin: PluginRef; readonly themes: ThemeEntries };
+import { themeIdOf } from './contract/wire/format.js';
 
 export const makeThemes = Effect.gen(function* () {
-  const points = yield* PluginPoints;
+  const held = yield* (yield* PluginPoints).hold(THEMES);
   const moved = yield* Effect.acquireRelease(PubSub.unbounded<void>(), PubSub.shutdown);
-  const offered = new Map<string, Offered>();
-  const bump = () => {
-    PubSub.publishUnsafe(moved, undefined);
-  };
-
-  const register = ({ plugin, value }: PluginContribution<ThemeEntries>) =>
-    Effect.sync(() => {
-      if (Object.keys(value).length === 0) return () => undefined;
-      const standing: Offered = { plugin, themes: value };
-      offered.set(plugin.id, standing);
-      bump();
-      return () => {
-        if (offered.get(plugin.id) !== standing) return;
-        offered.delete(plugin.id);
-        bump();
-      };
-    });
+  yield* Effect.acquireRelease(
+    Effect.sync(() => held.changed(() => PubSub.publishUnsafe(moved, undefined))),
+    (stop) => Effect.sync(stop),
+  );
 
   const catalogOf = (): ThemeCatalog => ({
-    themes: [...offered.values()]
-      .flatMap(({ plugin, themes }) =>
-        Object.entries(themes).map(([id, theme]) => ({ id: themeIdOf(plugin.id, id), plugin: plugin.id, pluginTitle: plugin.title, theme })),
+    themes: [...held.all().values()]
+      .flatMap(({ plugin, value }) =>
+        Object.entries(value).map(([id, theme]) => ({ id: themeIdOf(plugin.id, id), plugin: plugin.id, pluginTitle: plugin.title, theme })),
       )
       .sort((left, right) => (left.id < right.id ? -1 : 1)),
   });
-
-  yield* Effect.acquireRelease(points.declare(THEMES, register), (withdraw) => Effect.sync(withdraw));
 
   return Themes.of({
     catalog: Stream.unwrap(

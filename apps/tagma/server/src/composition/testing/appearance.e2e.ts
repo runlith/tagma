@@ -62,7 +62,7 @@ e2e.effect('a theme chosen in one window’s menu paints every open window, and 
       await page.getByRole('menuitem', { name: /^Theme/ }).click();
       await page.getByRole('menuitemradio', { name: 'Nord', exact: true }).click();
       await Promise.all([paints(page, BACKGROUND), paints(second, BACKGROUND)]);
-      expect(await second.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true);
+      expect(await second.evaluate("document.documentElement.classList.contains('dark')")).toBe(true);
       await second.reload();
       await paints(second, BACKGROUND);
     }).pipe(
