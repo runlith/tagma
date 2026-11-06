@@ -136,4 +136,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/threads
 ---
-The operator works with agents in threads, and this is the app's largest module: thread list and column, chat and feed, thread birth, team, external harnesses, library, thread worktree, work tab, and thread places that composition fills as `ThreadPlaces`.
+The operator works with agents in threads, and this is the app's largest module: thread list and column, chat and feed, thread birth, team, external harnesses, library, thread worktree, work tab, the thread a plugin view places, the face its composer gives plugin parts, and thread places that composition fills as `ThreadPlaces`.

@@ -60,7 +60,8 @@ fields:
       {
         "at": "src/composer.ts",
         "for": [
-          "96400e93"
+          "96400e93",
+          "9cc7259f"
         ]
       },
       {
