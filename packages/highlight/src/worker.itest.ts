@@ -30,7 +30,7 @@ describe('the worker tokenizes nothing that was dropped', () => {
     post({ id: 1, kind: 'lines', code: file(1), language: 'typescript' });
     await landing(1);
 
-    post({ id: 2, kind: 'lines', code: file(2), language: 'typescript' });
+    post({ id: 2, kind: 'lines', code: file(2).repeat(100), language: 'typescript' });
     post({ id: 3, kind: 'lines', code: file(3), language: 'typescript' });
     post({ kind: 'drop', id: 2 });
     await landing(3);
