@@ -1,5 +1,5 @@
 import { type Context, Effect } from 'effect';
-import { threadSignalEvent, threadUserMessageEvent, type ThreadEventBody } from '../../events';
+import { threadSignalEvent, threadUserMessageEvent, type ThreadEventBody, type ThreadTurnEvent } from '../../events';
 import {
   beforeBarrier,
   carriesWords,
@@ -15,6 +15,7 @@ import {
   spokenByOther,
   threadQueuedTurnOf,
   threadSignalOfInboxItem,
+  type ThreadInboxWords,
   waitsForTurn,
 } from '../../inboxItems';
 import { inputAddressOf, type Keyed } from '../../keyed';
@@ -44,7 +45,7 @@ function sourceOf(runId: string | null, pending: readonly ThreadInboxItem[], coh
 
 export type Door = { readonly key: Keyed | undefined; readonly item: ThreadInboxItem };
 
-export type Arrival = { readonly item: ThreadInboxItem; readonly event: (runId: string | null) => ThreadEventBody };
+export type Arrival = { readonly item: ThreadInboxItem; readonly event: (runId: string | null) => ThreadTurnEvent };
 
 export type Queues = Effect.Success<ReturnType<typeof makeQueues>>;
 
@@ -62,6 +63,16 @@ export const makeQueues = Effect.fnUntraced(function* ({
   const admission = yield* RunAdmission;
   const residency = yield* ThreadResidency;
 
+  const arrivalOf = (thread: ThreadMetadataRow, item: ThreadInboxWords<ThreadInboxItem>): Effect.Effect<Arrival, ThreadBorderFailed> => {
+    const signal = threadSignalOfInboxItem(item);
+    return signal.attachments?.length
+      ? Effect.map(attachments.resolve(thread.id, thread.ownerId, signal.attachments), (stored) => ({
+          item,
+          event: (runId: string | null) => threadSignalEvent(signal, runId, { attachments: stored }),
+        }))
+      : Effect.succeed({ item, event: (runId: string | null) => threadSignalEvent(signal, runId) });
+  };
+
   const signalsOf = (
     thread: ThreadMetadataRow,
     items: readonly ThreadInboxItem[],
@@ -69,15 +80,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
   ): Effect.Effect<readonly Arrival[], ThreadBorderFailed> =>
     Effect.forEach(
       items.filter(carriesWords).filter((item) => item.state === 'queued' && !opensTurn(item) && !spoken.has(item.id)),
-      (item) => {
-        const signal = threadSignalOfInboxItem(item);
-        return signal.attachments?.length
-          ? Effect.map(attachments.resolve(thread.id, thread.ownerId, signal.attachments), (stored) => ({
-              item,
-              event: (runId: string | null) => threadSignalEvent(signal, runId, { attachments: stored }),
-            }))
-          : Effect.succeed({ item, event: (runId: string | null) => threadSignalEvent(signal, runId) });
-      },
+      (item) => arrivalOf(thread, item),
     );
 
   const queuedTurns = Effect.fnUntraced(function* (
@@ -91,7 +94,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
     const turns = queued.filter(opensTurn);
     const told = yield* openings.told(thread, queued);
     const said = openingWords(queued).filter((item) => !told.has(item.id));
-    const tasked = turns.filter(carriesWords).filter(spokenByOther);
+    const tasked = yield* Effect.forEach(turns.filter(carriesWords).filter(spokenByOther), (item) => arrivalOf(thread, item));
     const refs = said.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? [...(item.body.attachments ?? [])] : []));
     const stored = refs.length > 0 ? yield* attachments.resolve(thread.id, thread.ownerId, refs) : undefined;
     const reader = said.some((item) => isReaderWordsItem(item) || saidAsOperator(item));
@@ -102,10 +105,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
         said.length > 0
           ? (runId: string) => threadUserMessageEvent({ id: runId }, { ...queuedTurnSaid(said), attachments: stored, reader, turnKey })
           : undefined,
-      facts: (runId) => [
-        ...under(signals, stopped ? runId : source.runId, runId),
-        ...tasked.map((item) => threadSignalEvent(threadSignalOfInboxItem(item), runId)),
-      ],
+      facts: (runId) => [...under(signals, stopped ? runId : source.runId, runId), ...tasked.map((arrival) => arrival.event(runId))],
       seed: source.items.filter(carriesWords),
       consume: consumed(inbox, source, told),
       admits: unmoved(source),
@@ -117,10 +117,10 @@ export const makeQueues = Effect.fnUntraced(function* ({
           : (run, turn) => {
               if (turn !== null && said.some((item) => item.id === door.item.id))
                 return { status: 'started', runId: run.id, entry: turn.payload.entry };
-              const spoken = tasked.find((item) => item.id === door.item.id);
+              const spoken = tasked.find((arrival) => arrival.item.id === door.item.id);
               return spoken === undefined
                 ? { status: 'queued', runId: run.id, queued: threadQueuedTurnOf(run.id, door.item) }
-                : { status: 'started', runId: run.id, entry: threadSignalEvent(threadSignalOfInboxItem(spoken), run.id).payload.entry };
+                : { status: 'started', runId: run.id, entry: spoken.event(run.id).payload.entry };
             },
     });
     return opened;

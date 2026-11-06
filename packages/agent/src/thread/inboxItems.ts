@@ -56,6 +56,7 @@ export function threadSignalOfInboxItem(item: ThreadInboxWords): ThreadSignal {
             type: OUTSIDE_SIGNAL_TYPE,
             addressee: 'transport',
             text: item.body.text,
+            attachments: item.body.attachments?.length ? item.body.attachments : undefined,
             from: address.from,
             occurredAt: item.occurredAt,
           };

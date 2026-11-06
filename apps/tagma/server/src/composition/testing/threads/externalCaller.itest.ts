@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, Layer, Schedule, Schema, Stream } from 'effect';
+import { Context, Deferred, Effect, Exit, Layer, Schema, Stream } from 'effect';
 import { DoorFixture, doorFixture } from '../doorFixture.js';
 import { nativeLeads, subscriptionLogin, modelDefaults } from '../claudeLogin.js';
 import { projectLeaving } from '../doorFixture.js';
@@ -19,7 +19,12 @@ const decodeSnapshot = Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchem
 const decodeStart = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer));
 const decodeStatuses = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.read_statuses.answer));
 
-const heard = new Map<string, string>();
+const heard = new Map<string, Deferred.Deferred<string>>();
+const hearing = (runId: string): Deferred.Deferred<string> => {
+  const standing = heard.get(runId) ?? Deferred.makeUnsafe<string>();
+  heard.set(runId, standing);
+  return standing;
+};
 
 const fixture = doorFixture({
   models: (standing) => ({
@@ -28,7 +33,7 @@ const fixture = doorFixture({
       ...standing.request(input),
       web: undefined,
       stream: (call) => {
-        if (input.runId !== undefined) heard.set(input.runId, JSON.stringify(call.messages));
+        if (input.runId !== undefined) Deferred.doneUnsafe(hearing(input.runId), Exit.succeed(JSON.stringify(call.messages)));
         return Stream.never;
       },
     }),
@@ -250,26 +255,41 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
     }),
   );
 
-  it.effect('a plugin’s turn in the person’s thread is recorded as the plugin’s and reaches the agent under its title', () =>
-    Effect.gen(function* () {
-      const { world, projectId } = yield* World;
-      const { thread } = yield* born();
-      const answer = yield* decodeStart((yield* op('start_turn', { threadId: thread.id, text: 'Your hand.', key: 'hand-1' }, PLUGIN)).body);
-      expect(answer).toMatchObject({ status: 'started', acted: true });
-      const runId = (answer as { readonly runId: string }).runId;
-      const item = yield* inboxOf(world.runtime.owners).receipt(inputItemId({ kind: 'external', name: 'plugin:poker' }, 'hand-1'));
-      expect(item).toMatchObject({
-        kind: 'turn',
-        sender: { kind: 'external', name: 'plugin:poker', title: 'Poker table' },
-        body: { text: 'Your hand.' },
-      });
-      yield* Effect.repeat(
-        Effect.sync(() => heard.get(runId)),
-        { schedule: Schedule.spaced('20 millis'), until: (said) => said !== undefined },
-      );
-      expect(heard.get(runId)).toContain('<message from=\\"Poker table\\">Your hand.</message>');
-      yield* turnsOf(world.runtime.owners).stop(thread.id, projectId, runId);
-    }),
+  it.effect(
+    'a plugin’s turn in the person’s thread is recorded as the plugin’s and reaches the agent under its title, with its attachment',
+    () =>
+      Effect.gen(function* () {
+        const { world, projectId } = yield* World;
+        const { thread } = yield* born();
+        const uploaded = yield* Effect.promise(async () => {
+          const response = await world.app(
+            new Request(`http://tagma/api/threads/${thread.id}/attachments?project=${projectId}&name=hand.md`, {
+              method: 'POST',
+              headers: { 'content-type': 'text/markdown' },
+              body: '# Hand\n\nAce of spades.',
+            }),
+            world.routed,
+          );
+          return { status: response.status, body: (await response.json()) as { readonly id: string } };
+        });
+        expect(uploaded).toMatchObject({ status: 201 });
+        const sent = { threadId: thread.id, text: 'Your hand.', attachments: [{ id: uploaded.body.id }], key: 'hand-1' };
+        const response = yield* op('start_turn', sent, PLUGIN);
+        expect(response).toMatchObject({ status: 200 });
+        const answer = yield* decodeStart(response.body);
+        expect(answer).toMatchObject({ status: 'started', acted: true });
+        const runId = (answer as { readonly runId: string }).runId;
+        const item = yield* inboxOf(world.runtime.owners).receipt(inputItemId({ kind: 'external', name: 'plugin:poker' }, 'hand-1'));
+        expect(item).toMatchObject({
+          kind: 'turn',
+          sender: { kind: 'external', name: 'plugin:poker', title: 'Poker table' },
+          body: { text: 'Your hand.', attachments: [{ id: uploaded.body.id }] },
+        });
+        const said = yield* Deferred.await(hearing(runId));
+        expect(said).toContain('<message from=\\"Poker table\\">Your hand.</message>');
+        expect(said).toContain('Ace of spades.');
+        yield* turnsOf(world.runtime.owners).stop(thread.id, projectId, runId);
+      }),
   );
 
   it.effect('an external caller wakes once by key and reads the stopped run through status and endings', () =>
