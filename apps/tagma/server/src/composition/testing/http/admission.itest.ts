@@ -29,7 +29,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const stopped = yield* Context.get(door, SocketOperations).perform(OperationId.make('stop_run'), project, { threadId }, THREAD_STOP);
       expect(stopped).toEqual({ status: 'nothing-running' });
       const overHttp = yield* world.op('stop_run', { threadId }, `${query}&scope=0123abcd`);
-      expect(overHttp.body).toMatchObject({ code: 'thread-channel' });
+      expect(overHttp).toMatchObject({ status: 200, body: { status: 'nothing-running' } });
       expect(world.runtime.pool.held().map((copy) => copy.treeRoot)).not.toContain(graph.layout.treeRoot);
 
       const tree = yield* world.op('read_tree', {}, query);
