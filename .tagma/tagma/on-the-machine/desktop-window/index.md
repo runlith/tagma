@@ -8,6 +8,9 @@ fields:
     "entries": [
       {
         "at": "src/bridge.ts"
+      },
+      {
+        "at": "src/kept.ts"
       }
     ],
     "id": "@tagma/desktop",

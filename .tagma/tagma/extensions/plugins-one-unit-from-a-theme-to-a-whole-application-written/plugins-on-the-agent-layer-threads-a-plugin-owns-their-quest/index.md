@@ -191,7 +191,7 @@ This comes after the window's module host, step 5 of [[d2b5f488]].
 
 This also comes after step 5. Each slot's owner declares a face for plugins, in place of `SlotOwners`.
 - **Composer parts:** a `composer` point of `views`. A member gets `{thread: {id, projectId, status}, draft: {text, setText, insert, attach}, send}`.
-- **Tool cards:** the existing `results` point, drawn as a Svelte view. A card for one of its plugin's own tools gets `{name, input, output, state: running | done | refused, threadId}`.
+- **Tool cards:** the existing `results` point, drawn as a Svelte view. A card for one of its plugin's own tools gets `{name, input, output, state: running | done | refused, threadId}`. It lands in step 5 of [[d2b5f488]], with the frames it replaces ([[96ba6027]]).
 - **Prompt commands:** the `commands` point of `plugins`. A command is text from the manifest, or one of the plugin's actions ([[ba083eb0]]). The composer runs the action through `run_plugin_action`, extended with `{threadId, args}`, and its text answer fills the draft. One handled point therefore serves a key, the palette and a slash command.
 - **Pins:** the `pins` point, unchanged.
 
@@ -288,7 +288,6 @@ Each check goes through its real caller's door: the SDK's client over `/api/op` 
 
 **Step 7: depth 3.**
 - A composer part inserts text into the draft, and shows only in projects where its plugin runs.
-- A Svelte tool card draws the plugin's own tool.
 - A throwing part breaks only itself.
 - A slash command runs the plugin's action, and its answer fills the draft.
 - A `beforeTool` hook in Tagma's format denies a matching call and wakes the idle process. The same call proceeds while the plugin fails, unless the hook declares `onFailure: 'block'`.

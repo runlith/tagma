@@ -159,11 +159,13 @@ The graph, threads, law and gates are never plugins: the product's guarantees st
 - **`resident`** keeps a plugin up, for one that holds a live connection to a service.
 - **A process whose `tools/list` differs from the manifest is refused**, with the difference named.
 
-**Revision.** The process revision of an SDK-built plugin comes from the manifest and `process.entry`, judged by size and modification time, with content hashed in a worker. Views are keyed apart from it. A source edit followed by a rebuild therefore restarts the process once, and recompiles only the views that changed.
+**Revision.** The process revision of an SDK-built plugin comes from the manifest and `process.entry`, judged by size and modification time, with content hashed in a worker. Views are keyed apart from it. A rebuild that changes the process restarts it once. One that changes only views republishes them without a restart, and Tagma recompiles only the files that changed ([[96ba6027]]).
 
-**Installed files.** `plugins` owns every installed directory, the leases on it, and the sweep. Each plugin revision is installed into `<data>/plugin-revisions/<id>/<revision>/`. Every holder registers its lease through a port of `plugins`: a process generation, a provider run, a compiled view. The sweep honours all of them. An install runs in this order:
+**Installed files.** `plugins` owns every installed directory, the leases on it, and the sweep. Each plugin revision is installed into `<data>/plugin-revisions/<id>/<revision>/`. Every holder registers its lease through a port of `plugins`: a process generation, a provider run, a view compile while it reads. The sweep honours all of them. An install runs in this order:
 
-fetch → read → check against the points → compile views → settle the directory → write the record.
+fetch → read → check against the points → settle the directory → write the record.
+
+Views compile after publication, never during install ([[96ba6027]]).
 
 At start, the records and the directories are reconciled. A plugin installed from a folder runs its process and views in place. Its provider part is copied per revision, because ESM never unloads. A person's own plugins live in `<data>/plugins/<id>/`.
 
@@ -178,22 +180,21 @@ At start, the records and the directories are reconciled. A plugin installed fro
 
 ## Interface
 
-**Svelte views.**
-- **Build.** The SDK build ships `.svelte` and `.svelte.ts` files as source, the plugin's and those of its dependencies alike. Every other import is bundled into plain ESM chunks. Host specifiers stay external in the chunks too. The graph runs one way: Svelte files import chunks, never the reverse. A dependency that imports `svelte/internal/*` fails the build.
-- **Compile.** Tagma compiles only the Svelte files, with its own `compile` and `compileModule` and options matching the window's: runes, async and production. TypeScript goes through Bun's transpiler. The work runs in a worker (rule 7a910861).
-- **Link.** The compiled output, and the chunks, have their host specifiers rewritten to the host modules' chunk URLs. The link is keyed on the window build's manifest hash, which covers the compiler's identity and every host chunk URL. Any Tagma update that changes either recompiles and relinks.
-- **Failure.** A view the compiler rejects refuses that view only, with the compiler's message. The plugin's tools and schedules stay.
-- **Serving.** Plugin modules are served under content-addressed URLs below `/api/plugins/<id>/`, behind admission on the remote door (explanation 8c5b6812). After an update, an open window unmounts the plugin's mounts and remounts them from the new URLs. The old module stays in memory until the window reloads.
-- **Development.** The dev front reaches `/api/plugins/*` through its existing `/api` proxy. Rewriting host specifiers to the Vite optimizer's URLs in development is not established.
+**Svelte views** ([[96ba6027]]).
+- **Build.** The SDK build ships every file the views reach, the plugin's and its dependencies', with the resolution it made, as `dist/ui/`. A dependency that ships another compiler's output, a `.js` file importing `svelte/internal/*`, fails the build.
+- **Compile.** Tagma bundles that graph with `Bun.build` and its own `compile` and `compileModule`, with the window's own options, declared once (runes, async off, production). It makes one bundle per plugin revision, after the views are published. The work runs in a worker (rule 7a910861).
+- **No link step.** The window's shell carries an import map from each host specifier to a host module at a fixed path. A compiled module keeps its host specifiers bare, so it depends only on its sources and the compiler. A Tagma update recompiles views only when it changes Svelte.
+- **Failure.** A compile failure refuses the plugin's views, with the compiler's message, as a fault on its card. The plugin's tools and schedules stay.
+- **Serving.** Plugin modules are served under content-addressed URLs below `/api/views/modules/`, behind admission on the remote door (explanation 8c5b6812). After an update, an open window unmounts the plugin's mounts and remounts them from the new URLs. The old module stays in memory until the window reloads.
+- **Development.** The dev front reaches `/api/views/*` through its existing `/api` proxy. It serves each host module as a re-export of the optimizer URL its own components import.
 
 **Host modules.** These modules are shared with the window, because they hold shared runtime state:
-- `svelte`, `svelte/internal/client`, `svelte/internal/disclose-version` and `svelte/internal/flags/*`;
-- `svelte/store`, `transition`, `motion`, `reactivity`, `events`, `attachments` and `animate`;
+- the client exports of the window's `svelte` package, `svelte/internal/*` and `svelte/legacy` included;
 - the window's implementation of `@runlith/tagma/ui`.
 
-The window's build emits each as a chunk with its named exports kept (`preserveSignature: 'strict'`), and the app imports those same chunks. The published `@runlith/tagma/ui` is a type facade generated from the app's exports. A real implementation in a package would carry a second `@runlith/layer` and make a package depend on the app.
+The window's build emits each as a chunk at a fixed path under `/_app/host/`, with its named exports kept (`preserveSignature: 'strict'`). Each one is a facade over the chunks the window itself imports, so a plugin and the window run one runtime. The published `@runlith/tagma/ui` is a type facade generated from the app's exports. A real implementation in a package would carry a second `@runlith/layer` and make a package depend on the app.
 
-**Tailwind.** Tailwind does not run per plugin. In a worker, Tagma regenerates one utilities sheet over the window build's own class candidates and those of every enabled plugin, against the window's resolved `app.css` input. The window build ships that input as an artefact: the theme, the chat-ui theme, its variants and utilities. The sheet is swapped whenever the set of views changes: install, update, removal, enabling, or a view's rebuild. Utilities therefore keep one order, and a plugin cannot override the window's own classes.
+**Tailwind.** Tailwind does not run per plugin. In a worker, Tagma regenerates one utilities sheet per machine over the window build's own class candidates and those of every published plugin, against the window's `app.css`. The window build ships its candidates, and every stylesheet `app.css` reaches as it resolved them, as an artefact. The window appends the sheet after its own. The sheet is swapped whenever the set of plugins' candidates changes: install, update, removal, enabling, or a view's rebuild. Utilities therefore keep one order, and a plugin cannot override the window's own classes. In the dev front, Tailwind takes the plugins' candidates as `@source inline` instead ([[96ba6027]]).
 
 **Someone else's HTML.** A Svelte view embeds a site, a widget or a whole web application with `<Frame src>` from `@runlith/tagma/ui`. That is an iframe on its own origin, and the framed page reaches no Tagma API.
 
@@ -234,7 +235,7 @@ The window's build emits each as a chunk with its named exports kept (`preserveS
   Adapter fetching moves into it. Admission in `invocation` checks a plugin caller against the enabled set `plugins` owns, which it reads directly from above ([[c4451a7e]]).
 - **`plugin-host` (server), today `tagma-apps`,** keeps process life only: the supervisor, its generations, `idle`, the backoff gate, and the `caller` each contribution carries for executing it, hooks included. It imports `plugins`, never the other way.
 - **One in-server loader** is extracted from `providers/adapters`: `importAdapter`, host modules, run pinning. It imports from a directory `plugins` gives it, and registers its runs as holders through `plugins`' lease port. `providers` and `speech` both load through it, each declaring its own port for installed packages. Speech becomes a reloadable catalog, and a listening session pins the catalog it started with.
-- **`views` (server) and `app-views` (client)** become the window's module host: the compile pipeline, the link step, the utilities sheet, the module route, the slot faces and `<Frame>`. `views` owns the schemas of every window point but `themes`.
+- **`views` (server) and `app-plugin-views` (client)** become the window's module host: the compile pipeline, the module routes, the utilities sheet, the mount and `useTagma()`, and the slot faces. `app-views` ends: MCP App windows move into `app-mcp`, and `Frame` into `app-shared`, where it is also `<Frame>` ([[96ba6027]]). `views` owns the schemas of every window point but `themes`.
 - **`appearance` (server) and `app-appearance` (client)** own how Tagma looks: the `themes` point and its meaning check, Tagma's own theme as data, the person's theme settings, and painting every window ([[ca575591]]).
 - **`app-plugins` (client)** draws the screen. The Providers screen adds providers through the same install act.
 - **`app-keys` (client)** becomes the one keymap over every action, and a new client module draws the person's Shortcuts settings; plugins' actions and shortcuts are `views` points ([[ba083eb0]]).
@@ -314,7 +315,7 @@ Performer checks, each through the same door a real caller uses.
 - **No app left.** `install_app` and `install_adapter` are gone, and Tagma reads no `tagma-app.json`. The operator's threads and graph open as before.
 
 **What the person sees**
-- **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A change in the window build's manifest hash relinks it, as the link cache counts.
+- **Svelte views.** A Svelte section imports a Tagma component and renders with the window's tokens. A Tagma update that keeps Svelte recompiles nothing; one that changes Svelte recompiles every plugin's views once.
 - **Themes.** A theme changes surfaces, text, syntax and the terminal palette in both modes, in every open window. One that moves a state colour out of its meaning fails its build and its install with the reason ([[ca575591]]).
 - **Shortcuts.** A shortcut on a chord the keymap leaves free opens the plugin's section, in a project where the plugin is enabled. A plugin's shortcut on a chord Tagma uses stays unbound, and its card names the chord with Rebind.
 - **Windows (step 10).** A shortcut opens a frameless, always-on-top window holding a grid of four threads on four providers.
@@ -334,13 +335,10 @@ Performer checks, each through the same door a real caller uses.
 - **A public contract later.** While rule [[0528876d]] stands, the SDK changes with Tagma in one commit, and a plugin it breaks is rebuilt by an agent. When outside authors arrive and the rule is cancelled, the SDK surface, the host protocol, the slot faces and the host modules become a versioned contract.
 - **Svelte majors.** A new Svelte major recompiles every Svelte view, and may refuse some.
 - **A shared window.** A hung Svelte module hangs the window, and a leak lives until reload. The Vigla idea [[6b792682]] would address this later. Nothing here waits for it.
-- **Weight.** The server ships the Svelte compiler and Tailwind on every platform, and regenerates one sheet whenever the set of views changes.
+- **Weight.** The server ships the Svelte compiler, Tailwind and Tailwind's native `lightningcss` on every platform, and regenerates one sheet whenever the set of plugins' candidates changes.
 
 ## Not established
 
-- That the window's Vite build emits the host modules with their signatures kept, and imports them itself. This is reasoned from Rollup's `emitFile`, not run.
-- Rewriting host specifiers in the dev front, against the Vite optimizer's URLs.
-- The cost of compiling one plugin, and of regenerating the utilities sheet.
 - Whether Electron shortcuts reach the window while focus is inside an iframe, and whether the window survives a hung iframe.
 - The memory a plugin process holds at rest.
 

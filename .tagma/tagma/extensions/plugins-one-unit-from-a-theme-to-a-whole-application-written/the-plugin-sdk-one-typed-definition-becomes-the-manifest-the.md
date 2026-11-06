@@ -123,16 +123,16 @@ A handler fails by throwing. A thrown `Refusal(reason)` reaches the caller as it
    - The build refuses native `.node` addons, and dynamic imports it cannot bundle.
    - Tagma runs the file on its own runtime (`process.execPath`) with `--no-install`. An import that slipped out of the bundle then fails loudly instead of being fetched.
 4. **It bundles a provider part** into `dist/provider.js`, against the host modules the in-server loader serves.
-5. **It prepares the views.**
-   - **Svelte sources.** It ships the `.svelte` and `.svelte.ts` files as source, the plugin's own and those of its dependencies.
-   - **Chunks.** It bundles every other import into plain ESM chunks. Host specifiers (`svelte`, `svelte/*`, `@runlith/tagma/ui`) stay external there too.
-   - **Direction.** Svelte files import chunks, never the reverse.
-   - **Refusal.** A dependency that imports `svelte/internal/*` fails the build.
+5. **It prepares the views** as the view graph `dist/ui/` ([[96ba6027]]).
+   - **Files.** Every file the views reach is shipped as written: the plugin's own under their paths, each dependency's under `_modules/<package>/`. Host specifiers (`svelte`, `svelte/*`, `@runlith/tagma/ui`) stay bare.
+   - **`graph.json`.** Every import each file writes, with the file it resolved to, and the Tailwind class candidates of the shipped files.
+   - **Proof.** It bundles the graph as Tagma will, with its own Svelte, so a view the compiler rejects fails the build with the compiler's message. The bundle is discarded.
+   - **Refusal.** A dependency that ships another compiler's output, a `.js` file importing `svelte/internal/*`, fails the build.
 6. **It checks the result** against the point schemas of the SDK's own Tagma version. A manifest the server would refuse fails the build, with the reason the server would give.
 
 The template commits `dist/` and `tagma-plugin.json`, and marks them as generated and merged as binary in `.gitattributes`. A collaborator, or an install from git, then has everything with no build of their own.
 
-**The edit loop.** `tagma-plugin dev` rebuilds on every change. A plugin installed from a folder is read in place. A rebuild restarts its process once, and only the views that changed recompile. An agent runs the build after its edits; the `plugins` skill says so.
+**The edit loop.** `tagma-plugin dev` rebuilds on every change. A plugin installed from a folder is read in place. A rebuild that changes only views republishes them without restarting the process, and Tagma recompiles only the files that changed. An agent runs the build after its edits; the `plugins` skill says so.
 
 ## The process at run time
 
@@ -182,7 +182,7 @@ Typing `op` by operation id, rather than mapping operations to method names by h
 | `tagma.servers.<name>.call(...)` | Calls a tool of a server the plugin brought |
 | `tagma.theme` | The theme in force, `{id, mode}`, as a reactive value, for a view that draws on a canvas ([[ca575591]]) |
 
-`@runlith/tagma/ui` also exports the host's components and tokens, and `<Frame src>`, which embeds someone else's site, widget or web application in an iframe on its own origin. A view reaches only this surface, through the view host's declared methods (`BRIDGE_METHODS`). `<Thread>` is the person's own thread interface and acts as the person: placing it hands the person their own composer, not the plugin.
+`@runlith/tagma/ui` also exports the host's components and tokens, and `<Frame src>`, which embeds someone else's site, widget or web application in an iframe on its own origin. A view is written against this surface only. It runs in the window's own document, so the surface is its contract, not a wall ([[d2b5f488]], Risks). `<Thread>` is the person's own thread interface and acts as the person: placing it hands the person their own composer, not the plugin.
 
 ## Where it lives in the code
 

@@ -66,6 +66,8 @@ edges:
     to: 01a123cc-eedf-7059-b425-43b31ad089ea
   - kind: imports
     to: 01a12c51-8120-7250-9703-61feea5c74f4
+  - kind: imports
+    to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports-tests
     to: 01a12c56-911b-7d6f-9ef3-3bc7b6853ec2
   - kind: imports-tests
@@ -80,4 +82,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/providers
 ---
-Models run on the operator’s subscriptions, keys and installed programs. The module owns provider declarations, accounts, credentials, quotas and fresh model asks: features name an answer kind and a selection, while the provider’s declared request, borrowing or program path decides how the answer is served.
+Models run on the operator’s subscriptions, keys and installed programs. The module owns provider declarations, accounts, credentials, quotas and fresh model asks: features name an answer kind and a selection, while the provider’s declared request, borrowing or program path decides how the answer is served. It also gives an outside caller, a plugin, the model menu and one ask on the operator’s accounts, recorded as the caller’s.
