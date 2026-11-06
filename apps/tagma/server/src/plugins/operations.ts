@@ -6,7 +6,9 @@ import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
+import { OPERATOR } from '../workspace/contract/wire/checkout.js';
 import { Plugins } from './contract/service/plugins.js';
+import { createPlugin } from './creation.js';
 import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS } from './contract/wire/operations.js';
 import type { PluginRow } from './contract/wire/rows.js';
 
@@ -92,6 +94,20 @@ export const PLUGIN_PAIRS = {
           scope: input.scope ?? 'project',
         });
         return answer(yield* reached(project, plugin));
+      }),
+    }),
+  ),
+  create_plugin: pair(
+    OPS.create_plugin,
+    body(OPS.create_plugin, {
+      execute: Effect.fnUntraced(function* (input, _prepared, caller) {
+        const path = yield* createPlugin({
+          projectId: yield* projectId,
+          id: input.id,
+          title: input.title,
+          holder: caller.actor.kind === 'thread' ? { kind: 'thread', thread: caller.actor.threadId } : OPERATOR,
+        });
+        return { status: 'ok' as const, path };
       }),
     }),
   ),

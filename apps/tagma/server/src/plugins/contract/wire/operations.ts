@@ -6,7 +6,7 @@ import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import { placedCursor, projectField } from '../../../platform/contract/wire/place.js';
 import { SETTABLE_SCOPES, type SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { PluginConsented } from './consent.js';
-import { PluginId } from './names.js';
+import { PluginId, PluginLabel } from './names.js';
 import { pluginRowSchema } from './rows.js';
 
 const declared = {
@@ -175,6 +175,25 @@ export const PLUGIN_OPERATIONS = {
     presentation: { running: 'Switching a plugin', done: 'Switched a plugin' },
     subjects: (_input, prepared?: PluginConsented | null) => (prepared ? prepared.consent.subjects : []),
     raises: (_input, prepared?: PluginConsented | null) => (prepared ? prepared.consent.raised : []),
+  }),
+  create_plugin: operation('create_plugin', {
+    approval: ASKS_IN_REVIEW,
+    ...acted,
+    answer: arms({ ok: { path: Schema.String.annotate({ description: 'The new plugin folder.' }) } }),
+    meaning:
+      'Create a new plugin in Tagma’s format: write the SDK’s template into this project’s `.tagma-plugins/<id>/`, ready to have its dependencies installed, be built and be installed from its folder.',
+    grammar:
+      'The folder holds `package.json`, `plugin.ts`, its test and `.gitattributes` marking the build output generated; it carries no build yet, so install its dependencies, run `tagma-plugin build` there, then install_plugin with the folder as source. A folder that already stands refuses.',
+    input: Schema.Struct({
+      project: projectField,
+      id: PluginLabel.annotate({ description: 'The plugin, which names its folder, its tools and its agents.' }),
+      title: Schema.NonEmptyString.annotate({ description: 'What the person reads as its name.' }),
+    }),
+    refusals: ['unknown-project', 'plugin-folder-taken', 'plugin-folder-unwritable'],
+    confirmation: (input) => ({ summary: `Create the plugin ${input.id} in .tagma-plugins/${input.id}?` }),
+    confirmLabel: 'Create',
+    presentation: { running: 'Creating a plugin', done: 'Created a plugin' },
+    subjects: () => [],
   }),
   uninstall_plugin: operation('uninstall_plugin', {
     approval: ASKS_IN_REVIEW,
