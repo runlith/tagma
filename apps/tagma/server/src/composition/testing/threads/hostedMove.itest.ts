@@ -1,25 +1,17 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
-import { Context, Effect, Fiber, FileSystem, Schema } from 'effect';
+import { Context, Effect, Fiber, FileSystem } from 'effect';
 import { THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
-import { hostedContentSchema } from '@runlith/hosted-runner/wire/messages';
-import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
-import { grantFor } from '../../../platform/testing/grants.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
-import { turnsOf } from '../../../threads/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
 import type { WorktreeIntent } from '../../../worktrees/contract/wire/creation.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { suiteGit } from '../suiteGit.js';
-import { heard, signal, until } from './protocolRig.js';
+import { until } from './protocolRig.js';
+import { heldTurn, textOf } from './hostedTurn.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
-
-const calledSchema = Schema.Struct({ content: Schema.Array(hostedContentSchema), failed: Schema.Boolean });
-
-const textOf = (called: typeof calledSchema.Type): string =>
-  called.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
 
 const worktree = Effect.fnUntraced(function* (name: string) {
   const { world, projectId, checkout } = yield* ProtocolWorld;
@@ -37,34 +29,6 @@ const worktree = Effect.fnUntraced(function* (name: string) {
   });
   const made = (yield* op('create_worktree', { operationId: name })).body as { operation: WorktreeIntent };
   return { rootId: made.operation.rootId, destination };
-});
-
-const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'review') {
-  const { world, projectId, agent, birth, changes } = yield* ProtocolWorld;
-  const files = yield* FileSystem.FileSystem;
-  const report = yield* agent(label);
-  const threadId = yield* birth();
-  yield* Context.get(world.runtime.owners, ThreadHarness).threads.handle(threadId, 'operator').setAuthorityMode(mode);
-  const asThread = (id: string, input: object) => world.op(id, input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(threadId) });
-  const called = Effect.fnUntraced(function* (toolCallId: string, name: string, input: object) {
-    yield* signal(`${report}.announce`, JSON.stringify({ toolCallId, name, input }));
-    yield* until(
-      Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes(`said-${toolCallId}`) ? true : null)),
-      `the agent sealed ${toolCallId}`,
-      report,
-      changes(threadId),
-    );
-    return yield* Schema.decodeUnknownEffect(calledSchema)((yield* asThread('call_hosted_tool', { toolCallId, name, input })).body);
-  });
-  yield* turnsOf(world.runtime.owners).send(threadId, projectId, 'HOLD the turn');
-  yield* until(
-    Effect.map(heard(report), (lines) => (lines.some((line) => line.method === 'session/prompt') ? true : null)),
-    'the turn reached the agent',
-    report,
-    changes(threadId),
-  );
-  yield* asThread('open_hosted_turn', {});
-  return { threadId, report, called, release: files.writeFileString(`${report}.release`, 'release') };
 });
 
 describe('a Tagma agent on ACP moves between worktrees like a native one', () => {

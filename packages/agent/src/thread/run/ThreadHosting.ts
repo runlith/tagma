@@ -778,7 +778,7 @@ export const threadHostingLayer = Layer.effect(
         if (fiber === null) return { ...failure(ENDED), words: [] };
         const exit = yield* Fiber.await(fiber);
         if (Exit.isFailure(exit))
-          return yield* Cause.hasInterruptsOnly(exit.cause) ? Effect.fail(broke(new Error(ENDED))) : Effect.failCause(exit.cause);
+          return Cause.hasInterruptsOnly(exit.cause) ? { ...failure(ENDED), words: [] } : yield* Effect.failCause(exit.cause);
         yield* hosted.words.refresh();
         return { ...exit.value, words: hosted.words.handed() };
       }),
