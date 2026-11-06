@@ -500,13 +500,13 @@ export function describeThreadHosting<TTx, TWrite extends TTx = TTx, R = never>(
       }),
     );
     test(
-      'stopping the turn that waits on an ask_user clears the question and fails the call',
+      'stopping the turn that waits on an ask_user clears the question and answers the call that the run ended',
       Effect.fnUntraced(function* () {
         const run = yield* hostedTurn();
         const answering = yield* Effect.forkScoped(Effect.result(run.ask()));
         yield* run.asked();
         expect(yield* run.world.harness.threads.handle(run.thread.id, OWNER).stop()).toMatchObject({ status: 'stopped' });
-        expect((yield* Fiber.join(answering))._tag).toBe('Failure');
+        expect(yield* Fiber.join(answering)).toMatchObject({ _tag: 'Success', success: { failed: true } });
         yield* until(() => Effect.map(run.questions(), (questions) => questions[0]?.status === 'cleared'));
       }),
     );
