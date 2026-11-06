@@ -330,6 +330,10 @@ export const RuleRun = Schema.Struct({
   ms: Schema.Finite,
   reached: Schema.Boolean,
   failed: Schema.optional(Schema.String),
+  owed: Schema.optional(Schema.Int).annotate({
+    description:
+      'How many of the findings this run measured stand inside the rule’s debt. Over a change they are counted here and left out of `violations`; over `all` they are listed with `owed` set.',
+  }),
 });
 export type RuleRun = typeof RuleRun.Type;
 
@@ -345,7 +349,9 @@ export const CheckAnswer = Schema.Struct({
   shown: Schema.Int,
   total: Schema.Int,
   next: Schema.NullOr(Schema.String),
-  fingerprints: Schema.Array(Schema.String),
+  fingerprints: Schema.Array(Schema.String).annotate({
+    description: 'The distinct fingerprints of the violations on this page; the next page, by the same cursor, carries the next ones.',
+  }),
   bodies: Schema.optional(RuleBodies),
   unjudged: Schema.Array(LandingUnjudged),
   rules: Schema.Array(RuleRun),

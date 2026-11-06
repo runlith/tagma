@@ -485,7 +485,6 @@ export const ENFORCEMENT_PAIRS = {
                     head,
                     counts: new Map(),
                     violations: [],
-                    fingerprints: [],
                     unjudged,
                     rules: [],
                     bodies: {},
@@ -508,7 +507,9 @@ export const ENFORCEMENT_PAIRS = {
             };
             const continued = input.cursor === undefined ? undefined : readCursor(input.cursor, question);
             if (continued !== undefined && 'refused' in continued) return yield* cursorRefusal(continued.refused);
-            const rows = ran.checking.violations.toSorted((left, right) => keyOrder(ASCENDING)(violationKey(left), violationKey(right)));
+            const rows = ran.checking.violations
+              .filter((one) => over === 'all' || one.owed !== true)
+              .toSorted((left, right) => keyOrder(ASCENDING)(violationKey(left), violationKey(right)));
             const cut = page({
               rows: continued === undefined ? rows : pastKey(rows, violationKey, ASCENDING, continued.at),
               asked: pageRows(input.limit, VIOLATIONS, ceilingOf(VIOLATIONS)),
@@ -526,7 +527,7 @@ export const ENFORCEMENT_PAIRS = {
               shown: cut.shown,
               total: rows.length,
               next: cut.next,
-              fingerprints: ran.checking.fingerprints,
+              fingerprints: fingerprintsOf(cut.rows),
               bodies: shownBodies(ran.checking.bodies, cut.rows),
               unjudged: ran.checking.unjudged,
               rules: ran.checking.rules,
@@ -595,6 +596,8 @@ export const ENFORCEMENT_PAIRS = {
   ),
 };
 
+const fingerprintsOf = (rows: readonly CheckedViolation[]): string[] => [...new Set(rows.map((one) => one.fingerprint))].sort();
+
 type StagedAsk = { readonly root?: string; readonly index?: string };
 
 const stagedRoot = Effect.fn('check_rules.stagedRoot')(function* (input: StagedAsk, projectId: number) {
@@ -658,7 +661,7 @@ const stagedAnswer = Effect.fnUntraced(function* (
     shown: cut.shown,
     total: rows.length,
     next: cut.next,
-    fingerprints: [...new Set(rows.map((one) => one.fingerprint))].sort(),
+    fingerprints: fingerprintsOf(cut.rows),
     bodies: shownBodies(judged.bodies, cut.rows),
     unjudged: judged.unjudged,
     rules: judged.runs ?? [],

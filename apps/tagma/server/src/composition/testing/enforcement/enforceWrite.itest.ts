@@ -155,7 +155,6 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
           });
           const before = yield* events();
           const tried = yield* checkedOverHead(fx, rule);
-          expect(tried.fingerprints).toEqual(['app order core/view.ts -> ui/']);
           expect(tried.violations).toEqual([
             {
               rule,
@@ -180,7 +179,7 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
         Effect.fnUntraced(function* () {
           const rule = yield* fx.created(['rule'], 'Import only downward', { sources: [{ kind: 'dir', ref: 'src/ui' }] });
           const tried = yield* checkedOverHead(fx, rule);
-          expect(tried.fingerprints).toEqual([]);
+          expect(tried.violations).toEqual([]);
         })(),
       ),
     );

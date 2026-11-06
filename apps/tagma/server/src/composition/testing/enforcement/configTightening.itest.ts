@@ -121,13 +121,17 @@ export default { repeated: ({ tree, base }) => ({ tree: { findings: found(tree) 
         wrote(world, { projectId: project, threadId: thread.id }, root, 'tagma.config.ts', before, after);
       yield* writeConfig(config(5), config(3));
       const preview = answered(yield* call('check_rules', { over: 'change', limit: 10 }));
-      expect(preview).toMatchObject({ total: 3, refuses: false, paths: ['tagma.config.ts'] });
+      expect(preview).toMatchObject({
+        total: 2,
+        refuses: false,
+        paths: ['tagma.config.ts'],
+        rules: [expect.objectContaining({ owed: 1 })],
+      });
       expect(
         (preview.violations as { file: string; owed?: true }[])
           .map(({ file, owed }) => ({ file, owed }))
           .sort((a, b) => a.file.localeCompare(b.file)),
       ).toEqual([
-        { file: 'src/debt.ts', owed: true },
         { file: 'src/expenses.ts', owed: undefined },
         { file: 'src/seed.ts', owed: undefined },
       ]);
@@ -171,10 +175,65 @@ export default { repeated: ({ tree, base }) => ({ tree: { findings: found(tree) 
       );
       expect(accepted.absorbed).toContainEqual(expect.objectContaining({ fingerprint: units[0]!.fingerprint, count: 2 }));
       const covered = answered(yield* call('check_rules', { over: 'change', rules: [rule], limit: 10 }));
-      expect((covered.violations as { owed?: true }[]).map((one) => one.owed)).toEqual([true, true]);
+      expect(covered).toMatchObject({ violations: [], total: 0, rules: [expect.objectContaining({ owed: 2 })] });
       expect(answered(yield* call('submit_work', { subject: 'replace size with a counted inspection' }))).toMatchObject({
         submitted: { status: 'landed' },
       });
+    }),
+  );
+
+  it.effect('a tightened description over a reach full of debt answers its fresh findings and counts the debt', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('crowded'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      yield* files.makeDirectory(join(root, 'src'));
+      const owedFiles = Array.from({ length: 12 }, (_, at) => `debt${at}.ts`);
+      for (const path of owedFiles) yield* files.writeFileString(join(root, 'src', path), rows(6));
+      for (const path of ['fresh.ts', 'newer.ts']) yield* files.writeFileString(join(root, 'src', path), rows(4));
+      yield* files.writeFileString(join(root, 'tagma.config.ts'), config(5));
+      yield* suiteGit(root, 'add', '-A');
+      yield* suiteGit(root, 'commit', '-qm', 'seed size rule');
+      const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
+      expect(added.status).toBe(200);
+      const project = (added.body as { project: { id: number } }).project.id;
+      const born = yield* world.op('create_thread', { approvalMode: 'bypass' }, `project=${project}`);
+      const {
+        snapshot: { thread },
+      } = yield* Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchema)(born.body);
+      const doors = makeThreadDoors(world, project, ['create_block', 'enforce_rule', 'check_rules']);
+      const native = yield* doors.doorsFor(thread.id, thread.ownerId);
+      const call = (id: string, input: Record<string, unknown>) => doors.atNative(id, input, native);
+      const parentId = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!
+        .name;
+      const owner = (
+        answered(yield* call('create_block', { tags: ['task'], parentId, title: 'Shorten oversized files' })).block as { name: string }
+      ).name;
+      const rule = (
+        answered(yield* call('create_block', { tags: ['rule'], parentId, title: 'Small source files' })).block as { name: string }
+      ).name;
+      expect(
+        answered(
+          yield* call('enforce_rule', {
+            blockId: rule,
+            base: null,
+            strictness: 'gate',
+            inspection: 'size',
+            owner,
+            on: [{ op: 'submit_work', phase: 'before' }],
+          }),
+        ),
+      ).toMatchObject({ debt: { after: owedFiles.length } });
+      yield* wrote(world, { projectId: project, threadId: thread.id }, root, 'tagma.config.ts', config(5), config(3));
+      const answer = answered(yield* call('check_rules', { over: 'change' }));
+      const violations = answer.violations as { file: string; fingerprint: string; owed?: true }[];
+      expect(answer).toMatchObject({ total: 2, refuses: false, rules: [expect.objectContaining({ owed: owedFiles.length })] });
+      expect(violations.map(({ file, owed }) => ({ file, owed })).sort((a, b) => a.file.localeCompare(b.file))).toEqual([
+        { file: 'src/fresh.ts', owed: undefined },
+        { file: 'src/newer.ts', owed: undefined },
+      ]);
+      expect([...(answer.fingerprints as string[])].sort()).toEqual(violations.map(({ fingerprint }) => fingerprint).sort());
     }),
   );
 

@@ -135,11 +135,13 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
           : `checked the tree submit_work would land against ${answer.head}: ${answer.paths.join(', ')}`;
   const named = (one: CheckAnswer['rules'][number]) =>
     `${one.rule === '' ? 'the inspection' : one.rule}${one.strictness === undefined ? '' : ` (${one.strictness}, ${triggersSaid(one.on ?? [])})`}`;
+  const debtNote = (one: CheckAnswer['rules'][number]) =>
+    one.owed === undefined ? '' : answer.over === 'all' ? `; ${one.owed} in debt` : `; ${one.owed} in debt, not listed`;
   const ran = (one: CheckAnswer['rules'][number]) =>
     one.failed !== undefined
       ? `  ${named(one)} failed after ${seconds(one.ms)}: ${one.failed}`
       : one.reached
-        ? `  ${named(one)} ran in ${seconds(one.ms)}`
+        ? `  ${named(one)} ran in ${seconds(one.ms)}${debtNote(one)}`
         : `  ${named(one)} ran nothing: the change reaches none of its reach`;
   const rules = answer.rules.map(ran);
   const failed = answer.refusal?.code === 'inspection-failed' || answer.rules.some((one) => one.failed !== undefined);
@@ -165,7 +167,7 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
             : 'submit_work would land this change as far as its rules go',
         ]),
     ...(rules.length === 0 ? [] : [`rules (${rules.length}):`, ...rules]),
-    `fingerprints (${answer.fingerprints.length}): ${answer.fingerprints.length === 0 ? 'none' : answer.fingerprints.join(', ')}`,
+    `fingerprints on this page (${answer.fingerprints.length}): ${answer.fingerprints.length === 0 ? 'none' : answer.fingerprints.join(', ')}`,
     ...unjudgedLines(answer.unjudged),
     ...(answer.violations.length === 0 && answer.total === 0
       ? failed

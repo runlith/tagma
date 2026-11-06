@@ -65,7 +65,6 @@ export type Checking = {
   readonly head: string;
   readonly counts: ReadonlyMap<string, ReadonlyMap<string, number>>;
   readonly violations: readonly CheckedViolation[];
-  readonly fingerprints: readonly string[];
   readonly unjudged: readonly LandingUnjudged[];
   readonly rules: readonly RuleRun[];
   readonly bodies: RuleBodies;
@@ -162,19 +161,27 @@ type Collected = {
 
 const collecting = (): Collected => ({ counts: new Map(), violations: [], unjudged: [], rules: [] });
 
-const settled = (head: string, collected: Collected, targets: readonly Target[], refuses?: boolean): Checking => ({
-  head,
-  counts: collected.counts,
-  violations: collected.violations,
-  fingerprints: [...new Set(collected.violations.map((one) => one.fingerprint))].sort(),
-  unjudged: collected.unjudged,
-  rules: collected.rules,
-  bodies: bodiesOf(
-    targets,
-    collected.violations.map((one) => one.rule),
-  ),
-  refuses,
-});
+const owedBy = (violations: readonly CheckedViolation[]): ReadonlyMap<string, number> => {
+  const owed = new Map<string, number>();
+  for (const one of violations) if (one.owed === true) owed.set(one.rule, (owed.get(one.rule) ?? 0) + 1);
+  return owed;
+};
+
+const settled = (head: string, collected: Collected, targets: readonly Target[], refuses?: boolean): Checking => {
+  const owed = owedBy(collected.violations);
+  return {
+    head,
+    counts: collected.counts,
+    violations: collected.violations,
+    unjudged: collected.unjudged,
+    rules: collected.rules.map((run) => ({ ...run, owed: owed.get(run.rule) })),
+    bodies: bodiesOf(
+      targets,
+      collected.violations.map((one) => one.rule),
+    ),
+    refuses,
+  };
+};
 
 const normOf = (target: Target): Norm => ({ rule: target.name, title: target.title, strictness: target.said.strictness });
 
