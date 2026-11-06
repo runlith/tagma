@@ -9,15 +9,12 @@ import { tick } from 'svelte';
 import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
-import { Dictation } from '$lib/features/speech/dictation/Dictation.svelte.js';
-import { SpeechRepo } from '$lib/features/speech/Repo.js';
 import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
 import { Refusal, RETRIES, retriable } from '$lib/wire/refusal.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
-import { SoundChannel } from '$lib/wire/SoundChannel.js';
 import { loadCatalog, TestCatalog, testDoor } from '$lib/wire/testing.js';
 import { readyState } from '$lib/app/testing.js';
 import { AppState } from '$lib/features/workspace/AppState.js';
@@ -32,7 +29,7 @@ function json(body: unknown, status = 200): Response {
 test.each([
   { code: 'demo-unavailable', requests: 1 },
   { code: 'transport', requests: RETRIES + 1 },
-])('the dictation reader retains a $code catalog refusal after $requests requests', async ({ code, requests }) => {
+])('a catalog reader retains a $code catalog refusal after $requests requests', async ({ code, requests }) => {
   let reads = 0;
   const door = testDoor(async (input, init) => {
     const path = new URL(new Request(input, init).url).pathname;
@@ -68,11 +65,8 @@ test.each([
       SettingsRepo,
       ProjectsRepo,
       Workspace,
-      Dictation,
-      SpeechRepo,
       Notices,
       Live,
-      SoundChannel,
       Cache.of({ defaultOptions: { queries: { retry: (count, error) => count < RETRIES && retriable(error), retryDelay: 0 } } }),
     ),
     Layer.mergeAll(
@@ -84,10 +78,14 @@ test.each([
       ServerOrigin.of('http://localhost'),
     ),
   );
+  const entry = mounted.get(SettingsRepo).catalog.key(7);
+  const stop = $effect.root(() => {
+    $effect(() => {
+      void entry.data;
+    });
+  });
   try {
-    mounted.get(Dictation);
     await mounted.get(Workspace).ready;
-    const entry = mounted.get(SettingsRepo).catalog.key(7);
     await waitUntil(() => reads > 0 && !entry.watchFetching());
     await tick();
     expect(reads).toBe(requests);
@@ -95,6 +93,7 @@ test.each([
     expect(entry.watchError()).toMatchObject({ code });
     expect(entry.watchFetching()).toBe(false);
   } finally {
+    stop();
     await mounted.unmount();
   }
 });
