@@ -18,7 +18,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/projectWindows.ts
   - kind: file
-    ref: packages/desktop-host/src/QuickHideShortcut.ts
+    ref: packages/desktop-host/src/GlobalShortcuts.ts
   - kind: file
     ref: packages/desktop-host/src/WindowPlacement.ts
 ---

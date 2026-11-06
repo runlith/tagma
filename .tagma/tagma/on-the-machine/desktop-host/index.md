@@ -10,9 +10,6 @@ fields:
         "at": "src/ExternalLinks.ts"
       },
       {
-        "at": "src/QuickHideShortcut.ts"
-      },
-      {
         "at": "src/WindowPlacement.ts"
       },
       {
@@ -29,4 +26,4 @@ sources:
   - kind: dir
     ref: packages/desktop-host
 ---
-Desktop products need a window that remembers its place, lets no foreign pages out, and hides on a global shortcut. The kit owns three main-process Electron mechanisms: window placement between runs, the policy of which addresses may leave it, and the quick-hide shortcut. It creates no windows: the caller builds the BrowserWindow itself and picks the placement file, shortcut and app origins.
+Desktop products need a window that remembers its place, lets no foreign pages out, and answers global shortcuts. The kit owns three main-process Electron mechanisms: window placement between runs, the policy of which addresses may leave it, and the one registrar of tap shortcuts, which registers a set of chords, drops what left it and reports each refusal as taken by another app or refused instead of logging it. It creates no windows: the caller builds the BrowserWindow itself and picks the placement file, the shortcut set and app origins.

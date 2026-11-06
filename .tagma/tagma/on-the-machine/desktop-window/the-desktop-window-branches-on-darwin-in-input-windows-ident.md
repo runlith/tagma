@@ -36,7 +36,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/swipe.ts
   - kind: file
-    ref: apps/tagma/desktop/src/tabKeys.ts
+    ref: apps/tagma/desktop/src/interception.ts
 ---
 The window is Electron, which runs on three operating systems, but its main-process code is written for macOS with other platforms as the fallback. Each branch reads `process.platform` or calls an Apple tool directly, so no contract stands between the window and its macOS parts. `preload.ts:38,135` maps the platform to the `OperatingSystemKind` it hands the surface; that is a fact delivered through the bridge contract and is fine.
 

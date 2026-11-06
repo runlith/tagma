@@ -28,9 +28,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/views/contract/wire/points.ts
   - kind: file
-    ref: apps/tagma/desktop/src/tabKeys.ts
+    ref: apps/tagma/desktop/src/interception.ts
   - kind: file
-    ref: packages/desktop-host/src/QuickHideShortcut.ts
+    ref: packages/desktop-host/src/GlobalShortcuts.ts
   - kind: file
     ref: apps/tagma/server/src/speech/keys.ts
 ---
@@ -264,7 +264,7 @@ A press answers at once (rule c57e2aa9), so it asks nothing.
   - it owns the Shortcuts section and the chord control;
   - it answers the plugin card: `displaced(plugin)`, and `globals(plugin)` — the chords the plugin asks to have in every app, each allowed or not.
 - **`executions`:** the terminal's acts become actions; `TerminalKeymap` keeps the encodings and the policy.
-- **`speech`:** the `dictation.hold` action. `dictation/Global.svelte.ts` arms the desktop with the global chord the table gives.
+- **`speech`:** the `dictation.hold` action, held through `Keymap.hold`. Its global chord reaches main in the table `Keymap` publishes, like every global.
 - **`plugin-views`:** contributes plugin actions from the feed.
 - **`app-plugins`:** the card's lines with **Rebind**, **Work in every app** and **Only in Tagma**.
 - **Desktop:**

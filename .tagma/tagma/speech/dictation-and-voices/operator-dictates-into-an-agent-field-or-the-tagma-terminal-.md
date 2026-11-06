@@ -36,7 +36,7 @@ sources:
 ---
 **Value.** The operator speaks instead of typing: the text lands where the cursor is — in an agent field or in the Tagma terminal. Whether to send it is their own call.
 
-**How.** Holding the dictation key (the `speech.dictation.key` setting, `⌥ Space` by default) or the microphone button next to send in the composer. A short press starts recording until the next press. Underneath are the `speech.recognize` feed and the `finish_recognition` operation, both available only to the operator.
+**How.** Holding the hold-to-dictate shortcut (`dictation.hold`, `⌥ Space` by default, rebound in `shortcuts.bindings`) or the microphone button next to send in the composer. A short press starts recording until the next press. Underneath are the `speech.recognize` feed and the `finish_recognition` operation, both available only to the operator.
 
 **Behaviour.**
 - The target is picked by focus: an agent field or a terminal. With focus on neither, the text goes to the visible agent field. With none of those, dictation does not start, and a notification explains why.
