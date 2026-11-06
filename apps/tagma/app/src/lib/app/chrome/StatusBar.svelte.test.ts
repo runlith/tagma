@@ -8,6 +8,7 @@ import { Layer } from '@runlith/layer/Layer';
 import { makeRouter } from '@runlith/layer/testing';
 import { stubFamily, stubMutation, stubSingle } from '@runlith/query/testing';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
+import { UserSettings } from '$lib/features/settings/UserSettings.svelte.js';
 import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -187,7 +188,7 @@ afterEach(() => {
 function draw(options: { at?: GraphAim | undefined } = {}): HTMLElement {
   vi.useFakeTimers({ now: NOW });
   app = mountShell(
-    Layer.mergeAll(CountdownClock, WallClock, Notices, Checkout, Holdings, ReaderMarks, Readings, View, ExecutionActs),
+    Layer.mergeAll(CountdownClock, WallClock, Notices, UserSettings, Checkout, Holdings, ReaderMarks, Readings, View, ExecutionActs),
     Layer.mergeAll(
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
       Layer.of(Workspace, { projects: [], contextProject: null } as never),
