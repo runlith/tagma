@@ -22,9 +22,11 @@ export const pluginHostLayer: Layer.Layer<
     const offers = yield* makeOffers;
     yield* Effect.acquireRelease(points.declare(TOOLS, offers.register), (withdraw) => Effect.sync(withdraw));
     const supervisor = yield* makeSupervisor({ points, hosted, offers });
-    yield* Effect.acquireRelease((yield* PluginProcesses).register(supervisor.reading), (withdraw) => Effect.sync(withdraw));
-
     const serial = yield* Semaphore.make(1);
+    yield* Effect.acquireRelease(
+      (yield* PluginProcesses).register({ reading: supervisor.reading, stopped: (id) => serial.withPermit(supervisor.stop(id)) }),
+      (withdraw) => Effect.sync(withdraw),
+    );
 
     const reconcile = Effect.fn('PluginHost.reconcile')(
       function* () {
@@ -42,19 +44,30 @@ export const pluginHostLayer: Layer.Layer<
       (effect) => serial.withPermit(effect),
     );
 
+    const settled = reconcile().pipe(
+      Effect.tapError((failure) =>
+        Effect.logWarning(`the installed plugins could not be read, asked again in ${ASKED_AGAIN}: ${failure.message}`),
+      ),
+      Effect.retry(Schedule.spaced(ASKED_AGAIN)),
+      Effect.orDie,
+    );
+
     return Context.make(
       PluginHost,
       PluginHost.of({
         start: Effect.fn('PluginHost.start')(function* () {
-          const settled = reconcile().pipe(Effect.retry(Schedule.spaced(ASKED_AGAIN)));
           yield* Effect.forkIn(
             Stream.runForEach(enabled.changes, () => settled),
             scope,
           );
-          yield* reconcile().pipe(Effect.tapError(() => Effect.forkIn(settled, scope)));
+          yield* Effect.forkIn(
+            Stream.runForEach(hosted.changes, (id) => supervisor.reread(id)),
+            scope,
+          );
+          yield* settled;
         }),
         reading: supervisor.reading,
-        pending: (id) => Effect.map(hosted.roots(), (roots) => roots.get(id)?.refused === null && !supervisor.standing(id)),
+        pending: (id) => Effect.map(hosted.roots(), (roots) => roots.has(id) && !supervisor.standing(id)),
         call: supervisor.call,
         callAdmitted: supervisor.callAdmitted,
         read: supervisor.read,

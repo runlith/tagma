@@ -15,7 +15,7 @@ export class HostPlace extends Context.Service<HostPlace, { readonly server: str
 export class PluginHost extends Context.Service<
   PluginHost,
   {
-    start(): Effect.Effect<void, PluginsUnreadable>;
+    start(): Effect.Effect<void>;
     reading(id: string): PluginProcessRow | undefined;
     pending(id: string): Effect.Effect<boolean, PluginsUnreadable>;
     call: McpToolCaller['call'];

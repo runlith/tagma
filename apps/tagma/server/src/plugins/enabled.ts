@@ -21,8 +21,9 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
   readonly digests: Digests;
   readonly pulses: PubSub.PubSub<number | null>;
+  readonly inputs: PubSub.PubSub<string>;
 }) {
-  const { shelf, digests, pulses } = input;
+  const { shelf, digests, pulses, inputs } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
 
@@ -30,6 +31,12 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
 
   const refusedHere = (id: string) => (refused: { readonly message: string }) =>
     Effect.as(Effect.logWarning(`the plugin ${id} contributes nothing while its directory is refused: ${refused.message}`), null);
+
+  const readRefused = (id: string) => ({
+    PluginRefused: refusedHere(id),
+    PluginUnreadable: refusedHere(id),
+    NamesCollide: refusedHere(id),
+  });
 
   const installs = settings.value(pluginsInstalled).pipe(Effect.mapError(unreadable));
 
@@ -42,10 +49,9 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     for (const id of enabled) {
       const install = installed.find((entry) => entry.id === id);
       if (install === undefined) continue;
-      const bound = yield* Effect.flatMap(shelf.read(install.root, install.declared ?? null), (read) =>
-        shelf.bind(read, install.root, project),
-      ).pipe(Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }), Effect.mapError(unreadable));
-      if (bound !== null) loaded.push(bound.loaded);
+      const read = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
+      if (read === null) continue;
+      loaded.push((yield* shelf.bind(read, install.root, project).pipe(Effect.mapError(unreadable))).loaded);
     }
     return loaded;
   });
@@ -80,15 +86,15 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     for (const install of yield* installs) {
       const there = running.get(install.id);
       if (there === undefined) continue;
-      const read = yield* shelf.read(install.root, install.declared ?? null).pipe(
-        Effect.map((found) => (hosted(found.package) ? null : undefined)),
+      const taken = yield* shelf.read(install.root, install.declared ?? null).pipe(
+        Effect.map((found) => hosted(found.package)),
         Effect.catchTags({
-          PluginRefused: (refused) => Effect.succeed(refused.message),
-          NamesCollide: (refused) => Effect.succeed(refused.message),
+          PluginRefused: () => Effect.succeed(true),
+          PluginUnreadable: () => Effect.succeed(true),
+          NamesCollide: () => Effect.succeed(true),
         }),
-        Effect.mapError(unreadable),
       );
-      if (read !== undefined) listed.set(install.id, { root: install.root, refused: read, projects: there.sort((a, b) => a - b) });
+      if (taken) listed.set(install.id, { root: install.root, projects: there.sort((a, b) => a - b) });
     }
     return listed;
   });
@@ -133,9 +139,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
         for (const id of enabled) {
           const install = installed.find((entry) => entry.id === id);
           if (install === undefined) continue;
-          const found = yield* shelf
-            .read(install.root, install.declared ?? null)
-            .pipe(Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }));
+          const found = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
           if (found === null) continue;
           const entries = found.package.options
             .filter((option) => option.sensitive)
@@ -154,12 +158,12 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
             }),
         ),
     ),
-    changed: () => Effect.asVoid(PubSub.publish(pulses, null)),
+    changed: (key) => Effect.andThen(PubSub.publish(inputs, key), PubSub.publish(pulses, null)).pipe(Effect.asVoid),
   };
 
   return {
     enabled: EnabledPlugins.of({ of, held, changes: Stream.fromPubSub(pulses) }),
-    hosted: HostedPlugins.of({ roots, read }),
+    hosted: HostedPlugins.of({ roots, read, changes: Stream.fromPubSub(inputs) }),
     owner,
   };
 });

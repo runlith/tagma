@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Context, Effect, Exit, Fiber, Layer, Schedule, Scope } from 'effect';
@@ -114,6 +114,73 @@ it.live('a process whose tool list differs from its manifest is refused, named, 
   }),
 );
 
+it.live('a process that ends before it answers waits idle behind its backoff with its tools offered, and a later call starts it', () =>
+  Effect.gen(function* () {
+    const world = yield* hostWorld({ prefix: 'host-unstarted-' });
+    const { host, projectId, tools, said, until } = world;
+    yield* world.install(yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS }));
+    yield* until(() => host.reading('fixture')?.state === 'idle');
+    const refusing = join(world.data('fixture'), 'refuse');
+    yield* Effect.promise(() => writeFile(refusing, ''));
+    expect(yield* Effect.flip(host.call('fixture', 'look', {}, {}))).toMatchObject({ _tag: 'McpConnectFailed' });
+    expect(host.reading('fixture')).toMatchObject({ state: 'idle', restarts: 1 });
+    expect(Object.keys((yield* tools.of(projectId)).agents())).toEqual(['plugin__fixture__look']);
+    yield* Effect.promise(() => rm(refusing));
+    expect(yield* said('look')).toStartWith('look ');
+  }),
+);
+
+it.live(
+  'a plugin whose manifest cannot be read keeps the others hosted, owes its ends, and is not read again for another plugin’s change',
+  () =>
+    Effect.gen(function* () {
+      const world = yield* hostWorld({ prefix: 'host-unreadable-' });
+      const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
+      yield* world.install(root);
+      yield* world.install(yield* world.place('second', { program: FIXTURE, contributes: TOOLS }));
+      yield* world.until(() => world.host.reading('second')?.state === 'idle');
+      yield* world.shutdown;
+      const manifest = join(root, MANIFEST);
+      yield* Effect.acquireRelease(
+        Effect.promise(() => chmod(manifest, 0o000)),
+        () => Effect.promise(() => chmod(manifest, 0o644)),
+      );
+      const booted = yield* world.boot();
+      yield* world.until(() => booted.host.reading('fixture')?.state === 'failed' && booted.host.reading('second')?.state === 'idle');
+      expect(yield* booted.host.pending('fixture')).toBe(true);
+      const restarts = booted.host.reading('fixture')?.restarts;
+      yield* booted.plugins.enable({ projectId: world.projectId, id: 'second', enabled: false, scope: 'project' });
+      yield* world.until(() => booted.host.reading('second') === undefined);
+      expect(booted.host.reading('fixture')?.restarts).toBe(restarts);
+    }),
+);
+
+it.live('uninstalling a copied plugin removes the copy only after its process stopped and the call it served answered', () =>
+  Effect.gen(function* () {
+    const world = yield* hostWorld({ prefix: 'host-uninstall-' });
+    const { host, plugins, projectId, said, until } = world;
+    const prepared = yield* plugins.prepare({
+      projectId,
+      source: {
+        source: { kind: 'folder', path: yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS }) },
+        origin: { marketplace: 'market', entry: 'fixture' },
+        declared: null,
+      },
+    });
+    const { root } = yield* plugins.install({ projectId, prepared, enabled: true, scope: 'project' });
+    yield* until(() => host.reading('fixture')?.state === 'idle');
+    const serving = yield* Effect.forkScoped(said('hold'));
+    yield* until(() => host.reading('fixture')?.state === 'running');
+    const uninstalled = yield* Effect.forkScoped(plugins.uninstall({ projectId, id: 'fixture' }));
+    yield* Effect.repeat(plugins.ids(), { schedule: Schedule.spaced('20 millis'), until: (ids) => !ids.includes('fixture') });
+    expect(existsSync(root)).toBe(true);
+    yield* Effect.promise(() => writeFile(join(world.data('fixture'), 'release'), ''));
+    expect(yield* Fiber.join(serving)).toStartWith('held ');
+    yield* Fiber.join(uninstalled);
+    expect(existsSync(root)).toBe(false);
+  }),
+);
+
 it.live('a resident plugin runs from its enabling and comes back by itself after a crash', () =>
   Effect.gen(function* () {
     const world = yield* hostWorld({ prefix: 'host-resident-' });
@@ -172,8 +239,10 @@ it.live('a plugin whose manifest is broken when the server starts is watched, an
     yield* Effect.promise(() => writeFile(manifest, '{ not json'));
     const booted = yield* world.boot();
     yield* world.until(() => booted.host.reading('fixture')?.state === 'failed');
+    expect(yield* booted.host.pending('fixture')).toBe(true);
     yield* Effect.promise(() => writeFile(manifest, valid));
     yield* world.until(() => booted.host.reading('fixture')?.state === 'idle');
+    expect(yield* booted.host.pending('fixture')).toBe(false);
     expect(Object.keys((yield* booted.tools.of(world.projectId)).agents())).toEqual(['plugin__fixture__look']);
   }),
 );

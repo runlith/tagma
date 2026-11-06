@@ -9,7 +9,7 @@ import {
   EnabledPlugins,
   HostedPlugins,
   PluginPlaces,
-  type PluginProcessReader,
+  type PluginProcessControl,
   PluginProcesses,
   Plugins,
 } from './contract/service/plugins.js';
@@ -22,7 +22,14 @@ import { makePoints } from './points.js';
 import { makeShelf } from './shelf.js';
 import { clearStaging } from './sources.js';
 
-const UNHOSTED: PluginProcessReader = () => undefined;
+const UNHOSTED: PluginProcessControl = { reading: () => undefined, stopped: () => Effect.void };
+
+type Options = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+const differing = (before: Options, after: Options): readonly string[] =>
+  [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+    (id) => JSON.stringify(before[id] ?? {}) !== JSON.stringify(after[id] ?? {}),
+  );
 
 export const pluginsLayer: Layer.Layer<
   Plugins | EnabledPlugins | HostedPlugins | PluginPoints | PluginProcesses,
@@ -41,24 +48,37 @@ export const pluginsLayer: Layer.Layer<
     yield* clearStaging(home).pipe(Effect.orDie);
     const pulses = yield* Effect.acquireRelease(PubSub.unbounded<number | null>({ replay: 1 }), PubSub.shutdown);
     const changed = (projectId: number | null) => Effect.asVoid(PubSub.publish(pulses, projectId));
+    const inputs = yield* Effect.acquireRelease(PubSub.unbounded<string>(), PubSub.shutdown);
+    const touched = (id: string) => Effect.asVoid(PubSub.publish(inputs, id));
     const points = makePoints();
-    let reader = UNHOSTED;
+    let control = UNHOSTED;
     const processes = PluginProcesses.of({
       register: (registered) =>
         Effect.sync(() => {
-          reader = registered;
+          control = registered;
           return () => {
-            if (reader === registered) reader = UNHOSTED;
+            if (control === registered) control = UNHOSTED;
           };
         }),
     });
     const shelf = yield* makeShelf({ home });
     const digests = yield* makeDigests;
-    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => reader, changed });
-    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses });
+    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched });
+    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, pulses, inputs });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);
-    yield* Effect.forkScoped(Stream.runForEach(Stream.drop(options, 1), () => changed(null)));
+    let seen: Options | null = null;
+    yield* Effect.forkScoped(
+      Stream.runForEach(options, (now) =>
+        Effect.gen(function* () {
+          const before = seen;
+          seen = now;
+          if (before === null) return;
+          yield* Effect.forEach(differing(before, now), touched, { discard: true });
+          yield* changed(null);
+        }),
+      ),
+    );
     const registry = yield* ProjectChanges;
     yield* Effect.acquireRelease(
       Effect.sync(() => [registry.removed.subscribe(() => changed(null)), registry.changed.subscribe(changed(null))]),

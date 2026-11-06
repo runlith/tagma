@@ -8,7 +8,7 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { type PluginPackage, PluginRefused, type PluginUnreadable } from './contract/service/format.js';
-import { type PluginDescribed, type PluginPrepared, type PluginProcessReader, Plugins } from './contract/service/plugins.js';
+import { type PluginDescribed, type PluginPrepared, type PluginProcessControl, Plugins } from './contract/service/plugins.js';
 import type { PluginPoints } from './contract/service/points.js';
 import { componentName } from './contract/wire/names.js';
 import type { PluginDeclared, PluginOrigin, PluginProcessRow, PluginRow, PluginSource } from './contract/wire/rows.js';
@@ -104,10 +104,11 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly digests: Digests;
   readonly home: string;
   readonly points: PluginPoints['Service'];
-  readonly processes: () => PluginProcessReader;
+  readonly processes: () => PluginProcessControl;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
+  readonly touched: (id: string) => Effect.Effect<void>;
 }) {
-  const { shelf, digests, home, points, processes, changed } = input;
+  const { shelf, digests, home, points, processes, changed, touched } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const owners = yield* SecretOwners;
@@ -164,7 +165,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     );
 
   const processOf = (id: string, pkg: PluginPackage): PluginProcessRow | undefined =>
-    hosted(pkg) ? (processes()(id) ?? { state: 'stopped', tools: 0, restarts: 0 }) : undefined;
+    hosted(pkg) ? (processes().reading(id) ?? { state: 'stopped', tools: 0, restarts: 0 }) : undefined;
 
   const outdatedOf = Effect.fnUntraced(function* (root: string, pkg: PluginPackage) {
     const build = pkg.build;
@@ -294,7 +295,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         components: [],
         ignored: [],
         options: [],
-        process: processes()(install.id),
+        process: processes().reading(install.id),
         outdated: false,
         refused: reading.failure.message,
       } satisfies PluginRow;
@@ -413,7 +414,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         ['install again'],
       );
     }
-    yield* untaken(id, held);
+    const replaces = yield* untaken(id, held);
     yield* Effect.forEach(yield* runsAfter(id, projectId, change), (target) => clashes(target, read, projectId), { discard: true });
     const stage = held.stage;
     const root =
@@ -434,6 +435,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       { id, source: held.fetched, root, origin: held.origin ?? undefined, declared: held.declared ?? undefined },
     ]);
     if (change !== 'kept') yield* switched(projectId, id, change);
+    if (replaces) yield* touched(id);
     yield* changed(null);
     return yield* row(projectId, id);
   });
@@ -539,20 +541,6 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
                   ]),
               ),
             );
-          if (install.root === cloneRoot(home, id)) {
-            yield* files
-              .remove(install.root, { recursive: true, force: true })
-              .pipe(
-                Effect.mapError(
-                  (failure) =>
-                    new GateRefusal(
-                      'plugin-clone-failed',
-                      `${id} stays installed: its copy at ${install.root} could not be removed: ${failure.message}`,
-                      ['make the copy writable to the server, then uninstall again'],
-                    ),
-                ),
-              );
-          }
           yield* recorded((current) => current.filter((entry) => entry.id !== id));
           yield* settings.amend<Readonly<Record<string, Readonly<Record<string, string>>>>, never>(
             pluginsOptions,
@@ -572,6 +560,21 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
           shelf.forget(install.root);
           digests.forget(install.root);
           yield* changed(null);
+          yield* processes().stopped(id);
+          if (install.root === cloneRoot(home, id)) {
+            yield* files
+              .remove(install.root, { recursive: true, force: true })
+              .pipe(
+                Effect.mapError(
+                  (failure) =>
+                    new GateRefusal(
+                      'plugin-clone-failed',
+                      `${id} is uninstalled and its process stopped, but its copy at ${install.root} could not be removed: ${failure.message}`,
+                      ['remove that folder by hand; installing the plugin again also replaces it'],
+                    ),
+                ),
+              );
+          }
           return { ...answer, enabled: false, everywhere: false };
         }),
       );

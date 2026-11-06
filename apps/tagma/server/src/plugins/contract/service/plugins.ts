@@ -184,7 +184,7 @@ type PluginHosted = {
   readonly redact: readonly string[];
 };
 
-export type PluginHostedRoot = { readonly root: string; readonly refused: string | null; readonly projects: readonly number[] };
+export type PluginHostedRoot = { readonly root: string; readonly projects: readonly number[] };
 
 export class PluginUnhosted extends Data.TaggedError('PluginUnhosted')<{ readonly id: string }> {
   override get message(): string {
@@ -197,14 +197,18 @@ export class HostedPlugins extends Context.Service<
   {
     roots(): Effect.Effect<ReadonlyMap<string, PluginHostedRoot>, PluginsUnreadable>;
     read(id: string): Effect.Effect<PluginHosted, PluginUnhosted | PluginRefused | PluginUnreadable | PluginsUnreadable>;
+    readonly changes: Stream.Stream<string>;
   }
 >()('tagma/plugins/HostedPlugins') {}
 
-export type PluginProcessReader = (id: string) => PluginProcessRow | undefined;
+export type PluginProcessControl = {
+  readonly reading: (id: string) => PluginProcessRow | undefined;
+  readonly stopped: (id: string) => Effect.Effect<void>;
+};
 
 export class PluginProcesses extends Context.Service<
   PluginProcesses,
   {
-    register(reader: PluginProcessReader): Effect.Effect<() => void>;
+    register(control: PluginProcessControl): Effect.Effect<() => void>;
   }
 >()('tagma/plugins/PluginProcesses') {}

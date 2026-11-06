@@ -7,6 +7,7 @@ import { FIXTURE_TOOLS } from './tools.js';
 const data = process.env.TAGMA_PLUGIN_DATA ?? '.';
 const journal = (line: string): void => appendFileSync(join(data, 'journal'), `${line}\n`);
 
+if (existsSync(join(data, 'refuse'))) process.exit(4);
 journal(`start ${process.pid}`);
 process.on('exit', () => journal(`exit ${process.pid}`));
 const lingering = process.env.LINGER;

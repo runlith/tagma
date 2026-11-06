@@ -82,6 +82,7 @@ type Slot = {
   title: string | null;
   failure: string | undefined;
   refused: string | undefined;
+  rejected: boolean;
   restarts: number;
   failures: number;
   gate: number;
@@ -127,6 +128,8 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       if (moving !== null) return Deferred.await(moving).pipe(Effect.andThen(serving(id, use, woke)));
       const live = slot.live;
       if (live !== null && alive(live)) return use(live, slot);
+      if (slot.rejected)
+        return Effect.fail(new McpConnectFailed({ server: id, transport: 'stdio', reason: slot.failure ?? 'its process was refused' }));
       if (woke || slot.standing?.process == null) return Effect.fail(notConnected(slot));
       return woken(slot).pipe(Effect.andThen(serving(id, use, true)));
     });
@@ -148,6 +151,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       title: null,
       failure: undefined,
       refused: undefined,
+      rejected: false,
       restarts: 0,
       failures: 0,
       gate: 0,
@@ -217,35 +221,34 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     yield* Scope.close(old.scope, Exit.void);
   });
 
-  const failed = Effect.fnUntraced(function* (slot: Slot, reason: string) {
+  const fell = Effect.fnUntraced(function* (slot: Slot, reason: string, since: number | null) {
+    const now = yield* Clock.currentTimeMillis;
+    slot.failure = reason;
+    slot.restarts += 1;
+    slot.failures = since !== null && now - since >= STABLE_MS ? 1 : slot.failures + 1;
+    slot.gate = now + backoffOf(slot.failures);
+    if (slot.standing?.process?.resident !== true) {
+      slot.state = 'idle';
+      return;
+    }
+    slot.state = 'failed';
+    offers.broken(slot.id, true);
+    yield* schedule(slot, backoffOf(slot.failures));
+  });
+
+  const rejected = (slot: Slot, reason: string): void => {
     slot.state = 'failed';
     slot.failure = reason;
-    slot.failures += 1;
-    slot.gate = (yield* Clock.currentTimeMillis) + backoffOf(slot.failures);
+    slot.rejected = true;
     offers.broken(slot.id, true);
-    if (slot.standing?.process?.resident === true) {
-      slot.restarts += 1;
-      yield* schedule(slot, backoffOf(slot.failures));
-    }
-  });
+  };
 
   const crashed = Effect.fn('PluginHost.crashed')(
     function* (slot: Slot, generation: Generation, reason: string) {
       if (slot.live !== generation) return;
       slot.live = null;
       yield* Scope.close(generation.scope, Exit.void);
-      const now = yield* Clock.currentTimeMillis;
-      slot.failure = reason;
-      slot.restarts += 1;
-      slot.failures = now - generation.startedAt >= STABLE_MS ? 1 : slot.failures + 1;
-      slot.gate = now + backoffOf(slot.failures);
-      if (slot.standing?.process?.resident === true) {
-        slot.state = 'failed';
-        offers.broken(slot.id, true);
-        yield* schedule(slot, backoffOf(slot.failures));
-        return;
-      }
-      slot.state = 'idle';
+      yield* fell(slot, reason, generation.startedAt);
     },
     Effect.uninterruptible,
     (work, slot) => slot.lock.withPermit(work),
@@ -292,12 +295,12 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
         generations,
       ),
     );
-    if (Result.isFailure(opened)) return yield* failed(slot, opened.failure.reason);
+    if (Result.isFailure(opened)) return yield* fell(slot, opened.failure.reason, null);
     const generation = opened.success;
     const difference = listingDifference(standing.tools, generation.session.descriptors);
     if (difference !== null) {
       yield* Scope.close(generation.scope, Exit.void);
-      return yield* failed(slot, difference);
+      return rejected(slot, difference);
     }
     slot.live = generation;
     slot.state = 'running';
@@ -377,7 +380,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
         slot.refused = undefined;
         const standing = slot.standing;
         if (standing !== null && standing.revision === plugin.revision && standing.environment.fingerprint === environment.fingerprint) {
-          if (standing.process?.resident !== true || slot.live !== null) return;
+          if (slot.rejected || standing.process?.resident !== true || slot.live !== null) return;
           const wait = slot.gate - (yield* Clock.currentTimeMillis);
           if (wait > 0) return yield* schedule(slot, wait);
           const process = standing.process;
@@ -391,6 +394,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             yield* closed(slot);
             slot.standing?.withdraw();
             slot.standing = null;
+            slot.rejected = false;
             const ref: PluginRef = { id: slot.id, title: plugin.title, root: slot.root, data: plugin.data };
             const published = yield* Effect.result(points.publish(ref, checked, { call }));
             slot.failures = 0;
@@ -465,11 +469,17 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     hosting: (): readonly string[] => [...slots.keys()],
     ensure: Effect.fnUntraced(function* (id: string, root: string, projects: readonly number[]) {
       const standing = slots.get(id);
-      if (standing !== undefined && standing.root !== root) yield* stop(id);
-      const slot = slots.get(id) ?? made(id, root, projects);
-      slot.projects = projects;
-      yield* bring(slot);
+      if (standing?.root === root) {
+        standing.projects = projects;
+        return;
+      }
+      if (standing !== undefined) yield* stop(id);
+      yield* bring(made(id, root, projects));
     }),
+    reread: (id: string): Effect.Effect<void> => {
+      const slot = slots.get(id);
+      return slot === undefined ? Effect.void : schedule(slot, Duration.zero);
+    },
     stop,
     call,
     callAdmitted: Effect.fn('PluginHost.callAdmitted')(

@@ -46,29 +46,33 @@ const assembled = (home: string) =>
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('build steps of plugins', (it) => {
   it.effect(
-    'an enabled plugin is asked its step as tagma and its answer is the verdict; failed, it refuses the steps; stopped, it has none',
+    'an enabled plugin is asked its step as tagma and its answer is the verdict; one that did not start is asked again past its gate; one whose tools differ refuses the steps; disabled, none',
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
           const fileSystem = yield* FileSystem.FileSystem;
           const home = yield* tempRootEffect(demo.fixture, 'build-steps-home-');
-          const root = yield* tempRootEffect(demo.fixture, 'build-steps-plugin-');
-          yield* Effect.promise(() =>
-            writePlugin(root, {
-              id: 'pin',
-              title: 'Pin',
-              program: join(import.meta.dir, 'buildStepsFixture.ts'),
-              contributes: {
-                tools: ['pin', 'read'].map((name) => ({
-                  name,
-                  audience: 'tagma',
-                  description: name,
-                  inputSchema: { type: 'object', properties: {} },
-                })),
-                beforeBuild: [{ tool: 'pin', title: 'Core pin' }],
-              },
-            }),
-          );
+          const placed = Effect.fnUntraced(function* (id: string, tools: readonly string[]) {
+            const root = yield* tempRootEffect(demo.fixture, `build-steps-${id}-`);
+            yield* Effect.promise(() =>
+              writePlugin(root, {
+                id,
+                title: id,
+                program: join(import.meta.dir, 'buildStepsFixture.ts'),
+                contributes: {
+                  tools: tools.map((name) => ({
+                    name,
+                    audience: 'tagma',
+                    description: name,
+                    inputSchema: { type: 'object', properties: {} },
+                  })),
+                  beforeBuild: [{ tool: 'pin', title: 'Core pin' }],
+                },
+              }),
+            );
+            return root;
+          });
+          const root = yield* placed('pin', ['pin', 'read']);
           const built = yield* Layer.build(
             assembled(home).pipe(
               Layer.provide(
@@ -88,17 +92,20 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           const plugins = Context.get(built, Plugins);
           const steps = Context.get(built, BuildSteps);
           yield* within(host.start());
-          const standing = (state: 'idle' | 'failed') =>
+          const standing = (state: 'idle' | 'failed', id = 'pin') =>
             Effect.repeat(
-              Effect.sync(() => host.reading('pin')),
+              Effect.sync(() => host.reading(id)),
               {
                 schedule: Schedule.spaced('20 millis'),
                 until: (row) => row?.state === state,
               },
             );
+          const installed = Effect.fnUntraced(function* (source: string) {
+            const prepared = yield* within(plugins.prepare({ projectId: demo.projectId, source }));
+            yield* within(plugins.install({ projectId: demo.projectId, prepared, enabled: true, scope: 'project' }));
+          });
 
-          const prepared = yield* within(plugins.prepare({ projectId: demo.projectId, source: root }));
-          yield* within(plugins.install({ projectId: demo.projectId, prepared, enabled: true, scope: 'project' }));
+          yield* installed(root);
           expect(yield* standing('idle')).toMatchObject({ state: 'idle' });
           const [step, ...more] = yield* steps.of(demo.demoRoot);
           expect(more).toEqual([]);
@@ -119,10 +126,21 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           yield* standing('idle');
           yield* fileSystem.writeFileString(join(root, 'crash'), '');
           expect((yield* Effect.flip(step!.ask({ offer: 'head', checkout: demo.demoRoot }))).message).toContain('pin could not be asked');
-          yield* standing('failed');
-          expect((yield* Effect.flip(steps.of(demo.demoRoot))).message).toContain('pin is enabled here but its process failed');
+          expect(host.reading('pin')).toMatchObject({ state: 'idle', restarts: 1 });
+          const [again] = yield* steps.of(demo.demoRoot);
+          yield* fileSystem.remove(join(root, 'crash'));
+          expect(yield* again!.ask({ offer: 'head', checkout: demo.demoRoot })).toMatchObject({ verdict: 'stop' });
 
-          yield* within(plugins.enable({ projectId: demo.projectId, id: 'pin', enabled: false, scope: 'project' }));
+          yield* installed(yield* placed('gap', ['pin', 'read', 'gone']));
+          yield* standing('idle', 'gap');
+          const gap = (yield* steps.of(demo.demoRoot)).find((one) => one.plugin === 'gap');
+          expect((yield* Effect.flip(gap!.ask({ offer: 'head', checkout: demo.demoRoot }))).message).toContain('gap could not be asked');
+          yield* standing('failed', 'gap');
+          expect((yield* Effect.flip(steps.of(demo.demoRoot))).message).toContain('gap is enabled here but its process failed');
+
+          for (const id of ['pin', 'gap']) {
+            yield* within(plugins.enable({ projectId: demo.projectId, id, enabled: false, scope: 'project' }));
+          }
           expect(yield* steps.of(demo.demoRoot)).toEqual([]);
         }).pipe(Effect.scoped),
       ),
