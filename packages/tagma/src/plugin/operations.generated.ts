@@ -1244,6 +1244,29 @@ export type ExternalOperations = {
                 readonly tokens: number | null;
               };
             } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
               readonly kind: 'call-ending';
               readonly runId: string;
               readonly toolCallId: string;
@@ -1379,6 +1402,29 @@ export type ExternalOperations = {
                 readonly tokens: number | null;
               };
             } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
               readonly kind: 'call-ending';
               readonly runId: string;
               readonly toolCallId: string;
@@ -1493,6 +1539,29 @@ export type ExternalOperations = {
                 readonly name: string | null;
               };
               readonly event: 'tasks';
+              readonly forOperator: boolean;
+              readonly cost: {
+                readonly kind: 'warm';
+                readonly tokens: number | null;
+                readonly until: string;
+              } | {
+                readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+                readonly tokens: number | null;
+              };
+            } | {
+              readonly kind: 'child-update';
+              readonly child: {
+                readonly threadId: string;
+                readonly projectId?: number;
+                readonly name: string | null;
+              };
+              readonly event: 'deleted';
+              readonly by: string;
+              readonly at: string;
+              readonly ended: {
+                readonly run: boolean;
+                readonly owed: boolean;
+              };
               readonly forOperator: boolean;
               readonly cost: {
                 readonly kind: 'warm';
@@ -2154,6 +2223,29 @@ export type ExternalOperations = {
             readonly name: string | null;
           };
           readonly event: 'tasks';
+          readonly forOperator: boolean;
+          readonly cost: {
+            readonly kind: 'warm';
+            readonly tokens: number | null;
+            readonly until: string;
+          } | {
+            readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+            readonly tokens: number | null;
+          };
+        } | {
+          readonly kind: 'child-update';
+          readonly child: {
+            readonly threadId: string;
+            readonly projectId?: number;
+            readonly name: string | null;
+          };
+          readonly event: 'deleted';
+          readonly by: string;
+          readonly at: string;
+          readonly ended: {
+            readonly run: boolean;
+            readonly owed: boolean;
+          };
           readonly forOperator: boolean;
           readonly cost: {
             readonly kind: 'warm';
@@ -3196,6 +3288,12 @@ export type ExternalOperations = {
           readonly entries: number;
           readonly blocks: readonly string[];
           readonly bounded: boolean;
+          readonly unread: readonly {
+            readonly projectId: number;
+            readonly root: string;
+            readonly code: string;
+            readonly reason: string;
+          }[];
         };
         readonly recap?: {
           readonly summary: string;
@@ -3452,6 +3550,29 @@ export type ExternalOperations = {
             readonly name: string | null;
           };
           readonly event: 'tasks';
+          readonly forOperator: boolean;
+          readonly cost: {
+            readonly kind: 'warm';
+            readonly tokens: number | null;
+            readonly until: string;
+          } | {
+            readonly kind: 'cold' | 'likely-warm' | 'estimated-cold' | 'unknown';
+            readonly tokens: number | null;
+          };
+        } | {
+          readonly kind: 'child-update';
+          readonly child: {
+            readonly threadId: string;
+            readonly projectId?: number;
+            readonly name: string | null;
+          };
+          readonly event: 'deleted';
+          readonly by: string;
+          readonly at: string;
+          readonly ended: {
+            readonly run: boolean;
+            readonly owed: boolean;
+          };
           readonly forOperator: boolean;
           readonly cost: {
             readonly kind: 'warm';
