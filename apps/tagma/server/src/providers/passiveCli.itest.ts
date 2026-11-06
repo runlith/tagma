@@ -118,7 +118,7 @@ it.effect('passive catalog and account reads start no CLI until the provider is 
     });
     const common = Layer.mergeAll(
       Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'opencode', origin: 'builtin', version: null, load: async () => ({ adapter: () => [provider] }) }],
+        sources: [{ id: 'opencode', origin: 'builtin', version: null, load: async () => () => [provider] }],
       }),
       Layer.succeed(CredentialFiles, { tokensPath }),
       Layer.succeed(DefaultAccounts, defaults),

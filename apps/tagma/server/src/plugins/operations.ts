@@ -3,13 +3,12 @@ import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
 import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
-import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { OPERATOR } from '../workspace/contract/wire/checkout.js';
 import { Plugins } from './contract/service/plugins.js';
 import { createPlugin } from './creation.js';
-import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS } from './contract/wire/operations.js';
+import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS, type PluginSwitchScope } from './contract/wire/operations.js';
 import type { PluginRow } from './contract/wire/rows.js';
 
 const questionOf = (projectId: number): PageQuestion => ({ operation: 'read_plugins', selection: { projectId }, order: PLUGIN_ROWS.order });
@@ -85,7 +84,11 @@ export const PLUGIN_PAIRS = {
         if (input.enabled === false) return null;
         return yield* (yield* Plugins).installed({ projectId: yield* projectId, id: input.id });
       }),
-      execute: Effect.fnUntraced(function* (input: { readonly id: string; readonly enabled?: boolean; readonly scope?: SettableScope }) {
+      execute: Effect.fnUntraced(function* (input: {
+        readonly id: string;
+        readonly enabled?: boolean;
+        readonly scope?: PluginSwitchScope;
+      }) {
         const project = yield* projectId;
         const plugin = yield* (yield* Plugins).enable({
           projectId: project,

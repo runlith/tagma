@@ -73,7 +73,7 @@ it.effect('a discovered model catalog survives a new registry and a failed refre
     });
     const inputs = Layer.mergeAll(
       Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'dynamic', origin: 'builtin', version: null, load: async () => ({ adapter: () => [provider] }) }],
+        sources: [{ id: 'dynamic', origin: 'builtin', version: null, load: async () => () => [provider] }],
       }),
       Layer.succeed(CredentialFiles, { tokensPath }),
       Layer.succeed(HarnessDirectories, directories),

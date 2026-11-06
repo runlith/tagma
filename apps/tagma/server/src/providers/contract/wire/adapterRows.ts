@@ -13,9 +13,8 @@ const bytesOf = (row: unknown): number => new TextEncoder().encode(JSON.stringif
 const wideAdapter = (): AdapterRow => ({
   adapter: {
     id: 'x'.repeat(60),
-    origin: 'machine',
+    origin: 'plugin',
     version: 'x'.repeat(20),
-    source: 'x'.repeat(200),
     state: 'failed',
     reason: 'x'.repeat(600),
   },

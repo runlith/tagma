@@ -2,7 +2,7 @@ import type { HookCall, HookPoint, HookSession } from '@runlith/tagma/plugin/pro
 import { Context, Data, type Effect, type FileSystem } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { HookAnswer } from '../wire/hooks.js';
-import type { PluginManifest, PluginOptionType } from '../wire/rows.js';
+import type { PluginManifest, PluginOptionType, PluginProviders } from '../wire/rows.js';
 
 export type PluginClaim = 'manifest' | 'layout';
 
@@ -84,6 +84,8 @@ export type PluginAbout = {
 
 export type PluginProcess = { readonly entry: string; readonly resident: boolean };
 
+type PluginProviderPart = PluginProviders & { readonly entry: string };
+
 type PluginBuild = { readonly hash: string; readonly sources: readonly string[]; readonly outputs: readonly string[] };
 
 export type PluginPackage = {
@@ -99,6 +101,7 @@ export type PluginPackage = {
   readonly hooks: readonly PluginHook[];
   readonly options: readonly PluginOption[];
   readonly process: PluginProcess | null;
+  readonly providers: PluginProviderPart | null;
   readonly build: PluginBuild | null;
   readonly contributes: Readonly<Record<string, unknown>>;
   readonly ignored: readonly PluginIgnored[];

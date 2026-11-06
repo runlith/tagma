@@ -11,13 +11,23 @@ import { type PluginPackage, PluginRefused, type PluginUnreadable } from './cont
 import { type PluginDescribed, type PluginPrepared, type PluginProcessControl, Plugins } from './contract/service/plugins.js';
 import type { PluginPoints } from './contract/service/points.js';
 import { componentName } from './contract/wire/names.js';
-import type { PluginDeclared, PluginFault, PluginOrigin, PluginProcessRow, PluginRow, PluginSource } from './contract/wire/rows.js';
+import type { PluginSwitchScope } from './contract/wire/operations.js';
+import type {
+  PluginDeclared,
+  PluginFault,
+  PluginOrigin,
+  PluginProcessRow,
+  PluginProviders,
+  PluginRow,
+  PluginSource,
+} from './contract/wire/rows.js';
 import {
   installedFrom,
   type PluginInstall,
   pluginsDisabled,
   pluginsEnabled,
   pluginsInstalled,
+  pluginsOff,
   pluginsOptions,
 } from './contract/wire/settings.js';
 import { componentsOf, consentOf } from './consent.js';
@@ -25,7 +35,16 @@ import type { Digests } from './digests.js';
 import { type Enabling, enablingIn } from './enabling.js';
 import { collision, hosted, type NamesCollide, namesOf, type Read } from './reader.js';
 import { type Bound, SECRET_KIND, type Shelf } from './shelf.js';
-import { cloneRoot, dropStage, fetchSource, sameSource, settle, sourceOf, type SourceUnreadable } from './sources.js';
+import {
+  cloneRoot,
+  dropStage,
+  fetchSource,
+  type PackageUnreachable,
+  sameSource,
+  settle,
+  sourceOf,
+  type SourceUnreadable,
+} from './sources.js';
 
 const READ_PLUGINS = 'read_plugins names what is installed and what each plugin carries';
 
@@ -33,13 +52,15 @@ const KEPT = Duration.hours(24);
 
 type Wanted = { readonly source: PluginSource; readonly origin: PluginOrigin | null; readonly declared: PluginDeclared | null };
 
-type Change = { readonly enabled: boolean; readonly scope: SettableScope };
+type Change = { readonly enabled: boolean; readonly scope: PluginSwitchScope };
 
 type Target = { readonly project: { readonly id: number; readonly name: string }; readonly now: boolean };
 
 const willRun = (there: Enabling, id: string, here: boolean, change: Change | 'kept'): boolean => {
   const now = there.running.has(id);
   if (change === 'kept' || (change.scope === 'project' && !here)) return now;
+  if (change.scope === 'machine') return change.enabled && there.listed.has(id);
+  if (there.machineOff.has(id)) return false;
   if (change.scope === 'project') return change.enabled;
   if (change.enabled) return now || here || !there.off.includes(id);
   return there.own.includes(id) && !there.off.includes(id);
@@ -58,10 +79,16 @@ const refusedOf = (failure: PluginRefused | PluginUnreadable | NamesCollide) =>
     ? new GateRefusal('plugin-names-collide', failure.reason, ['rename one of the two components in the plugin, then install again'])
     : new GateRefusal('plugin-refused', failure.message, ['correct the plugin as the reason says, then install again']);
 
-const unfetchedOf = (failure: SourceUnreadable | CloneFailed | CommitUnreachable) => {
+const unfetchedOf = (failure: SourceUnreadable | CloneFailed | CommitUnreachable | PackageUnreachable) => {
   switch (failure._tag) {
     case 'SourceUnreadable':
-      return new GateRefusal('plugin-source-unreadable', failure.reason, ['name a plugin directory the server can read, or a git URL']);
+      return new GateRefusal('plugin-source-unreadable', failure.reason, [
+        'name a plugin directory the server can read, a git URL or an npm package',
+      ]);
+    case 'PackageUnreachable':
+      return new GateRefusal('plugin-package-unreachable', failure.message, [
+        'check the package name and range, and that the registry npm_config_registry names (npmjs.org when unset) serves it',
+      ]);
     case 'CloneFailed':
       return new GateRefusal('plugin-clone-failed', failure.message, [
         'check the URL and that git can reach it as the operator, then install again',
@@ -92,6 +119,9 @@ const optionRows = (pkg: PluginPackage, values: Readonly<Record<string, string>>
     set: values[option.key] !== undefined,
     fallback: option.sensitive ? null : option.fallback,
   }));
+
+const providedOf = (pkg: PluginPackage): PluginProviders | undefined =>
+  pkg.providers === null ? undefined : { models: pkg.providers.models, harnesses: pkg.providers.harnesses, speech: pkg.providers.speech };
 
 const shownOf = (read: Read, bound: Bound, points: PluginPoints['Service']) => ({
   components: componentsOf(
@@ -281,11 +311,13 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     const project = yield* projectRoot(projectId);
     const base = {
       id: install.id,
+      builtin: false,
       source: install.source,
       origin: install.origin,
       root: install.root,
       enabled: enabled.running.has(install.id),
       everywhere: enabled.everywhere.has(install.id),
+      off: enabled.machineOff.has(install.id),
       faults: faults(install.id),
     };
     const reading = yield* Effect.result(
@@ -316,6 +348,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       version: pkg.version,
       description: pkg.description,
       format: read.format,
+      providers: providedOf(pkg),
       ...shownOf(read, bound, points),
       process: processOf(install.id, pkg),
       ...(yield* outdatedOf(install.root, pkg)),
@@ -376,6 +409,10 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
 
   const switched = Effect.fnUntraced(function* (projectId: number, id: string, change: Change) {
     const here = yield* enabling(projectId);
+    if (change.scope === 'machine') {
+      if (here.machineOff.has(id) === change.enabled) yield* listed(pluginsOff, 'user', undefined, id, !change.enabled);
+      return;
+    }
     if (change.scope === 'user') {
       if (here.everywhere.has(id) !== change.enabled) yield* listed(pluginsEnabled, 'user', undefined, id, change.enabled);
       if (change.enabled && here.off.includes(id)) yield* listed(pluginsDisabled, 'project', projectId, id, false);
@@ -535,7 +572,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
             yield* Effect.forEach(starting, (target) => clashes(target, read, projectId), { discard: true });
           }
           yield* switched(projectId, id, change);
-          yield* changed(scope === 'user' ? null : projectId);
+          yield* changed(scope === 'project' ? projectId : null);
           return yield* row(projectId, id);
         }),
       );
@@ -565,7 +602,9 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
               return Effect.succeed(kept);
             },
           );
-          if ((yield* enabling(projectId)).everywhere.has(id)) yield* listed(pluginsEnabled, 'user', undefined, id, false);
+          const mine = yield* enabling(projectId);
+          if (mine.everywhere.has(id)) yield* listed(pluginsEnabled, 'user', undefined, id, false);
+          if (mine.machineOff.has(id)) yield* listed(pluginsOff, 'user', undefined, id, false);
           for (const project of yield* projects.list()) {
             const there = yield* enabling(project.id);
             if (there.own.includes(id)) yield* listed(pluginsEnabled, 'project', project.id, id, false);

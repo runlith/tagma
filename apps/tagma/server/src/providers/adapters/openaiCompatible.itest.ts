@@ -8,7 +8,6 @@ import type { SettingInstance } from '@runlith/tagma/adapter/provider';
 import { Context, Effect, Layer, Stream } from 'effect';
 import { credentialMissing } from '../credentials/missing.js';
 import { AdapterInstances } from '../contract/service/instances.js';
-import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
 import { BuiltinAdapters, ProviderRegistry } from '../contract/service/registry.js';
 import { registryLayer } from '../registry.js';
 
@@ -58,7 +57,7 @@ const registryOf = Effect.fnUntraced(function* (
   instances: readonly SettingInstance[],
   secrets: Record<string, Record<string, string>> = {},
 ) {
-  const entry: AdapterEntry = yield* Effect.promise(() => import('@runlith/adapter-openai-compatible/adapter'));
+  const { adapter } = yield* Effect.promise(() => import('@runlith/adapter-openai-compatible/adapter'));
   const stored = Layer.succeed(AdapterInstances, {
     read: () => Effect.succeed({ instances: new Map([['openai-compatible', instances]]), secrets }),
     save: (_adapter, instance) => Effect.succeed(instance),
@@ -69,7 +68,7 @@ const registryOf = Effect.fnUntraced(function* (
       Layer.provide(stored),
       Layer.provide(
         Layer.succeed(BuiltinAdapters, {
-          sources: [{ id: 'openai-compatible', origin: 'builtin', version: null, load: async () => entry }],
+          sources: [{ id: 'openai-compatible', origin: 'builtin', version: null, load: async () => adapter }],
         }),
       ),
     ),

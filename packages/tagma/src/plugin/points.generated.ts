@@ -10,6 +10,17 @@ export type PluginEnvelope = {
     /** Kept running while the plugin is enabled, rather than started on demand and stopped when idle. */
     readonly resident?: boolean;
   };
+  /** The provider part, as the build described it without running it: model providers, CLI agents and speech providers that join the catalogs of the whole machine. */
+  readonly providers?: {
+    /** The bundled providers module Tagma imports into its own process, its host modules served by the server’s copies. */
+    readonly entry: string;
+    /** It brings model providers: wire providers, CLI agents or a settings form for them. */
+    readonly models: boolean;
+    /** Among its model providers, a CLI agent Tagma runs. */
+    readonly harnesses: boolean;
+    /** It brings speech providers. */
+    readonly speech: boolean;
+  };
   readonly options?: readonly ({
     /** The option, named as the environment variable its process reads it from: capital letters, digits and underscores, not starting with TAGMA_ and not PATH, HOME, USER, LOGNAME, SHELL, TERM or TMPDIR. */
     readonly key: string;

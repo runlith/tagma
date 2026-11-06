@@ -37,6 +37,12 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       reason: `${MANIFEST} runs ${process.entry}, which is not a file inside the plugin: build the plugin again`,
     });
   }
+  const providers = manifest.providers ?? null;
+  if (providers !== null && (yield* entryOf(root, providers.entry)).kind !== 'file') {
+    return yield* new PluginRefused({
+      reason: `${MANIFEST} brings providers from ${providers.entry}, which is not a file inside the plugin: build the plugin again`,
+    });
+  }
   const ignored: PluginIgnored[] = [];
   const servers: PluginServer[] = [];
   for (const [name, server] of Object.entries(manifest.mcpServers ?? {})) {
@@ -64,10 +70,11 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       fallback: option.default ?? null,
     })),
     process,
+    providers,
     build: {
       hash: manifest.build.hash,
       sources: manifest.build.sources,
-      outputs: process === null ? [MANIFEST] : [MANIFEST, process.entry],
+      outputs: [MANIFEST, ...(process === null ? [] : [process.entry]), ...(providers === null ? [] : [providers.entry])],
     },
     contributes: manifest.contributes ?? {},
     ignored,

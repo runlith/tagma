@@ -82,6 +82,7 @@ export type CatalogSnapshot = typeof catalogSnapshotSchema.Type;
 
 export const servedProviderSchema = Schema.Struct({
   id: Schema.String,
+  plugin: Schema.String.annotate({ description: 'The plugin that brings it; a built-in plugin for a provider Tagma ships.' }),
   label: Schema.String,
   kind: Schema.Literals(['wire', 'harness']),
   auth: Schema.Literals(['api-key', 'oauth', 'cli']),
@@ -115,14 +116,13 @@ export const servedProviderSchema = Schema.Struct({
 });
 export type ServedProvider = typeof servedProviderSchema.Type;
 
-export const adapterOriginSchema = Schema.Literals(['builtin', 'machine']);
+export const adapterOriginSchema = Schema.Literals(['builtin', 'plugin']);
 export type AdapterOrigin = typeof adapterOriginSchema.Type;
 
 const adapterFields = {
-  id: Schema.String,
+  id: Schema.String.annotate({ description: 'The plugin whose provider part declares these model providers.' }),
   origin: adapterOriginSchema,
   version: Schema.NullOr(Schema.String),
-  source: Schema.optional(Schema.String),
 };
 
 export const adapterStateSchema = Schema.Union([

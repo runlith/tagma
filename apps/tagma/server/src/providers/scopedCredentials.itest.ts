@@ -58,9 +58,7 @@ const provider: WireProvider = {
   quota: { read: () => Effect.die('No quota is requested.'), fromHeaders: () => null },
 };
 let current = provider;
-const sources: AdapterSource[] = [
-  { id: 'run-adapter', origin: 'builtin', version: null, load: async () => ({ adapter: () => [current] }) },
-];
+const sources: AdapterSource[] = [{ id: 'run-adapter', origin: 'builtin', version: null, load: async () => () => [current] }];
 const providers = providersLayer.pipe(
   Layer.provide(
     Layer.mergeAll(

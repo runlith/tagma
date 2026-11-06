@@ -24,7 +24,7 @@ const acme = {
 } satisfies WireProvider;
 
 const source = (id: string, load: AdapterSource['load']): AdapterSource => ({ id, origin: 'builtin', version: null, load });
-const declaring = (id: string, providers: readonly Provider[]) => source(id, async () => ({ adapter: () => providers }));
+const declaring = (id: string, providers: readonly Provider[]) => source(id, async () => () => providers);
 
 const registry = (sources: readonly AdapterSource[]) =>
   Effect.map(Layer.build(registryLayer.pipe(Layer.provide(Layer.succeed(BuiltinAdapters, { sources })))), (context) =>
@@ -112,7 +112,7 @@ it.effect('failed updates retain declarations, refuse calls and recover without 
     const providers = yield* registry([
       source('changing', async () => {
         if (fault !== null) throw new Error(fault);
-        return { adapter: () => [entry] };
+        return () => [entry];
       }),
     ]);
     const access = yield* accessOf(providers);
@@ -157,7 +157,7 @@ it.effect('a failed re-enable keeps the declaration from before the adapter was 
     let broken = false;
     const installed = source('toggle', async () => {
       if (broken) throw new Error('failed re-enable');
-      return { adapter: () => [acme] };
+      return () => [acme];
     });
     const sources: AdapterSource[] = [installed];
     const providers = yield* registry(sources);
@@ -177,15 +177,14 @@ it.effect('a disabled adapter is listed but never loaded, and its provider is re
     const off: AdapterSource = {
       ...source('off', async () => {
         imported = true;
-        return { adapter: () => [acme] };
+        return () => [acme];
       }),
-      source: '/adapters/off',
       disabled: true,
     };
     const providers = yield* registry([off]);
     const catalog = yield* providers.catalog;
 
-    expect(catalog.adapters).toEqual([{ id: 'off', origin: 'builtin', version: null, source: '/adapters/off', state: 'disabled' }]);
+    expect(catalog.adapters).toEqual([{ id: 'off', origin: 'builtin', version: null, state: 'disabled' }]);
     expect(imported).toBe(false);
     const gone = yield* Effect.result(providers.registration('acme'));
     expect(Result.isFailure(gone) && gone.failure.code).toBe('provider-not-installed');

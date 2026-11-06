@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { PluginLabel } from '../../../../plugins/contract/wire/names.js';
-import { PLUGIN_OPTION_TYPES } from '../../../../plugins/contract/wire/rows.js';
+import { PLUGIN_OPTION_TYPES, PluginProviders } from '../../../../plugins/contract/wire/rows.js';
 
 export const MANIFEST = 'tagma-plugin.json';
 
@@ -101,6 +101,17 @@ export const Envelope = Schema.Struct({
       }),
     }),
   ),
+  providers: Schema.optional(
+    Schema.Struct({
+      entry: Inside.annotate({
+        description: 'The bundled providers module Tagma imports into its own process, its host modules served by the server’s copies.',
+      }),
+      ...PluginProviders.fields,
+    }),
+  ).annotate({
+    description:
+      'The provider part, as the build described it without running it: model providers, CLI agents and speech providers that join the catalogs of the whole machine.',
+  }),
   options: Schema.optional(Options),
   mcpServers: Schema.optional(Schema.Record(ServerName, Server)).annotate({
     description:

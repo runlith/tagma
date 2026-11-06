@@ -1,47 +1,20 @@
 import { readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import type { Adapter } from './provider';
-import { tagmaSection } from './hostModules';
+import { MANIFEST } from '../plugin/describe';
+import type { ProvidersDefinition } from '../plugin/plugin';
 
 export type HostModule = () => Promise<object>;
 export type HostModules = Readonly<Record<string, HostModule>>;
-export type AdapterEntry = { readonly adapter: Adapter };
 
-const manifestSchema = Schema.Struct({
-  name: Schema.optional(Schema.String),
-  version: Schema.optional(Schema.String),
-  main: Schema.optional(Schema.String),
-  exports: Schema.optional(Schema.Unknown),
-  tagma: Schema.optional(tagmaSection),
+export type ImportedProviders = ProvidersDefinition & { readonly id: string; readonly version: string };
+
+const envelopeSchema = Schema.Struct({
+  id: Schema.String,
+  version: Schema.String,
+  providers: Schema.optional(Schema.Struct({ entry: Schema.String })),
 });
-export type PackageManifest = typeof manifestSchema.Type;
-const decode = Schema.decodeUnknownSync(Schema.fromJsonString(manifestSchema));
-export const readManifest = async (directory: string): Promise<PackageManifest> =>
-  decode(await readFile(join(directory, 'package.json'), 'utf8'));
-
-const conditionOf = (target: unknown): string | null => {
-  if (typeof target === 'string') return target;
-  if (typeof target !== 'object' || target === null) return null;
-  const conditions = target as Readonly<Record<string, unknown>>;
-  for (const condition of ['bun', 'import', 'default']) {
-    const found = conditionOf(conditions[condition]);
-    if (found !== null) return found;
-  }
-  return null;
-};
-
-export const adapterEntry = (manifest: PackageManifest): string | null => {
-  const exported = manifest.exports;
-  if (typeof exported === 'string') return exported;
-  if (typeof exported === 'object' && exported !== null) {
-    const map = exported as Readonly<Record<string, unknown>>;
-    const subpaths = Object.keys(map).some((key) => key.startsWith('.'));
-    const found = subpaths ? (conditionOf(map['.']) ?? conditionOf(map['./adapter'])) : conditionOf(map);
-    if (found !== null) return found;
-  }
-  return manifest.main ?? null;
-};
+const decodeEnvelope = Schema.decodeUnknownSync(Schema.fromJsonString(envelopeSchema));
 
 type Hosted = { readonly exports: object } | { readonly unloadable: unknown };
 let hosted: Promise<void> | undefined;
@@ -69,18 +42,32 @@ const hostOnce = (host: HostModules): Promise<void> =>
     });
   })());
 
-export const importAdapter = async (
+const definitionOf = (exported: unknown, path: string): ProvidersDefinition => {
+  if (typeof exported !== 'object' || exported === null)
+    throw new Error(`${path} exports no provider part as its default: write export default defineProviders({ models, speech })`);
+  const { models, speech } = exported as { readonly models?: unknown; readonly speech?: unknown };
+  if (models !== undefined && typeof models !== 'function')
+    throw new Error(`${path}: models is not an adapter: make it with defineAdapter from @runlith/tagma/adapter/provider`);
+  if (speech !== undefined && !Array.isArray(speech)) throw new Error(`${path}: speech is not a list of speech providers`);
+  if (models === undefined && speech === undefined) throw new Error(`${path} declares neither models nor speech`);
+  return exported as ProvidersDefinition;
+};
+
+export const importProviders = async (
   directory: string,
   host: HostModules,
   argv: readonly string[] = process.execArgv,
-): Promise<AdapterEntry> => {
+): Promise<ImportedProviders> => {
   if (!argv.includes('--no-install'))
     throw new Error(
       'the server runs without --no-install, so an import outside the host modules would install a second copy instead of failing; start it with bun --no-install',
     );
-  const entry = adapterEntry(await readManifest(directory));
-  if (entry === null) throw new Error(`${join(directory, 'package.json')} names no entry: give it "exports" or "main"`);
   const real = await realpath(directory);
+  const manifest = join(real, MANIFEST);
+  const { id, version, providers } = decodeEnvelope(await readFile(manifest, 'utf8'));
+  if (providers === undefined) throw new Error(`${manifest} declares no provider part`);
+  const entry = join(real, providers.entry);
   await hostOnce(host);
-  return (await import(join(real, entry))) as AdapterEntry;
+  const module = (await import(entry)) as { readonly default?: unknown };
+  return { id, version, ...definitionOf(module.default, entry) };
 };

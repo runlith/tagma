@@ -64,6 +64,11 @@
       "bun": "./src/adapter/settings.ts",
       "default": "./src/adapter/settings.ts"
     },
+    "./adapter/speech": {
+      "types": "./src/adapter/speech.ts",
+      "bun": "./src/adapter/speech.ts",
+      "default": "./src/adapter/speech.ts"
+    },
     "./adapter/loader": {
       "types": "./src/adapter/loader.ts",
       "bun": "./src/adapter/loader.ts",
@@ -151,6 +156,7 @@
     "@runlith/held": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/mcp": "workspace:*",
+    "@runlith/speech": "workspace:*",
     "@runlith/utils": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
     "@tailwindcss/oxide": "catalog:",
@@ -182,6 +188,7 @@
       "./adapter/payload",
       "./adapter/provider",
       "./adapter/settings",
+      "./adapter/speech",
       "effect",
       "effect/http"
     ]

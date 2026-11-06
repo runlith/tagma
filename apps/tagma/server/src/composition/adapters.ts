@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { ADAPTERS } from '../installation/contract/wire/layout.js';
-import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
-import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
+import type { Adapter, HarnessProvider } from '@runlith/tagma/adapter/provider';
 import type { HostedRunner } from '@runlith/hosted-runner/run';
 import type { Signer } from '../cli/contract/service/server.js';
 import type { AdapterPlaces, AdapterSource } from '../providers/contract/service/registry.js';
@@ -21,11 +20,11 @@ type BuiltinHarness = {
 
 type Builtin = AdapterSource & { readonly harness?: BuiltinHarness };
 
-const builtin = (id: string, load: () => Promise<AdapterEntry>, harness?: BuiltinHarness): Builtin => ({
+const builtin = (id: string, load: () => Promise<{ readonly adapter: Adapter }>, harness?: BuiltinHarness): Builtin => ({
   id,
   origin: 'builtin',
   version: null,
-  load,
+  load: async () => (await load()).adapter,
   harness,
 });
 

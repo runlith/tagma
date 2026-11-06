@@ -159,7 +159,7 @@ const makeRig = Effect.fnUntraced(function* (input: {
     input.environment ??
     makeUserEnvironment({ shell: null, env: { PATH: join(input.root, 'bin'), ...input.variables }, world: null, home: null });
   const builtin = Layer.succeed(BuiltinAdapters, {
-    sources: [{ id: 'login-fixture', origin: 'builtin', version: null, load: async () => ({ adapter: () => input.providers }) }],
+    sources: [{ id: 'login-fixture', origin: 'builtin', version: null, load: async () => () => input.providers }],
   });
   const registry = Context.get(yield* Layer.build(registryLayer.pipe(Layer.provide(builtin))), ProviderRegistry);
   const adapters = yield* makeHarnessAdapters;

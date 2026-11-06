@@ -53,6 +53,7 @@ const readLegacy = Effect.fnUntraced(function* (root: string, raw: Readonly<Reco
     hooks: yield* hooksOf(root, { name, id: pluginIdOf(name) }, settings.hooks, ignored),
     options: [],
     process: null,
+    providers: null,
     build: null,
     contributes: {},
     ignored,

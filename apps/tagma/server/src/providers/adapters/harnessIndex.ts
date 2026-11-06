@@ -16,7 +16,7 @@ const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Ent
 export const indexHarnesses = Effect.fn('MachineAdapters.indexHarnesses')(function* (machine: string, loaded: readonly Loaded[]) {
   const files = yield* FileSystem.FileSystem;
   const installed = yield* readInstalls(machine);
-  const byId = new Map(loaded.filter((row) => row.state.origin === 'machine').map((row) => [row.state.id, row]));
+  const byId = new Map(loaded.filter((row) => row.state.origin === 'plugin').map((row) => [row.state.id, row]));
   const rows = installed.flatMap((install) => {
     const declared = byId.get(install.id);
     if (!install.enabled || declared?.state.state !== 'loaded') return [];

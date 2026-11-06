@@ -24,8 +24,8 @@ import { machineSources, adapterHost } from './adapters/external.js';
 import { indexHarnesses } from './adapters/harnessIndex.js';
 import { failed, type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
-import { basename, dirname, join } from 'node:path';
-import { importAdapter, readManifest } from '@runlith/tagma/adapter/loader';
+import { dirname, join } from 'node:path';
+import { importProviders } from '@runlith/tagma/adapter/loader';
 import { accountSource, makeAccountModes, modeSections } from './accounts/modes.js';
 import type { AccountSection } from './contract/wire/catalog.js';
 import { CredentialFiles } from './contract/service/credentials.js';
@@ -65,9 +65,16 @@ const askedModels = (provider: Provider, asks: AskOffers): ServedProvider['asks'
   );
 
 const servedOf =
-  (instanced: ReadonlySet<string>, failures: ReadonlyMap<string, string>, sourceOf: (provider: string) => string, asks: AskOffers) =>
+  (
+    instanced: ReadonlySet<string>,
+    failures: ReadonlyMap<string, string>,
+    sourceOf: (provider: string) => string,
+    asks: AskOffers,
+    plugins: ReadonlyMap<string, string>,
+  ) =>
   (provider: Provider): ServedProvider => ({
     id: provider.id,
+    plugin: plugins.get(provider.id) ?? provider.id,
     instance: instanced.has(provider.id) ? true : undefined,
     failure: failures.get(provider.id),
     label: provider.label,
@@ -153,7 +160,8 @@ export const catalogOf = (
   const adapters = loaded.map((adapter) => adapter.state);
   const instanced = new Set([...instances.values()].flatMap((held) => held.map((instance) => instance.id)));
   const sourceOf = (id: string) => accountSource(providers, sections, id);
-  const serve = servedOf(instanced, failures, sourceOf, asks);
+  const plugins = new Map(loaded.flatMap(({ state, providers: declared }) => declared.map((provider) => [provider.id, state.id] as const)));
+  const serve = servedOf(instanced, failures, sourceOf, asks, plugins);
   const harnessesWhere = (judged: (section: AccountSection, mode: string) => boolean) =>
     new Set(
       providers
@@ -262,25 +270,19 @@ export const registryLayer = Layer.effect(
         ? Effect.orDie(stored.value.read())
         : Effect.succeed({ instances: new Map<string, readonly SettingInstance[]>(), secrets: {} });
     const loadVersion = Effect.fn('providers.loadVersion')(function* (directory: string) {
-      const manifest = yield* Effect.result(Effect.tryPromise(() => readManifest(directory)));
-      if (Result.isFailure(manifest)) {
-        yield* Effect.logError('a held adapter version has no readable manifest', { directory, reason: String(manifest.failure) });
+      const imported = yield* Effect.result(Effect.tryPromise(() => importProviders(directory, place.host, process.execArgv)));
+      if (Result.isFailure(imported)) {
+        yield* Effect.logError('a held provider revision did not load', { directory, reason: String(imported.failure) });
         return [];
       }
-      const id = manifest.success.name ?? basename(directory);
-      const source: AdapterSource = {
-        id,
-        origin: 'machine',
-        version: manifest.success.version ?? null,
-        directory,
-        load: () => importAdapter(directory, place.host, process.execArgv),
-      };
+      const { id, version, models } = imported.success;
+      const source: AdapterSource = { id, origin: 'plugin', version, directory, load: async () => models };
       return (yield* load(source, adapterHost(yield* snapshot, id), new Map(), new Map())).providers;
     });
     const externals = Effect.gen(function* () {
       const { instances, secrets } = yield* snapshot;
       const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
-      const priorMachine = previous.filter((adapter) => adapter.state.origin === 'machine');
+      const priorMachine = previous.filter((adapter) => adapter.state.origin === 'plugin');
       const machine = yield* machineSources(place.machine, place.host, process.execArgv).pipe(
         Effect.map((installed) => ({ installed, unreadable: [] as readonly Loaded[] })),
         Effect.catchTag('RecordUnreadable', (failure) =>
@@ -288,7 +290,7 @@ export const registryLayer = Layer.effect(
             installed: [] as readonly AdapterSource[],
             unreadable:
               priorMachine.length === 0
-                ? [failed({ id: failure.path, origin: 'machine', version: null }, failure.reason)]
+                ? [failed({ id: failure.path, origin: 'plugin', version: null }, failure.reason)]
                 : priorMachine.map((adapter) =>
                     adapter.state.state === 'disabled'
                       ? adapter

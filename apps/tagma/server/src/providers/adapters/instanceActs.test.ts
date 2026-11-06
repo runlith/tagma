@@ -4,13 +4,12 @@ import { defineAdapter, type SettingInstance, type SettingRow } from '@runlith/t
 import { CredentialFileFailed } from '@runlith/credential-file/failure';
 import { Effect, Layer } from 'effect';
 import { AdapterInstances } from '../contract/service/instances.js';
-import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
 import { BuiltinAdapters, ProviderRegistry } from '../contract/service/registry.js';
 import { registryLayer } from '../registry.js';
 import { listModels, removeInstance, saveInstance } from './instanceActs.js';
 
 const world = Effect.fnUntraced(function* (unwritable = false) {
-  const entry: AdapterEntry = yield* Effect.promise(() => import('@runlith/adapter-openai-compatible/adapter'));
+  const entry = yield* Effect.promise(() => import('@runlith/adapter-openai-compatible/adapter'));
   const rows = new Map<string, SettingInstance>();
   const secrets: Record<string, SettingRow> = {};
   let revision = 0;
@@ -67,7 +66,7 @@ const world = Effect.fnUntraced(function* (unwritable = false) {
             id: 'openai-compatible',
             origin: 'builtin',
             version: null,
-            load: async () => ({ adapter: defineAdapter(entry.adapter, settings) }),
+            load: async () => defineAdapter(entry.adapter, settings),
           },
         ],
       }),

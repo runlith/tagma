@@ -1420,6 +1420,7 @@
         "@runlith/held": "workspace:*",
         "@runlith/llm": "workspace:*",
         "@runlith/mcp": "workspace:*",
+        "@runlith/speech": "workspace:*",
         "@runlith/utils": "workspace:*",
         "@standard-schema/spec": "^1.1.0",
         "@tailwindcss/oxide": "catalog:",

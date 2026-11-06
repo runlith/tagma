@@ -12,7 +12,7 @@ import type { GeneratedImage, ImageRequest } from '@runlith/llm/profiles/images'
 import type { AdapterHost, WireProvider } from '../src/adapter/provider';
 import { declare } from '../src/adapter/declaration';
 import { host } from './host.generated';
-import { importAdapter } from '../src/adapter/loader';
+import { importProviders } from '../src/adapter/loader';
 
 export type SignInFixture = {
   readonly kind: 'loopback' | 'paste' | 'key' | 'device';
@@ -73,7 +73,7 @@ const signIn = Effect.fn('conformance.signIn')(function* (
 });
 
 export const runConformance = async (directory: string, fixture: ConformanceFixture): Promise<ConformanceResult> => {
-  const declared = declare(await importAdapter(directory, host), fixture.host);
+  const declared = declare((await importProviders(directory, host)).models, fixture.host);
   const provider = declared.providers.find((provider) => provider.id === fixture.provider);
   assert(provider?.kind === 'wire', `The kit needs a declared wire provider: ${fixture.provider}`);
   const modelId = fixture.model ?? provider.defaultTextModel;

@@ -4,7 +4,7 @@ import type { ProductIdentity } from '@runlith/llm/profiles/contract';
 import type { AdapterHost } from '@runlith/tagma/adapter/provider';
 import type { InstanceSnapshot } from '../contract/service/instances.js';
 import { instanceFile, instanceSnapshot } from '../credentials/instanceFile.js';
-import { type HostModules, importAdapter } from '@runlith/tagma/adapter/loader';
+import { type HostModules, importProviders } from '@runlith/tagma/adapter/loader';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import type { AdapterSource } from '../contract/service/registry.js';
 import { type AdapterInstall, readInstalls, type RecordUnreadable } from './record.js';
@@ -33,11 +33,10 @@ export const machineSources = (
     : Effect.map(readInstalls(machine), (installs: readonly AdapterInstall[]) =>
         installs.map((install) => ({
           id: install.id,
-          origin: 'machine' as const,
+          origin: 'plugin' as const,
           version: install.version,
-          load: () => importAdapter(join(machine, install.directory), host, argv),
+          load: async () => (await importProviders(join(machine, install.directory), host, argv)).models,
           directory: join(machine, install.directory),
-          source: install.source,
           disabled: install.enabled ? undefined : (true as const),
         })),
       );

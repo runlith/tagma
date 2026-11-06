@@ -1,7 +1,7 @@
 import type { ModelCatalog, ModelOption } from '@runlith/llm/models/catalog';
 import type { AskKind } from '@runlith/llm/models/description';
-import type { AdapterSettings, AskProgram, HarnessProvider, Provider, WireProvider } from '@runlith/tagma/adapter/provider';
-import type { AdapterEntry, HostModules } from '@runlith/tagma/adapter/loader';
+import type { Adapter, AdapterSettings, AskProgram, HarnessProvider, Provider, WireProvider } from '@runlith/tagma/adapter/provider';
+import type { HostModules } from '@runlith/tagma/adapter/loader';
 import { Context, Effect, type Stream } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { AdapterOrigin, AdapterState, ServedCatalog, AccountSection, CatalogSnapshot } from '../wire/catalog.js';
@@ -98,11 +98,10 @@ export type AdapterIdentity = {
   readonly id: string;
   readonly origin: AdapterOrigin;
   readonly version: string | null;
-  readonly source?: string;
 };
 
 export type AdapterSource = AdapterIdentity & {
-  readonly load: () => Promise<AdapterEntry>;
+  readonly load: () => Promise<Adapter | undefined>;
   readonly disabled?: true;
   readonly directory?: string;
 };

@@ -1,7 +1,7 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { type CloneFailed, type CommitUnreachable, isGitUrl, shallowClone } from '@runlith/git/clone';
-import { Data, Effect, FileSystem, type PlatformError } from 'effect';
-import type { ChildProcessSpawner } from 'effect/process';
+import { Config, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
+import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { within } from './contract/service/reading.js';
 import type { PluginSource } from './contract/wire/rows.js';
 
@@ -17,19 +17,45 @@ export class SourceUnreadable extends Data.TaggedError('SourceUnreadable')<{ rea
   }
 }
 
+export class PackageUnreachable extends Data.TaggedError('PackageUnreachable')<{ readonly name: string; readonly reason: string }> {
+  override get message(): string {
+    return `The npm package ${this.name} could not be fetched: ${this.reason}`;
+  }
+}
+
 export type Fetched = {
   readonly source: PluginSource;
   readonly root: string;
   readonly stage: string | null;
 };
 
-export const sourceOf = (given: string, projectRoot: string): PluginSource =>
-  isGitUrl(given)
+const NPM_PREFIX = 'npm:';
+const SCOPED = /^@[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*(?:@.+)?$/u;
+const NPM_REGISTRY = 'https://registry.npmjs.org';
+
+const npmOf = (given: string): PluginSource => {
+  const at = given.indexOf('@', 1);
+  return at === -1 ? { kind: 'npm', name: given } : { kind: 'npm', name: given.slice(0, at), range: given.slice(at + 1) };
+};
+
+export const sourceOf = (given: string, projectRoot: string): PluginSource => {
+  if (given.startsWith(NPM_PREFIX)) return npmOf(given.slice(NPM_PREFIX.length));
+  if (SCOPED.test(given)) return npmOf(given);
+  return isGitUrl(given)
     ? { kind: 'git', url: given }
     : { kind: 'folder', path: isAbsolute(given) ? resolve(given) : resolve(projectRoot, given) };
+};
 
-export const sameSource = (a: PluginSource, b: PluginSource): boolean =>
-  a.kind === 'git' ? b.kind === 'git' && a.url === b.url && a.path === b.path : b.kind === 'folder' && a.path === b.path;
+export const sameSource = (a: PluginSource, b: PluginSource): boolean => {
+  switch (a.kind) {
+    case 'git':
+      return b.kind === 'git' && a.url === b.url && a.path === b.path;
+    case 'folder':
+      return b.kind === 'folder' && a.path === b.path;
+    case 'npm':
+      return b.kind === 'npm' && a.name === b.name;
+  }
+};
 
 export const cloneRoot = (home: string, id: string): string => join(home, CLONES, id);
 
@@ -84,41 +110,100 @@ const copiedFrom = Effect.fnUntraced(function* (root: string, into: string) {
   return into;
 });
 
+type NpmSource = Extract<PluginSource, { readonly kind: 'npm' }>;
+
+const Packument = Schema.Struct({
+  'dist-tags': Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  versions: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ dist: Schema.Struct({ tarball: Schema.String }) }))),
+});
+const decodePackument = Schema.decodeUnknownEffect(Packument);
+
+const asked = (name: string, url: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`${url} answered ${response.status}`);
+      return response;
+    },
+    catch: (cause) => new PackageUnreachable({ name, reason: cause instanceof Error ? cause.message : String(cause) }),
+  });
+
+const unpacked = Effect.fn('plugins.npm')(function* (source: NpmSource, stage: string) {
+  const files = yield* FileSystem.FileSystem;
+  const { name } = source;
+  const failed = (reason: string) => new PackageUnreachable({ name, reason });
+  const registry = (yield* Config.String('npm_config_registry').pipe(
+    Config.withDefault(NPM_REGISTRY),
+    Effect.mapError((failure) => failed(failure.message)),
+  )).replace(/\/+$/u, '');
+  const document = yield* asked(name, `${registry}/${name.replace('/', '%2F')}`).pipe(
+    Effect.flatMap((response) =>
+      Effect.tryPromise({ try: () => response.json(), catch: () => failed('its registry document is not JSON') }),
+    ),
+    Effect.flatMap((json) => decodePackument(json).pipe(Effect.mapError((failure) => failed(failure.message)))),
+  );
+  const range = source.range ?? 'latest';
+  const chosen =
+    document['dist-tags']?.[range] ??
+    Object.keys(document.versions ?? {})
+      .filter((version) => Bun.semver.satisfies(version, range))
+      .sort((left, right) => Bun.semver.order(right, left))[0];
+  const tarball = chosen === undefined ? undefined : document.versions?.[chosen]?.dist.tarball;
+  if (tarball === undefined) return yield* failed(`no version satisfies ${range}`);
+  const bytes = yield* asked(name, tarball).pipe(
+    Effect.flatMap((response) => Effect.tryPromise({ try: () => response.arrayBuffer(), catch: () => failed(`${tarball} broke off`) })),
+  );
+  const archive = join(stage, 'package.tgz');
+  const into = join(stage, 'unpacked');
+  yield* files.writeFile(archive, new Uint8Array(bytes)).pipe(Effect.mapError((failure) => failed(failure.message)));
+  yield* files.makeDirectory(into, { recursive: true }).pipe(Effect.mapError((failure) => failed(failure.message)));
+  const exit = yield* Effect.scoped(
+    Effect.flatMap(
+      ChildProcess.make('tar', ['-xzf', archive, '-C', into], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }),
+      (handle) => handle.exitCode,
+    ),
+  ).pipe(Effect.mapError((failure) => failed(`tar could not be run: ${failure.reason._tag}`)));
+  if (exit !== 0) return yield* failed(`its archive did not unpack: tar exited ${exit}`);
+  return into;
+});
+
 export const fetchSource = Effect.fn('plugins.fetch')(function* (
   source: PluginSource,
   home: string,
   snapshot: boolean,
 ): Effect.fn.Return<
   Fetched,
-  SourceUnreadable | CloneFailed | CommitUnreachable,
+  SourceUnreadable | CloneFailed | CommitUnreachable | PackageUnreachable,
   FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > {
   const files = yield* FileSystem.FileSystem;
   if (source.kind === 'folder' && !snapshot) return { source, root: yield* directoryIn(source.path, undefined, source.path), stage: null };
   const stage = yield* staged(home);
   const taken = join(stage, TAKEN);
-  const copied: Effect.Effect<
+  const copied = Effect.fnUntraced(function* (): Effect.fn.Return<
     Fetched,
-    SourceUnreadable | CloneFailed | CommitUnreachable,
+    SourceUnreadable | CloneFailed | CommitUnreachable | PackageUnreachable,
     FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-  > =
-    source.kind === 'folder'
-      ? Effect.map(
-          Effect.flatMap(directoryIn(source.path, undefined, source.path), (root) => copiedFrom(root, taken)),
-          (root) => ({
-            source,
-            root,
-            stage,
-          }),
-        )
-      : Effect.gen(function* () {
-          const repository = join(stage, 'repository');
-          const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
-          const root = yield* copiedFrom(yield* directoryIn(repository, source.path, source.url), taken);
-          yield* files.remove(repository, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
-          return { source: { ...source, commit }, root, stage };
-        });
-  return yield* copied.pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
+  > {
+    switch (source.kind) {
+      case 'folder':
+        return { source, root: yield* copiedFrom(yield* directoryIn(source.path, undefined, source.path), taken), stage };
+      case 'git': {
+        const repository = join(stage, 'repository');
+        const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
+        const root = yield* copiedFrom(yield* directoryIn(repository, source.path, source.url), taken);
+        yield* files.remove(repository, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+        return { source: { ...source, commit }, root, stage };
+      }
+      case 'npm': {
+        const into = yield* unpacked(source, stage);
+        const root = yield* copiedFrom(yield* directoryIn(into, 'package', source.name), taken);
+        yield* files.remove(into, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+        return { source, root, stage };
+      }
+    }
+  });
+  return yield* copied().pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
 });
 
 export const settle = Effect.fn('plugins.settle')(function* (fetched: { readonly root: string; readonly stage: string }, target: string) {

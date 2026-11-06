@@ -14,6 +14,7 @@ type ServedFixture = Partial<ServedProvider> & {
 
 export function servedProvider(provider: ServedFixture): ServedProvider {
   return {
+    plugin: provider.id,
     label: provider.id,
     kind: 'wire',
     auth: 'oauth',

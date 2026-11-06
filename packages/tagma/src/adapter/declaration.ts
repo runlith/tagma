@@ -165,18 +165,17 @@ const settingsFault = (settings: AdapterSettings | undefined): string | null => 
 };
 
 export const declare = (
-  entry: unknown,
+  models: unknown,
   host: AdapterHost,
   taken: ReadonlyMap<string, string> = new Map(),
   sections: ReadonlyMap<string, SectionClaim> = new Map(),
 ): Declaration => {
-  if (typeof entry !== 'object' || entry === null || !('adapter' in entry) || typeof entry.adapter !== 'function')
-    throw new Error('the adapter entry exports no adapter');
-  const adapter = entry.adapter as Adapter;
+  if (typeof models !== 'function') throw new Error('models is not an adapter: make it with defineAdapter');
+  const adapter = models as Adapter;
   const fault = settingsFault(adapter.settings);
   if (fault !== null) throw new Error(fault);
   const candidates = adapter(host);
-  if (!Array.isArray(candidates)) throw new Error('the adapter entry does not answer a list of providers');
+  if (!Array.isArray(candidates)) throw new Error('the adapter does not answer a list of providers');
   const providers = candidates.map((provider): Provider =>
     provider.catalog === undefined ? provider : { ...provider, dynamicCatalog: true },
   );

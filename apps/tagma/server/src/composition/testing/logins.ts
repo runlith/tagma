@@ -295,8 +295,8 @@ export const relocatedAdapters = (sources: readonly AdapterSource[], logins: Log
   return sources.map((source) => ({
     ...source,
     load: async () => {
-      const entry = await source.load();
-      return { ...entry, adapter: adapterOf(entry.adapter, places) };
+      const adapter = await source.load();
+      return adapter === undefined ? undefined : adapterOf(adapter, places);
     },
   }));
 };

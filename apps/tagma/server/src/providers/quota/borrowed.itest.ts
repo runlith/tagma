@@ -123,7 +123,7 @@ const layer = providersLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
       Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'fixture', origin: 'builtin', version: null, load: async () => ({ adapter: () => providers }) }],
+        sources: [{ id: 'fixture', origin: 'builtin', version: null, load: async () => () => providers }],
       }),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(AccountCli, cli),

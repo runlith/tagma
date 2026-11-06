@@ -36,8 +36,8 @@ const home = await mkdtemp(join(tmpdir(), 'default-model-'));
 afterAll(() => rm(home, { recursive: true, force: true }));
 
 const SOURCES: readonly AdapterSource[] = [
-  { id: 'anthropic', origin: 'builtin', version: null, load: () => import('@runlith/adapter-anthropic/adapter') },
-  { id: 'openai', origin: 'builtin', version: null, load: () => import('@runlith/adapter-openai/adapter') },
+  { id: 'anthropic', origin: 'builtin', version: null, load: async () => (await import('@runlith/adapter-anthropic/adapter')).adapter },
+  { id: 'openai', origin: 'builtin', version: null, load: async () => (await import('@runlith/adapter-openai/adapter')).adapter },
 ];
 
 const cli = (claudeSignedIn: boolean): AccountCli['Service'] => ({

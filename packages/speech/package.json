@@ -42,5 +42,18 @@
     "@types/ws": "catalog:",
     "typescript": "catalog:",
     "ws": "catalog:"
+  },
+  "tagma": {
+    "host": [
+      "./protocol/adapter",
+      "./protocol/codec",
+      "./protocol/duplex",
+      "./protocol/synthesisDuplex",
+      "./protocol/transport",
+      "./wire/capabilities",
+      "./wire/events",
+      "./wire/failure",
+      "./wire/requests"
+    ]
   }
 }

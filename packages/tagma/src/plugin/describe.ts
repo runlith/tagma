@@ -15,6 +15,8 @@ export type PluginDescription = {
   readonly contributes: Partial<PluginPoints>;
 };
 
+export const MANIFEST = 'tagma-plugin.json';
+
 export const PROCESS_ENTRY = 'dist/process.js';
 
 type PluginManifest = Omit<PluginEnvelope, 'version' | 'build'>;
@@ -105,6 +107,7 @@ const OWN: Readonly<Record<Exclude<keyof PluginDefinition, keyof PluginData>, tr
   resident: true,
   options: true,
   mcpServers: true,
+  providers: true,
   tools: true,
   resources: true,
   views: true,

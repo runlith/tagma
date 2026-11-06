@@ -1,5 +1,8 @@
 import type { McpCaller } from '@runlith/mcp/caller';
+import type { AnyProvider } from '@runlith/speech/engine/catalog';
+import type { SpeechHost } from '@runlith/speech/engine/SpeechSources';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
+import type { Adapter } from '../adapter/provider.js';
 import type { ModelsClient } from './models.js';
 import type { PluginServers, ServerClient } from './servers.js';
 import type { ExternalOperations } from './operations.generated.js';
@@ -151,6 +154,7 @@ export type PluginDefinition = PluginData & {
   readonly resident?: NonNullable<PluginEnvelope['process']>['resident'];
   readonly options?: PluginEnvelope['options'];
   readonly mcpServers?: PluginEnvelope['mcpServers'];
+  readonly providers?: string;
   readonly tools?: Readonly<Record<string, Tool<any>>>;
   readonly resources?: Readonly<Record<string, Resource>>;
   readonly views?: Readonly<Record<string, View>>;
@@ -167,6 +171,13 @@ type Unknown<Definition> = { readonly [Field in Exclude<keyof Definition, keyof 
 
 export const definePlugin = <const Definition extends PluginDefinition>(definition: Definition & Unknown<Definition>): Definition =>
   definition;
+
+export type ProvidersDefinition = {
+  readonly models?: Adapter;
+  readonly speech?: readonly AnyProvider<SpeechHost>[];
+};
+
+export const defineProviders = (definition: ProvidersDefinition): ProvidersDefinition => definition;
 
 export const tool = <S extends InputSchema | undefined = undefined, A extends ToolAudience = ToolAudience, R = unknown>(
   declared: Tool<S, A, R>,

@@ -85,7 +85,7 @@ const cli = (installed: () => boolean): AccountCli['Service'] => ({
   ended: () => Effect.never,
   stop: () => Effect.die('the mode test cancels no login terminal'),
 });
-const fixture: AdapterSource = { id: 'fixture', origin: 'builtin', version: null, load: async () => ({ adapter: () => [official, wire] }) };
+const fixture: AdapterSource = { id: 'fixture', origin: 'builtin', version: null, load: async () => () => [official, wire] };
 const registry = (path: string, installed: () => boolean, sources: readonly AdapterSource[] = [fixture]) =>
   Effect.map(
     Layer.build(
@@ -236,7 +236,7 @@ it.effect('an adapter whose account mode collides with a declared section fails 
     const rival: HarnessProvider = { ...official, id: 'rival', label: 'Rival' };
     const catalog = (yield* registry(join(home, 'collision'), always, [
       fixture,
-      { id: 'rival', origin: 'machine', version: '1', load: async () => ({ adapter: () => [rival] }) },
+      { id: 'rival', origin: 'plugin', version: '1', load: async () => () => [rival] },
     ])).current();
     expect(catalog.adapters.find((adapter) => adapter.id === 'rival')).toMatchObject({ state: 'failed' });
     expect(catalog.sections[0]?.options.map((option) => option.provider)).toEqual([official.id, wire.id]);

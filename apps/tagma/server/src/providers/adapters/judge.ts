@@ -12,13 +12,13 @@ export type Loaded = {
 };
 
 export const failed = (source: AdapterIdentity, reason: string): Loaded => ({
-  state: { id: source.id, origin: source.origin, version: source.version, source: source.source, state: 'failed', reason },
+  state: { id: source.id, origin: source.origin, version: source.version, state: 'failed', reason },
   providers: [],
   settings: undefined,
 });
 
 const disabled = (source: AdapterIdentity): Loaded => ({
-  state: { id: source.id, origin: source.origin, version: source.version, source: source.source, state: 'disabled' },
+  state: { id: source.id, origin: source.origin, version: source.version, state: 'disabled' },
   providers: [],
   settings: undefined,
 });
@@ -43,7 +43,6 @@ export const load = Effect.fn('providers.load')(function* (
           id: source.id,
           origin: source.origin,
           version: source.version,
-          source: source.source,
           state: 'loaded',
           providers: declared.success.providers.map((provider) => provider.id),
         },

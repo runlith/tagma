@@ -12,14 +12,19 @@ export const PluginInstall = Schema.Struct({
 });
 export type PluginInstall = typeof PluginInstall.Type;
 
+const sourceText = (source: PluginInstall['source']): string => {
+  switch (source.kind) {
+    case 'folder':
+      return source.path;
+    case 'git':
+      return source.path === undefined ? source.url : `${source.url} ${source.path}`;
+    case 'npm':
+      return source.range === undefined ? source.name : `${source.name}@${source.range}`;
+  }
+};
+
 export const installedFrom = (install: Pick<PluginInstall, 'source' | 'origin'>): string =>
-  install.origin !== undefined
-    ? `${install.origin.entry}@${install.origin.marketplace}`
-    : install.source.kind === 'folder'
-      ? install.source.path
-      : install.source.path === undefined
-        ? install.source.url
-        : `${install.source.url} ${install.source.path}`;
+  install.origin !== undefined ? `${install.origin.entry}@${install.origin.marketplace}` : sourceText(install.source);
 
 export const pluginsInstalled = settingListKey({
   id: 'plugins.installed',
@@ -55,6 +60,19 @@ export const pluginsDisabled = settingListKey({
   member: PluginId,
   fallback: [] as readonly string[],
   scopes: ['project'],
+  merge: 'replace',
+});
+
+export const pluginsOff = settingListKey({
+  id: 'plugins.off',
+  order: 774,
+  title: 'Turned off on this machine',
+  description:
+    'The plugins, built-in ones included, that run in no project on this machine whatever their enabling says; their providers leave the model and speech catalogs.',
+  control: { kind: 'managed', by: 'enable_plugin' },
+  member: PluginId,
+  fallback: [] as readonly string[],
+  scopes: ['user'],
   merge: 'replace',
 });
 

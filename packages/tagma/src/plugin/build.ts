@@ -5,14 +5,12 @@ import { fileURLToPath } from 'node:url';
 import type { BunPlugin } from 'bun';
 import { manifestRefusal } from './checks.generated.js';
 import { computedImports } from './computed.js';
-import { describePlugin, manifestOf, PluginInvalid, PROCESS_ENTRY } from './describe.js';
+import { describePlugin, MANIFEST, manifestOf, PluginInvalid, PROCESS_ENTRY } from './describe.js';
 import { BuildFailed } from './failure.js';
 import type { PluginDefinition } from './plugin.js';
 import type { PluginEnvelope } from './points.generated.js';
 import { typeCheck } from './types.js';
 import { buildViews, publishViews } from './views.js';
-
-export const MANIFEST = 'tagma-plugin.json';
 
 const DEFINITION = 'plugin.ts';
 

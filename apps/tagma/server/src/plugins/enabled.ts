@@ -16,7 +16,7 @@ import {
 } from './contract/service/plugins.js';
 import type { PluginContribution, PluginPoints } from './contract/service/points.js';
 import { type HookEntries, HOOKS_FACE } from './contract/wire/hooks.js';
-import { pluginsDisabled, pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
+import { pluginsDisabled, pluginsEnabled, pluginsInstalled, pluginsOff } from './contract/wire/settings.js';
 import type { Digests } from './digests.js';
 import { enablingIn } from './enabling.js';
 import { hosted, type Read } from './reader.js';
@@ -101,11 +101,18 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   const held = Effect.fn('EnabledPlugins.held')(function* (projectId: number) {
     const enabled = yield* settings.held(pluginsEnabled, projectId).pipe(Effect.mapError(unreadable));
     const off = yield* settings.held(pluginsDisabled, projectId).pipe(Effect.mapError(unreadable));
-    let seen: { readonly enabled: readonly string[]; readonly off: readonly string[]; readonly running: readonly string[] } | null = null;
+    const machineOff = yield* settings.held(pluginsOff, projectId).pipe(Effect.mapError(unreadable));
+    type Seen = {
+      readonly enabled: readonly string[];
+      readonly off: readonly string[];
+      readonly machineOff: readonly string[];
+      readonly running: readonly string[];
+    };
+    let seen: Seen | null = null;
     return (): readonly string[] => {
-      const now = { enabled: enabled(), off: off() };
-      if (seen !== null && seen.enabled === now.enabled && seen.off === now.off) return seen.running;
-      seen = { ...now, running: now.enabled.filter((id) => !now.off.includes(id)) };
+      const now = { enabled: enabled(), off: off(), machineOff: machineOff() };
+      if (seen !== null && seen.enabled === now.enabled && seen.off === now.off && seen.machineOff === now.machineOff) return seen.running;
+      seen = { ...now, running: now.enabled.filter((id) => !now.off.includes(id) && !now.machineOff.includes(id)) };
       return seen.running;
     };
   });

@@ -3,7 +3,7 @@ import { Schema } from 'effect';
 export const PLUGIN_OPTION_TYPES = ['string', 'number', 'boolean', 'directory', 'file'] as const;
 export type PluginOptionType = (typeof PLUGIN_OPTION_TYPES)[number];
 
-export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution'] as const;
+export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution', 'provider'] as const;
 export type PluginComponentKind = (typeof PLUGIN_COMPONENT_KINDS)[number];
 
 const Named = Schema.String.check(Schema.isMinLength(1));
@@ -21,8 +21,20 @@ export const PluginSource = Schema.Union([
       description: 'The full commit: the pin a source asks for, and on an install the commit installed.',
     }),
   }),
+  Schema.Struct({
+    kind: Schema.Literal('npm'),
+    name: Named.annotate({ description: 'The npm package, from the registry the machine’s npm configuration names.' }),
+    range: Schema.optional(Named).annotate({ description: 'The version, range or dist-tag asked for; latest when absent.' }),
+  }),
 ]);
 export type PluginSource = typeof PluginSource.Type;
+
+export const PluginProviders = Schema.Struct({
+  models: Schema.Boolean.annotate({ description: 'It brings model providers: wire providers, CLI agents or a settings form for them.' }),
+  harnesses: Schema.Boolean.annotate({ description: 'Among its model providers, a CLI agent Tagma runs.' }),
+  speech: Schema.Boolean.annotate({ description: 'It brings speech providers.' }),
+});
+export type PluginProviders = typeof PluginProviders.Type;
 
 export const PluginOrigin = Schema.Struct({
   marketplace: Named.annotate({ description: 'The marketplace the plugin was installed from.' }),
@@ -113,15 +125,28 @@ export const pluginRowSchema = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   version: Schema.NullOr(Schema.String),
   description: Schema.NullOr(Schema.String),
-  format: Schema.NullOr(Schema.String).annotate({ description: 'The format its directory was read in; null when it could not be read.' }),
-  source: PluginSource,
+  builtin: Schema.Boolean.annotate({
+    description: 'Shipped inside Tagma: it has no source or directory, cannot be uninstalled, and only the machine switch acts on it.',
+  }),
+  format: Schema.NullOr(Schema.String).annotate({
+    description: 'The format its directory was read in; null for a built-in plugin and when it could not be read.',
+  }),
+  source: Schema.NullOr(PluginSource).annotate({ description: 'Where it was installed from; null for a built-in plugin.' }),
   origin: Schema.optional(PluginOrigin).annotate({ description: 'The marketplace entry it was installed from; update_plugin follows it.' }),
-  root: Schema.String.annotate({
-    description: 'The directory it is read from: a folder installed in place, or the copy taken from its git URL or marketplace entry.',
+  root: Schema.NullOr(Schema.String).annotate({
+    description:
+      'The directory it is read from: a folder installed in place, or the copy taken from its git URL, npm package or marketplace entry; null for a built-in plugin.',
   }),
   enabled: Schema.Boolean.annotate({ description: 'Whether this project runs its components.' }),
   everywhere: Schema.Boolean.annotate({
     description: 'Whether it is enabled for every project; a project that switches it off does not run it.',
+  }),
+  off: Schema.Boolean.annotate({
+    description:
+      'Whether it is turned off on this machine: it runs in no project whatever its enabling says, and its providers leave the model and speech catalogs.',
+  }),
+  providers: Schema.optional(PluginProviders).annotate({
+    description: 'What its provider part brings; providers stand on the whole machine, so project enabling does not apply to them.',
   }),
   components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma took from it.' }),
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),

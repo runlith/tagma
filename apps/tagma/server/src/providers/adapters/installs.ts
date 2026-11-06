@@ -156,7 +156,7 @@ export const makeMachineAdapters = (input: {
 
   const stateAfterReload = (id: string): Effect.Effect<AdapterState, GateRefusal<AdapterInstallRefusal>> =>
     Effect.flatMap(registry.reload, (catalog) => {
-      const state = catalog.adapters.findLast((adapter) => adapter.origin === 'machine' && adapter.id === id);
+      const state = catalog.adapters.findLast((adapter) => adapter.origin === 'plugin' && adapter.id === id);
       return state === undefined ? Effect.fail(refused(id)(new Error('the registry did not read it back'))) : Effect.succeed(state);
     });
 

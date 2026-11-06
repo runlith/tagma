@@ -6,6 +6,7 @@ import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
 import type { PluginConsented } from '../wire/consent.js';
+import type { PluginSwitchScope } from '../wire/operations.js';
 import type {
   PluginComponentKind,
   PluginDeclared,
@@ -63,6 +64,7 @@ export type PluginPrepareRefusal =
   | PluginListRefusal
   | 'plugin-source-unreadable'
   | 'plugin-clone-failed'
+  | 'plugin-package-unreachable'
   | 'plugin-pin-unreachable'
   | 'plugin-refused'
   | 'plugin-names-collide'
@@ -74,7 +76,9 @@ export type PluginInstallRefusal =
   | SettingLandRefusal
   | 'setting-scope'
   | 'setting-value';
-export type PluginChangeRefusal = Exclude<PluginInstallRefusal, 'plugin-id-taken' | 'plugin-pin-unreachable' | 'plugin-preview-expired'>;
+export type PluginChangeRefusal =
+  | Exclude<PluginInstallRefusal, 'plugin-id-taken' | 'plugin-pin-unreachable' | 'plugin-preview-expired'>
+  | 'plugin-builtin';
 
 export type PluginFailure<Code extends string> = StoreFailure | GateRefusal<Code>;
 
@@ -111,7 +115,7 @@ export class Plugins extends Context.Service<
       readonly projectId: number;
       readonly id: string;
       readonly enabled: boolean;
-      readonly scope: SettableScope;
+      readonly scope: PluginSwitchScope;
     }): Effect.Effect<PluginRow, PluginFailure<PluginChangeRefusal>>;
     uninstall(input: { readonly projectId: number; readonly id: string }): Effect.Effect<PluginRow, PluginFailure<PluginChangeRefusal>>;
   }

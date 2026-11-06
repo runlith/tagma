@@ -199,6 +199,7 @@ it.live('uninstalling a copied plugin removes the copy only after its process st
       },
     });
     const { root } = yield* plugins.install({ projectId, prepared, enabled: true, scope: 'project' });
+    if (root === null) return yield* Effect.die('an installed plugin is read from its own directory');
     yield* until(() => host.reading('fixture')?.state === 'idle');
     const serving = yield* Effect.forkScoped(said('hold'));
     yield* until(() => host.reading('fixture')?.state === 'running');
