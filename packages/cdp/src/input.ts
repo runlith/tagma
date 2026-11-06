@@ -155,6 +155,9 @@ const ORIGIN: Point = { x: 0, y: 0 };
 export type Pointer = { at: Point | null };
 
 const ENTRY_MARGIN = 0.15;
+const DETOUR_FROM = 120;
+const DETOUR_REACH = 260;
+const DETOUR_EDGE = 12;
 
 const entry = Effect.fnUntraced(function* (session: Session, target: Point) {
   const { cssVisualViewport: view } = yield* session.send('Page.getLayoutMetrics');
@@ -174,41 +177,80 @@ export const humanInput = (session: Session, pointer: Pointer = { at: null }) =>
     const start = pointer.at ?? (yield* entry(session, { x: to.x + offset.x, y: to.y + offset.y }));
     pointer.at = start;
     const from = { x: start.x - offset.x, y: start.y - offset.y };
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const distance = Math.hypot(dx, dy);
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
     if (distance < 1) return;
-    const bend = Math.min(100, Math.max(8, distance * between(0.08, 0.22))) * (Math.random() < 0.5 ? -1 : 1);
-    const normal = { x: -dy / distance, y: dx / distance };
-    const c1 = { x: from.x + dx * 0.28 + normal.x * bend, y: from.y + dy * 0.28 + normal.y * bend };
-    const c2 = { x: from.x + dx * 0.76 + normal.x * bend * 0.5, y: from.y + dy * 0.76 + normal.y * bend * 0.5 };
-    const duration = between(160, 280) + Math.sqrt(distance) * between(8, 14);
-    const steps = Math.max(12, Math.ceil(duration / 16));
-    const end = to;
-    for (let step = 1; step <= steps; step += 1) {
-      const t = step / steps;
-      const eased = t * t * (3 - 2 * t);
-      const u = 1 - eased;
-      const at = {
-        x: u ** 3 * from.x + 3 * u ** 2 * eased * c1.x + 3 * u * eased ** 2 * c2.x + eased ** 3 * end.x,
-        y: u ** 3 * from.y + 3 * u ** 2 * eased * c1.y + 3 * u * eased ** 2 * c2.y + eased ** 3 * end.y,
-      };
-      yield* session.send(
-        'Input.dispatchMouseEvent',
-        {
-          type: 'mouseMoved',
-          x: at.x,
-          y: at.y,
-          modifiers,
-          button: held ? 'left' : 'none',
-          buttons: held ? 1 : 0,
-        },
-        child,
+    const send = (at: Point) =>
+      Effect.andThen(
+        session.send(
+          'Input.dispatchMouseEvent',
+          { type: 'mouseMoved', x: at.x, y: at.y, modifiers, button: held ? 'left' : 'none', buttons: held ? 1 : 0 },
+          child,
+        ),
+        Effect.sync(() => {
+          pointer.at = { x: at.x + offset.x, y: at.y + offset.y };
+        }),
       );
-      pointer.at = { x: at.x + offset.x, y: at.y + offset.y };
-      yield* rest((duration / steps) * 0.7, (duration / steps) * 1.3);
+    const glide = Effect.fnUntraced(function* (a: Point, b: Point, share: number) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1) return;
+      const bend = Math.min(100, Math.max(8, length * share)) * (Math.random() < 0.5 ? -1 : 1);
+      const normal = { x: -dy / length, y: dx / length };
+      const c1 = { x: a.x + dx * 0.28 + normal.x * bend, y: a.y + dy * 0.28 + normal.y * bend };
+      const c2 = { x: a.x + dx * 0.76 + normal.x * bend * 0.5, y: a.y + dy * 0.76 + normal.y * bend * 0.5 };
+      const duration = between(160, 280) + Math.sqrt(length) * between(8, 14);
+      const steps = Math.max(12, Math.ceil(duration / 16));
+      for (let step = 1; step <= steps; step += 1) {
+        const t = step / steps;
+        const eased = t * t * (3 - 2 * t);
+        const u = 1 - eased;
+        yield* send({
+          x: u ** 3 * a.x + 3 * u ** 2 * eased * c1.x + 3 * u * eased ** 2 * c2.x + eased ** 3 * b.x,
+          y: u ** 3 * a.y + 3 * u ** 2 * eased * c1.y + 3 * u * eased ** 2 * c2.y + eased ** 3 * b.y,
+        });
+        yield* rest((duration / steps) * 0.7, (duration / steps) * 1.3);
+      }
+    });
+    const via = held ? null : yield* detour(from, to, offset, distance);
+    if (via === null) yield* glide(from, to, between(0.08, 0.22));
+    else {
+      yield* glide(from, via, between(0.02, 0.06));
+      const ahead = { x: (to.x - from.x) / distance, y: (to.y - from.y) / distance };
+      let at = via;
+      for (let drift = Math.floor(between(1, 4)); drift > 0; drift -= 1) {
+        yield* rest(60, 190);
+        const forward = between(0.3, 2);
+        const aside = between(-2, 2);
+        at = { x: at.x + ahead.x * forward - ahead.y * aside, y: at.y + ahead.y * forward + ahead.x * aside };
+        yield* send(at);
+      }
+      yield* rest(40, 160);
+      yield* glide(at, to, between(0.02, 0.06));
     }
     pointer.at = { x: to.x + offset.x, y: to.y + offset.y };
+  });
+
+  const detour = Effect.fnUntraced(function* (from: Point, to: Point, offset: Point, distance: number) {
+    if (distance < DETOUR_FROM || Math.random() >= (distance >= 250 ? 0.75 : 0.55)) return null;
+    const { cssVisualViewport: view } = yield* session.send('Page.getLayoutMetrics');
+    const along = between(0.35, 0.65);
+    const normal = { x: -(to.y - from.y) / distance, y: (to.x - from.x) / distance };
+    const inside = (at: Point) =>
+      at.x + offset.x > DETOUR_EDGE &&
+      at.x + offset.x < view.clientWidth - DETOUR_EDGE &&
+      at.y + offset.y > DETOUR_EDGE &&
+      at.y + offset.y < view.clientHeight - DETOUR_EDGE;
+    for (const away of [Math.min(DETOUR_REACH, distance * between(0.3, 0.6)), distance * 0.3]) {
+      const sides = (Math.random() < 0.5 ? [1, -1] : [-1, 1])
+        .map((side) => ({
+          x: from.x + (to.x - from.x) * along + normal.x * away * side,
+          y: from.y + (to.y - from.y) * along + normal.y * away * side,
+        }))
+        .filter(inside);
+      if (sides.length > 0) return sides[0]!;
+    }
+    return null;
   });
 
   const touch = Effect.fn('cdp.click')(function* (
@@ -327,9 +369,17 @@ export const humanInput = (session: Session, pointer: Pointer = { at: null }) =>
       const ticks = Math.max(3, Math.ceil(Math.hypot(delta.x, delta.y) / between(65, 110)));
       const weights = Array.from({ length: ticks }, () => between(0.65, 1.35));
       const sum = weights.reduce((total, weight) => total + weight, 0);
-      for (const weight of weights) {
-        yield* wheel(session, at, { x: (delta.x * weight) / sum, y: (delta.y * weight) / sum });
+      let spot = at;
+      for (const [index, weight] of weights.entries()) {
+        yield* wheel(session, spot, { x: (delta.x * weight) / sum, y: (delta.y * weight) / sum });
         yield* rest(35, 90);
+        if (index < weights.length - 1 && Math.random() < 0.45) {
+          const angle = between(0, Math.PI * 2);
+          const reach = between(1, 4);
+          spot = { x: spot.x + Math.cos(angle) * reach, y: spot.y + Math.sin(angle) * reach };
+          yield* session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: spot.x, y: spot.y, button: 'none', buttons: 0 });
+          pointer.at = spot;
+        }
       }
     }),
     drag: Effect.fn('cdp.drag')(function* (from: Point, to: Point) {
