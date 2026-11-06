@@ -92,6 +92,18 @@ test('an undeclared touch whose finger and scroll stood still is not motion', ()
   expect(retapped.unchecked).toEqual([]);
 });
 
+test('an unchanged row witnesses a frame that no text spans, unless the rows disagree', () => {
+  const renamed = (one: Frame): Frame => ({ ...one, sentinels: one.sentinels.map((sentinel) => ({ ...sentinel, id: sentinel.id + 100 })) });
+  const witnessed = displacement(recording('row-witness', [frame(0, 100, { moving: true }), renamed(frame(10, 300, { moving: true }))]));
+  expect(witnessed.unchecked).toEqual([]);
+  expect(witnessed.pairs[0]!.commonDelta).toBe(200);
+  const split = renamed(frame(10, 300, { moving: true }));
+  split.rows[1]!.rect = box(450, 100);
+  expect(displacement(recording('row-split', [frame(0, 100, { moving: true }), split])).unchecked).toEqual([
+    { frame: 1, reason: 'no-common-sentinel' },
+  ]);
+});
+
 test('a resized single row retains its unchanged text anchor while excluding reflowed paragraphs', () => {
   const first = frame(0, 100, {
     rows: [row('a', box(100, 600, 200))],

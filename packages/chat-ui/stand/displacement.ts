@@ -260,6 +260,17 @@ function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, whe
     smallest = Math.min(smallest, delta);
     largest = Math.max(largest, delta);
   }
+  let rowWitnesses = 0;
+  if (readings.length === 0)
+    for (const [key, row] of afterRows) {
+      const old = beforeRows.get(key);
+      if (old === undefined || changed.has(key) || !visible(old.rect, previous.viewport) || !visible(row.rect, current.viewport)) continue;
+      const delta = row.rect.top - old.rect.top;
+      smallest = Math.min(smallest, delta);
+      largest = Math.max(largest, delta);
+      rowWitnesses += 1;
+    }
+  const witnessed = readings.length > 0 || (rowWitnesses > 0 && !exceeds(largest - smallest, TOLERANCE));
   const active = drag !== undefined && index > drag.fromFrame && index <= drag.toFrame;
   const dragging = active && drag.preventFling;
   const stationary = dragging && drag.distance === 0 && drag.speed === 0;
@@ -275,7 +286,7 @@ function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, whe
     (drag?.preventFling === true && index > drag.toFrame
       ? false
       : (afterWheel ? current.moving : previous.moving || current.moving) || touching || active);
-  const commonDelta = readings.length === 0 ? null : (smallest + largest) / 2;
+  const commonDelta = witnessed ? (smallest + largest) / 2 : null;
   return {
     moving,
     touching,
