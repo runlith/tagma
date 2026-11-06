@@ -34,6 +34,12 @@ export type HeldContributions<W> = {
   readonly changed: (listener: (plugin: string) => void) => () => void;
 };
 
+type ContributionShown = {
+  readonly title: string | undefined;
+  readonly entries: readonly ContributionEntry[];
+  readonly uses: string | null;
+};
+
 export const checkedOf = <W>(checked: PluginChecked, point: PluginFaced<W>): W | undefined => checked[point.plugin.name] as W | undefined;
 
 export class PluginPoints extends Context.Service<
@@ -42,9 +48,7 @@ export class PluginPoints extends Context.Service<
     declare<W>(point: PluginFaced<W>, register: PluginRegister<W>): Effect.Effect<() => void>;
     hold<W>(point: PluginFaced<W>): Effect.Effect<HeldContributions<W>, never, Scope.Scope>;
     check(plugin: string, contributes: Readonly<Record<string, unknown>>): Result.Result<PluginChecked, string>;
-    title(name: string): string | undefined;
-    entries(name: string, value: unknown): readonly ContributionEntry[];
-    uses(name: string, value: unknown): string | null;
+    shown(name: string, value: unknown): ContributionShown;
     publish(plugin: PluginRef, checked: PluginChecked, caller: McpToolCaller): Effect.Effect<() => void, PluginPointRefused>;
   }
 >()('tagma/plugins/PluginPoints') {}

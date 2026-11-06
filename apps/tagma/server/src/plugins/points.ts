@@ -94,18 +94,16 @@ export const makePoints = () => {
       }
       return checked;
     },
-    title: (name) => points.get(name)?.point.plugin.title,
-    entries: (name, value) => {
+    shown: (name, value) => {
       const face = faces.get(name);
-      if (face?.entries === undefined) return [];
-      const decoded = contributionOf(face, value);
-      return Result.isSuccess(decoded) && decoded.success !== undefined ? face.entries(decoded.success) : [];
-    },
-    uses: (name, value) => {
-      const face = faces.get(name);
-      if (face?.uses === undefined) return null;
-      const decoded = contributionOf(face, value);
-      return Result.isSuccess(decoded) && decoded.success !== undefined ? face.uses(decoded.success) : null;
+      const decoded =
+        face === undefined || (face.entries === undefined && face.uses === undefined) ? undefined : contributionOf(face, value);
+      const read = decoded !== undefined && Result.isSuccess(decoded) ? decoded.success : undefined;
+      return {
+        title: face?.title,
+        entries: read === undefined ? [] : (face?.entries?.(read) ?? []),
+        uses: read === undefined ? null : (face?.uses?.(read) ?? null),
+      };
     },
     publish: Effect.fn('PluginPoints.publish')(function* (plugin, checked, caller) {
       const entries = Object.entries(checked).flatMap(([name, value]) => {

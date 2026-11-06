@@ -41,12 +41,11 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
 };
 
 const contributionComponent = (points: PluginPoints['Service'], point: string, value: unknown): PluginComponent => {
-  const entries = points.entries(point, value);
-  const uses = points.uses(point, value);
+  const { title, entries, uses } = points.shown(point, value);
   return {
     kind: 'contribution',
     name: point,
-    title: points.title(point),
+    title,
     ...(uses === null ? {} : { detail: uses }),
     ...(entries.length === 0 ? {} : { entries }),
   };
