@@ -1,3 +1,4 @@
+import { Failure } from '@runlith/layer/Failure';
 import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import { Platform } from '@runlith/layer/Platform';
@@ -48,11 +49,16 @@ export const WINDOW = Layer.mergeAll(
     if (import.meta.hot !== undefined) return unshownSheet;
     const platform = yield* Platform;
     const origin = yield* ServerOrigin;
-    return adoptedSheet(async (address) => {
-      const answer = await platform.fetch(new URL(address, origin.http));
-      if (!answer.ok) throw new Error(`${address} answered ${answer.status}`);
-      return answer.text();
-    });
+    const failure = yield* Failure;
+    return adoptedSheet(
+      async (address) => {
+        const answer = await platform.fetch(new URL(address, origin.http));
+        if (!answer.ok) throw new Error(`${address} answered ${answer.status}`);
+        return answer.text();
+      },
+      failure,
+      origin.http,
+    );
   }),
   Host.of(hostOf(desktop?.operatingSystem, liveBrowser(), storedShell(browserPlatform().storage.local), touchScreen(), installedApp())),
   ServerOrigin.of(window.location.origin),
