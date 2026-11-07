@@ -15,6 +15,9 @@ fields:
       },
       {
         "at": "contract/"
+      },
+      {
+        "at": "list.ts"
       }
     ],
     "id": "tagma-plugin-format",
@@ -32,6 +35,8 @@ edges:
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports
     to: 01a18921-850b-74c0-a119-c016a939df5d
+  - kind: imports
+    to: 01a189a0-4b54-758e-bef7-1061d6fd5286
 sources:
   - kind: dir
     ref: apps/tagma/server/src/plugin-formats/tagma
