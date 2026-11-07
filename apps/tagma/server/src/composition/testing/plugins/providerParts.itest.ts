@@ -8,6 +8,7 @@ import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/tes
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeDoorWorld } from '../doorFixture.js';
+import { settledThread } from '../native-harness/settled.fixture.js';
 
 type Answer = { readonly status: number; readonly body: unknown };
 type Row = {
@@ -27,9 +28,12 @@ const noInstall = Layer.effectDiscard(
   ),
 );
 
-const wire = (id: string) => `
+const wire = (id: string, baseURL = 'https://unused.invalid/v1') => `
 import { Effect } from 'effect';
 import { defineAdapter } from '@runlith/tagma/adapter/provider';
+import { consoleKey } from '@runlith/llm/profiles/credential';
+import { route } from '@runlith/llm/protocols/openai-compatible-chat';
+import { QuotaUnsupported } from '@runlith/llm/schema/quota';
 export default {
   models: defineAdapter(() => [
     {
@@ -37,15 +41,36 @@ export default {
       label: '${id}',
       kind: 'wire',
       auth: 'api-key',
-      models: { '${id}-1': { label: 'One', capacity: { context: 100000 }, capabilities: ['text'], reasoning: [], defaultReasoning: null } },
+      models: { '${id}-1': { label: 'One', capacity: { context: 100000, output: 1024 }, capabilities: ['text'], reasoning: [], defaultReasoning: null } },
       cacheLifetime: { promisedSeconds: null, prior: null },
       defaultTextModel: '${id}-1',
-      profile: { model: () => Effect.die('unused'), options: () => undefined, output: { budget: 100, sent: false } },
-      quota: { read: () => Effect.die('unused'), fromHeaders: () => null },
+      profile: {
+        model: (selection) =>
+          Effect.succeed(
+            route
+              .with({
+                provider: '${id}',
+                endpoint: { baseURL: '${baseURL}' },
+                auth: consoleKey(selection.credentials, selection.ownerId, '${id}', selection.account).bearer(),
+                limits: { output: 1024 },
+              })
+              .model({ id: selection.model }),
+          ),
+        options: () => undefined,
+        output: { budget: 1024, sent: true },
+      },
+      quota: { read: () => Effect.fail(new QuotaUnsupported()), fromHeaders: () => null },
     },
   ]),
 };
 `;
+
+const REPLY = [
+  { id: 'reply', choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello from the stub.' }, finish_reason: null }] },
+  { id: 'reply', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } },
+]
+  .map((frame) => `data: ${JSON.stringify(frame)}\n\n`)
+  .join('');
 
 const part = Effect.fnUntraced(function* (directory: string, id: string, code: string) {
   const files = yield* FileSystem.FileSystem;
@@ -58,28 +83,22 @@ const part = Effect.fnUntraced(function* (directory: string, id: string, code: s
   return directory;
 });
 
-class World extends Context.Service<
-  World,
-  {
-    readonly op: (id: string, input: unknown) => Effect.Effect<Answer>;
-    readonly root: string;
-    readonly registry: ProviderRegistry['Service'];
-  }
->()('testing/ProviderPartsWorld') {}
+const makeWorld = Effect.gen(function* () {
+  const door = yield* makeDoorWorld({ own: 'installs provider plugins and turns plugins off on the machine' });
+  const files = yield* FileSystem.FileSystem;
+  const projectId = yield* door.stealthProject();
+  const project = `project=${projectId}`;
+  return {
+    op: (id: string, input: unknown): Effect.Effect<Answer> => door.op(id, input, project),
+    root: yield* files.makeTempDirectoryScoped({ prefix: 'provider-parts-' }),
+    registry: Context.get(door.runtime.owners, ProviderRegistry),
+    settled: (threadId: string) => settledThread({ threadId, projectId }).pipe(Effect.provide(door.runtime.owners)),
+  };
+});
 
-const world = Layer.effect(
-  World,
-  Effect.gen(function* () {
-    const door = yield* makeDoorWorld({ own: 'installs provider plugins and turns plugins off on the machine' });
-    const files = yield* FileSystem.FileSystem;
-    const project = `project=${yield* door.stealthProject()}`;
-    return {
-      op: (id: string, input: unknown) => door.op(id, input, project),
-      root: yield* files.makeTempDirectoryScoped({ prefix: 'provider-parts-' }),
-      registry: Context.get(door.runtime.owners, ProviderRegistry),
-    };
-  }),
-);
+class World extends Context.Service<World, Effect.Success<typeof makeWorld>>()('testing/ProviderPartsWorld') {}
+
+const world = Layer.effect(World, makeWorld);
 
 const rows = Effect.fnUntraced(function* () {
   const { op } = yield* World;
@@ -171,6 +190,45 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
             expect(yield* op('uninstall_plugin', { id })).toMatchObject({ status: 200 });
           expect(yield* until(menu(), (listed) => !listed.includes('acme'))).not.toContain('acme');
         }),
+    );
+
+    it.effect('a thread runs a turn on the model a provider plugin from a folder brings, through that plugin’s own wire', () =>
+      Effect.gen(function* () {
+        const { op, root, settled } = yield* World;
+        const asked: { readonly authorization: string | null; readonly model: unknown }[] = [];
+        const stub = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              hostname: '127.0.0.1',
+              port: 0,
+              fetch: async (request) => {
+                if (new URL(request.url).pathname !== '/v1/chat/completions') return new Response('absent', { status: 404 });
+                const body = (await request.json()) as { readonly model?: unknown };
+                asked.push({ authorization: request.headers.get('authorization'), model: body.model });
+                return new Response(`${REPLY}data: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } });
+              },
+            }),
+          ),
+          (served) => Effect.promise(() => served.stop(true)),
+        );
+        const relay = yield* part(join(root, 'relay'), 'relay-plugin', wire('relay', `http://127.0.0.1:${stub.port}/v1`));
+        expect(yield* op('install_plugin', { source: relay })).toMatchObject({ status: 200 });
+        expect(yield* until(menu(), (listed) => listed.includes('relay'))).toContain('relay');
+        expect(yield* op('save_console_key', { provider: 'relay', key: 'relay-key' })).toMatchObject({ status: 200 });
+
+        const created = yield* op('create_thread', { type: 'tagma' });
+        const threadId = (created.body as { readonly snapshot: { readonly thread: { readonly id: string } } }).snapshot.thread.id;
+        expect(
+          yield* op('set_thread_model', { threadId, provider: 'relay', model: 'relay-1', reasoning: null, switches: {} }),
+        ).toMatchObject({
+          status: 200,
+        });
+        expect(yield* op('start_turn', { threadId, text: 'Say hello.', key: crypto.randomUUID() })).toMatchObject({ status: 200 });
+        expect((yield* settled(threadId)).latestRun).toMatchObject({ status: 'completed' });
+        expect(asked).toContainEqual({ authorization: 'Bearer relay-key', model: 'relay-1' });
+
+        expect(yield* op('uninstall_plugin', { id: 'relay-plugin' })).toMatchObject({ status: 200 });
+      }).pipe(Effect.scoped),
     );
 
     it.effect('an npm package installs by its name from the registry the machine’s npm configuration names', () =>
