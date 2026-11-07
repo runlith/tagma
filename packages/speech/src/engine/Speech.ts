@@ -64,7 +64,15 @@ export class Speech extends Context.Service<
       yield* Effect.forkScoped(
         Stream.runForEach(sources.parts, (parts) =>
           Effect.flatMap(standingOf(parts), (next) => Effect.andThen(replace(next), Deferred.succeed(first, next))),
-        ).pipe(Effect.ensuring(Effect.flatMap(standingOf([]), (empty) => Deferred.succeed(first, empty)))),
+        ).pipe(
+          Effect.ensuring(
+            Effect.suspend(() =>
+              latest !== undefined
+                ? Effect.void
+                : Effect.flatMap(standingOf([]), (empty) => Effect.andThen(replace(empty), Deferred.succeed(first, empty))),
+            ),
+          ),
+        ),
       );
       const opening = yield* Deferred.await(first);
       const current = (): Standing => latest ?? opening;

@@ -111,6 +111,7 @@ it.effect('passive catalog and account reads start no CLI until the provider is 
     const directories = makeHarnessDirectoryStore({ home, machine: 'fixture' });
     const defaults = DefaultAccounts.of({
       defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+      heldAccount: () => Effect.die('a passive CLI holds no speech provider'),
       saveDefaultAccount: () => Effect.die('no default account edit'),
       settleDefaultAccount: () => Effect.die('no default settlement'),
       forgetAccount: () => Effect.die('no account removal'),

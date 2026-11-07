@@ -174,6 +174,7 @@ const birthOn = Effect.fnUntraced(function* (
         DefaultAccounts,
         DefaultAccounts.of({
           defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+          heldAccount: () => Effect.die('choosing a model holds no speech provider'),
           saveDefaultAccount: () => Effect.die('choosing a model saves no account default'),
           settleDefaultAccount: () => Effect.die('choosing a model settles no account default'),
           forgetAccount: () => Effect.die('choosing a model forgets no account'),

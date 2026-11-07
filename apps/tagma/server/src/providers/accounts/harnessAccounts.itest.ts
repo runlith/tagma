@@ -134,6 +134,7 @@ const defaults = (): DefaultAccounts['Service'] => {
     Effect.sync(() => ({ account: (account = next === null ? null : AccountKey.make(next)), revision: ++revision }));
   return {
     defaultAccount: () => Effect.sync(() => ({ account, revision })),
+    heldAccount: () => Effect.die('harness accounts hold no speech provider'),
     saveDefaultAccount: save,
     settleDefaultAccount: (_unit, provider, next) => save(provider, next),
     forgetAccount: (provider, key) => (account === key ? save(provider, null) : Effect.succeed({ account, revision })),

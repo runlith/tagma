@@ -101,6 +101,7 @@ it.effect('a discovered model catalog survives a new registry and a failed refre
       ),
       Layer.succeed(DefaultAccounts, {
         defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+        heldAccount: () => Effect.die('catalogs hold no speech provider'),
         saveDefaultAccount: () => Effect.die('no default writes'),
         settleDefaultAccount: () => Effect.die('no default settlement'),
         forgetAccount: () => Effect.die('no account removal'),

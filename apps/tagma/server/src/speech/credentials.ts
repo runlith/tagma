@@ -35,7 +35,7 @@ export const credentialsLayer: Layer.Layer<SpeechCredentials, never, ProviderCre
         );
         const standing =
           account === undefined
-            ? (yield* Effect.mapError(defaults.defaultAccount(provider), (failure) => unreadable(provider, failure))).account
+            ? (yield* Effect.mapError(defaults.heldAccount(provider), (failure) => unreadable(provider, failure))).account
             : null;
         const choice =
           account === undefined

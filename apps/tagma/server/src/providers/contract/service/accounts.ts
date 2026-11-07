@@ -42,6 +42,7 @@ export class DefaultAccounts extends Context.Service<
   DefaultAccounts,
   {
     defaultAccount(provider: string, unit?: Unit<'machine'>, runId?: string): Effect.Effect<DefaultAccount, StoreFailure | GateRefusal>;
+    heldAccount(provider: string): Effect.Effect<DefaultAccount, StoreFailure>;
     saveDefaultAccount(
       provider: string,
       account: string | null,

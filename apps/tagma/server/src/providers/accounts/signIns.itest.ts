@@ -51,6 +51,7 @@ const accounts: SubscriptionAccounts = {
 
 const defaults: DefaultAccounts['Service'] = {
   defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+  heldAccount: () => Effect.die('sign-ins hold no speech provider'),
   saveDefaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
   settleDefaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
   forgetAccount: () => Effect.die('this test removes no uninstalled account'),

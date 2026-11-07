@@ -2,7 +2,7 @@ import type { AnyProvider, SpeechFault, SpeechPart } from '@runlith/speech/engin
 import { Speech } from '@runlith/speech/engine/Speech';
 import { type SpeechHost, SpeechSources } from '@runlith/speech/engine/SpeechSources';
 import { importProviders } from '@runlith/tagma/adapter/loader';
-import { Context, Effect, Layer, Stream } from 'effect';
+import { Context, Effect, Layer, Predicate, type Scope, Stream } from 'effect';
 import { PluginFaults, PluginRevisions, type ProviderPart, ProviderParts } from '../plugins/contract/service/plugins.js';
 import { PROVIDER_FAULTS } from '../plugins/contract/wire/rows.js';
 import { KeyedProviders } from '../providers/contract/service/credentials.js';
@@ -10,8 +10,14 @@ import { HOST_MODULES } from './hostModules.generated.js';
 
 export type BuiltinSpeech = ReadonlyMap<string, ReadonlyArray<AnyProvider<SpeechHost>>>;
 
+const keyed = (entry: unknown): entry is AnyProvider<SpeechHost> =>
+  Predicate.isObject(entry) &&
+  typeof entry['id'] === 'string' &&
+  Predicate.isObject(entry['credential']) &&
+  entry['credential']['_tag'] === 'required';
+
 const keyedOf = (parts: ReadonlyArray<SpeechPart<SpeechHost>>): ReadonlyArray<string> =>
-  parts.flatMap((part) => part.providers.filter((provider) => provider.credential._tag === 'required').map((provider) => provider.id));
+  parts.flatMap((part) => part.providers.filter(keyed).map((provider) => provider.id));
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -37,23 +43,38 @@ export const speechSourcesWith = <R>(builtinsOf: Effect.Effect<BuiltinSpeech, ne
           Effect.tap((part) => Effect.sync(() => imported.set(directory, part))),
         );
       };
-      const partsOf = (standing: readonly ProviderPart[]) =>
-        Effect.forEach(
-          standing.filter((row) => row.providers.speech && !row.off),
-          (row): Effect.Effect<ReadonlyArray<SpeechPart<SpeechHost>>> => {
-            if (row.directory !== null) return Effect.map(importedOf(row, row.directory), (part) => [part]);
-            const own = builtins.get(row.id);
-            return Effect.succeed(own === undefined ? [] : [{ owner: row.id, providers: own }]);
-          },
-        ).pipe(Effect.map((parts) => parts.flat()));
-      let standing = yield* partsOf(rows.current());
-      const parts = Stream.mapEffect(rows.changes, (current) =>
-        Effect.tap(partsOf(current), (next) =>
-          Effect.sync(() => {
+      const revisions = yield* PluginRevisions;
+      let standing: ReadonlyArray<SpeechPart<SpeechHost>> = [];
+      yield* revisions.register({
+        standing: () => new Set(standing.flatMap((part) => (part.revision === undefined ? [] : [part.revision]))),
+      });
+      const partOf = (row: ProviderPart): Effect.Effect<ReadonlyArray<SpeechPart<SpeechHost>> | null, never, Scope.Scope> => {
+        if (row.directory === null) {
+          const own = builtins.get(row.id);
+          return Effect.succeed(own === undefined ? [] : [{ owner: row.id, providers: own }]);
+        }
+        const directory = row.directory;
+        return Effect.flatMap(revisions.hold(directory), (held) =>
+          held ? Effect.map(importedOf(row, directory), (part) => [part]) : Effect.succeed(null),
+        );
+      };
+      const settled = (current: readonly ProviderPart[]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const found = yield* Effect.forEach(
+              current.filter((row) => row.providers.speech && !row.off),
+              partOf,
+            );
+            if (found.some((part) => part === null)) return null;
+            const next = found.flatMap((part) => part ?? []);
             standing = next;
+            return next;
           }),
-        ),
-      );
+        );
+      const reload = (current: readonly ProviderPart[]): Effect.Effect<ReadonlyArray<SpeechPart<SpeechHost>>> =>
+        Effect.flatMap(settled(current), (next) => (next === null ? Effect.suspend(() => reload(rows.current())) : Effect.succeed(next)));
+      yield* reload(rows.current());
+      const parts = Stream.mapEffect(rows.changes, reload);
       return Context.make(SpeechSources, SpeechSources.of({ parts })).pipe(
         Context.add(KeyedProviders, KeyedProviders.of({ ids: () => keyedOf(standing) })),
       );

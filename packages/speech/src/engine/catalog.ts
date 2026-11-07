@@ -87,6 +87,10 @@ const recognitionConsistent = (capabilities: RecognitionCapabilities, where: str
 };
 
 const providerConsistent = <R>(provider: AnyProvider<R>) => {
+  const form: unknown = provider.credential;
+  if (typeof form !== 'object' || form === null || !('_tag' in form) || (form._tag !== 'none' && form._tag !== 'required'))
+    throw new Error(`Speech provider "${provider.id}" declares no credential form.`);
+  if (typeof provider.availability !== 'function') throw new Error(`Speech provider "${provider.id}" declares no availability.`);
   const recognizer = provider.recognizer;
   const synthesizer = provider.synthesizer;
   if (recognizer === undefined && synthesizer === undefined)
@@ -133,10 +137,15 @@ const providerConsistent = <R>(provider: AnyProvider<R>) => {
   }
 };
 
+const idOf = (provider: unknown): string =>
+  typeof provider === 'object' && provider !== null && 'id' in provider && typeof provider.id === 'string' ? provider.id : '';
+
 const refusalOf = <R>(provider: AnyProvider<R>, holders: ReadonlyMap<string, string>): string | undefined => {
-  if (typeof provider.id !== 'string' || provider.id === '') return 'Speech provider has an empty id.';
-  const holder = holders.get(provider.id);
-  if (holder !== undefined) return `Speech provider "${provider.id}" is already declared by ${holder}.`;
+  if (typeof provider !== 'object' || provider === null) return 'A speech list entry is not a speech provider.';
+  const id = idOf(provider);
+  if (id === '') return 'Speech provider has an empty id.';
+  const holder = holders.get(id);
+  if (holder !== undefined) return `Speech provider "${id}" is already declared by ${holder}.`;
   try {
     providerConsistent(provider);
     return undefined;
@@ -154,7 +163,7 @@ export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>): SpeechCat
     for (const provider of part.providers) {
       const reason = refusalOf(provider, holders);
       if (reason !== undefined) {
-        faults.push({ owner: part.owner, provider: typeof provider.id === 'string' ? provider.id : '', reason });
+        faults.push({ owner: part.owner, provider: idOf(provider), reason });
         continue;
       }
       holders.set(provider.id, part.owner);

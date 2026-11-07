@@ -92,6 +92,8 @@ export const defaultAccountsLayer = (
           );
         }),
 
+        heldAccount: (provider) => units.read((read) => rows.read(read, OPERATOR_PRINCIPAL, sourceOf(provider))),
+
         saveDefaultAccount: Effect.fnUntraced(function* (provider, account, expectedRevision) {
           if (account !== null) yield* known(provider);
           const source = sourceOf(provider);

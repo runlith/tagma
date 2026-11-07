@@ -9,8 +9,6 @@ export class Catalog extends Service<Catalog>()('SpeechCatalog', { tier: 'app' }
     return new Catalog(yield* Live, yield* SpeechRepo, yield* Scope, yield* Failure);
   }
 
-  private opened = false;
-
   constructor(
     live: LiveConnection,
     private readonly speech: SpeechRepo,
@@ -29,7 +27,7 @@ export class Catalog extends Service<Catalog>()('SpeechCatalog', { tier: 'app' }
   }
 
   private moved(): void {
-    if (this.opened && this.speech.status.data !== undefined) void this.speech.status.refresh();
-    this.opened = true;
+    const status = this.speech.status;
+    if (status.watch() !== undefined || status.watchError() !== undefined || status.watchFetching()) void status.refresh();
   }
 }

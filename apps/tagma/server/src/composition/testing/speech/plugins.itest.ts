@@ -4,6 +4,8 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { chunk } from '@runlith/audio/sound/chunk';
 import { ended } from '@runlith/audio/sound/track';
 import { layer } from '@runlith/effect-test';
+import type { RecognitionChoice } from '@runlith/speech/engine/choose';
+import type { SpeechSet } from '@runlith/speech/engine/set';
 import { Speech } from '@runlith/speech/engine/Speech';
 import { LIVE } from '@runlith/speech/wire/capabilities';
 import { Context, Effect, Exit, FileSystem, Layer, Schedule, Scope, Stream } from 'effect';
@@ -26,21 +28,25 @@ const noInstall = Layer.effectDiscard(
   ),
 );
 
-const echo = (id: string, label: string, words: string, turns = "['provider']") => `
-import { Deferred, Effect, Stream } from 'effect';
+type Shape = { readonly turns?: string; readonly keyed?: boolean; readonly preamble?: string; readonly leading?: string };
+
+const echo = (id: string, label: string, words: string, shape: Shape = {}) => `
+import { Deferred, Effect, Schema, Stream } from 'effect';
 import { SpeechEvent } from '@runlith/speech/wire/events';
+${shape.preamble ?? ''}
 const model = {
   id: '${id}-1',
   label: '${label}',
   recognition: {
-    kind: 'stream', rates: [16000], partials: false, turns: ${turns}, finalize: false, timestamps: 'segment',
+    kind: 'stream', rates: [16000], partials: false, turns: ${shape.turns ?? "['provider']"}, finalize: false, timestamps: 'segment',
     speakers: false, confidence: false, languages: { codes: ['en'], hints: 1, detect: true },
     prompting: { prompt: false, terms: false }, limits: {}, tuning: [],
   },
 };
 export default {
-  speech: [{
-    id: '${id}', label: '${id}', credential: { _tag: 'none', value: undefined }, egress: [],
+  speech: [${shape.leading ?? ''}{
+    id: '${id}', label: '${id}', egress: [],
+    credential: ${shape.keyed === true ? "{ _tag: 'required', schema: Schema.Struct({ apiKey: Schema.String }) }" : "{ _tag: 'none', value: undefined }"},
     availability: () => Effect.succeed({ _tag: 'present' }),
     recognizer: {
       models: [model],
@@ -119,12 +125,16 @@ const until = <A, R>(read: Effect.Effect<A, never, R>, done: (value: A) => boole
 
 const format = { rate: 16_000, channels: 1 };
 
-const heard = Effect.fnUntraced(function* (speech: Speech['Service']) {
+const track = () => ({ format, chunks: Stream.make(chunk(format, 0n, new Int16Array(3_200)), ended('drained')), end: Effect.void });
+
+const words = (set: SpeechSet, choice: RecognitionChoice) =>
+  Effect.map(Stream.runCollect(set.recognize(choice, track(), { track: 'mic', origin: 0n })), (all) =>
+    all.flatMap((one) => (one._tag === 'Utterance' && one.closed ? [one.text] : [])),
+  );
+
+const heard = Effect.fnUntraced(function* (speech: Speech['Service'], provider = 'echo') {
   const set = yield* speech.take;
-  const choice = yield* set.recognizer({ kinds: LIVE, provider: 'echo' });
-  const track = { format, chunks: Stream.make(chunk(format, 0n, new Int16Array(3_200)), ended('drained')), end: Effect.void };
-  const all = yield* Stream.runCollect(set.recognize(choice, track, { track: 'mic', origin: 0n }));
-  return all.flatMap((one) => (one._tag === 'Utterance' && one.closed ? [one.text] : []));
+  return yield* words(set, yield* set.recognizer({ kinds: LIVE, provider }));
 });
 
 layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
@@ -174,7 +184,7 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
       Effect.gen(function* () {
         const { op, root } = yield* World;
         const broken = yield* part(join(root, 'thrown'), 'thrown-speech', "throw new Error('the speech part is broken');\n");
-        const bent = yield* part(join(root, 'bent'), 'bent-speech', echo('bent', 'Bent', 'never', '[]'));
+        const bent = yield* part(join(root, 'bent'), 'bent-speech', echo('bent', 'Bent', 'never', { turns: '[]' }));
         for (const source of [broken, bent]) expect(yield* op('install_plugin', { source })).toMatchObject({ status: 200 });
         const faulted = yield* until(rows(), (listed) =>
           ['thrown-speech', 'bent-speech'].every((id) =>
@@ -189,6 +199,76 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
         ]);
         expect((yield* status()).some((model) => model.provider === 'openai')).toBe(true);
         for (const id of ['thrown-speech', 'bent-speech']) expect(yield* op('uninstall_plugin', { id })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a null in a speech list reads broken beside its valid provider, and the fixed rebuild still reaches the catalog', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const folder = yield* part(join(root, 'holey'), 'holey-speech', echo('holey', 'Holey A', 'holey', { leading: 'null, ' }));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        const faulted = yield* until(rows(), (listed) =>
+          Boolean(listed.find((row) => row.id === 'holey-speech')?.faults.some((fault) => fault.point === 'speech')),
+        );
+        expect(faulted.find((row) => row.id === 'holey-speech')?.faults).toEqual([
+          expect.objectContaining({ point: 'speech', detail: expect.stringContaining('not a speech provider') }),
+        ]);
+        expect((yield* status()).find((model) => model.provider === 'holey')).toMatchObject({ label: 'Holey A' });
+
+        yield* part(folder, 'holey-speech', echo('holey', 'Holey B', 'holey'));
+        yield* until(status(), (models) => models.some((model) => model.label === 'Holey B'));
+        const cleared = yield* until(rows(), (listed) => listed.find((row) => row.id === 'holey-speech')?.faults.length === 0);
+        expect(cleared.find((row) => row.id === 'holey-speech')?.faults).toEqual([]);
+        expect(yield* op('uninstall_plugin', { id: 'holey-speech' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a recognition on a keyed provider with no account named still signs after its plugin is turned off everywhere', () =>
+      Effect.gen(function* () {
+        const { op, root, speech } = yield* World;
+        const folder = yield* part(join(root, 'keyed'), 'keyed-speech', echo('keyed', 'Keyed', 'signed words', { keyed: true }));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        yield* until(status(), (models) => models.some((model) => model.provider === 'keyed'));
+        expect(yield* op('save_console_key', { provider: 'keyed', key: 'keyed-key' })).toMatchObject({ status: 200 });
+
+        const work = yield* Scope.make();
+        const set = yield* Scope.provide(speech.take, work);
+        const choice = yield* set.recognizer({ kinds: LIVE, provider: 'keyed' });
+        expect(yield* op('enable_plugin', { id: 'keyed-speech', enabled: false, scope: 'machine' })).toMatchObject({ status: 200 });
+        yield* until(status(), (models) => !models.some((model) => model.provider === 'keyed'));
+        expect(yield* words(set, choice)).toEqual(['signed words']);
+        yield* Scope.close(work, Exit.void);
+        expect((yield* speech.now).recognition.some((offer) => offer.provider === 'keyed')).toBe(false);
+
+        expect(yield* op('enable_plugin', { id: 'keyed-speech', enabled: true, scope: 'machine' })).toMatchObject({ status: 200 });
+        expect(yield* op('uninstall_plugin', { id: 'keyed-speech' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a revision still importing is kept through an uninstall and leaves once its part is withdrawn', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        const gate = join(root, 'gate');
+        const started = join(root, 'started');
+        const folder = yield* part(join(root, 'slow'), 'slow-speech', echo('slow', 'Slow A', 'slow'));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        yield* until(status(), (models) => models.some((model) => model.label === 'Slow A'));
+
+        const preamble = `
+import { existsSync, writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(started)}, import.meta.dir);
+while (!existsSync(${JSON.stringify(gate)})) await Bun.sleep(10);
+`;
+        yield* part(folder, 'slow-speech', echo('slow', 'Slow B', 'slow', { preamble }));
+        yield* until(files.exists(started).pipe(Effect.orDie), (standing) => standing);
+        const importing = join(yield* files.readFileString(started), '..');
+        expect(yield* op('uninstall_plugin', { id: 'slow-speech' })).toMatchObject({ status: 200 });
+        expect(yield* files.exists(importing)).toBe(true);
+
+        yield* files.writeFileString(gate, '');
+        yield* until(status(), (models) => !models.some((model) => model.provider === 'slow'));
+        expect(yield* until(files.exists(importing).pipe(Effect.orDie), (standing) => !standing)).toBe(false);
       }),
     );
   },

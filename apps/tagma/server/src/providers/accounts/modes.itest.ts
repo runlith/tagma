@@ -258,6 +258,7 @@ it.effect('a harness thread launches on its directory account whatever mode is s
     const rows = makeHarnessDirectoryStore({ home: path, machine: 'machine' });
     const defaults: DefaultAccounts['Service'] = {
       defaultAccount: () => Effect.succeed({ account: null, revision: 0 }),
+      heldAccount: () => Effect.die('the launch test holds no speech provider'),
       saveDefaultAccount: () => Effect.die('the launch test saves no default'),
       settleDefaultAccount: () => Effect.die('the launch test settles no default'),
       forgetAccount: () => Effect.die('the launch test forgets no account'),
