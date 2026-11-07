@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import LayoutGrid from '@lucide/svelte/icons/layout-grid';
   import Plus from '@lucide/svelte/icons/plus';
   import Store from '@lucide/svelte/icons/store';
@@ -41,6 +43,8 @@
   const builtin = (item: Here): boolean => item.kind === 'plugin' && item.row.builtin;
   const installed = $derived(shown.filter((item) => !builtin(item)));
   const built = $derived(shown.filter(builtin));
+  let builtOpen = $state(false);
+  const builtShown = $derived(builtOpen ? built : built.filter((item) => samePlace(placeOfHere(item), place)));
 
   const ROW = 'relative flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-ui transition-colors';
   const rowClass = (current: boolean, quiet = false) => [
@@ -103,11 +107,17 @@
       {/if}
 
       {#if built.length > 0}
-        <p class="eyebrow flex items-baseline px-2 pt-4 pb-1 text-muted-foreground/70">
-          <span class="flex-1">Built into Tagma</span>
-          <span class="stamp tabular">{built.length}</span>
-        </p>
-        {#each built as item (item.key)}
+        <button
+          type="button"
+          class={[rowClass(false, true), 'mt-1 text-left']}
+          aria-expanded={builtOpen}
+          onclick={() => (builtOpen = !builtOpen)}
+        >
+          {#if builtOpen}<ChevronDown class="size-4 shrink-0" />{:else}<ChevronRight class="size-4 shrink-0" />{/if}
+          <FadeText text="Built into Tagma" class="flex-1" />
+          <span class="stamp tabular text-muted-foreground/70">{built.length}</span>
+        </button>
+        {#each builtShown as item (item.key)}
           {@render hereRow(item)}
         {/each}
       {/if}

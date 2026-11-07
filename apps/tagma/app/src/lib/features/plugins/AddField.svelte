@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+  import { MCP_SERVER_LINK } from '@tagma/server/mcp/contract/wire/link';
+  import { PLUGIN_LINK } from '@tagma/server/plugins/contract/wire/link';
   import Package from '@lucide/svelte/icons/package';
   import Plug from '@lucide/svelte/icons/plug';
   import Store from '@lucide/svelte/icons/store';
@@ -12,6 +14,8 @@
   import FadeText from '$lib/shared/FadeText.svelte';
   import { Refusal, toldOf } from '$lib/wire/refusal.js';
   import type { Told } from '$lib/wire/told.js';
+  import type { Link } from '$lib/features/opening/Link.js';
+  import { Opening } from '$lib/features/opening/Opening.svelte.js';
   import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
   import { McpRepo, type McpDeclarationInput } from '$lib/features/mcp/Repo.js';
   import { addressOf } from '$lib/features/plugins/address.js';
@@ -32,27 +36,33 @@
     oncancel: () => void;
   } = $props();
 
+  type Added = { readonly at: Place; readonly said: string; readonly link: Link | null };
+
   const plugins = PluginsRepo.use();
   const mcp = McpRepo.use();
+  const opening = Opening.use();
 
   let typed = $state('');
   let busy = $state(false);
   let failed = $state<Told | undefined>(undefined);
   let refusal = $state<{ code: string; reason: string; unblock: readonly string[] } | undefined>(undefined);
   let found = $state<{ readonly at: string; readonly what: Found } | undefined>(undefined);
+  let added = $state<Added | null>(null);
 
   const address = $derived(addressOf(typed));
   const reach = $derived(scope === 'user' ? 'all your projects' : project.name);
 
-  async function act(work: () => Promise<Place | null>): Promise<void> {
+  async function act(work: () => Promise<Added | null>): Promise<void> {
     busy = true;
     failed = undefined;
+    added = null;
     try {
-      const at = await work();
+      const done = await work();
       typed = '';
       found = undefined;
       refusal = undefined;
-      await ondone(at === null ? null : idOf(at));
+      added = done;
+      await ondone(done === null ? null : idOf(done.at));
     } catch (error: unknown) {
       failed = toldOf(error);
       refusal = error instanceof Refusal ? { code: error.code, reason: error.reason, unblock: error.unblock } : undefined;
@@ -64,12 +74,24 @@
   const addSource = (source: string) =>
     act(async () => {
       const marketplace = await plugins.addMarketplace.run({ source }, { throwOnError: true });
-      return marketplace === undefined ? null : { kind: 'source', id: marketplace.id };
+      return marketplace === undefined
+        ? null
+        : {
+            at: { kind: 'source', id: marketplace.id },
+            said: `Added the source ${marketplace.title}; its plugins are in the Plugins catalog.`,
+            link: null,
+          };
     });
   const installPrepared = (prepared: string) =>
     act(async () => {
       const plugin = await plugins.installPrepared.run({ projectId: project.id, prepared, scope }, { throwOnError: true });
-      return plugin === undefined ? null : { kind: 'plugin', id: plugin.id };
+      return plugin === undefined
+        ? null
+        : {
+            at: { kind: 'plugin', id: plugin.id },
+            said: `Added ${plugin.title ?? plugin.id} to ${reach}.`,
+            link: { kind: PLUGIN_LINK, target: { projectId: project.id, id: plugin.id } },
+          };
     });
 
   async function inspect(source: string): Promise<void> {
@@ -86,8 +108,12 @@
   }
   const declare = (declaration: McpDeclarationInput) =>
     act(async () => {
-      await mcp.add.run({ projectId: project.id, scope: 'project', declaration }, { throwOnError: true });
-      return { kind: 'server', scope: 'project', name: declaration.name };
+      await mcp.add.run({ projectId: project.id, scope, declaration }, { throwOnError: true });
+      return {
+        at: { kind: 'server', scope, name: declaration.name },
+        said: `Added the server ${declaration.name} to ${reach}.`,
+        link: { kind: MCP_SERVER_LINK, target: { projectId: project.id, scope, name: declaration.name, contributor: null } },
+      };
     });
 </script>
 
@@ -145,10 +171,13 @@
             <FadeText text={shown.preview.title ?? shown.preview.id} class="text-ui font-medium" />
             <FadeText text={shown.preview.description ?? 'One plugin'} class="text-small text-muted-foreground" />
           </span>
-          <Button disabled={busy} onclick={() => void installPrepared(shown.preview.prepared)}>Add to {reach}</Button>
+          <Button disabled={busy} onclick={() => void installPrepared(shown.preview.prepared)}
+            >Add to {shown.preview.providers !== undefined && shown.preview.components.length === 0 ? 'all your projects' : reach}</Button
+          >
         </div>
         <Gives
           components={shown.preview.components}
+          providers={shown.preview.providers}
           ignored={shown.preview.ignored}
           consent={shown.preview.consent}
           options={shown.preview.options}
@@ -159,7 +188,7 @@
     {#key typed}
       <div class="overflow-hidden rounded-lg border">
         <p class="bg-sunken px-3 pt-3 text-small text-muted-foreground">
-          {address.kind === 'service' ? 'A service agents reach over the network' : 'A program agents run on this computer'}, for {project.name}.
+          {address.kind === 'service' ? 'A service agents reach over the network' : 'A program agents run on this computer'}, for {reach}.
         </p>
         <McpDeclarationForm start={address.start} {busy} {refusal} onsubmit={(declaration) => void declare(declaration)} {oncancel} />
       </div>
@@ -167,4 +196,13 @@
   {/if}
 
   {#if failed !== undefined && address.kind === 'source'}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
+  {#if added !== null && address.kind === 'empty'}
+    {@const link = added.link}
+    <div class="flex items-center gap-3">
+      <p class="flex-1 text-ui text-muted-foreground">{added.said}</p>
+      {#if link !== null}
+        <Button size="sm" variant="outline" onclick={() => void opening.open(link, 'full')}>Open it</Button>
+      {/if}
+    </div>
+  {/if}
 </div>

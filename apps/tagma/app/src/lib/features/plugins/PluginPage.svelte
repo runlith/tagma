@@ -119,21 +119,17 @@
 
   const machine = (enabled: boolean) => enable(enabled, 'machine');
 
-  const where = $derived(
-    row.off
-      ? 'Turned off everywhere on this machine'
-      : row.builtin
-        ? 'Built into Tagma'
-        : onlyProviders(row)
-          ? 'Its providers serve all your projects'
-          : row.everywhere
-            ? row.enabled
-              ? 'Runs in all your projects'
-              : `Off in ${project.name}, on in your other projects`
-            : row.enabled
-              ? `Runs in ${project.name}`
-              : `Off in ${project.name}`,
-  );
+  const SERVE = 'its providers serve all your projects';
+
+  const where = $derived.by(() => {
+    if (row.off) return 'Turned off everywhere on this machine';
+    if (row.builtin) return 'Built into Tagma';
+    if (onlyProviders(row)) return 'Its providers serve all your projects';
+    if (row.enabled) return row.everywhere ? 'Runs in all your projects' : `Runs in ${project.name}`;
+    const off = row.everywhere ? `Off in ${project.name}, on in your other projects` : `Off in ${project.name}`;
+    return row.providers === undefined ? off : `${off}; ${SERVE}`;
+  });
+  const listed = $derived(projected || !row.off || item.newer !== null);
 </script>
 
 {#snippet more()}
@@ -165,7 +161,7 @@
           >Update to {item.newer}</DropdownMenu.Item
         >
       {/if}
-      <DropdownMenu.Separator />
+      {#if listed}<DropdownMenu.Separator />{/if}
       <DropdownMenu.Item icon={Trash2} variant="destructive" disabled={busy !== null} onSelect={() => void remove()}>
         Remove from this machine
       </DropdownMenu.Item>

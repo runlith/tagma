@@ -37,7 +37,7 @@ const anthropic: PluginRow = {
   faults: [],
 };
 
-test('a built-in plugin’s card offers only the machine switch, and turning it off everywhere switches it off on the machine', async () => {
+test('a built-in plugin’s card has one act, and it switches the plugin off on the machine', async () => {
   const switched = Promise.withResolvers<unknown>();
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
   const app = mountShell(
@@ -65,8 +65,8 @@ test('a built-in plugin’s card offers only the machine switch, and turning it 
       onremoved: () => undefined,
     });
     flushSync();
-    const buttons = [...target.querySelectorAll('button')];
-    expect(buttons.map((button) => button.textContent?.trim())).toEqual(['Turn off everywhere']);
+    const buttons = target.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
     buttons[0]!.click();
     expect(await switched.promise).toEqual({ id: 'anthropic', enabled: false, scope: 'machine' });
   } finally {

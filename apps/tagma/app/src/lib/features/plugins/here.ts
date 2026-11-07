@@ -1,6 +1,6 @@
 import type { EntryRow } from '@tagma/server/marketplaces/contract/wire/rows';
 import type { McpServerRow } from '@tagma/server/mcp/contract/wire/servers';
-import type { PluginProcessRow, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+import { type PluginProcessRow, type PluginRow, PROVIDER_FAULTS } from '@tagma/server/plugins/contract/wire/rows';
 
 export type HereState = 'waits' | 'fails' | 'connecting' | 'update' | 'ok' | 'off';
 
@@ -78,15 +78,16 @@ export const processShown = (row: PluginRow): PluginProcessRow | undefined =>
     ? row.process
     : undefined;
 
-const PROVIDER_POINTS: ReadonlySet<string> = new Set(['providers', 'speech']);
+const PROVIDER_POINTS: ReadonlySet<string> = new Set(Object.values(PROVIDER_FAULTS));
 
-export const onlyProviders = (row: PluginRow): boolean => row.providers !== undefined && row.components.length === 0;
+export const onlyProviders = (row: PluginRow): boolean =>
+  row.providers !== undefined && row.process === undefined && row.components.length === 0;
 
 export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
   if (row.refused !== undefined && !stillWorking(row)) return 'fails';
   if (row.off) return 'off';
   if (row.faults.some((fault) => PROVIDER_POINTS.has(fault.point))) return 'fails';
-  if (!row.enabled && !onlyProviders(row)) return 'off';
+  if (!row.enabled && row.providers === undefined) return 'off';
   const states = [...servers.map(serverState), ...(row.process === undefined ? [] : [processState(row.process)])];
   if (states.includes('waits') || row.options.some((option) => option.required && !option.set)) return 'waits';
   if (states.includes('fails')) return 'fails';

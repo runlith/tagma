@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PluginComponent, PluginPreview, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+  import type { PluginComponent, PluginPreview, PluginProviders, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
   import Bot from '@lucide/svelte/icons/bot';
   import Globe from '@lucide/svelte/icons/globe';
   import KeyRound from '@lucide/svelte/icons/key-round';
@@ -25,7 +25,7 @@
     options,
   }: {
     components: readonly PluginComponent[];
-    providers?: PluginRow['providers'];
+    providers?: PluginProviders | undefined;
     ignored: PluginRow['ignored'];
     consent?: PluginPreview['consent'];
     options: PluginRow['options'];
@@ -48,7 +48,6 @@
     hook: Zap,
     process: Terminal,
     contribution: Puzzle,
-    provider: Cpu,
   };
 
   const said = $derived(components.map(saidOf));
@@ -84,8 +83,8 @@
 {/snippet}
 
 {#if brought.length > 0 || said.length > 0}
-  <section class="grid gap-2" aria-label="What agents get">
-    <h3 class="text-small font-medium text-muted-foreground">What agents get</h3>
+  <section class="grid gap-2" aria-label="What it brings">
+    <h3 class="text-small font-medium text-muted-foreground">What it brings</h3>
     <div class="grid divide-y rounded-lg border bg-raised">
       {#each brought as one (one.kind)}{@render line(BROUGHT[one.kind], one.title, one.detail)}{/each}
       {#each said as one, index (index)}{@render line(ICONS[one.kind], one.title, one.detail)}{/each}

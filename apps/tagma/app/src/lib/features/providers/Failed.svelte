@@ -14,7 +14,7 @@
 </script>
 
 {#each failed as adapter (adapter.id)}
-  <Callout tone="error" title="The plugin {adapter.id} could not load its providers" note={adapter.reason}>
+  <Callout tone="error" title="{adapter.title} could not load its providers" note={adapter.reason}>
     {#snippet actions()}
       {#if projectId !== null}
         <Button
