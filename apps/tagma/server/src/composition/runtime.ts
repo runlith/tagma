@@ -55,8 +55,9 @@ import { desktopBrowser } from '../desktop-browser/desktop-browser.js';
 import { providers } from '../providers/providers.js';
 import type { VendorWire } from '../providers/accounts/signIns.js';
 import { SignIns, VendorWires } from '../providers/contract/service/signIns.js';
-import { AdapterPlaces, type AdapterSource, BuiltinAdapters } from '../providers/contract/service/registry.js';
-import { adapterPlaces, BUILTIN_ADAPTERS } from './adapters.js';
+import type { AdapterSource } from '../providers/contract/service/registry.js';
+import { BUILTIN_ADAPTERS, BUILTIN_PLUGINS } from './adapters.js';
+import { adapterSourcesLayer } from './adapterSources.js';
 import { dataPathOf, MachineStore, GraphStore, storeDirectory } from '../platform/contract/service/store.js';
 import { type AssemblyInvalid, type Started, start } from './start.js';
 import { MachineUnits, GraphUnits } from '../platform/contract/service/units.js';
@@ -82,7 +83,7 @@ import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { McpPlaces } from '../mcp/contract/service/places.js';
 import { pluginServersLayer } from '../plugins/servers.js';
 import { plugins } from '../plugins/plugins.js';
-import { PluginPlaces } from '../plugins/contract/service/plugins.js';
+import { BuiltinPlugins, PluginPlaces } from '../plugins/contract/service/plugins.js';
 import { PluginFormats } from '../plugins/contract/service/format.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
 import { tagmaFormat } from '../plugin-formats/tagma/format.js';
@@ -105,7 +106,7 @@ import { installationAnchor } from '../installation/paths.js';
 import { harnessIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
 import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
-import { packageHoldersLayer } from '../external-harnesses/store/packages.js';
+import { packageHoldersLayer, revisionRecordsLayer } from '../external-harnesses/store/packages.js';
 import { AccountCli, LoginPlaces } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
 import { makeHarnessAdapters } from '../external-harnesses/adapters.js';
@@ -449,9 +450,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const providerLayer = providers.lifetimes.installation.pipe(
     Layer.provide(Layer.succeed(CredentialFiles, { tokensPath: options.tokensPath })),
     Layer.provide(spoken.sources),
-    Layer.provide(Layer.succeed(BuiltinAdapters, { sources: options.adapters ?? BUILTIN_ADAPTERS })),
-    Layer.provide(Layer.succeed(AdapterPlaces, adapterPlaces(dataPath))),
-    Layer.provide(packageHoldersLayer.pipe(Layer.provide(Layer.succeed(HarnessAdapters, adapters)))),
+    Layer.provide(adapterSourcesLayer(dataPath, options.adapters ?? BUILTIN_ADAPTERS)),
     Layer.provide(
       options.quotaProviders === undefined ? Layer.empty : Layer.succeed(QuotaProviders, { providers: options.quotaProviders }),
     ),
@@ -568,6 +567,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       plugins.lifetimes.installation.pipe(
         Layer.provideMerge(Layer.succeed(PluginPlaces, { home: pluginsHome })),
         Layer.provide(Layer.succeed(PluginFormats, [tagmaFormat, claudeCodeFormat, codexFormat, agentPluginsFormat])),
+        Layer.provide(Layer.succeed(BuiltinPlugins, BUILTIN_PLUGINS)),
+        Layer.provide(revisionRecordsLayer),
       ),
     ),
     Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)))),
@@ -676,6 +677,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             ),
             closing('landing', landing.lifetimes.installation),
             closing('external harness sessions', externalHarnesses.lifetimes.installation.pipe(Layer.provide(BunFileSystem.layer))),
+            packageHoldersLayer.pipe(Layer.provide(Layer.succeed(HarnessAdapters, adapters))),
           ).pipe(
             Layer.provideMerge(
               closing(

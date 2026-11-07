@@ -190,6 +190,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
       servers: declarations,
       hooks: hooksAt(pkg, place),
       process: pkg.process,
+      providers: pkg.providers,
       contributes: pkg.contributes,
     };
     return { loaded, options, skipped } satisfies Bound;

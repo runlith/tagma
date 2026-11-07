@@ -1,15 +1,14 @@
-import { join } from 'node:path';
 import { Data, Effect } from 'effect';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { PACKAGE_VARIABLE, type SessionSigner } from '../contract/wire/sessionVariables.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { declaredHarness } from '../adapter/declared.js';
-import { ADAPTERS, dataDirectory } from '../../installation/contract/wire/layout.js';
+import { dataDirectory } from '../../installation/contract/wire/layout.js';
 import type { Channel } from '../../installation/contract/wire/channel.js';
 import type { Invocation } from '../../platform/cli/verb.js';
 
 export type HarnessDeclarations = (
-  machine: string | null,
+  data: string | null,
   harness: string | null,
   pinned: string | null,
 ) => Promise<readonly HarnessProvider[]>;
@@ -24,7 +23,7 @@ export type HookRows = {
 
 export class HarnessUnreadable extends Data.TaggedError('HarnessUnreadable')<{ readonly harness: string; readonly reason: string }> {
   override get message() {
-    return `the installed adapter packages could not be read for ${this.harness}: ${this.reason}`;
+    return `the plugins' provider parts could not be read for ${this.harness}: ${this.reason}`;
   }
 }
 
@@ -37,7 +36,7 @@ export const harnessRows = Effect.fnUntraced(function* (
   const { declarations, signers } = yield* Effect.promise(catalog);
   const data = dataDirectory(channel, at.env);
   const providers = yield* Effect.tryPromise({
-    try: () => declarations(data === null ? null : join(data, ADAPTERS), harness, at.env[PACKAGE_VARIABLE] ?? null),
+    try: () => declarations(data, harness, at.env[PACKAGE_VARIABLE] ?? null),
     catch: (cause) =>
       new HarnessUnreadable({ harness: harness ?? 'unnamed hook', reason: cause instanceof Error ? cause.message : String(cause) }),
   }).pipe(Effect.withSpan('hook.installedHarness'));

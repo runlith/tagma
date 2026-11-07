@@ -8,7 +8,13 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { type PluginPackage, PluginRefused, type PluginUnreadable } from './contract/service/format.js';
-import { type PluginDescribed, type PluginPrepared, type PluginProcessControl, Plugins } from './contract/service/plugins.js';
+import {
+  type BuiltinPlugin,
+  type PluginDescribed,
+  type PluginPrepared,
+  type PluginProcessControl,
+  Plugins,
+} from './contract/service/plugins.js';
 import type { PluginPoints } from './contract/service/points.js';
 import { componentName } from './contract/wire/names.js';
 import type { PluginSwitchScope } from './contract/wire/operations.js';
@@ -133,17 +139,24 @@ const shownOf = (read: Read, bound: Bound, points: PluginPoints['Service']) => (
   options: optionRows(read.package, bound.options),
 });
 
+const builtinRefusal = (id: string) =>
+  new GateRefusal('plugin-builtin', `${id} is built into Tagma: it is never installed or uninstalled, only turned off on this machine.`, [
+    `enable_plugin ${id} with scope machine and enabled false turns it off everywhere; enabled true turns it on again`,
+  ]);
+
 export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
   readonly digests: Digests;
   readonly home: string;
   readonly points: PluginPoints['Service'];
+  readonly builtins: readonly BuiltinPlugin[];
   readonly processes: () => PluginProcessControl;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
   readonly touched: (id: string) => Effect.Effect<void>;
   readonly faults: (id: string) => readonly PluginFault[];
 }) {
-  const { shelf, digests, home, points, processes, changed, touched, faults } = input;
+  const { shelf, digests, home, points, builtins, processes, changed, touched, faults } = input;
+  const builtin = new Map(builtins.map((plugin) => [plugin.id, plugin]));
   const settings = yield* Settings;
   const projects = yield* Projects;
   const owners = yield* SecretOwners;
@@ -219,6 +232,10 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const installedList = settings.value(pluginsInstalled);
 
   const untaken = Effect.fnUntraced(function* (id: string, wanted: Wanted) {
+    if (builtin.has(id))
+      return yield* new GateRefusal('plugin-id-taken', `A plugin named ${id} is built into Tagma.`, [
+        'give the plugin another id in its manifest, then install it again',
+      ]);
     const standing = (yield* installedList).find((entry) => entry.id === id);
     if (standing === undefined || sameInstall(standing, wanted)) return standing !== undefined;
     return yield* new GateRefusal('plugin-id-taken', `A plugin named ${id} is already installed from ${installedFrom(standing)}.`, [
@@ -254,6 +271,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         source: held.fetched,
         origin: held.origin ?? undefined,
         replaces: yield* untaken(read.id, held),
+        providers: providedOf(pkg),
         ...shownOf(read, bound, points),
         consent: {
           runs: consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value),
@@ -368,7 +386,32 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     return install ?? (yield* notInstalled(id));
   });
 
+  const builtinRow = (plugin: BuiltinPlugin, enabled: Enabling): PluginRow => {
+    const off = enabled.machineOff.has(plugin.id);
+    return {
+      id: plugin.id,
+      title: plugin.title,
+      version: null,
+      description: plugin.description,
+      builtin: true,
+      format: null,
+      source: null,
+      root: null,
+      enabled: !off,
+      everywhere: !off,
+      off,
+      providers: plugin.providers,
+      components: [],
+      ignored: [],
+      options: [],
+      outdated: false,
+      faults: faults(plugin.id),
+    };
+  };
+
   const row = Effect.fnUntraced(function* (projectId: number, id: string) {
+    const shipped = builtin.get(id);
+    if (shipped !== undefined) return builtinRow(shipped, yield* enabling(projectId));
     const install = yield* installedOf(id);
     return yield* rowOf(install, projectId, yield* enabling(projectId));
   });
@@ -492,17 +535,17 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   });
 
   return Plugins.of({
-    ids: () => Effect.map(installedList, (installs) => installs.map((install) => install.id).sort()),
+    ids: () => Effect.map(installedList, (installs) => [...builtin.keys(), ...installs.map((install) => install.id)].sort()),
     installs: () => installedList,
     rows: Effect.fn('Plugins.rows')(function* (projectId, ids) {
       const enabled = yield* enabling(projectId);
       const installs = new Map((yield* installedList).map((install) => [install.id, install]));
-      return yield* Effect.forEach(
-        ids.flatMap((id) => {
-          const install = installs.get(id);
-          return install === undefined ? [] : [install];
-        }),
-        (install) => rowOf(install, projectId, enabled),
+      const listed = ids.flatMap((id): readonly (BuiltinPlugin | PluginInstall)[] => {
+        const found = builtin.get(id) ?? installs.get(id);
+        return found === undefined ? [] : [found];
+      });
+      return yield* Effect.forEach(listed, (found) =>
+        'root' in found ? rowOf(found, projectId, enabled) : Effect.succeed(builtinRow(found, enabled)),
       );
     }),
     describe: Effect.fn('Plugins.describe')(function* ({ root, declared }) {
@@ -556,6 +599,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       return yield* locked(put(projectId, prepared, 'kept'));
     }),
     installed: Effect.fn('Plugins.installed')(function* ({ projectId, id }) {
+      if (builtin.has(id)) return { id, consent: { subjects: [], raised: [] }, running: false };
       const install = yield* installedOf(id);
       const read = yield* readOf(install.root, install.declared);
       const bound = yield* boundOf(read, install.root, projectId);
@@ -564,6 +608,12 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     enable: Effect.fn('Plugins.enable')(function* ({ projectId, id, enabled, scope }) {
       return yield* locked(
         Effect.gen(function* () {
+          if (builtin.has(id)) {
+            if (scope !== 'machine') return yield* builtinRefusal(id);
+            yield* switched(projectId, id, { enabled, scope });
+            yield* changed(null);
+            return yield* row(projectId, id);
+          }
           const install = yield* installedOf(id);
           const change = { enabled, scope };
           if (enabled) {
@@ -580,6 +630,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     uninstall: Effect.fn('Plugins.uninstall')(function* ({ projectId, id }) {
       return yield* locked(
         Effect.gen(function* () {
+          if (builtin.has(id)) return yield* builtinRefusal(id);
           const install = yield* installedOf(id);
           const answer = yield* row(projectId, id);
           yield* owners

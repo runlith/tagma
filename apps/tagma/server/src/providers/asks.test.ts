@@ -12,8 +12,8 @@ import { Effect, Layer, Stream } from 'effect';
 import { ProviderAccounts } from './contract/service/accounts.js';
 import { ModelAccess } from './contract/service/access.js';
 import { AskPrograms, DefaultSelection, type SavedSelection } from './contract/service/asks.js';
-import { AdapterInstalls } from './contract/service/adapters.js';
-import { noInstalls } from './testing/holders.js';
+import { PluginRevisions } from '../plugins/contract/service/plugins.js';
+import { unheldRevisions } from '../plugins/testing/revisions.js';
 import { HarnessAccounts } from './contract/service/harness.js';
 import { ProviderRegistry } from './contract/service/registry.js';
 import { makeModelAsks } from './asks.js';
@@ -92,7 +92,7 @@ const setup = Effect.gen(function* () {
       Layer.mock(ProviderAccounts, { connected: Effect.sync(() => ({ revision: 0, providers: new Set(connected) })) }),
       Layer.mock(HarnessAccounts, { launch: () => Effect.succeed(null) }),
       Layer.mock(AskPrograms, { run: () => Effect.die('no program answers in this catalog') }),
-      Layer.succeed(AdapterInstalls, noInstalls),
+      Layer.succeed(PluginRevisions, unheldRevisions),
       Layer.succeed(DefaultSelection, DefaultSelection.of({ saved: Effect.sync(() => saved.selection) })),
       Layer.succeed(ActivityLog, recording.log),
       Layer.succeed(

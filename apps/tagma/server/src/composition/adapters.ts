@@ -1,15 +1,8 @@
-import { join } from 'node:path';
-import { ADAPTERS } from '../installation/contract/wire/layout.js';
 import type { Adapter, HarnessProvider } from '@runlith/tagma/adapter/provider';
 import type { HostedRunner } from '@runlith/hosted-runner/run';
 import type { Signer } from '../cli/contract/service/server.js';
-import type { AdapterPlaces, AdapterSource } from '../providers/contract/service/registry.js';
-import { HOST_MODULES } from './hostModules.generated.js';
-
-export const adapterPlaces = (home: string | null): AdapterPlaces['Service'] => ({
-  machine: home === null ? null : join(home, ADAPTERS),
-  host: HOST_MODULES,
-});
+import type { BuiltinPlugin } from '../plugins/contract/service/plugins.js';
+import type { AdapterSource } from '../providers/contract/service/registry.js';
 
 type BuiltinHarness = {
   readonly id: string;
@@ -20,8 +13,29 @@ type BuiltinHarness = {
 
 type Builtin = AdapterSource & { readonly harness?: BuiltinHarness };
 
+type Shipped = Omit<BuiltinPlugin, 'providers'> & { readonly speech?: true };
+
+const SHIPPED: readonly Shipped[] = [
+  { id: 'anthropic', title: 'Anthropic', description: 'Claude models and the Claude Code agent.' },
+  { id: 'openai', title: 'OpenAI', description: 'OpenAI models, the Codex agent, and OpenAI speech recognition and voices.', speech: true },
+  { id: 'cursor', title: 'Cursor', description: 'The Cursor agent and the models it serves.' },
+  { id: 'xai', title: 'xAI', description: 'Grok models and the Grok agent.' },
+  { id: 'google', title: 'Google', description: 'The Gemini CLI agent and the models it serves.' },
+  { id: 'muse', title: 'Muse', description: 'Muse models and the Muse Code agent.' },
+  { id: 'devin', title: 'Devin', description: 'The Devin agent and the models it serves.' },
+  { id: 'opencode-go', title: 'OpenCode Go', description: 'The models of an OpenCode Go subscription.' },
+  { id: 'opencode', title: 'OpenCode', description: 'The OpenCode agent and the models it serves.' },
+  { id: 'stepfun', title: 'StepFun', description: 'StepFun models.' },
+  { id: 'deepseek', title: 'DeepSeek', description: 'DeepSeek models.' },
+  { id: 'openrouter', title: 'OpenRouter', description: 'The models OpenRouter serves.' },
+  { id: 'openai-compatible', title: 'OpenAI-compatible server', description: 'Models of any server that speaks the OpenAI API.' },
+  { id: 'soniox', title: 'Soniox', description: 'Soniox speech recognition and voices.', speech: true },
+  { id: 'whisper', title: 'Whisper', description: 'Speech recognition on this Mac, with no account.', speech: true },
+];
+
 const builtin = (id: string, load: () => Promise<{ readonly adapter: Adapter }>, harness?: BuiltinHarness): Builtin => ({
   id,
+  title: SHIPPED.find((plugin) => plugin.id === id)?.title ?? id,
   origin: 'builtin',
   version: null,
   load: async () => (await load()).adapter,
@@ -75,6 +89,16 @@ export const BUILTIN_ADAPTERS: readonly Builtin[] = [
   builtin('openrouter', () => import('@runlith/adapter-openrouter/adapter')),
   builtin('openai-compatible', () => import('@runlith/adapter-openai-compatible/adapter')),
 ];
+
+const adapterOf = new Map(BUILTIN_ADAPTERS.map((source) => [source.id, source]));
+
+export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = SHIPPED.map(({ speech, ...plugin }) => {
+  const models = adapterOf.get(plugin.id);
+  return {
+    ...plugin,
+    providers: { models: models !== undefined, harnesses: models?.harness !== undefined, speech: speech === true },
+  };
+});
 
 export const BUILTIN_HARNESS_PROVIDERS: ReadonlyMap<string, BuiltinHarness> = new Map(
   BUILTIN_ADAPTERS.flatMap(({ harness }) => (harness === undefined ? [] : [[harness.id, harness] as const])),

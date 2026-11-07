@@ -2,7 +2,7 @@ import { and, isNotNull, sql } from 'drizzle-orm';
 import { Effect, Layer } from 'effect';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
-import { PackageHolders } from '../../providers/contract/service/adapters.js';
+import { PluginRevisions, RevisionRecords } from '../../plugins/contract/service/plugins.js';
 import { externalSession } from '../../threads/store/harnessFacet.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 
@@ -26,13 +26,16 @@ export const recordedPackages = Effect.gen(function* () {
   );
 });
 
-export const packageHoldersLayer = Layer.effect(
-  PackageHolders,
+export const packageHoldersLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const adapters = yield* HarnessAdapters;
-    return PackageHolders.of({
+    yield* (yield* PluginRevisions).register({
       standing: () => new Set(adapters.all().flatMap((row) => (row.package === undefined ? [] : [row.package]))),
-      recorded: yield* recordedPackages,
     });
   }),
+);
+
+export const revisionRecordsLayer = Layer.effect(
+  RevisionRecords,
+  Effect.map(recordedPackages, (recorded) => RevisionRecords.of({ recorded })),
 );

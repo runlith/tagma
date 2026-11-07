@@ -1,10 +1,12 @@
 import { join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
 
 export const QUILL = {
   harness: 'quill',
   label: 'Quill',
-  name: 'quill-adapter',
+  name: 'quill-plugin',
   version: '1.0.0',
   binary: 'quill',
   install: 'npm install --global quill-cli',
@@ -146,6 +148,8 @@ export const adapter = defineAdapter(() => [
     },
   },
 ]);
+
+export default { models: adapter };
 `;
 
 const askText = `#!/bin/sh
@@ -175,10 +179,14 @@ export const quillRelease = Effect.fn('quill.release')(function* (
   screen = true,
 ) {
   const files = yield* FileSystem.FileSystem;
-  const manifest = { name: QUILL.name, version, type: 'module', exports: { '.': './adapter.ts' } };
-  yield* files.writeFileString(join(directory, 'package.json'), JSON.stringify(manifest));
-  yield* files.writeFileString(join(directory, 'answer.txt'), `quill ${version}\n`);
-  yield* files.writeFileString(join(directory, 'adapter.ts'), adapterText(close, screen));
+  yield* files.makeDirectory(join(directory, 'dist'), { recursive: true });
+  yield* files.writeFileString(join(directory, 'dist/answer.txt'), `quill ${version}\n`);
+  yield* files.writeFileString(join(directory, 'dist/ask.sh'), askText);
+  yield* files.writeFileString(join(directory, PROVIDERS_ENTRY), adapterText(close, screen));
+  yield* files.writeFileString(
+    join(directory, MANIFEST),
+    manifestText({ id: QUILL.name, title: QUILL.label, version, providers: { models: true, harnesses: true, speech: false } }),
+  );
 });
 
 export const quillPackage = Effect.fn('quill.package')(function* (root: string) {
@@ -188,7 +196,6 @@ export const quillPackage = Effect.fn('quill.package')(function* (root: string) 
   yield* files.makeDirectory(directory, { recursive: true });
   yield* files.makeDirectory(bin, { recursive: true });
   yield* quillRelease(directory, QUILL.version);
-  yield* files.writeFileString(join(directory, 'ask.sh'), askText);
   yield* files.writeFileString(join(bin, QUILL.binary), cliText, { mode: 0o755 });
   return { directory, bin } satisfies QuillPackage;
 });

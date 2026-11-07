@@ -1,7 +1,7 @@
 import type { Settings } from '../../settings/contract/service/values.js';
 import type { HarnessAccounts } from '../../providers/contract/service/harness.js';
 import type { ProviderRegistry } from '../../providers/contract/service/registry.js';
-import { AdapterInstalls } from '../../providers/contract/service/adapters.js';
+import { PluginRevisions } from '../../plugins/contract/service/plugins.js';
 import { Cause, Clock, Deferred, Duration, Effect, Fiber, FiberMap, FileSystem, Option, type Scope } from 'effect';
 import { CurrentActivity, defected } from '@runlith/activity/Activity';
 import { ActivityLog } from '@runlith/activity/log';
@@ -108,7 +108,7 @@ export class SessionDriver implements Driving {
     private readonly executionEndings: ExecutionEndings['Service'],
     private readonly log: ActivityLog,
     private readonly adapters: HarnessAdapters['Service'],
-    installs: AdapterInstalls['Service'],
+    installs: PluginRevisions['Service'],
   ) {
     this.lease = new SessionLease(store, terminals, executionEndings, endings, owners, idle, ownerId, (threadId) => this.attend(threadId));
     this.roots = new SessionRoots(
@@ -190,7 +190,7 @@ export class SessionDriver implements Driving {
     declaring: ProjectDeclaring,
     alignment: SessionAlignment,
     ownerId: string = crypto.randomUUID(),
-  ): Effect.Effect<SessionDriver, never, Scope.Scope | FileSystem.FileSystem | ExecutionEndings | HarnessAdapters | AdapterInstalls> {
+  ): Effect.Effect<SessionDriver, never, Scope.Scope | FileSystem.FileSystem | ExecutionEndings | HarnessAdapters | PluginRevisions> {
     return Effect.flatMap(
       Effect.all([
         FiberMap.make<string, void, never>(),
@@ -201,7 +201,7 @@ export class SessionDriver implements Driving {
         ExecutionEndings,
         ActivityLog,
         HarnessAdapters,
-        AdapterInstalls,
+        PluginRevisions,
       ]),
       ([fibers, owners, idle, realigns, files, executionEndings, log, adapters, installs]) => {
         const driver = new SessionDriver(

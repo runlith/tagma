@@ -31,7 +31,7 @@ import {
   type FreshAsk,
 } from './contract/service/asks.js';
 import { HarnessAccounts } from './contract/service/harness.js';
-import { AdapterInstalls } from './contract/service/adapters.js';
+import { PluginRevisions } from '../plugins/contract/service/plugins.js';
 import type { AskRefusal } from './contract/wire/asks.js';
 import { ProviderRegistry, type AskRoute, type ProviderCatalog } from './contract/service/registry.js';
 
@@ -83,7 +83,7 @@ export const makeModelAsks = Effect.gen(function* () {
   const accounts = yield* ProviderAccounts;
   const harnessAccounts = yield* HarnessAccounts;
   const programs = yield* AskPrograms;
-  const installs = yield* AdapterInstalls;
+  const installs = yield* PluginRevisions;
   const defaults = yield* DefaultSelection;
   const log = yield* ActivityLog;
   const lanes = new Map<string, Semaphore.Semaphore>();

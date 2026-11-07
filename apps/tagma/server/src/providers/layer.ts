@@ -2,10 +2,8 @@ import { dirname } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { openModelClient } from '@runlith/llm/models/client';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
-import { Context, Effect, Layer, Option, Result, Stream } from 'effect';
-import { homeless, makeMachineAdapters } from './adapters/installs.js';
+import { Context, Effect, Layer, Option, Stream } from 'effect';
 import { makeAdapterInstanceRows } from './adapters/instanceRows.js';
-import { AdapterInstalls, PackageHolders } from './contract/service/adapters.js';
 import { AdapterInstances } from './contract/service/instances.js';
 import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import { MachineStore } from '../platform/contract/service/store.js';
@@ -26,7 +24,7 @@ import { DefaultLogins, defaultLoginsLayer } from './accounts/defaultLogins.js';
 import { harnessSignIns } from './accounts/harnessSignIns.js';
 import { HarnessAccounts } from './contract/service/harness.js';
 import { AccountCli } from './contract/service/cli.js';
-import { AdapterPlaces, type ProviderCatalog, ProviderRegistry } from './contract/service/registry.js';
+import { type ProviderCatalog, ProviderRegistry } from './contract/service/registry.js';
 import { DefaultAccounts, ProviderAccounts } from './contract/service/accounts.js';
 import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from './contract/service/credentials.js';
 import { AccountQuota } from './contract/service/quota.js';
@@ -197,20 +195,6 @@ const signing = Layer.effect(
   }),
 );
 
-const adapters = Layer.effect(
-  AdapterInstalls,
-  Effect.gen(function* () {
-    const places = yield* Effect.serviceOption(AdapterPlaces);
-    const machine = Option.match(places, { onNone: () => null, onSome: (place) => place.machine });
-    const holders = yield* PackageHolders;
-    if (machine === null) return homeless;
-    const installs = makeMachineAdapters({ machine, registry: yield* ProviderRegistry, holders });
-    const swept = yield* Effect.result(installs.sweep());
-    if (Result.isFailure(swept)) yield* Effect.logError('earlier adapter versions were not swept', { reason: swept.failure.reason });
-    return installs;
-  }),
-);
-
 const movedKeys = Layer.effectDiscard(
   Effect.flatMap(ProviderCredentials, ({ keys }) =>
     keys.moveKeys().pipe(
@@ -242,7 +226,7 @@ const loginDriver = Layer.effectDiscard(
   }),
 );
 
-export const providersLayer = Layer.mergeAll(access, adapters, signing, movedKeys, catalogDriver, loginDriver).pipe(
+export const providersLayer = Layer.mergeAll(access, signing, movedKeys, catalogDriver, loginDriver).pipe(
   Layer.provideMerge(modelCatalogsLayer),
   Layer.provideMerge(harnessAccounts),
   Layer.provideMerge(quota),

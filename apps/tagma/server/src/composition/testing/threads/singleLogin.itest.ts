@@ -6,7 +6,9 @@ import { layer } from '@runlith/effect-test';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { openModelClient } from '@runlith/llm/models/client';
 import { answering, type Sent } from '@runlith/llm/route/transport/answering';
-import { Clock, Context, Effect, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Queue, Schedule, Schema, Stream } from 'effect';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
 import { modelAccess } from '../../../providers/access.js';
 import { HarnessDirectories } from '../../../providers/accounts/harnessRows.js';
 import { DefaultAccounts, ProviderAccounts } from '../../../providers/contract/service/accounts.js';
@@ -106,6 +108,7 @@ export const adapter = defineAdapter(() => ['${CLI}', 'silent-cli'].map((id) => 
     answer: ({ stdout, stderr, exit }) => exit === 0 ? { _tag: 'Text', text: JSON.parse(stdout).text } : { _tag: 'Refused', refusal: 'ask-provider-failed', message: stderr },
   } },
 })));
+export default { models: adapter };
 `;
 
 const makeFixture = Effect.gen(function* () {
@@ -195,15 +198,19 @@ layer(Layer.effect(SingleLoginFixture, makeFixture).pipe(Layer.provideMerge(BunF
               }),
               () => directories.remove(provider, AccountKey.make('only')).pipe(Effect.orDie),
             );
-          const source = join(root, 'adapter');
-          yield* files.makeDirectory(source);
+          const source = join(root, 'plugin');
+          yield* files.makeDirectory(join(source, 'dist'), { recursive: true });
           yield* files.writeFileString(
-            join(source, 'package.json'),
-            JSON.stringify({ name: 'single-ask-adapter', version: '1.0.0', type: 'module', exports: { '.': './adapter.ts' } }),
+            join(source, MANIFEST),
+            manifestText({ id: 'single-ask', providers: { models: true, harnesses: true, speech: false } }),
           );
-          yield* files.writeFileString(join(source, 'adapter.ts'), packageText);
-          yield* files.copyFile(SCRIPT, join(source, 'ask.ts'));
-          expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200 });
+          yield* files.writeFileString(join(source, PROVIDERS_ENTRY), packageText);
+          yield* files.copyFile(SCRIPT, join(source, 'dist/ask.ts'));
+          expect(yield* op('install_plugin', { source })).toMatchObject({ status: 200 });
+          yield* Effect.repeat(
+            Effect.sync(() => registry.current().models.registered(CLI)),
+            { until: (registered) => registered, schedule: Schedule.spaced('20 millis'), times: 500 },
+          );
           let threadId: string | undefined;
           const cases = [
             {

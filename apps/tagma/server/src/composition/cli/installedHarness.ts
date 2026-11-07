@@ -1,11 +1,11 @@
-import { basename, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { Effect } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import type { HarnessProvider, Provider } from '@runlith/tagma/adapter/provider';
 import { importProviders } from '@runlith/tagma/adapter/loader';
 import type { HarnessDeclarations } from '../../external-harnesses/hooks/rows.js';
-import { type AdapterHosts, machineHosts } from '../../providers/adapters/external.js';
-import { harnessPackage, harnessPackages } from '../../providers/adapters/harnessIndex.js';
+import { harnessPackage, harnessPackages } from '../../providers/harnessIndex.js';
+import { type AdapterHosts, dataHosts } from '../../providers/hosts.js';
 import { BUILTIN_HARNESS_PROVIDERS } from '../adapters.js';
 import { HOST_MODULES } from '../hostModules.generated.js';
 
@@ -19,24 +19,22 @@ const declared = async (directory: string, hosts: AdapterHosts): Promise<readonl
   return models === undefined ? [] : models(hosts(id));
 };
 
-const pinnedHarness = async (machine: string, harness: string, pinned: string): Promise<HarnessProvider | null> => {
-  const directory = join(machine, basename(pinned));
-  if (!(await Bun.file(join(directory, 'tagma-plugin.json')).exists())) return null;
-  return (await declared(directory, await Effect.runPromise(machineHosts(machine)))).find(declares(harness)) ?? null;
-};
+const hostsOf = (data: string) => Effect.runPromise(dataHosts(data));
 
-const installedHarness = async (machine: string, harness: string, pinned: string | null): Promise<HarnessProvider | null> => {
-  const held = pinned === null ? null : await pinnedHarness(machine, harness, pinned);
-  if (held !== null) return held;
-  const entry = await Effect.runPromise(harnessPackage(machine, harness).pipe(Effect.provide(BunFileSystem.layer)));
+const installedHarness = async (data: string, harness: string, pinned: string | null): Promise<HarnessProvider | null> => {
+  if (pinned !== null && existsSync(pinned)) {
+    const held = (await declared(pinned, await hostsOf(data))).find(declares(harness));
+    if (held !== undefined) return held;
+  }
+  const entry = await Effect.runPromise(harnessPackage(data, harness).pipe(Effect.provide(BunFileSystem.layer)));
   if (entry === null) return null;
-  return (await declared(entry.directory, await Effect.runPromise(machineHosts(machine)))).find(declares(harness)) ?? null;
+  return (await declared(entry.directory, await hostsOf(data))).find(declares(harness)) ?? null;
 };
 
-const installedHarnesses = async (machine: string): Promise<readonly HarnessProvider[]> => {
-  const entries = await Effect.runPromise(harnessPackages(machine).pipe(Effect.provide(BunFileSystem.layer)));
+const installedHarnesses = async (data: string): Promise<readonly HarnessProvider[]> => {
+  const entries = await Effect.runPromise(harnessPackages(data).pipe(Effect.provide(BunFileSystem.layer)));
   if (entries.length === 0) return [];
-  const hosts = await Effect.runPromise(machineHosts(machine));
+  const hosts = await hostsOf(data);
   const providers: HarnessProvider[] = [];
   for (const entry of entries)
     providers.push(
@@ -45,13 +43,13 @@ const installedHarnesses = async (machine: string): Promise<readonly HarnessProv
   return providers;
 };
 
-export const harnessDeclarations: HarnessDeclarations = async (machine, harness, pinned) => {
+export const harnessDeclarations: HarnessDeclarations = async (data, harness, pinned) => {
   if (harness === null) {
     const builtins = await Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map(({ load }) => load()));
-    return machine === null ? builtins : [...builtins, ...(await installedHarnesses(machine))];
+    return data === null ? builtins : [...builtins, ...(await installedHarnesses(data))];
   }
   const builtin = BUILTIN_HARNESS_PROVIDERS.get(harness);
   if (builtin !== undefined) return [await builtin.load()];
-  const provider = machine === null ? null : await installedHarness(machine, harness, pinned);
+  const provider = data === null ? null : await installedHarness(data, harness, pinned);
   return provider === null ? [] : [provider];
 };

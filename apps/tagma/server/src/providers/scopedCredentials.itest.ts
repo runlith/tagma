@@ -17,9 +17,11 @@ import { ModelAccess } from './contract/service/access.js';
 import { DefaultAccounts } from './contract/service/accounts.js';
 import { CredentialFiles, ProviderCredentials, QuotaProviders } from './contract/service/credentials.js';
 import { AccountCli } from './contract/service/cli.js';
-import { BuiltinAdapters, ProviderRegistry, type AdapterSource } from './contract/service/registry.js';
+import { AdapterSources, ProviderRegistry, type AdapterSource } from './contract/service/registry.js';
+import { fixedSources } from './testing/registry.js';
+import { PluginRevisions } from '../plugins/contract/service/plugins.js';
+import { unheldRevisions } from '../plugins/testing/revisions.js';
 import { providersLayer } from './layer.js';
-import { sessionlessLayer } from './testing/holders.js';
 
 const home = mkdtempSync(join(tmpdir(), 'provider-run-'));
 const key = AccountKey.make('held-account');
@@ -58,14 +60,16 @@ const provider: WireProvider = {
   quota: { read: () => Effect.die('No quota is requested.'), fromHeaders: () => null },
 };
 let current = provider;
-const sources: AdapterSource[] = [{ id: 'run-adapter', origin: 'builtin', version: null, load: async () => () => [current] }];
+const sources: AdapterSource[] = [
+  { id: 'run-adapter', title: 'Run adapter', origin: 'builtin', version: null, load: async () => () => [current] },
+];
 const providers = providersLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
-      Layer.succeed(BuiltinAdapters, { sources }),
+      Layer.succeed(AdapterSources, fixedSources(sources)),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(QuotaProviders, { providers: [] }),
-      sessionlessLayer,
+      Layer.succeed(PluginRevisions, unheldRevisions),
       Layer.succeed(AccountCli, {
         installed: () => Effect.succeed({ _tag: 'Missing', reason: 'absent' } as const),
         changes: Stream.empty,

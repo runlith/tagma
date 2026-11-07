@@ -3,12 +3,14 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BunPlugin } from 'bun';
+import { sdkHost } from '../adapter/sdkHost';
 import { manifestRefusal } from './checks.generated.js';
 import { computedImports } from './computed.js';
 import { describePlugin, MANIFEST, manifestOf, PluginInvalid, PROCESS_ENTRY } from './describe.js';
 import { BuildFailed } from './failure.js';
 import type { PluginDefinition } from './plugin.js';
 import type { PluginEnvelope } from './points.generated.js';
+import { buildProviders, PROVIDERS_ENTRY } from './providers.js';
 import { typeCheck } from './types.js';
 import { buildViews, publishViews } from './views.js';
 
@@ -128,6 +130,8 @@ export const buildPlugin = async (folder: string): Promise<Built> => {
   );
   if (drafted !== null) throw new BuildFailed('check', `${MANIFEST}: ${drafted}`);
   const { code, read } = await bundled(directory);
+  const providers =
+    definition.providers === undefined ? null : await buildProviders(directory, definition.providers, { id, version }, await sdkHost());
   const points = described.contributes;
   const entries = (points.views ?? []).map((shown) => shown.entry);
   const icons = [...(points.surfaces ?? []), ...(points.panes ?? [])].flatMap((section) =>
@@ -135,7 +139,7 @@ export const buildPlugin = async (folder: string): Promise<Built> => {
   );
   const views = entries.length === 0 ? null : await buildViews({ directory, entries, icons });
   try {
-    const sources = sourcesOf(directory, [...read, ...(views?.read ?? [])]);
+    const sources = sourcesOf(directory, [...read, ...(providers?.read ?? []), ...(views?.read ?? [])]);
     const build = { hash: await sourceHash(directory, sources), sources };
     const contributed = {
       ...contributes,
@@ -143,7 +147,7 @@ export const buildPlugin = async (folder: string): Promise<Built> => {
         ? {}
         : { views: points.views.map((shown) => (views?.media.has(shown.entry) ? { ...shown, media: true } : shown)) }),
     };
-    const text = `${JSON.stringify({ id, title, version, description, process, options, build, contributes: contributed }, null, 2)}\n`;
+    const text = `${JSON.stringify({ id, title, version, description, process, providers: providers?.envelope, options, build, contributes: contributed }, null, 2)}\n`;
     const manifest = JSON.parse(text) as PluginEnvelope;
     const refused = manifestRefusal(manifest);
     if (refused !== null) throw new BuildFailed('check', `${MANIFEST}: ${refused}`);
@@ -152,6 +156,12 @@ export const buildPlugin = async (folder: string): Promise<Built> => {
     else {
       await mkdir(dirname(entry), { recursive: true });
       await writeFile(entry, code);
+    }
+    const providersFile = join(directory, PROVIDERS_ENTRY);
+    if (providers === null) await rm(providersFile, { force: true });
+    else {
+      await mkdir(dirname(providersFile), { recursive: true });
+      await writeFile(providersFile, providers.code);
     }
     await publishViews(views, directory);
     await writeFile(join(directory, MANIFEST), text);

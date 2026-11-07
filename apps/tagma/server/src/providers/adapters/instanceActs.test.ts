@@ -4,7 +4,8 @@ import { defineAdapter, type SettingInstance, type SettingRow } from '@runlith/t
 import { CredentialFileFailed } from '@runlith/credential-file/failure';
 import { Effect, Layer } from 'effect';
 import { AdapterInstances } from '../contract/service/instances.js';
-import { BuiltinAdapters, ProviderRegistry } from '../contract/service/registry.js';
+import { AdapterSources, ProviderRegistry } from '../contract/service/registry.js';
+import { fixedSources } from '../testing/registry.js';
 import { registryLayer } from '../registry.js';
 import { listModels, removeInstance, saveInstance } from './instanceActs.js';
 
@@ -60,16 +61,18 @@ const world = Effect.fnUntraced(function* (unwritable = false) {
   const registry = registryLayer.pipe(
     Layer.provideMerge(store),
     Layer.provide(
-      Layer.succeed(BuiltinAdapters, {
-        sources: [
+      Layer.succeed(
+        AdapterSources,
+        fixedSources([
           {
             id: 'openai-compatible',
+            title: 'OpenAI-compatible server',
             origin: 'builtin',
             version: null,
             load: async () => defineAdapter(entry.adapter, settings),
           },
-        ],
-      }),
+        ]),
+      ),
     ),
   );
   return {

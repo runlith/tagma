@@ -50,8 +50,8 @@ export type ProviderCatalog = {
 export type NotInstalled = GateRefusal<'provider-not-installed'>;
 
 export const notInstalled = (provider: string): NotInstalled =>
-  new GateRefusal('provider-not-installed', `No installed adapter provides "${provider}".`, [
-    `install the adapter that provides ${provider}`,
+  new GateRefusal('provider-not-installed', `No plugin on this machine provides "${provider}".`, [
+    `install_plugin the plugin that provides ${provider}, or turn it on again on this machine; the Plugins screen lists what stands`,
   ]);
 
 export function servedTextModel(
@@ -96,6 +96,7 @@ export class ProviderRegistry extends Context.Service<
 
 export type AdapterIdentity = {
   readonly id: string;
+  readonly title: string;
   readonly origin: AdapterOrigin;
   readonly version: string | null;
 };
@@ -106,14 +107,13 @@ export type AdapterSource = AdapterIdentity & {
   readonly directory?: string;
 };
 
-export class BuiltinAdapters extends Context.Service<BuiltinAdapters, { readonly sources: readonly AdapterSource[] }>()(
-  'tagma/providers/BuiltinAdapters',
-) {}
-
-export class AdapterPlaces extends Context.Service<
-  AdapterPlaces,
+export class AdapterSources extends Context.Service<
+  AdapterSources,
   {
-    readonly machine: string | null;
+    current(): readonly AdapterSource[];
+    readonly changes: Stream.Stream<readonly AdapterSource[]>;
     readonly host: HostModules;
   }
->()('tagma/providers/AdapterPlaces') {}
+>()('tagma/providers/AdapterSources') {}
+
+export class AdapterPlaces extends Context.Service<AdapterPlaces, { readonly data: string | null }>()('tagma/providers/AdapterPlaces') {}

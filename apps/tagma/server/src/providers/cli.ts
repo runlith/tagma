@@ -5,8 +5,4 @@ export const providersVerbs = (binding: () => Promise<AuthCli>) => ({
     const [{ auth }, port] = await Promise.all([import('./cli/auth.js'), binding()]);
     return { auth: auth(port) };
   },
-  adapter: async () => {
-    const [{ adapter }, port] = await Promise.all([import('./cli/adapter.js'), binding()]);
-    return { adapter: adapter(port) };
-  },
 });

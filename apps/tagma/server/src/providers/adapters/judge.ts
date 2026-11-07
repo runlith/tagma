@@ -11,14 +11,14 @@ export type Loaded = {
   readonly directory?: string;
 };
 
-export const failed = (source: AdapterIdentity, reason: string): Loaded => ({
-  state: { id: source.id, origin: source.origin, version: source.version, state: 'failed', reason },
+const failed = (source: AdapterIdentity, reason: string): Loaded => ({
+  state: { id: source.id, title: source.title, origin: source.origin, version: source.version, state: 'failed', reason },
   providers: [],
   settings: undefined,
 });
 
 const disabled = (source: AdapterIdentity): Loaded => ({
-  state: { id: source.id, origin: source.origin, version: source.version, state: 'disabled' },
+  state: { id: source.id, title: source.title, origin: source.origin, version: source.version, state: 'disabled' },
   providers: [],
   settings: undefined,
 });
@@ -41,6 +41,7 @@ export const load = Effect.fn('providers.load')(function* (
     ? {
         state: {
           id: source.id,
+          title: source.title,
           origin: source.origin,
           version: source.version,
           state: 'loaded',

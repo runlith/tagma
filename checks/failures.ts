@@ -2,6 +2,13 @@ import type { SwallowedFailuresParams } from '@runlith/tagma/rules/effect';
 
 export const ALLOWED: SwallowedFailuresParams['allow'] = [
   {
+    path: 'apps/tagma/server/src/plugins/revisions.ts',
+    symbol: 'makeRevisions.synced',
+    form: 'failureReturn',
+    site: 'cd569787',
+    why: 'A plugin whose directory does not read keeps the revision it brought before: its row answers the refusal and, where a part stood, a revisions fault names it; the next change of the plugin reads it again.',
+  },
+  {
     path: 'apps/tagma/server/src/views/modules/builds.ts',
     symbol: 'makeBuilds.onSuccess',
     form: 'catch',

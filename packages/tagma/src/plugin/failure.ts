@@ -1,4 +1,4 @@
-type BuildStep = 'package' | 'types' | 'definition' | 'bundle' | 'views' | 'check';
+type BuildStep = 'package' | 'types' | 'definition' | 'bundle' | 'providers' | 'views' | 'check';
 
 export class BuildFailed extends Error {
   constructor(

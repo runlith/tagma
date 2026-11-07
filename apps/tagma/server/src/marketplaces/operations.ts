@@ -6,6 +6,7 @@ import { body, pair } from '../platform/contract/service/body.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
 import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
 import { type PluginPrepared, Plugins } from '../plugins/contract/service/plugins.js';
+import { npmSourceOf } from '../plugins/contract/wire/rows.js';
 import { installedFrom } from '../plugins/contract/wire/settings.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { Marketplaces } from './contract/service/marketplaces.js';
@@ -84,9 +85,13 @@ export const MARKETPLACE_PAIRS = {
     OPS.inspect_source,
     body(OPS.inspect_source, {
       execute: Effect.fnUntraced(function* (input) {
+        if (npmSourceOf(input.source) !== null) {
+          const prepared = yield* (yield* Plugins).prepare({ projectId: yield* projectId, source: input.source });
+          return { status: 'ok' as const, found: { kind: 'plugin' as const, preview: prepared.preview } };
+        }
         if (!isGitUrl(input.source) && !isAbsolute(input.source)) {
-          return yield* new GateRefusal('field-invalid', `${input.source} is neither a git URL nor an absolute folder path.`, [
-            'name it by its git URL or by the absolute path of its folder',
+          return yield* new GateRefusal('field-invalid', `${input.source} is not a git URL, an absolute folder path or an npm package.`, [
+            'name it by its git URL, the absolute path of its folder, or npm:<package>',
           ]);
         }
         const source = isGitUrl(input.source)

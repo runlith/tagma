@@ -3,7 +3,7 @@ import { Schema } from 'effect';
 export const PLUGIN_OPTION_TYPES = ['string', 'number', 'boolean', 'directory', 'file'] as const;
 export type PluginOptionType = (typeof PLUGIN_OPTION_TYPES)[number];
 
-export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution', 'provider'] as const;
+export const PLUGIN_COMPONENT_KINDS = ['skill', 'command', 'mcp-server', 'agent', 'hook', 'process', 'contribution'] as const;
 export type PluginComponentKind = (typeof PLUGIN_COMPONENT_KINDS)[number];
 
 const Named = Schema.String.check(Schema.isMinLength(1));
@@ -29,12 +29,24 @@ export const PluginSource = Schema.Union([
 ]);
 export type PluginSource = typeof PluginSource.Type;
 
+const NPM_PREFIX = 'npm:';
+const SCOPED = /^@[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*(?:@.+)?$/u;
+
+export const npmSourceOf = (given: string): Extract<PluginSource, { readonly kind: 'npm' }> | null => {
+  const named = given.startsWith(NPM_PREFIX) ? given.slice(NPM_PREFIX.length) : SCOPED.test(given) ? given : null;
+  if (named === null || named === '') return null;
+  const at = named.indexOf('@', 1);
+  return at === -1 ? { kind: 'npm', name: named } : { kind: 'npm', name: named.slice(0, at), range: named.slice(at + 1) };
+};
+
 export const PluginProviders = Schema.Struct({
   models: Schema.Boolean.annotate({ description: 'It brings model providers: wire providers, CLI agents or a settings form for them.' }),
   harnesses: Schema.Boolean.annotate({ description: 'Among its model providers, a CLI agent Tagma runs.' }),
   speech: Schema.Boolean.annotate({ description: 'It brings speech providers.' }),
 });
 export type PluginProviders = typeof PluginProviders.Type;
+
+export const PROVIDER_FAULTS = { models: 'providers', speech: 'speech', revision: 'revisions' } as const;
 
 export const PluginOrigin = Schema.Struct({
   marketplace: Named.annotate({ description: 'The marketplace the plugin was installed from.' }),
@@ -185,6 +197,9 @@ export const pluginPreviewSchema = Schema.Struct({
   source: PluginSource,
   origin: Schema.optional(PluginOrigin),
   replaces: Schema.Boolean.annotate({ description: 'Whether installing it replaces the version of this plugin installed now.' }),
+  providers: Schema.optional(PluginProviders).annotate({
+    description: 'What its provider part brings to the whole machine; its code runs inside Tagma’s server.',
+  }),
   components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma takes from it.' }),
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),

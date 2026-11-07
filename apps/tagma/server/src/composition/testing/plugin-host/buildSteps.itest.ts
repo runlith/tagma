@@ -13,7 +13,8 @@ import { writePlugin } from '../../../plugin-formats/tagma/testing/folder.js';
 import { HostPlace, PluginHost } from '../../../plugin-host/contract/service/supervision.js';
 import { pluginHost } from '../../../plugin-host/plugin-host.js';
 import { PluginFormats } from '../../../plugins/contract/service/format.js';
-import { PluginPlaces, Plugins } from '../../../plugins/contract/service/plugins.js';
+import { BuiltinPlugins, PluginPlaces, Plugins, RevisionRecords } from '../../../plugins/contract/service/plugins.js';
+import { unrecorded } from '../../../plugins/testing/revisions.js';
 import { plugins as pluginsModule } from '../../../plugins/plugins.js';
 import { Projects } from '../../../projects/contract/service/registry.js';
 import { projectIdentificationLayer } from '../../../projects/identity.js';
@@ -33,6 +34,8 @@ const assembled = (home: string) =>
         Layer.provideMerge(
           pluginsModule.lifetimes.installation.pipe(
             Layer.provide(Layer.succeed(PluginPlaces, { home })),
+            Layer.provide(Layer.succeed(BuiltinPlugins, [])),
+            Layer.provide(Layer.succeed(RevisionRecords, unrecorded)),
             Layer.provide(Layer.succeed(PluginFormats, [tagmaFormat])),
             Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(files))),
             Layer.provide(BunFileSystem.layer),

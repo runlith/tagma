@@ -1,6 +1,6 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import type { HookCall, HookPoint, HookSession } from '@runlith/tagma/plugin/protocol';
-import { Context, Data, type Effect, type Stream } from 'effect';
+import { Context, Data, type Effect, type Scope, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
@@ -14,6 +14,7 @@ import type {
   PluginOrigin,
   PluginPreview,
   PluginProcessRow,
+  PluginProviders,
   PluginRow,
   PluginSource,
 } from '../wire/rows.js';
@@ -162,6 +163,7 @@ export type PluginLoaded = {
   readonly servers: readonly McpServerDeclaration[];
   readonly hooks: readonly LoadedHook[];
   readonly process: PluginProcess | null;
+  readonly providers: PluginPackage['providers'];
   readonly contributes: Readonly<Record<string, unknown>>;
 };
 
@@ -223,3 +225,46 @@ export class PluginProcesses extends Context.Service<
     register(control: PluginProcessControl): Effect.Effect<() => void>;
   }
 >()('tagma/plugins/PluginProcesses') {}
+
+export type BuiltinPlugin = {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly providers: PluginProviders;
+};
+
+export class BuiltinPlugins extends Context.Service<BuiltinPlugins, readonly BuiltinPlugin[]>()('tagma/plugins/BuiltinPlugins') {}
+
+export type ProviderPart = {
+  readonly id: string;
+  readonly title: string;
+  readonly version: string | null;
+  readonly builtin: boolean;
+  readonly directory: string | null;
+  readonly providers: PluginProviders;
+  readonly off: boolean;
+};
+
+export class ProviderParts extends Context.Service<
+  ProviderParts,
+  {
+    current(): readonly ProviderPart[];
+    readonly changes: Stream.Stream<readonly ProviderPart[]>;
+  }
+>()('tagma/plugins/ProviderParts') {}
+
+export type RevisionHolder = { readonly standing: () => ReadonlySet<string> };
+
+export class RevisionRecords extends Context.Service<
+  RevisionRecords,
+  { readonly recorded: Effect.Effect<ReadonlySet<string>, StoreFailure> }
+>()('tagma/plugins/RevisionRecords') {}
+
+export class PluginRevisions extends Context.Service<
+  PluginRevisions,
+  {
+    hold(directory: string | null, recorded?: boolean): Effect.Effect<boolean, never, Scope.Scope>;
+    register(holder: RevisionHolder): Effect.Effect<void, never, Scope.Scope>;
+    readonly released: Effect.Effect<void>;
+  }
+>()('tagma/plugins/PluginRevisions') {}

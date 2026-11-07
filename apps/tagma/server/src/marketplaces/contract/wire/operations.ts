@@ -149,12 +149,14 @@ export const MARKETPLACE_OPERATIONS = {
         ]),
       },
     }),
-    meaning: 'Read what a git URL or folder holds before adding it: a marketplace list, or one plugin prepared for install.',
+    meaning: 'Read what a git URL, folder or npm package holds before adding it: a marketplace list, or one plugin prepared for install.',
     grammar:
-      'A marketplace is named with its list; add_marketplace adds it. A plugin is answered as preview_plugin answers an entry, and install_plugin with its `prepared` installs that revision. Adds and runs nothing.',
+      'A marketplace is named with its list; add_marketplace adds it. A plugin is answered as preview_plugin answers an entry, and install_plugin with its `prepared` installs that revision. An npm package is always a plugin. Adds and runs nothing.',
     input: Schema.Struct({
       project: projectField,
-      source: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'A git URL, or the absolute path of a folder.' }),
+      source: Schema.String.check(Schema.isMinLength(1)).annotate({
+        description: 'A git URL, the absolute path of a folder, or an npm package as `npm:<name>[@range]` or `@scope/name[@range]`.',
+      }),
     }),
     refusals: [
       'field-invalid',

@@ -11,7 +11,8 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { AccountCli } from '../contract/service/cli.js';
 import { CredentialFiles, ProviderCredentials } from '../contract/service/credentials.js';
-import { type AdapterSource, BuiltinAdapters, ProviderRegistry } from '../contract/service/registry.js';
+import { type AdapterSource, AdapterSources, ProviderRegistry } from '../contract/service/registry.js';
+import { fixedSources } from '../testing/registry.js';
 import { DefaultAccounts } from '../contract/service/accounts.js';
 import { AccountQuota } from '../contract/service/quota.js';
 import { registryLayer } from '../registry.js';
@@ -85,14 +86,20 @@ const cli = (installed: () => boolean): AccountCli['Service'] => ({
   ended: () => Effect.never,
   stop: () => Effect.die('the mode test cancels no login terminal'),
 });
-const fixture: AdapterSource = { id: 'fixture', origin: 'builtin', version: null, load: async () => () => [official, wire] };
+const fixture: AdapterSource = {
+  id: 'fixture',
+  title: 'Fixture',
+  origin: 'builtin',
+  version: null,
+  load: async () => () => [official, wire],
+};
 const registry = (path: string, installed: () => boolean, sources: readonly AdapterSource[] = [fixture]) =>
   Effect.map(
     Layer.build(
       registryLayer.pipe(
         Layer.provide(
           Layer.mergeAll(
-            Layer.succeed(BuiltinAdapters, { sources }),
+            Layer.succeed(AdapterSources, fixedSources(sources)),
             Layer.succeed(CredentialFiles, { tokensPath: join(path, 'tokens.json') }),
             Layer.succeed(AccountCli, cli(installed)),
           ),
@@ -236,7 +243,7 @@ it.effect('an adapter whose account mode collides with a declared section fails 
     const rival: HarnessProvider = { ...official, id: 'rival', label: 'Rival' };
     const catalog = (yield* registry(join(home, 'collision'), always, [
       fixture,
-      { id: 'rival', origin: 'plugin', version: '1', load: async () => () => [rival] },
+      { id: 'rival', title: 'Rival', origin: 'plugin', version: '1', load: async () => () => [rival] },
     ])).current();
     expect(catalog.adapters.find((adapter) => adapter.id === 'rival')).toMatchObject({ state: 'failed' });
     expect(catalog.sections[0]?.options.map((option) => option.provider)).toEqual([official.id, wire.id]);

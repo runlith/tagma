@@ -4,7 +4,6 @@
   "private": true,
   "description": "The public contract of Tagma: rules a repository declares in tagma.config.ts and the adapter a model provider is written against.",
   "bin": {
-    "create": "./kit/create.ts",
     "tagma-plugin": "./src/plugin/cli.ts"
   },
   "type": "module",
@@ -77,16 +76,6 @@
     "./adapter/declaration": {
       "types": "./src/adapter/declaration.ts",
       "default": "./src/adapter/declaration.ts"
-    },
-    "./adapter/conformance": {
-      "types": "./kit/conformance.ts",
-      "bun": "./kit/conformance.ts",
-      "default": null
-    },
-    "./adapter/create": {
-      "types": "./kit/create.ts",
-      "bun": "./kit/create.ts",
-      "default": null
     },
     "./adapter/host-modules": {
       "types": "./src/adapter/hostModules.ts",

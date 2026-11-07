@@ -5,8 +5,8 @@ import { ProviderRegistry } from '../contract/service/registry.js';
 import { normalize, publicValues, settingsValues } from './settingValues.js';
 
 export const unsettled = (adapter: string) =>
-  new GateRefusal('unknown-adapter', `No installed adapter "${adapter}" declares settings.`, [
-    'name an adapter whose read_adapters row carries settings',
+  new GateRefusal('unknown-adapter', `No plugin "${adapter}" on this machine declares provider settings.`, [
+    'name a plugin whose provider part declares settings; the Providers screen lists them',
   ]);
 
 const settingsOf = Effect.fnUntraced(function* (adapter: string) {

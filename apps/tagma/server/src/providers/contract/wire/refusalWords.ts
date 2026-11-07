@@ -5,7 +5,6 @@ export const REFUSAL_WORDS = {
   'account-cli-uncertain': 'Account sign-in outcome unclear',
   'account-kind': 'Provider has no CLI accounts',
   'account-required': 'Account must be chosen',
-  'adapter-install': 'Adapter could not be installed',
   'ask-input-too-large': 'Too much for the model to read',
   'ask-not-connected': 'Model provider not connected',
   'ask-provider-failed': 'Model provider failed',

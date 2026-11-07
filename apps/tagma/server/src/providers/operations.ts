@@ -7,7 +7,6 @@ import type { StoreFailure } from '../platform/contract/service/store.js';
 import type { OperationDeclaration } from '../platform/contract/wire/operation.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { DefaultAccounts } from './contract/service/accounts.js';
-import { AdapterInstalls } from './contract/service/adapters.js';
 import { ProviderCredentials } from './contract/service/credentials.js';
 import { AccountQuota, CacheCurves } from './contract/service/quota.js';
 import { ProviderRegistry } from './contract/service/registry.js';
@@ -17,7 +16,7 @@ import { PROVIDER_OPERATIONS as OPS, type ProviderOperationId } from './contract
 import { credentialRefusal, isTokenFault } from './credentials/refusal.js';
 import { cacheLifetimes } from './quota/cacheLifetimes.js';
 import { listModels, removeInstance, saveInstance } from './adapters/instanceActs.js';
-import { readAdapters, readSettings } from './adapters/reads.js';
+import { readSettings } from './adapters/reads.js';
 import { ModelCatalogs } from './catalogs.js';
 import { askModel, askUsage } from './askCalls.js';
 import { DefaultLogins } from './accounts/defaultLogins.js';
@@ -272,76 +271,10 @@ export const PROVIDER_PAIRS = {
         ),
     }),
   ),
-  read_adapters: pair(
-    OPS.read_adapters,
-    body(OPS.read_adapters, {
-      execute: (input) => Effect.map(readAdapters(input), (read) => ({ status: 'read' as const, ...read })),
-    }),
-  ),
   read_adapter_settings: pair(
     OPS.read_adapter_settings,
     body(OPS.read_adapter_settings, {
       execute: (input) => Effect.map(readSettings(input.adapter, input), (read) => ({ status: 'read' as const, ...read })),
-    }),
-  ),
-  install_adapter: pair(
-    OPS.install_adapter,
-    body(OPS.install_adapter, {
-      execute: (input) =>
-        declared(OPS.install_adapter)(
-          Effect.map(
-            Effect.flatMap(AdapterInstalls, (adapters) => adapters.install(input.source)),
-            (adapter) => ({ status: 'installed' as const, adapter }),
-          ),
-        ),
-    }),
-  ),
-  update_adapter: pair(
-    OPS.update_adapter,
-    body(OPS.update_adapter, {
-      execute: (input) =>
-        declared(OPS.update_adapter)(
-          Effect.map(
-            Effect.flatMap(AdapterInstalls, (adapters) => adapters.update(input.id)),
-            (adapter) => ({ status: 'updated' as const, adapter }),
-          ),
-        ),
-    }),
-  ),
-  remove_adapter: pair(
-    OPS.remove_adapter,
-    body(OPS.remove_adapter, {
-      execute: (input) =>
-        declared(OPS.remove_adapter)(
-          Effect.as(
-            Effect.flatMap(AdapterInstalls, (adapters) => adapters.remove(input.id)),
-            { status: 'removed' as const, id: input.id },
-          ),
-        ),
-    }),
-  ),
-  disable_adapter: pair(
-    OPS.disable_adapter,
-    body(OPS.disable_adapter, {
-      execute: (input) =>
-        declared(OPS.disable_adapter)(
-          Effect.map(
-            Effect.flatMap(AdapterInstalls, (adapters) => adapters.disable(input.id)),
-            (adapter) => ({ status: 'disabled' as const, adapter }),
-          ),
-        ),
-    }),
-  ),
-  enable_adapter: pair(
-    OPS.enable_adapter,
-    body(OPS.enable_adapter, {
-      execute: (input) =>
-        declared(OPS.enable_adapter)(
-          Effect.map(
-            Effect.flatMap(AdapterInstalls, (adapters) => adapters.enable(input.id)),
-            (adapter) => ({ status: 'enabled' as const, adapter }),
-          ),
-        ),
     }),
   ),
   save_adapter_instance: pair(

@@ -7,7 +7,8 @@ import { Context, Effect, Layer, Schema, Stream } from 'effect';
 import type { CliHarnessProvider } from '@runlith/tagma/adapter/provider';
 import { ModelCatalogs, modelCatalogsLayer } from './catalogs.js';
 import { registryLayer } from './registry.js';
-import { BuiltinAdapters, ProviderRegistry } from './contract/service/registry.js';
+import { AdapterSources, ProviderRegistry } from './contract/service/registry.js';
+import { fixedSources } from './testing/registry.js';
 import { CredentialFiles, ProviderCredentials } from './contract/service/credentials.js';
 import { DefaultAccounts, ProviderAccounts } from './contract/service/accounts.js';
 import { HarnessAccounts } from './contract/service/harness.js';
@@ -117,9 +118,10 @@ it.effect('passive catalog and account reads start no CLI until the provider is 
       defaultAccountMoved: Stream.empty,
     });
     const common = Layer.mergeAll(
-      Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'opencode', origin: 'builtin', version: null, load: async () => () => [provider] }],
-      }),
+      Layer.succeed(
+        AdapterSources,
+        fixedSources([{ id: 'opencode', title: 'OpenCode', origin: 'builtin', version: null, load: async () => () => [provider] }]),
+      ),
       Layer.succeed(CredentialFiles, { tokensPath }),
       Layer.succeed(DefaultAccounts, defaults),
       Layer.succeed(HarnessDirectories, directories),

@@ -3,7 +3,7 @@ import { type CloneFailed, type CommitUnreachable, isGitUrl, shallowClone } from
 import { Config, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { within } from './contract/service/reading.js';
-import type { PluginSource } from './contract/wire/rows.js';
+import { npmSourceOf, type PluginSource } from './contract/wire/rows.js';
 
 export const CLONES = 'agent-plugins';
 export const DATA = 'agent-plugin-data';
@@ -29,22 +29,13 @@ export type Fetched = {
   readonly stage: string | null;
 };
 
-const NPM_PREFIX = 'npm:';
-const SCOPED = /^@[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*(?:@.+)?$/u;
 const NPM_REGISTRY = 'https://registry.npmjs.org';
 
-const npmOf = (given: string): PluginSource => {
-  const at = given.indexOf('@', 1);
-  return at === -1 ? { kind: 'npm', name: given } : { kind: 'npm', name: given.slice(0, at), range: given.slice(at + 1) };
-};
-
-export const sourceOf = (given: string, projectRoot: string): PluginSource => {
-  if (given.startsWith(NPM_PREFIX)) return npmOf(given.slice(NPM_PREFIX.length));
-  if (SCOPED.test(given)) return npmOf(given);
-  return isGitUrl(given)
+export const sourceOf = (given: string, projectRoot: string): PluginSource =>
+  npmSourceOf(given) ??
+  (isGitUrl(given)
     ? { kind: 'git', url: given }
-    : { kind: 'folder', path: isAbsolute(given) ? resolve(given) : resolve(projectRoot, given) };
-};
+    : { kind: 'folder', path: isAbsolute(given) ? resolve(given) : resolve(projectRoot, given) });
 
 export const sameSource = (a: PluginSource, b: PluginSource): boolean => {
   switch (a.kind) {

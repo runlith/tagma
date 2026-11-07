@@ -1,16 +1,21 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { PluginProviders } from '../../../plugins/contract/wire/rows.js';
 import { MANIFEST } from '../contract/wire/manifest.js';
 
 export const PROCESS_ENTRY = 'dist/process.js';
+
+export const PROVIDERS_ENTRY = 'dist/providers.js';
 
 const BUILT_FROM_NOTHING = { hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', sources: [] };
 
 export type PluginFolder = {
   readonly id: string;
   readonly title?: string;
+  readonly version?: string;
   readonly program?: string;
   readonly resident?: boolean;
+  readonly providers?: PluginProviders;
   readonly options?: readonly Readonly<Record<string, unknown>>[];
   readonly mcpServers?: Readonly<Record<string, unknown>>;
   readonly contributes?: Readonly<Record<string, unknown>>;
@@ -21,8 +26,9 @@ export const manifestText = (folder: PluginFolder): string =>
   JSON.stringify({
     id: folder.id,
     title: folder.title ?? folder.id,
-    version: '0.0.0',
+    version: folder.version ?? '0.0.0',
     process: folder.program === undefined ? undefined : { entry: PROCESS_ENTRY, resident: folder.resident },
+    providers: folder.providers === undefined ? undefined : { entry: PROVIDERS_ENTRY, ...folder.providers },
     options: folder.options,
     mcpServers: folder.mcpServers,
     build: folder.build ?? BUILT_FROM_NOTHING,

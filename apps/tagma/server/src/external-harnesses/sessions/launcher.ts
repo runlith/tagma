@@ -8,7 +8,7 @@ import type { GrantSigner } from '../../platform/contract/service/grantSigner.js
 import { transportOf } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
-import type { AdapterInstalls } from '../../providers/contract/service/adapters.js';
+import type { PluginRevisions } from '../../plugins/contract/service/plugins.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { launchChoice } from '../birth/modelChoice.js';
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
@@ -64,7 +64,7 @@ export class SessionLauncher {
     private readonly files: FileSystem.FileSystem,
     private readonly declaring: ProjectDeclaring,
     private readonly adapters: HarnessAdapters['Service'],
-    private readonly installs: AdapterInstalls['Service'],
+    private readonly installs: PluginRevisions['Service'],
   ) {}
 
   readonly launch = Effect.fnUntraced(function* (

@@ -6,6 +6,7 @@ import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { type PluginFormats, PluginUnreadable } from './contract/service/format.js';
 import {
+  BuiltinPlugins,
   EnabledPlugins,
   HostedPlugins,
   PluginDigests,
@@ -13,7 +14,10 @@ import {
   PluginPlaces,
   type PluginProcessControl,
   PluginProcesses,
+  PluginRevisions,
   Plugins,
+  ProviderParts,
+  RevisionRecords,
 } from './contract/service/plugins.js';
 import { PluginPoints } from './contract/service/points.js';
 import type { PluginFault } from './contract/wire/rows.js';
@@ -22,6 +26,7 @@ import { makeDigests } from './digests.js';
 import { makeEnabled } from './enabled.js';
 import { makeInstalls } from './installs.js';
 import { makePoints } from './points.js';
+import { makeRevisions } from './revisions.js';
 import { makeShelf } from './shelf.js';
 import { clearStaging } from './sources.js';
 
@@ -35,7 +40,15 @@ const differing = (before: Options, after: Options): readonly string[] =>
   );
 
 export const pluginsLayer: Layer.Layer<
-  Plugins | EnabledPlugins | HostedPlugins | PluginPoints | PluginProcesses | PluginFaults | PluginDigests,
+  | Plugins
+  | EnabledPlugins
+  | HostedPlugins
+  | PluginPoints
+  | PluginProcesses
+  | PluginFaults
+  | PluginDigests
+  | ProviderParts
+  | PluginRevisions,
   never,
   | Settings
   | Projects
@@ -43,6 +56,8 @@ export const pluginsLayer: Layer.Layer<
   | SecretOwners
   | PluginPlaces
   | PluginFormats
+  | BuiltinPlugins
+  | RevisionRecords
   | FileSystem.FileSystem
   | ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effectContext(
@@ -82,10 +97,24 @@ export const pluginsLayer: Layer.Layer<
       },
     });
     const faultsOf = (id: string) => [...(found.get(id)?.values() ?? [])];
-    const installs = yield* makeInstalls({ shelf, digests, home, points, processes: () => control, changed, touched, faults: faultsOf });
+    const builtins = yield* BuiltinPlugins;
+    const installs = yield* makeInstalls({
+      shelf,
+      digests,
+      home,
+      points,
+      builtins,
+      processes: () => control,
+      changed,
+      touched,
+      faults: faultsOf,
+    });
     const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs });
+    const settings = yield* Settings;
+    const records = yield* RevisionRecords;
+    const { parts, revisions } = yield* makeRevisions({ home, shelf, digests, builtins, faults, settings, records, pulses });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
-    const options = yield* (yield* Settings).changes(pluginsOptions).pipe(Effect.orDie);
+    const options = yield* settings.changes(pluginsOptions).pipe(Effect.orDie);
     let seen: Options | null = null;
     yield* Effect.forkScoped(
       Stream.runForEach(options, (now) =>
@@ -109,6 +138,8 @@ export const pluginsLayer: Layer.Layer<
       Context.add(PluginPoints, points),
       Context.add(PluginProcesses, processes),
       Context.add(PluginFaults, faults),
+      Context.add(ProviderParts, parts),
+      Context.add(PluginRevisions, revisions),
       Context.add(
         PluginDigests,
         PluginDigests.of({

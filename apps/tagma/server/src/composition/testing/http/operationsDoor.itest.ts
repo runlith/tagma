@@ -1,9 +1,7 @@
 import { expect } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Layer } from 'effect';
-import { THREAD_TOOL_CANCEL_VALUE, THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
+import { THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { eq, sql } from 'drizzle-orm';
 import { thread } from '../../../threads/testing/doubles.js';
@@ -97,43 +95,14 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('operation HTTP
       });
     }),
   );
-  it.effect('a thread installs and removes an adapter through its own door: trust performs, review asks', () =>
+  it.effect('a thread reads an adapter’s settings through its own door', () =>
     Effect.gen(function* () {
-      const { world } = yield* Place;
-      const source = yield* world.directory('adapter');
-      writeFileSync(join(source, 'package.json'), JSON.stringify({ name: 'door-adapter', version: '1.0.0' }));
-      const threadOf = (born: HttpAnswer) => (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
-      const asThread = (threadId: string) => ({
-        [GRANT_HEADER]: grantEnvironment(threadId, testSessionIdentity)[GRANT_VARIABLE] as string,
-      });
-      const reviewed = threadOf(yield* threadIn('review'));
-      const asked = yield* answered('install_adapter', { source }, undefined, { ...asThread(reviewed), [APPROVAL_WAIT_HEADER]: '0' });
-      expect(asked).toMatchObject({ status: 409, body: { code: 'approval-pending' } });
-      const questions = Context.get(world.runtime.owners, ThreadHarness).runs.questions();
-      const [standing] = yield* questions.open(reviewed);
-      expect(standing?.action?.operation).toBe('install_adapter');
-      yield* questions.answer(reviewed, standing!.questionId, [{ questionId: standing!.questionId, values: [THREAD_TOOL_CANCEL_VALUE] }]);
-      const trusted = asThread(threadOf(yield* threadIn('trust')));
-      expect(yield* answered('install_adapter', { source }, undefined, trusted)).toMatchObject({
-        status: 200,
-        body: { status: 'installed', adapter: { id: 'door-adapter', origin: 'machine', source } },
-      });
-      expect(yield* answered('read_adapters', {}, undefined, trusted)).toMatchObject({
-        status: 200,
-        body: {
-          status: 'read',
-          adapters: expect.arrayContaining([
-            { adapter: expect.objectContaining({ id: 'door-adapter', origin: 'machine', source }), settings: null },
-          ]),
-        },
-      });
+      const born = yield* threadIn('trust');
+      const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
+      const trusted = { [GRANT_HEADER]: grantEnvironment(threadId, testSessionIdentity)[GRANT_VARIABLE] as string };
       expect(yield* answered('read_adapter_settings', { adapter: 'openai-compatible' }, undefined, trusted)).toMatchObject({
         status: 200,
         body: { status: 'read', settings: { adapter: 'openai-compatible', discovers: true } },
-      });
-      expect(yield* answered('remove_adapter', { id: 'door-adapter' }, undefined, trusted)).toMatchObject({
-        status: 200,
-        body: { status: 'removed', id: 'door-adapter' },
       });
     }),
   );

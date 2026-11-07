@@ -121,11 +121,12 @@ export type AdapterOrigin = typeof adapterOriginSchema.Type;
 
 const adapterFields = {
   id: Schema.String.annotate({ description: 'The plugin whose provider part declares these model providers.' }),
+  title: Schema.String.annotate({ description: 'That plugin’s title.' }),
   origin: adapterOriginSchema,
   version: Schema.NullOr(Schema.String),
 };
 
-export const adapterStateSchema = Schema.Union([
+const adapterStateSchema = Schema.Union([
   Schema.Struct({ ...adapterFields, state: Schema.Literal('loaded'), providers: Schema.Array(Schema.String) }),
   Schema.Struct({ ...adapterFields, state: Schema.Literal('failed'), reason: Schema.String }),
   Schema.Struct({ ...adapterFields, state: Schema.Literal('disabled') }),

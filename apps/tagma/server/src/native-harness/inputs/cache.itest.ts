@@ -131,6 +131,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             title: 'Demo',
             place: { root: pluginRoot, data: pluginRoot, options: {}, project: demo.demoRoot },
             process: null,
+            providers: null,
             contributes: {},
             redact: [],
             skills: [

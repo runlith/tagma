@@ -11,7 +11,8 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { CredentialFiles } from '../../providers/contract/service/credentials.js';
-import { type AdapterSource, BuiltinAdapters, ProviderRegistry } from '../../providers/contract/service/registry.js';
+import { type AdapterSource, AdapterSources, ProviderRegistry } from '../../providers/contract/service/registry.js';
+import { fixedSources } from '../../providers/testing/registry.js';
 import { DefaultAccounts, ProviderAccounts } from '../../providers/contract/service/accounts.js';
 import { registryLayer } from '../../providers/registry.js';
 import { HarnessDirectories, makeHarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
@@ -36,8 +37,20 @@ const home = await mkdtemp(join(tmpdir(), 'default-model-'));
 afterAll(() => rm(home, { recursive: true, force: true }));
 
 const SOURCES: readonly AdapterSource[] = [
-  { id: 'anthropic', origin: 'builtin', version: null, load: async () => (await import('@runlith/adapter-anthropic/adapter')).adapter },
-  { id: 'openai', origin: 'builtin', version: null, load: async () => (await import('@runlith/adapter-openai/adapter')).adapter },
+  {
+    id: 'anthropic',
+    title: 'Anthropic',
+    origin: 'builtin',
+    version: null,
+    load: async () => (await import('@runlith/adapter-anthropic/adapter')).adapter,
+  },
+  {
+    id: 'openai',
+    title: 'OpenAI',
+    origin: 'builtin',
+    version: null,
+    load: async () => (await import('@runlith/adapter-openai/adapter')).adapter,
+  },
 ];
 
 const cli = (claudeSignedIn: boolean): AccountCli['Service'] => ({
@@ -84,7 +97,7 @@ const birthOn = Effect.fnUntraced(function* (
       registryLayer.pipe(
         Layer.provide(
           Layer.mergeAll(
-            Layer.succeed(BuiltinAdapters, { sources: SOURCES }),
+            Layer.succeed(AdapterSources, fixedSources(SOURCES)),
             Layer.succeed(CredentialFiles, { tokensPath }),
             Layer.succeed(AccountCli, account),
           ),

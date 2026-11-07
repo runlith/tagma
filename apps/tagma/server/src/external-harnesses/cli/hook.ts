@@ -32,13 +32,13 @@ export const hook = ({ connect, catalog }: { readonly connect: HookConnect; read
         const rows = yield* harnessRows(catalog, at, yield* InstalledChannel, named).pipe(
           Effect.catchTag('HarnessUnreadable', (unreadable) =>
             Effect.sync(() =>
-              refuse('harness-unreadable', unreadable.message, ['read_adapters — whether the adapter package still loads']),
+              refuse('harness-unreadable', unreadable.message, ['read_plugins — whether the plugin that brings it reads broken']),
             ),
           ),
         );
         if (rows === null) {
-          return refuse('harness-not-installed', `no builtin harness and no adapter installed on this machine declares ${named}`, [
-            'install_adapter — install the package that declares it',
+          return refuse('harness-not-installed', `no builtin harness and no plugin on this machine declares ${named}`, [
+            'install_plugin — install the plugin that brings it, or turn it on again on this machine',
             'tagma upgrade — rewrite hook files written for a harness since removed',
           ]);
         }

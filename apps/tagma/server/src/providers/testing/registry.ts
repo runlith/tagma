@@ -1,14 +1,30 @@
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
 import { Effect, Stream } from 'effect';
-import { notInstalled, type ProviderCatalog, type ProviderRegistry } from '../contract/service/registry.js';
+import {
+  type AdapterSource,
+  AdapterSources,
+  notInstalled,
+  type ProviderCatalog,
+  type ProviderRegistry,
+} from '../contract/service/registry.js';
 import { catalogOf } from '../registry.js';
 import { modeSections } from '../accounts/modes.js';
+
+export const fixedSources = (sources: readonly AdapterSource[]) =>
+  AdapterSources.of({ current: () => sources, changes: Stream.never, host: {} });
 
 export const providerCatalogOf = (providers: readonly Provider[]): ProviderCatalog =>
   catalogOf(
     [
       {
-        state: { id: 'fixture', origin: 'builtin', version: null, state: 'loaded', providers: providers.map(({ id }) => id) },
+        state: {
+          id: 'fixture',
+          title: 'Fixture',
+          origin: 'builtin',
+          version: null,
+          state: 'loaded',
+          providers: providers.map(({ id }) => id),
+        },
         providers,
         settings: undefined,
       },

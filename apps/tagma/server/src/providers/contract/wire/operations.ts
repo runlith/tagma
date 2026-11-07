@@ -4,14 +4,8 @@ import { Schema } from 'effect';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { accountsFrameSchema, cacheLifetimesSchema } from './accounts.js';
-import {
-  adapterStateSchema,
-  servedCatalogSchema,
-  servedInstanceSchema,
-  settingsDeclarationSchema,
-  settingValuesSchema,
-} from './catalog.js';
-import { ADAPTER_ROWS, adapterRowSchema, INSTANCE_ROWS } from './adapterRows.js';
+import { servedCatalogSchema, servedInstanceSchema, settingsDeclarationSchema, settingValuesSchema } from './catalog.js';
+import { INSTANCE_ROWS } from './adapterRows.js';
 import { PAGE_CURSOR } from '@runlith/paging';
 import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import {
@@ -354,26 +348,6 @@ export const PROVIDER_OPERATIONS = {
     confirmLabel: 'Remove console key',
     presentation: { running: 'Removing the console key', done: 'Removed the console key' },
   }),
-  read_adapters: operation('read_adapters', {
-    approval: ASKS_NEVER,
-    ...adapterActs,
-    meaning:
-      'Read the model provider adapters on this machine, each with its origin, version, the source it was installed from, whether it loaded, failed or is disabled, and the title and instance count of the settings it declares.',
-    grammar:
-      'A page of rows by id with the total; `next` continues the walk, null on the last page. Only an adapter of origin `machine` is updated, switched or removed; a `builtin` one comes with this server. read_adapter_settings reads the settings of one adapter.',
-    input: Schema.Struct({ limit: limitOf(ADAPTER_ROWS), cursor: PAGE_CURSOR }),
-    answer: arms({
-      read: { adapters: Schema.Array(adapterRowSchema), shown: Schema.Int, total: Schema.Int, next: Schema.NullOr(Schema.String) },
-    }),
-    refusals: ['bad-cursor', 'cursor-stale'],
-    page: ADAPTER_ROWS,
-    effect: 'read',
-    identity: 'none',
-    subjects: nobody,
-    confirmation: () => ({ summary: 'Read the adapters?' }),
-    confirmLabel: 'Read adapters',
-    presentation: { running: 'Reading the adapters', done: 'Read the adapters' },
-  }),
   read_adapter_settings: operation('read_adapter_settings', {
     approval: ASKS_NEVER,
     ...adapterActs,
@@ -399,81 +373,6 @@ export const PROVIDER_OPERATIONS = {
     confirmation: (input) => ({ summary: `Read the ${input.adapter} settings?` }),
     confirmLabel: 'Read settings',
     presentation: { running: 'Reading the adapter settings', done: 'Read the adapter settings' },
-  }),
-  install_adapter: operation('install_adapter', {
-    approval: ASKS_IN_REVIEW,
-    ...adapterActs,
-    meaning:
-      'Install a model provider adapter on this machine from an npm package, a GitHub repository or a local directory; installing an id again puts its new version in place for the next run, without a restart.',
-    input: Schema.Struct({ source: Schema.String.check(Schema.isMinLength(1)) }),
-    answer: arms({ installed: { adapter: adapterStateSchema } }),
-    refusals: ['adapter-install'],
-    effect: 'external',
-    identity: { key: 'request' },
-    subjects: nobody,
-    confirmation: (input) => ({ summary: `Install the adapter ${input.source}?` }),
-    confirmLabel: 'Install adapter',
-    presentation: { running: 'Installing the adapter', done: 'Installed the adapter' },
-  }),
-  update_adapter: operation('update_adapter', {
-    approval: ASKS_IN_REVIEW,
-    ...adapterActs,
-    meaning: 'Install an installed adapter again from the source it was installed from; its new version serves from the next run.',
-    input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
-    answer: arms({ updated: { adapter: adapterStateSchema } }),
-    refusals: ['adapter-install', 'unknown-adapter'],
-    effect: 'external',
-    identity: { key: 'request' },
-    subjects: nobody,
-    confirmation: (input) => ({ summary: `Update the adapter ${input.id}?` }),
-    confirmLabel: 'Update adapter',
-    presentation: { running: 'Updating the adapter', done: 'Updated the adapter' },
-  }),
-  remove_adapter: operation('remove_adapter', {
-    approval: ASKS_IN_REVIEW,
-    ...adapterActs,
-    meaning: 'Remove an installed adapter from this machine; the credentials of its providers stay.',
-    input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
-    answer: arms({ removed: { id: Schema.String } }),
-    refusals: ['adapter-install', 'unknown-adapter'],
-    effect: 'write',
-    identity: { key: 'request' },
-    intent: 'destructive',
-    destructiveConsequence: (input) =>
-      `The adapter ${input.id} and its files are removed; its providers stop serving until it is installed again.`,
-    subjects: nobody,
-    confirmation: (input) => ({ summary: `Remove the adapter ${input.id}?` }),
-    confirmLabel: 'Remove adapter',
-    presentation: { running: 'Removing the adapter', done: 'Removed the adapter' },
-  }),
-  disable_adapter: operation('disable_adapter', {
-    approval: ASKS_IN_REVIEW,
-    ...adapterActs,
-    meaning:
-      'Stop loading an installed adapter without removing it: its providers read provider-not-installed from the next run and the credentials of its providers stay.',
-    input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
-    answer: arms({ disabled: { adapter: adapterStateSchema } }),
-    refusals: ['adapter-install', 'unknown-adapter'],
-    effect: 'write',
-    identity: { key: 'request' },
-    subjects: nobody,
-    confirmation: (input) => ({ summary: `Disable the adapter ${input.id}?` }),
-    confirmLabel: 'Disable adapter',
-    presentation: { running: 'Disabling the adapter', done: 'Disabled the adapter' },
-  }),
-  enable_adapter: operation('enable_adapter', {
-    approval: ASKS_IN_REVIEW,
-    ...adapterActs,
-    meaning: 'Load a disabled adapter again; its providers serve from the next run with the credentials they kept.',
-    input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
-    answer: arms({ enabled: { adapter: adapterStateSchema } }),
-    refusals: ['adapter-install', 'unknown-adapter'],
-    effect: 'write',
-    identity: { key: 'request' },
-    subjects: nobody,
-    confirmation: (input) => ({ summary: `Enable the adapter ${input.id}?` }),
-    confirmLabel: 'Enable adapter',
-    presentation: { running: 'Enabling the adapter', done: 'Enabled the adapter' },
   }),
   save_adapter_instance: operation('save_adapter_instance', {
     approval: ASKS_IN_REVIEW,

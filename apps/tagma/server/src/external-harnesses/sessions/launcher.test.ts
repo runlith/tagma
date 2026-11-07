@@ -13,7 +13,7 @@ import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../platform/contract/
 import { ScratchAreas } from '../../threads/contract/service/scratch.js';
 import { HarnessAccounts } from '../../providers/contract/service/harness.js';
 import { providerCatalogOf, staticRegistry } from '../../providers/testing/registry.js';
-import { noInstalls } from '../../providers/testing/holders.js';
+import { unheldRevisions } from '../../plugins/testing/revisions.js';
 import { SessionObservations } from '../contract/service/observations.js';
 import { hookReports } from '../testing/hookReports.js';
 import { transcriptFiles } from '../testing/files.js';
@@ -127,7 +127,7 @@ it.effect('a plain CLI reaches the host with its chosen permission mode, verbati
       memory.files,
       unused,
       world.adapters,
-      noInstalls,
+      unheldRevisions,
     );
     const facet = (yield* world.store.read(world.id))!;
     yield* launcher.launch(world.id, facet, facet.session!, true, false);

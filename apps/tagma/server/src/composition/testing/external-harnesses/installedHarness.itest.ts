@@ -3,8 +3,8 @@ import { delimiter, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Fiber, FileSystem, Layer, Predicate, Schedule } from 'effect';
+import { PluginRevisions } from '../../../plugins/contract/service/plugins.js';
 import { ModelAsks } from '../../../providers/contract/service/asks.js';
-import { AdapterInstalls } from '../../../providers/contract/service/adapters.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { SessionRead } from '../../../threads/contract/service/harness.js';
 import { makeDoorWorld } from '../doorFixture.js';
@@ -48,7 +48,7 @@ class World extends Context.Service<
     readonly sessions: SessionRead['Service'];
     readonly asks: ModelAsks['Service'];
     readonly registry: ProviderRegistry['Service'];
-    readonly installs: AdapterInstalls['Service'];
+    readonly revisions: PluginRevisions['Service'];
   }
 >()('testing/InstalledHarnessWorld') {}
 
@@ -57,10 +57,21 @@ const appeared = (path: string) =>
     Effect.repeat(files.exists(path), { until: (standing) => standing, schedule: Schedule.spaced('20 millis'), times: 500 }),
   );
 
+const gone = (path: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (files) =>
+    Effect.repeat(files.exists(path), { until: (standing) => !standing, schedule: Schedule.spaced('20 millis'), times: 500 }),
+  );
+
+const revisionOf = (registry: ProviderRegistry['Service'], other?: string) =>
+  Effect.repeat(
+    Effect.sync(() => registry.current().packages.get(QUILL.harness)),
+    { until: (directory) => directory !== undefined && directory !== other, schedule: Schedule.spaced('20 millis'), times: 500 },
+  );
+
 const world = Layer.effect(
   World,
   Effect.gen(function* () {
-    const door = yield* makeDoorWorld({ own: 'installs an adapter package into the machine and launches its CLI' });
+    const door = yield* makeDoorWorld({ own: 'installs a provider plugin onto the machine and launches its CLI' });
     const files = yield* FileSystem.FileSystem;
     const root = yield* files.makeTempDirectoryScoped({ prefix: 'quill-harness-' });
     const quill = yield* quillPackage(root);
@@ -80,7 +91,7 @@ const world = Layer.effect(
       sessions: Context.get(door.runtime.owners, SessionRead),
       asks: Context.get(door.runtime.owners, ModelAsks),
       registry: Context.get(door.runtime.owners, ProviderRegistry),
-      installs: Context.get(door.runtime.owners, AdapterInstalls),
+      revisions: Context.get(door.runtime.owners, PluginRevisions),
     };
   }),
 );
@@ -88,15 +99,19 @@ const world = Layer.effect(
 const born = (answer: Answer) => (answer.body as { readonly snapshot: { readonly thread: { readonly id: string } } }).snapshot.thread.id;
 
 layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
-  'a harness an installed package declares',
+  'a harness a provider plugin declares',
   (it) => {
     it.effect(
-      'is offered, refuses birth while its program is missing, launches its CLI, and after removal its resting CLI ends, its chat reads and a turn refuses',
+      'is offered, refuses birth while its program is missing, launches its CLI, and after uninstalling its resting CLI ends, its chat reads and a turn refuses',
       () =>
         Effect.gen(function* () {
-          const { op, source, bin, launched, projectId, sessions } = yield* World;
+          const { op, source, bin, launched, projectId, sessions, registry } = yield* World;
           const project = `project=${projectId}`;
-          expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
+          expect(yield* op('install_plugin', { source }, project)).toMatchObject({
+            status: 200,
+            body: { status: 'ok', plugin: { id: QUILL.name, providers: { harnesses: true } } },
+          });
+          yield* revisionOf(registry);
 
           const missing = yield* op('create_thread', { type: `harness:${QUILL.harness}` }, project);
           expect(missing).toMatchObject({ status: 409, body: { code: 'harness-not-installed' } });
@@ -131,7 +146,7 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
           );
           expect(yield* alive).toBe(true);
 
-          expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
+          expect(yield* op('uninstall_plugin', { id: QUILL.name }, project)).toMatchObject({ status: 200, body: { status: 'ok' } });
           const rested = yield* Effect.repeat(sessions(threadId), {
             until: (facet) => facet?.session?.state === 'ended',
             schedule: Schedule.spaced('20 millis'),
@@ -159,52 +174,48 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
         }),
     );
 
-    it.effect('an ask running across an update finishes on its version, and the next ask runs the new one', () =>
+    it.effect('an ask running across a rebuild finishes on its revision, and the next ask runs the new one', () =>
       Effect.gen(function* () {
-        const { op, source, root, asks, registry } = yield* World;
+        const { op, source, root, asks, registry, projectId } = yield* World;
         const files = yield* FileSystem.FileSystem;
-        expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
-        const first = registry.current().packages.get(QUILL.harness);
-        expect(first).toBeDefined();
+        expect(yield* op('install_plugin', { source }, `project=${projectId}`)).toMatchObject({ status: 200, body: { status: 'ok' } });
+        const first = yield* revisionOf(registry);
         const selection = { provider: QUILL.harness, model: QUILL.model, reasoning: null, account: null };
         const gate = join(root, 'ask-gate');
         const asking = yield* Effect.forkScoped(asks.text(selection, { system: 'Answer.', input: `wait:${gate}` }));
         expect(yield* appeared(`${gate}.asked`)).toBe(true);
 
         yield* quillRelease(source, '2.0.0');
-        expect(yield* op('update_adapter', { id: QUILL.name })).toMatchObject({ status: 200 });
-        const second = registry.current().packages.get(QUILL.harness);
-        expect(second).not.toBe(first);
+        const second = yield* revisionOf(registry, first);
         expect(yield* files.exists(first!)).toBe(true);
 
         yield* files.writeFileString(gate, '');
         expect((yield* Fiber.join(asking)).value).toBe(`quill ${QUILL.version}`);
-        expect(yield* files.exists(first!)).toBe(false);
+        expect(yield* gone(first!)).toBe(false);
         expect((yield* asks.text(selection, { system: 'Answer.', input: 'now' })).value).toBe('quill 2.0.0');
 
-        expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
-        expect(yield* files.exists(second!)).toBe(false);
+        expect(yield* op('uninstall_plugin', { id: QUILL.name }, `project=${projectId}`)).toMatchObject({ status: 200 });
+        expect(yield* gone(second!)).toBe(false);
       }),
     );
 
-    it.effect('a run pinned before an update asks its version afterwards, and a retired version takes no new hold', () =>
+    it.effect('a run pinned before a rebuild asks its revision afterwards, and a retired revision takes no new hold', () =>
       Effect.gen(function* () {
-        const { op, source, asks, registry, installs } = yield* World;
-        const files = yield* FileSystem.FileSystem;
+        const { op, source, asks, registry, revisions, projectId } = yield* World;
         yield* quillRelease(source, QUILL.version);
-        expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
-        const first = registry.current().packages.get(QUILL.harness)!;
+        expect(yield* op('install_plugin', { source }, `project=${projectId}`)).toMatchObject({ status: 200, body: { status: 'ok' } });
+        const first = (yield* revisionOf(registry))!;
         const run = crypto.randomUUID();
         registry.pinRun(run);
         yield* quillRelease(source, '2.0.0');
-        expect(yield* op('update_adapter', { id: QUILL.name })).toMatchObject({ status: 200 });
+        yield* revisionOf(registry, first);
 
         const selection = { provider: QUILL.harness, model: QUILL.model, reasoning: null, account: null };
         expect((yield* asks.text(selection, { system: 'Answer.', input: 'pinned', runId: run })).value).toBe(`quill ${QUILL.version}`);
         yield* registry.releaseRun(run);
-        expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
-        expect(yield* files.exists(first)).toBe(false);
-        expect(yield* Effect.scoped(installs.hold(first))).toBe(false);
+        expect(yield* gone(first)).toBe(false);
+        expect(yield* Effect.scoped(revisions.hold(first))).toBe(false);
+        expect(yield* op('uninstall_plugin', { id: QUILL.name }, `project=${projectId}`)).toMatchObject({ status: 200 });
       }),
     );
   },

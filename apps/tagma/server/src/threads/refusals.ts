@@ -204,7 +204,7 @@ function kernelRefusal(failure: unknown): Reworded | null {
     return {
       code: 'transport-cannot',
       reason: failure.message,
-      unblock: ['install the adapter whose transport this thread names', 'start a new thread for this work'],
+      unblock: ['install_plugin the plugin whose provider this thread’s transport names', 'start a new thread for this work'],
     };
   }
   if (failure instanceof ThreadActReusedError) {
@@ -225,7 +225,7 @@ function kernelRefusal(failure: unknown): Reworded | null {
     return {
       code: 'provider-not-installed',
       reason: failure.message,
-      unblock: [`install the adapter that provides ${failure.provider}`, 'move the thread to a model an installed adapter serves'],
+      unblock: [`install_plugin the plugin that provides ${failure.provider}`, 'move the thread to a model this machine serves'],
     };
   }
   if (failure instanceof ThreadActSpentError) {

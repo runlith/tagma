@@ -11,7 +11,8 @@ import { makeFileTokenStore } from '@runlith/llm/oauth/FileTokenStore';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { ModelCatalogs, modelCatalogsLayer } from './catalogs.js';
 import { registryLayer } from './registry.js';
-import { BuiltinAdapters, ProviderRegistry } from './contract/service/registry.js';
+import { AdapterSources, ProviderRegistry } from './contract/service/registry.js';
+import { fixedSources } from './testing/registry.js';
 import { CredentialFiles, ProviderCredentials } from './contract/service/credentials.js';
 import { DefaultAccounts } from './contract/service/accounts.js';
 import { HarnessAccounts } from './contract/service/harness.js';
@@ -72,9 +73,10 @@ it.effect('a discovered model catalog survives a new registry and a failed refre
       requested: true,
     });
     const inputs = Layer.mergeAll(
-      Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'dynamic', origin: 'builtin', version: null, load: async () => () => [provider] }],
-      }),
+      Layer.succeed(
+        AdapterSources,
+        fixedSources([{ id: 'dynamic', title: 'Dynamic', origin: 'builtin', version: null, load: async () => () => [provider] }]),
+      ),
       Layer.succeed(CredentialFiles, { tokensPath }),
       Layer.succeed(HarnessDirectories, directories),
       Layer.succeed(

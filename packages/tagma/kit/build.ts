@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { BunPlugin } from 'bun';
 import oxidePackage from '@tailwindcss/oxide/package.json' with { type: 'json' };
@@ -21,20 +21,12 @@ const manifests = new Map(
   }),
 );
 const specifiers = hostSpecifiers(texts);
-const hostEntry = join(import.meta.dir, 'host.generated.ts');
-const hostText = `export const host = {\n${specifiers.map((specifier) => `  ${JSON.stringify(specifier)}: () => import(${JSON.stringify(specifier)}),`).join('\n')}\n};\n`;
-const previousHost = await readFile(hostEntry, 'utf8').catch((error: NodeJS.ErrnoException) => {
-  if (error.code === 'ENOENT') return null;
-  throw error;
-});
-if (previousHost !== hostText) await writeFile(hostEntry, hostText);
 const manifest = manifests.get('@runlith/tagma');
 type Conditions = { readonly types: string; readonly browser?: string; readonly default: string | null };
-const CREATE = './adapter/create';
 const PLUGIN_DOOR = /^\.\/(?:plugin(?:\/|$)|testing$|ui$)/u;
 const CLI = join(packageRoot, manifest.bin['tagma-plugin']);
 const doors = Object.entries(manifest.exports as Readonly<Record<string, Conditions>>)
-  .filter(([key]) => (key.startsWith('./adapter/') && key !== CREATE) || PLUGIN_DOOR.test(key))
+  .filter(([key]) => key.startsWith('./adapter/') || PLUGIN_DOOR.test(key))
   .map(([key, conditions]) => ({ key, conditions, source: join(packageRoot, conditions.types) }));
 const adapterDoors = doors.filter((door) => door.key.startsWith('./adapter/'));
 const pluginDoors = doors.filter((door) => PLUGIN_DOOR.test(door.key));
@@ -268,9 +260,15 @@ for (const door of doors) {
     `/// <reference path="../types/node/index.d.ts" />\n/// <reference path="../host.d.ts" />\n${rewritten.get(door.source)}`,
   );
 }
+const SDK_HOST = join(packageRoot, 'src/adapter/sdkHost.ts');
+const sdkHostText = `export const sdkHost = async () => ({\n${specifiers.map((specifier) => `  ${JSON.stringify(specifier)}: () => import(${JSON.stringify(specifier)}),`).join('\n')}\n});\n`;
 const workspaceHost: BunPlugin = {
   name: 'workspace-host',
   setup(build) {
+    build.onLoad({ filter: /sdkHost\.ts$/ }, ({ path }) => {
+      if (path !== SDK_HOST) return undefined;
+      return { contents: sdkHostText, loader: 'ts' };
+    });
     build.onResolve({ filter: /^@runlith\// }, ({ path }) => {
       const file = workspaceFile(path);
       if (file === undefined) throw new Error(`Unknown workspace host module ${path}`);
@@ -304,9 +302,6 @@ const cli = join(out, `${builtFile(CLI)}.js`);
 const cliText = await readFile(cli, 'utf8');
 if (!cliText.startsWith('#!')) await writeFile(cli, `#!/usr/bin/env bun\n${cliText}`);
 await emitRules(out, ruleDoors);
-await mkdir(join(out, 'kit'), { recursive: true });
-await cp(join(import.meta.dir, 'create.ts'), join(out, 'kit/create.ts'));
-await cp(join(import.meta.dir, 'template'), join(out, 'kit/template'), { recursive: true });
 await writeFile(
   join(out, 'package.json'),
   JSON.stringify(
@@ -337,10 +332,9 @@ await writeFile(
             ];
           }),
         ),
-        [CREATE]: { types: './kit/create.ts', bun: './kit/create.ts', default: null },
       },
-      bin: { create: './kit/create.ts', 'tagma-plugin': `${builtFile(CLI)}.js` },
-      files: ['rules', 'adapter', 'plugin', 'host.d.ts', 'types', 'kit/create.ts', 'kit/template'],
+      bin: { 'tagma-plugin': `${builtFile(CLI)}.js` },
+      files: ['rules', 'adapter', 'plugin', 'host.d.ts', 'types'],
       dependencies: {
         typescript: `^${ts.version}`,
         svelte: `^${sveltePackage.version}`,
@@ -353,18 +347,4 @@ await writeFile(
     2,
   ),
 );
-const creator = join(out, 'create-tagma-adapter');
-await mkdir(join(creator, 'kit'), { recursive: true });
-await cp(join(import.meta.dir, 'create.ts'), join(creator, 'kit/create.ts'));
-await cp(join(import.meta.dir, 'template'), join(creator, 'kit/template'), { recursive: true });
-await writeFile(
-  join(creator, 'package.json'),
-  JSON.stringify(
-    { name: '@runlith/create-tagma-adapter', version: manifest.version, private: true, type: 'module', bin: { create: './kit/create.ts' } },
-    null,
-    2,
-  ),
-);
-console.log(
-  `Built ${ruleDoors.length + doors.length} SDK entries, ${specifiers.length} host declarations (${rewritten.size} modules) and the bun create package.`,
-);
+console.log(`Built ${ruleDoors.length + doors.length} SDK entries and ${specifiers.length} host declarations (${rewritten.size} modules).`);

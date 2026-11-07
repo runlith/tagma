@@ -25,8 +25,8 @@ export class HarnessMissing extends Data.TaggedError('HarnessMissing')<{ readonl
 export type HarnessNotInstalled = GateRefusal<'harness-not-installed'>;
 
 export const harnessNotInstalled = (harness: string, install: string | null = null): HarnessNotInstalled =>
-  new GateRefusal('harness-not-installed', `No installed adapter declares the ${harness} harness.`, [
-    install ?? `install the adapter package that declares ${harness}`,
+  new GateRefusal('harness-not-installed', `No plugin on this machine declares the ${harness} harness.`, [
+    install ?? `install_plugin the plugin that brings ${harness}`,
     'continue on a harness or model this machine has',
   ]);
 

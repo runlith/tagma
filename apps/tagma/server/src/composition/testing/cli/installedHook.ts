@@ -1,5 +1,8 @@
 import { join } from 'node:path';
-import { Context, Effect, FileSystem } from 'effect';
+import { Context, Effect, FileSystem, Schedule } from 'effect';
+import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
+import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { Blocks } from '../../../graph/contract/service/blocks.js';
 import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
@@ -17,23 +20,45 @@ import { QUILL, quillPackage } from '../external-harnesses/quill.js';
 import { makeTerminalWorld } from '../fixture.js';
 
 const program = Effect.gen(function* () {
-  const world = yield* makeTerminalWorld({ own: 'install a machine adapter and launch its hook process' });
+  const world = yield* makeTerminalWorld({ own: 'install a provider plugin and launch its hook process' });
   const project = yield* world.checkout();
   const root = yield* world.directory('quill');
   const files = yield* FileSystem.FileSystem;
+  const path = join(project.root, 'quill.txt');
+  yield* files.writeFileString(path, 'quill data\n');
+  const blocks = Context.get(world.runtime.graph, Blocks);
+  yield* Effect.provide(
+    Effect.gen(function* () {
+      const parentId = (yield* blocks.rootBlockOf(project.id)).id;
+      yield* blocks.create({
+        projectId: project.id,
+        parentId,
+        tags: ['explanation'],
+        title: 'Quill data',
+        body: 'The record stores one value per line.',
+        sources: [{ kind: 'file', ref: 'quill.txt' }],
+      });
+    }),
+    world.runtime.owners,
+  );
   const broken = join(root, 'broken');
-  yield* files.makeDirectory(broken);
+  yield* files.makeDirectory(join(broken, 'dist'), { recursive: true });
   yield* files.writeFileString(
-    join(broken, 'package.json'),
-    JSON.stringify({ name: 'broken-adapter', version: '1', main: './adapter.ts' }),
+    join(broken, MANIFEST),
+    manifestText({ id: 'broken-plugin', providers: { models: true, harnesses: false, speech: false } }),
   );
-  yield* files.writeFileString(
-    join(broken, 'adapter.ts'),
-    "throw new Error('unrelated adapter is broken'); export const adapter = () => [];\n",
-  );
-  const unrelated = yield* world.tagma(['op', 'install_adapter', JSON.stringify({ source: broken }), '--json']);
+  yield* files.writeFileString(join(broken, PROVIDERS_ENTRY), "throw new Error('unrelated plugin is broken');\n");
+  const install = (source: string) =>
+    world.tagma(['op', 'install_plugin', '--yes', JSON.stringify({ project: project.id, source, enabled: false }), '--json']);
+  const unrelated = yield* install(broken);
   const quill = yield* quillPackage(root);
-  const installed = yield* world.tagma(['op', 'install_adapter', JSON.stringify({ source: quill.directory }), '--json']);
+  const installed = yield* install(quill.directory);
+  const registry = Context.get(world.runtime.owners, ProviderRegistry);
+  yield* Effect.repeat(
+    Effect.sync(() => registry.current().packages.get(QUILL.harness)),
+    { until: (directory) => directory !== undefined, schedule: Schedule.spaced('20 millis'), times: 500 },
+  );
+  const failed = registry.current().adapters.find((adapter) => adapter.id === 'broken-plugin');
   const data = yield* world.directory('home');
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) if (value !== undefined) env[name] = value;
@@ -79,23 +104,6 @@ const program = Effect.gen(function* () {
     },
     terminalTestKernel(row),
   );
-  const path = join(project.root, 'quill.txt');
-  yield* files.writeFileString(path, 'quill data\n');
-  const blocks = Context.get(world.runtime.graph, Blocks);
-  yield* Effect.provide(
-    Effect.gen(function* () {
-      const parentId = (yield* blocks.rootBlockOf(project.id)).id;
-      yield* blocks.create({
-        projectId: project.id,
-        parentId,
-        tags: ['explanation'],
-        title: 'Quill data',
-        body: 'The record stores one value per line.',
-        sources: [{ kind: 'file', ref: 'quill.txt' }],
-      });
-    }),
-    world.runtime.owners,
-  );
   const answered = yield* hook(QUILL.harness);
   const read = yield* spawnedEffect(
     [
@@ -135,11 +143,22 @@ const program = Effect.gen(function* () {
       env: { ...env, TAGMA_SERVER_URL: world.url, TAGMA_DATABASE_PATH: join(data, 'tagma.sqlite'), [MCP_KEY_VARIABLE]: undefined },
     },
   );
-  const removed = yield* world.tagma(['op', 'remove_adapter', '--yes', JSON.stringify({ id: QUILL.name }), '--json']);
+  const removed = yield* world.tagma([
+    'op',
+    'uninstall_plugin',
+    '--yes',
+    JSON.stringify({ project: project.id, id: QUILL.name }),
+    '--json',
+  ]);
+  yield* Effect.repeat(
+    Effect.sync(() => registry.current().packages.get(QUILL.harness)),
+    { until: (directory) => directory === undefined, schedule: Schedule.spaced('20 millis'), times: 500 },
+  );
   const missing = yield* hook(QUILL.harness);
   return {
     unrelated,
     installed,
+    failed,
     removed,
     missing: { code: missing.exitCode, err: missing.stderr.toString() },
     mcp: { code: mcp.exitCode, err: mcp.stderr.toString() },

@@ -19,6 +19,9 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
     ...(loaded.process === null
       ? []
       : [{ kind: 'execute', value: mask(join(loaded.place.root, loaded.process.entry)) } satisfies PermissionSubject]),
+    ...(loaded.providers === null
+      ? []
+      : [{ kind: 'execute', value: mask(join(loaded.place.root, loaded.providers.entry)) } satisfies PermissionSubject]),
     ...loaded.servers.map((server): PermissionSubject => ({
       kind: server.transport === 'stdio' ? 'execute' : 'network',
       value: mask(reachOf(server)),

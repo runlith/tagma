@@ -26,9 +26,11 @@ import { AccountCli } from '../contract/service/cli.js';
 import { CredentialFiles } from '../contract/service/credentials.js';
 import { HarnessAccounts } from '../contract/service/harness.js';
 import { AccountQuota } from '../contract/service/quota.js';
-import { BuiltinAdapters } from '../contract/service/registry.js';
+import { AdapterSources } from '../contract/service/registry.js';
+import { fixedSources } from '../testing/registry.js';
+import { PluginRevisions } from '../../plugins/contract/service/plugins.js';
+import { unheldRevisions } from '../../plugins/testing/revisions.js';
 import { providersLayer } from '../layer.js';
-import { sessionlessLayer } from '../testing/holders.js';
 
 const home = await mkdtemp(join(tmpdir(), 'borrowed-quota-'));
 afterAll(() => rm(home, { recursive: true, force: true }));
@@ -122,12 +124,13 @@ const cli: AccountCli['Service'] = {
 const layer = providersLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
-      Layer.succeed(BuiltinAdapters, {
-        sources: [{ id: 'fixture', origin: 'builtin', version: null, load: async () => () => providers }],
-      }),
+      Layer.succeed(
+        AdapterSources,
+        fixedSources([{ id: 'fixture', title: 'Fixture', origin: 'builtin', version: null, load: async () => () => providers }]),
+      ),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(AccountCli, cli),
-      sessionlessLayer,
+      Layer.succeed(PluginRevisions, unheldRevisions),
     ),
   ),
   Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),

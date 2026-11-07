@@ -6,8 +6,9 @@ import { modelAccessLayer } from './access.js';
 import { ModelAccess } from './contract/service/access.js';
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
 import { Context, Effect, Layer, Result } from 'effect';
-import { type AdapterSource, BuiltinAdapters, ProviderRegistry } from './contract/service/registry.js';
+import { type AdapterSource, AdapterSources, ProviderRegistry } from './contract/service/registry.js';
 import { registryLayer } from './registry.js';
+import { fixedSources } from './testing/registry.js';
 
 const acme = {
   id: 'acme',
@@ -23,11 +24,11 @@ const acme = {
   quota: { read: () => Effect.die('unused'), fromHeaders: () => null },
 } satisfies WireProvider;
 
-const source = (id: string, load: AdapterSource['load']): AdapterSource => ({ id, origin: 'builtin', version: null, load });
+const source = (id: string, load: AdapterSource['load']): AdapterSource => ({ id, title: id, origin: 'builtin', version: null, load });
 const declaring = (id: string, providers: readonly Provider[]) => source(id, async () => () => providers);
 
 const registry = (sources: readonly AdapterSource[]) =>
-  Effect.map(Layer.build(registryLayer.pipe(Layer.provide(Layer.succeed(BuiltinAdapters, { sources })))), (context) =>
+  Effect.map(Layer.build(registryLayer.pipe(Layer.provide(Layer.succeed(AdapterSources, fixedSources(sources))))), (context) =>
     Context.get(context, ProviderRegistry),
   );
 
@@ -50,10 +51,24 @@ it.effect('an adapter that fails to load or declares a faulty provider stands fa
     const catalog = yield* providers.catalog;
 
     expect(catalog.adapters).toEqual([
-      { id: 'good', origin: 'builtin', version: null, state: 'loaded', providers: ['acme'] },
-      { id: 'broken', origin: 'builtin', version: null, state: 'failed', reason: 'module not found' },
-      { id: 'shapeless', origin: 'builtin', version: null, state: 'failed', reason: 'provider "bare" declares no request profile' },
-      { id: 'twin', origin: 'builtin', version: null, state: 'failed', reason: 'provider "acme" is already declared by adapter good' },
+      { id: 'good', title: 'good', origin: 'builtin', version: null, state: 'loaded', providers: ['acme'] },
+      { id: 'broken', title: 'broken', origin: 'builtin', version: null, state: 'failed', reason: 'module not found' },
+      {
+        id: 'shapeless',
+        title: 'shapeless',
+        origin: 'builtin',
+        version: null,
+        state: 'failed',
+        reason: 'provider "bare" declares no request profile',
+      },
+      {
+        id: 'twin',
+        title: 'twin',
+        origin: 'builtin',
+        version: null,
+        state: 'failed',
+        reason: 'provider "acme" is already declared by adapter good',
+      },
     ]);
     expect(catalog.served.providers.map((provider) => provider.id)).toEqual(['acme']);
   }),
@@ -184,7 +199,7 @@ it.effect('a disabled adapter is listed but never loaded, and its provider is re
     const providers = yield* registry([off]);
     const catalog = yield* providers.catalog;
 
-    expect(catalog.adapters).toEqual([{ id: 'off', origin: 'builtin', version: null, state: 'disabled' }]);
+    expect(catalog.adapters).toEqual([{ id: 'off', title: 'off', origin: 'builtin', version: null, state: 'disabled' }]);
     expect(imported).toBe(false);
     const gone = yield* Effect.result(providers.registration('acme'));
     expect(Result.isFailure(gone) && gone.failure.code).toBe('provider-not-installed');

@@ -214,13 +214,18 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     kind: SECRET_KIND,
     holders: Effect.fn('EnabledPlugins.holders')(
       function* (projectId: number) {
-        const enabled = (yield* enablingIn(settings, projectId)).running;
+        const { running, machineOff } = yield* enablingIn(settings, projectId);
         const installed = yield* settings.value(pluginsInstalled);
         const holders = [];
-        for (const id of enabled) {
-          const install = installed.find((entry) => entry.id === id);
-          if (install === undefined) continue;
-          const found = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
+        for (const install of installed) {
+          const { id } = install;
+          if (machineOff.has(id)) continue;
+          const found = running.has(id)
+            ? yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)))
+            : yield* shelf.read(install.root, install.declared ?? null).pipe(
+                Effect.map((read) => (read.package.providers === null ? null : read)),
+                Effect.catchTags(readRefused(id)),
+              );
           if (found === null) continue;
           const entries = found.package.options
             .filter((option) => option.sensitive)

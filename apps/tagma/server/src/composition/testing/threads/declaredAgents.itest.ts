@@ -260,6 +260,7 @@ it.live(
       title: 'Demo',
       place: { root: '/plugins/demo', data: '/plugins/demo', options: {}, project: '/project' },
       process: null,
+      providers: null,
       contributes: {},
       redact: [],
       skills: [],

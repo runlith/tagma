@@ -8,7 +8,8 @@ import { FileWatcher } from '../../platform/contract/service/watch.js';
 import { tagmaFormat } from '../../plugin-formats/tagma/format.js';
 import { type PluginFolder, writePlugin } from '../../plugin-formats/tagma/testing/folder.js';
 import { type PluginFormat, PluginFormats } from '../../plugins/contract/service/format.js';
-import { PluginPlaces, Plugins } from '../../plugins/contract/service/plugins.js';
+import { BuiltinPlugins, PluginPlaces, Plugins, RevisionRecords } from '../../plugins/contract/service/plugins.js';
+import { unrecorded } from '../../plugins/testing/revisions.js';
 import { plugins as pluginsModule } from '../../plugins/plugins.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -40,6 +41,8 @@ export const hostWorld = Effect.fnUntraced(function* (input: {
     Layer.provideMerge(
       pluginsModule.lifetimes.installation.pipe(
         Layer.provide(Layer.succeed(PluginPlaces, { home })),
+        Layer.provide(Layer.succeed(BuiltinPlugins, [])),
+        Layer.provide(Layer.succeed(RevisionRecords, unrecorded)),
         Layer.provide(Layer.succeed(PluginFormats, input.formats ?? [tagmaFormat])),
         Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(files))),
         Layer.provide(BunFileSystem.layer),

@@ -141,8 +141,17 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
             const { op, source, gate, asking, served, launched, home, projectId, runtime } = yield* World;
             const files = yield* FileSystem.FileSystem;
             const registry = Context.get(runtime.owners, ProviderRegistry);
-            expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
-            const version = registry.current().packages.get(QUILL.harness)!;
+            const revision = (other?: string) =>
+              Effect.repeat(
+                Effect.sync(() => registry.current().packages.get(QUILL.harness)),
+                {
+                  until: (directory) => directory !== undefined && directory !== other,
+                  schedule: Schedule.spaced('20 millis'),
+                  times: 500,
+                },
+              );
+            expect(yield* op('install_plugin', { source }, `project=${projectId}`)).toMatchObject({ status: 200, body: { status: 'ok' } });
+            const version = (yield* revision())!;
             const created = yield* op('create_thread', { type: `harness:${QUILL.harness}`, task: 'go' }, `project=${projectId}`);
             expect(created.status).toBe(200);
             const threadId = (created.body as { readonly snapshot: { readonly thread: { readonly id: string } } }).snapshot.thread.id;
@@ -153,15 +162,18 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
             expect(turning?.session?.package).toBe(version);
 
             yield* quillRelease(source, '2.0.0', 'quill.end', false);
-            expect(yield* op('update_adapter', { id: QUILL.name })).toMatchObject({ status: 200 });
-            const updated = registry.current().packages.get(QUILL.harness)!;
-            expect(updated).not.toBe(version);
+            const updated = (yield* revision(version))!;
             yield* files.writeFileString(asking, '');
             yield* Effect.repeat(Context.get(runtime.owners, ThreadHarness).reads.snapshot(threadId), {
               until: (snapshot) => snapshot.status.openQuestions.some((id) => id.startsWith('harness-screen:')),
               schedule: Schedule.spaced('20 millis'),
             });
-            expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
+            expect(yield* op('uninstall_plugin', { id: QUILL.name }, `project=${projectId}`)).toMatchObject({ status: 200 });
+            yield* Effect.repeat(files.exists(updated), {
+              until: (standing) => !standing,
+              schedule: Schedule.spaced('20 millis'),
+              times: 500,
+            });
             expect(yield* files.exists(version)).toBe(true);
             expect(yield* files.exists(updated)).toBe(false);
 

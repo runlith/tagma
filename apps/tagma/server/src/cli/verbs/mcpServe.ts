@@ -106,19 +106,15 @@ export const mcpServe = <Id extends string>(cli: OperationsCli<Id>) => {
           .pipe(
             Effect.catchTag('HarnessUnreadable', (unreadable) =>
               Effect.sync(() =>
-                refuse('harness-unreadable', unreadable.message, ['read_adapters — whether the adapter package still loads']),
+                refuse('harness-unreadable', unreadable.message, ['read_plugins — whether the plugin that brings it reads broken']),
               ),
             ),
           );
         if (row === null) {
-          return refuse(
-            'harness-not-installed',
-            `no builtin harness and no adapter installed on this machine declares ${options.harness}`,
-            [
-              'install_adapter — install the package that declares it',
-              'tagma upgrade — rewrite declarations written for a harness since removed',
-            ],
-          );
+          return refuse('harness-not-installed', `no builtin harness and no plugin on this machine declares ${options.harness}`, [
+            'install_plugin — install the plugin that brings it, or turn it on again on this machine',
+            'tagma upgrade — rewrite declarations written for a harness since removed',
+          ]);
         }
         const key = (row.variable === undefined ? undefined : at.env[row.variable]?.trim()) || at.env[MCP_KEY_VARIABLE]?.trim();
         if (!key) {

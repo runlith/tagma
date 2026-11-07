@@ -6,23 +6,25 @@ import { askKinds } from './contract/wire/asks.js';
 import { claimSections, type SectionClaim } from '@runlith/tagma/adapter/declaration';
 import { Effect, FileSystem, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { PluginFaults, PluginRevisions } from '../plugins/contract/service/plugins.js';
+import { PROVIDER_FAULTS } from '../plugins/contract/wire/rows.js';
 import type { ServedProvider, ServedSettings, CatalogSnapshot } from './contract/wire/catalog.js';
 import { AdapterInstances } from './contract/service/instances.js';
 import {
   AdapterPlaces,
   type AdapterSource,
+  AdapterSources,
   type AskOffers,
   type AskRoute,
-  BuiltinAdapters,
   defaultModelOf,
   notInstalled,
   type ProviderCatalog,
   ProviderRegistry,
   type SignedProviders,
 } from './contract/service/registry.js';
-import { machineSources, adapterHost } from './adapters/external.js';
-import { indexHarnesses } from './adapters/harnessIndex.js';
-import { failed, type Loaded, load } from './adapters/judge.js';
+import { adapterHost } from './hosts.js';
+import { indexHarnesses } from './harnessIndex.js';
+import { type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
 import { dirname, join } from 'node:path';
 import { importProviders } from '@runlith/tagma/adapter/loader';
@@ -246,10 +248,12 @@ const loadAll = Effect.fn('providers.loadAll')(function* (
 export const registryLayer = Layer.effect(
   ProviderRegistry,
   Effect.gen(function* () {
-    const { sources } = yield* BuiltinAdapters;
+    const sources = yield* AdapterSources;
     const places = yield* Effect.serviceOption(AdapterPlaces);
-    const place = places._tag === 'Some' ? places.value : { machine: null, host: {} };
+    const data = places._tag === 'Some' ? places.value.data : null;
     const disk = yield* Effect.serviceOption(FileSystem.FileSystem);
+    const revisions = yield* Effect.serviceOption(PluginRevisions);
+    const faults = yield* Effect.serviceOption(PluginFaults);
     const stored = yield* Effect.serviceOption(AdapterInstances);
     const files = yield* Effect.serviceOption(CredentialFiles);
     const cli = yield* Effect.serviceOption(AccountCli);
@@ -270,42 +274,37 @@ export const registryLayer = Layer.effect(
         ? Effect.orDie(stored.value.read())
         : Effect.succeed({ instances: new Map<string, readonly SettingInstance[]>(), secrets: {} });
     const loadVersion = Effect.fn('providers.loadVersion')(function* (directory: string) {
-      const imported = yield* Effect.result(Effect.tryPromise(() => importProviders(directory, place.host, process.execArgv)));
+      const imported = yield* Effect.result(
+        Effect.tryPromise({
+          try: () => importProviders(directory, sources.host, process.execArgv),
+          catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
+        }),
+      );
       if (Result.isFailure(imported)) {
-        yield* Effect.logError('a held provider revision did not load', { directory, reason: String(imported.failure) });
+        yield* Effect.logError('a held provider revision did not load', { directory, reason: imported.failure });
         return [];
       }
       const { id, version, models } = imported.success;
-      const source: AdapterSource = { id, origin: 'plugin', version, directory, load: async () => models };
+      const source: AdapterSource = { id, title: id, origin: 'plugin', version, directory, load: async () => models };
       return (yield* load(source, adapterHost(yield* snapshot, id), new Map(), new Map())).providers;
     });
+    const faulted = (loaded: readonly Loaded[]): void => {
+      if (faults._tag === 'None') return;
+      for (const { state } of loaded) {
+        if (state.state === 'failed')
+          faults.value.put(state.id, PROVIDER_FAULTS.models, { title: 'Its model providers did not load.', detail: state.reason });
+        else faults.value.clear(state.id, PROVIDER_FAULTS.models);
+      }
+    };
     const externals = Effect.gen(function* () {
       const { instances, secrets } = yield* snapshot;
       const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
-      const priorMachine = previous.filter((adapter) => adapter.state.origin === 'plugin');
-      const machine = yield* machineSources(place.machine, place.host, process.execArgv).pipe(
-        Effect.map((installed) => ({ installed, unreadable: [] as readonly Loaded[] })),
-        Effect.catchTag('RecordUnreadable', (failure) =>
-          Effect.succeed({
-            installed: [] as readonly AdapterSource[],
-            unreadable:
-              priorMachine.length === 0
-                ? [failed({ id: failure.path, origin: 'plugin', version: null }, failure.reason)]
-                : priorMachine.map((adapter) =>
-                    adapter.state.state === 'disabled'
-                      ? adapter
-                      : { ...failed(adapter.state, failure.reason), providers: adapter.providers },
-                  ),
-          }),
-        ),
-      );
-      const { unreadable } = machine;
-      const loaded = yield* loadAll([...sources, ...machine.installed], hostOf, unreadable, previous);
-      const next = [...loaded, ...unreadable];
-      if (place.machine !== null && unreadable.length === 0) {
-        if (disk._tag === 'None') return yield* Effect.die('machine adapter indexing requires FileSystem');
-        yield* indexHarnesses(place.machine, next).pipe(Effect.provideService(FileSystem.FileSystem, disk.value), Effect.orDie);
+      const next = yield* loadAll(sources.current(), hostOf, [], previous);
+      if (data !== null) {
+        if (disk._tag === 'None') return yield* Effect.die('the harness index requires FileSystem');
+        yield* indexHarnesses(data, next).pipe(Effect.provideService(FileSystem.FileSystem, disk.value), Effect.orDie);
       }
+      faulted(next);
       const catalog = catalogOf(next, instances, yield* sectionsOf(next), snapshots);
       previousInstances = instances;
       previous = next;
@@ -315,18 +314,32 @@ export const registryLayer = Layer.effect(
     const lock = yield* Semaphore.make(1);
     const runs = new Map<string, ProviderCatalog>();
     let current = yield* SubscriptionRef.get(state);
+    const released = revisions._tag === 'Some' ? revisions.value.released : Effect.void;
     const publish = Effect.fnUntraced(function* (next: ProviderCatalog) {
       current = next;
       yield* SubscriptionRef.set(state, next);
       return next;
     });
-    const reload = lock.withPermits(1)(Effect.flatMap(externals, publish));
+    const reload = lock
+      .withPermits(1)(Effect.flatMap(externals, publish))
+      .pipe(Effect.tap(() => released));
     const resettled = Effect.gen(function* () {
       const sections = yield* sectionsOf(previous);
       return JSON.stringify(sections) === JSON.stringify(current.sections)
         ? current
         : yield* publish(catalogOf(previous, previousInstances, sections, snapshots));
     });
+    const pinnedPackages = () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()]));
+    if (revisions._tag === 'Some')
+      yield* revisions.value.register({ standing: () => new Set([...pinnedPackages(), ...current.packages.values()]) });
+    let loadedFrom = sources.current();
+    yield* Effect.forkScoped(
+      Stream.runForEach(sources.changes, (next) => {
+        if (next === loadedFrom) return Effect.void;
+        loadedFrom = next;
+        return Effect.asVoid(reload);
+      }),
+    );
     if (cli._tag === 'Some') yield* Effect.forkScoped(Stream.runForEach(cli.value.changes, () => lock.withPermits(1)(resettled)));
     return ProviderRegistry.of({
       catalog: Effect.sync(() => current),
@@ -342,14 +355,25 @@ export const registryLayer = Layer.effect(
           const failure = current.failures.get(provider);
           return failure === undefined
             ? Effect.succeed(current.models.named(provider))
-            : Effect.fail(new GateRefusal('provider-failed', failure, ['repair or update the adapter']));
+            : Effect.fail(
+                new GateRefusal('provider-failed', failure, [
+                  'its plugin’s card on the Plugins screen names what broke: rebuild or update the plugin, or fix it with an agent',
+                ]),
+              );
         }),
       pinRun: (runId) => {
         if (!runs.has(runId)) runs.set(runId, current);
       },
       forRun: (runId) => runs.get(runId) ?? current,
-      releaseRun: (runId) => Effect.sync(() => void runs.delete(runId)),
-      pinned: () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()])),
+      releaseRun: (runId) =>
+        Effect.suspend(() => {
+          const dropped = runs.get(runId);
+          runs.delete(runId);
+          if (dropped === undefined || dropped === current) return Effect.void;
+          const held = new Set([...pinnedPackages(), ...current.packages.values()]);
+          return [...dropped.packages.values()].some((directory) => !held.has(directory)) ? released : Effect.void;
+        }),
+      pinned: pinnedPackages,
       loadVersion,
       reload,
       selectMode: (section, mode) =>

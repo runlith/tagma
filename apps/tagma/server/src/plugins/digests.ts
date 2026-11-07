@@ -20,7 +20,7 @@ class DigestUnread extends Data.TaggedError('DigestUnread')<{ readonly root: str
   }
 }
 
-type DigestPurpose = 'outputs' | 'process' | 'sources' | 'asked';
+type DigestPurpose = 'outputs' | 'process' | 'sources' | 'asked' | 'revision';
 
 type Held = Known & { readonly paths: readonly string[] };
 
@@ -55,7 +55,8 @@ export const makeDigests = Effect.gen(function* () {
   });
 
   const forget = (root: string): void => {
-    for (const purpose of ['outputs', 'process', 'sources', 'asked'] satisfies DigestPurpose[]) held.delete(`${purpose}\u0000${root}`);
+    for (const purpose of ['outputs', 'process', 'sources', 'asked', 'revision'] satisfies DigestPurpose[])
+      held.delete(`${purpose}\u0000${root}`);
   };
 
   return { digest, forget };

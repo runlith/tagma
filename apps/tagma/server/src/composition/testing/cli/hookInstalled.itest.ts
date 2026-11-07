@@ -13,8 +13,12 @@ it.live('an installed harness answers through its hook codec, and an undeclared 
       .split('\n')
       .find((line) => line.startsWith('installed-hook '));
     const result = JSON.parse(line!.slice('installed-hook '.length));
-    expect(JSON.parse(result.unrelated.out)).toMatchObject({ status: 'installed', adapter: { id: 'broken-adapter', state: 'failed' } });
-    expect(JSON.parse(result.installed.out)).toMatchObject({ status: 'installed', adapter: { id: 'quill-adapter', state: 'loaded' } });
+    expect(JSON.parse(result.unrelated.out)).toMatchObject({ status: 'ok', plugin: { id: 'broken-plugin' } });
+    expect(JSON.parse(result.installed.out)).toMatchObject({
+      status: 'ok',
+      plugin: { id: 'quill-plugin', providers: { harnesses: true } },
+    });
+    expect(result.failed).toMatchObject({ state: 'failed', reason: expect.stringContaining('unrelated plugin is broken') });
     expect(result.answered.code).toBe(0);
     const said = JSON.parse(result.answered.out);
     expect(Object.keys(said)).toEqual(['quill']);
@@ -26,7 +30,7 @@ it.live('an installed harness answers through its hook codec, and an undeclared 
     expect(result.unknown.code).not.toBe(0);
     expect(result.unknown.err).toContain('harness-not-installed');
     expect(result.mcp.err).toContain('mcp-unsigned');
-    expect(JSON.parse(result.removed.out)).toMatchObject({ status: 'removed', id: 'quill-adapter' });
+    expect(JSON.parse(result.removed.out)).toMatchObject({ status: 'ok', plugin: { id: 'quill-plugin' } });
     expect(result.missing.err).toContain('harness-not-installed');
   }),
 );

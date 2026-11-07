@@ -7,6 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mcpCallerMeta } from '@runlith/mcp/caller';
 import { graphFiles, svelteFiles } from './bundling.js';
 import { viewCompileOptions, viewModuleOptions } from './checks.generated.js';
+import { runConformance } from './testing.js';
 
 const sdk = resolve(import.meta.dir, '../..');
 const cli = join(import.meta.dir, 'cli.ts');
@@ -497,6 +498,196 @@ test('a Svelte view is type-checked against the SDK’s own @runlith/tagma/ui an
       expect(built.code).toBe(1);
       expect(built.out).toMatch(/ui\/Board\.svelte\(\d+,\d+\): error TS\d+/u);
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const PROVIDER_PLUGIN = [
+  "import { definePlugin } from '@runlith/tagma/plugin';",
+  '',
+  "export default definePlugin({ id: 'voice', title: 'Voice', providers: './providers.ts' });",
+  '',
+].join('\n');
+
+const PROVIDERS = [
+  "import { Effect, Schema, Stream } from 'effect';",
+  "import { defineProviders } from '@runlith/tagma/plugin';",
+  "import { defineAdapter } from '@runlith/tagma/adapter/provider';",
+  "import { defineSpeech } from '@runlith/tagma/adapter/speech';",
+  "import { AccountKey } from '@runlith/llm/models/authStatus';",
+  "import { subscriptionToken } from '@runlith/llm/profiles/credential';",
+  "import { subscriptionAccounts } from '@runlith/llm/oauth/vendor';",
+  "import { route } from '@runlith/llm/protocols/openai-compatible-chat';",
+  "import { QuotaUnsupported } from '@runlith/llm/schema/quota';",
+  "import { SpeechEvent } from '@runlith/speech/wire/events';",
+  '',
+  'const credential = Schema.Struct({ accessToken: Schema.String, refreshToken: Schema.NullOr(Schema.String), expiresAt: Schema.NullOr(Schema.Number) });',
+  'const accounts = subscriptionAccounts({',
+  '  credential,',
+  "  signIns: [{ kind: 'key', store: (key) => Effect.succeed({ accessToken: key, refreshToken: null, expiresAt: null }) }],",
+  "  key: () => AccountKey.make('only'),",
+  "  label: () => 'Voice',",
+  '});',
+  '',
+  'const models = defineAdapter(() => [',
+  '  {',
+  "    id: 'voice',",
+  "    label: 'Voice',",
+  "    kind: 'wire',",
+  "    auth: 'oauth',",
+  '    accounts,',
+  '    models: {',
+  "      'voice-1': { label: 'Voice 1', capacity: { context: 8192, output: 1024 }, capabilities: ['text'], reasoning: [], defaultReasoning: null },",
+  '    },',
+  "    defaultTextModel: 'voice-1',",
+  '    cacheLifetime: { promisedSeconds: null, prior: null },',
+  '    profile: {',
+  '      model: (selection) =>',
+  '        Effect.succeed(',
+  '          route',
+  '            .with({',
+  "              provider: 'voice',",
+  "              endpoint: { baseURL: 'https://voice.invalid/v1' },",
+  "              auth: subscriptionToken(selection.credentials, selection.ownerId, 'voice', selection.account).bearer(),",
+  '              limits: { context: 8192, output: 1024 },',
+  '            })',
+  '            .model({ id: selection.model }),',
+  '        ),',
+  '      options: () => undefined,',
+  '      output: { budget: 1024, sent: true },',
+  '    },',
+  '    quota: { read: () => Effect.fail(new QuotaUnsupported()), fromHeaders: () => null },',
+  '  },',
+  ']);',
+  '',
+  'const echo = defineSpeech({',
+  "  id: 'echo',",
+  "  label: 'Echo',",
+  "  credential: { _tag: 'none', value: 'none' },",
+  "  egress: ['https://echo.invalid'],",
+  "  availability: () => Effect.succeed({ _tag: 'present' }),",
+  '  recognizer: {',
+  '    models: [',
+  '      {',
+  "        id: 'echo-1',",
+  "        label: 'Echo 1',",
+  '        recognition: {',
+  "          kind: 'batch',",
+  '          rates: [16000],',
+  "          timestamps: 'segment',",
+  '          speakers: false,',
+  '          confidence: false,',
+  '          languages: { codes: [], hints: 1, detect: false },',
+  '          prompting: { prompt: false, terms: false },',
+  '          limits: { clipMs: 30000 },',
+  '          tuning: [],',
+  '        },',
+  '      },',
+  '    ],',
+  '    batch: () =>',
+  '      Stream.make(',
+  "        SpeechEvent.final('t', [{ lane: 'source', text: 'echoed', granularity: 'segment' }]),",
+  "        SpeechEvent.turnEnd('t'),",
+  '        SpeechEvent.finished,',
+  '      ),',
+  '  },',
+  '});',
+  '',
+  'export default defineProviders({ models, speech: [echo] });',
+  '',
+].join('\n');
+
+const providerFolder = async () => {
+  const { root, plugin } = await folder('voice');
+  for (const name of ['effect', '@runlith/llm', '@runlith/speech'])
+    await symlink(join(sdk, 'node_modules', name), join(plugin, 'node_modules', name));
+  await writeFile(join(plugin, 'plugin.ts'), PROVIDER_PLUGIN);
+  await writeFile(join(plugin, 'providers.ts'), PROVIDERS);
+  return { root, plugin };
+};
+
+test('a providers module builds into dist/providers.js with every host module left as an import, and the manifest says what the part brings', async () => {
+  const { root, plugin } = await providerFolder();
+  try {
+    expect(await run([process.execPath, cli, 'build', plugin], root)).toMatchObject({ code: 0 });
+    const manifest = JSON.parse(await readFile(join(plugin, 'tagma-plugin.json'), 'utf8'));
+    expect(manifest).toMatchObject({
+      id: 'voice',
+      providers: { entry: 'dist/providers.js', models: true, harnesses: false, speech: true },
+    });
+    expect(manifest.process).toBeUndefined();
+    expect(manifest.build.sources).toEqual(['package.json', 'plugin.ts', 'providers.ts']);
+    expect(await Bun.file(join(plugin, 'dist/process.js')).exists()).toBe(false);
+    const code = await readFile(join(plugin, 'dist/providers.js'), 'utf8');
+    const imported = new Bun.Transpiler({ loader: 'js' }).scan(code).imports.map(({ path }) => path);
+    expect(imported).toEqual(
+      expect.arrayContaining([
+        'effect',
+        '@runlith/tagma/adapter/provider',
+        '@runlith/tagma/adapter/speech',
+        '@runlith/llm/profiles/credential',
+        '@runlith/speech/wire/events',
+      ]),
+    );
+    expect(code).not.toContain('defineAdapter=');
+    await writeFile(join(plugin, 'plugin.ts'), PROVIDER_PLUGIN.replace(", providers: './providers.ts'", ''));
+    expect(await run([process.execPath, cli, 'build', plugin], root)).toMatchObject({ code: 0 });
+    expect(await Bun.file(join(plugin, 'dist/providers.js')).exists()).toBe(false);
+    expect(JSON.parse(await readFile(join(plugin, 'tagma-plugin.json'), 'utf8')).providers).toBeUndefined();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a provider part that declares nothing, or imports a module that cannot be bundled, stops the build with the reason', async () => {
+  const { root, plugin } = await providerFolder();
+  try {
+    await writeFile(join(plugin, 'providers.ts'), 'export default { speech: [] };\n');
+    const empty = await run([process.execPath, cli, 'build', plugin], root);
+    expect(empty.code).toBe(1);
+    expect(empty.out).toContain('The build stopped at providers');
+    expect(empty.out).toContain('declares no models and no speech providers');
+    await writeFile(join(plugin, 'providers.ts'), "import 'not-served-anywhere';\nexport default {};\n");
+    const unserved = await run([process.execPath, cli, 'build', plugin], root);
+    expect(unserved.code).toBe(1);
+    expect(unserved.out).toContain('The build stopped at bundle');
+    expect(unserved.out).toContain('not-served-anywhere');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('conformance runs over a built folder with no Tagma: the model call, its failure and a speech recognition against stubs', async () => {
+  const { root, plugin } = await providerFolder();
+  try {
+    expect(await run([process.execPath, cli, 'build', plugin], root)).toMatchObject({ code: 0 });
+    const result = await runConformance(plugin, {
+      models: {
+        host: { product: { mcpServer: 'contract', client: { name: 'contract', version: 'test' } }, instances: [] },
+        provider: 'voice',
+        signIn: { kind: 'key', input: 'local-fixture' },
+        expectedText: 'hello',
+        respond: (request, phase) => {
+          expect(request.headers.authorization).toBe('Bearer local-fixture');
+          expect(request.url).toBe('https://voice.invalid/v1/chat/completions');
+          if (phase === 'failure')
+            return new Response(JSON.stringify({ error: { message: 'local refusal', type: 'authentication_error' } }), { status: 401 });
+          const frames = [
+            { id: 'reply', choices: [{ index: 0, delta: { role: 'assistant', content: 'hello' }, finish_reason: null }] },
+            { id: 'reply', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } },
+          ];
+          return new Response(`${frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('')}data: [DONE]\n\n`, {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      },
+      speech: { provider: 'echo' },
+    });
+    expect(result.models).toMatchObject({ provider: 'voice', model: 'voice-1', text: 'hello', image: null });
+    expect(result.models?.failure._tag).toBe('LLM.Error');
+    expect(result.speech).toMatchObject({ provider: 'echo', model: 'echo-1' });
+    expect(result.speech?.heard.map((event) => event._tag)).toEqual(['Final', 'TurnEnd', 'Finished']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

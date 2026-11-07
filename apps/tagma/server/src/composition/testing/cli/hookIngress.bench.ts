@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { Clock, Context, Effect, FileSystem } from 'effect';
+import { Clock, Context, Effect, FileSystem, Schedule } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { MachineStore } from '../../../platform/contract/service/store.js';
@@ -14,7 +14,7 @@ import { SHIPPED_HARNESSES, sessionIdentity } from '../../../external-harnesses/
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
-import { AdapterInstalls } from '../../../providers/contract/service/adapters.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeTerminalWorld } from '../fixture.js';
 import { QUILL, quillPackage } from '../external-harnesses/quill.js';
 
@@ -154,7 +154,12 @@ const program = Effect.gen(function* () {
   const temporary = yield* world.directory('tmp');
   const dataHome = yield* world.directory('home');
   const quill = yield* quillPackage(yield* world.directory('quill'));
-  yield* Effect.orDie(Context.get(world.runtime.owners, AdapterInstalls).install(quill.directory));
+  yield* world.tagma(['op', 'install_plugin', '--yes', JSON.stringify({ project: project.id, source: quill.directory }), '--json']);
+  const registry = Context.get(world.runtime.owners, ProviderRegistry);
+  yield* Effect.repeat(
+    Effect.sync(() => registry.current().packages.get(QUILL.harness)),
+    { until: (directory) => directory !== undefined, schedule: Schedule.spaced('20 millis'), times: 500 },
+  );
   const processEnv = {
     ...process.env,
     TAGMA_SERVER_URL: world.url,

@@ -1,11 +1,11 @@
 ---
 name: plugins
-description: Build, change, install or debug a plugin in Tagma's format — a folder whose `plugin.ts` is written against `@runlith/tagma/plugin` and built by `tagma-plugin build` into `tagma-plugin.json`, `dist/process.js` and `dist/ui/`, adding tools, Svelte views, sections, panes, launchers, agents, schedules, notifications, thread endings, build steps and themes inside Tagma with no deploy. Load before writing or editing anything in a project's `.tagma-plugins/<id>/`; when the operator asks for a plugin, a bridge to a service, a board, a game, a section inside Tagma or a new look for Tagma; when read_plugins shows such a plugin refused, outdated or its process failed, or a plugin view does not compile or draw. Installing a Claude Code or Codex plugin needs only install_plugin; connecting an existing MCP server is add_mcp_server.
+description: Build, change, install or debug a plugin in Tagma's format — a folder whose `plugin.ts` is written against `@runlith/tagma/plugin` and built by `tagma-plugin build` into `tagma-plugin.json`, `dist/process.js`, `dist/providers.js` and `dist/ui/`, adding tools, Svelte views, sections, panes, launchers, agents, schedules, notifications, thread endings, build steps, themes, and model, CLI-agent and speech providers inside Tagma with no deploy. Load before writing or editing anything in a project's `.tagma-plugins/<id>/`; when the operator asks for a plugin, a bridge to a service, a board, a game, a section inside Tagma, a new look for Tagma, or a new model, agent or speech provider; when read_plugins shows such a plugin refused, outdated, broken or its process failed, or a plugin view does not compile or draw. Installing a Claude Code or Codex plugin needs only install_plugin; connecting an existing MCP server is add_mcp_server.
 ---
 
 # Plugins
 
-A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition written against `@runlith/tagma/plugin`. `tagma-plugin build` turns it into `tagma-plugin.json`, which Tagma reads without running anything, `dist/process.js`, the process serving its handlers, and `dist/ui/`, its views. All are build output: never edit them by hand, and commit them with the sources.
+A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition written against `@runlith/tagma/plugin`. `tagma-plugin build` turns it into `tagma-plugin.json`, which Tagma reads without running anything, `dist/process.js`, the process serving its handlers, `dist/providers.js`, its provider part, and `dist/ui/`, its views. All are build output: never edit them by hand, and commit them with the sources.
 
 ## Making and changing one
 
@@ -13,7 +13,7 @@ A plugin in Tagma's format is a folder whose `plugin.ts` exports one definition 
 2. Install its dependencies in the folder with the project's package manager (`bun install`). With none on the machine, install Bun first: `curl -fsSL https://bun.sh/install | bash` on macOS and Linux, `powershell -c "irm bun.sh/install.ps1 | iex"` on Windows. Add libraries the same way: the build bundles them, so nothing is installed where the plugin runs.
 3. Write the definition. After every edit run `bunx tagma-plugin build` in the folder: it type-checks, refuses a field `definePlugin` does not take, runs the checks Tagma runs at install, each point alone and against the points it names, and stops with Tagma's reason. `bunx tagma-plugin dev` rebuilds on every change for as long as it runs.
 4. `bun test` runs the folder's tests (Testing).
-5. `install_plugin {source: "<the path create_plugin answered>"}` installs it once, read in place, and runs it in this project; `scope: "user"` runs it in every project — the person's own plugin takes it — and `enabled: false` only installs it. `enable_plugin {id, enabled, scope?}` runs or stops it; `uninstall_plugin` stops it everywhere and keeps its data. Each rebuild reaches the installed plugin by itself.
+5. `install_plugin {source: "<the path create_plugin answered>"}` installs it once, read in place, and runs it in this project; `scope: "user"` runs it in every project — the person's own plugin takes it — and `enabled: false` only installs it. A published one installs from its git URL or, as `npm:<package>[@range]`, from the registry the machine's npm configuration names. `enable_plugin {id, enabled, scope?}` runs or stops it; `scope: "machine"` with `enabled: false` turns it off in every project and takes its providers out of the menus, and `enabled: true` turns it on again; `uninstall_plugin` stops it everywhere and keeps its data. Each rebuild reaches the installed plugin by itself.
 6. Commit a project's plugin folder with `dist/` and `tagma-plugin.json`, without `node_modules`: whoever opens the project runs it with no build. The person's own plugin is committed nowhere.
 
 ## The definition
@@ -56,6 +56,7 @@ The `example` reference is a whole plugin with a tool, a resource and a section.
 - **`views: {<id>: view('./ui/Board.svelte', {live?})}`** — `id` lowercase letters, digits and inner hyphens, at most 40; the entry a Svelte component of the folder (Views). A view shows only where another field places it. `live: true` keeps a result view running while scrolled away, within the feed's budget.
 - **`results: [{tool, view}]`** draws the feed entry of a call to an `agents` or `own` tool with the view. **`surfaces: [{view, title, icon?}]`** — a project section at `/<project>/p/<id>/<view>` with a rail item and a palette action, `title` at most 40, `icon` an svg, png, webp, gif or jpg file of the folder, as `ui/icon.svg`. **`panes`** — a side pane, the same shape. **`launchers: [{view, title}]`** — a palette action and a rail button opening the view in a window, `title` at most 60. **`pins: [{view}]`** — views a thread may pin above its feed. **`composer: [{view}]`** — a view drawn above the composer of every thread in a project where the plugin runs. **`agents: [{id, path}]`** — Agents of a plugin.
 - **`themes: {<id>: {title, light?, dark?}}`** — how Tagma looks, as data with no process; the `themes` reference carries the colour groups, the check that keeps state colours in their meaning, and choosing it.
+- **`providers: './providers.ts'`** — a module whose default export is `defineProviders({models?, speech?})`: model providers and CLI agents, speech providers (Providers).
 
 A field that fails when the plugin starts — a view missing from `views`, a result for a tool that is not `agents` or `own`, an agent file that does not parse — fails its process with the reason naming it.
 
@@ -95,6 +96,14 @@ A field that fails when the plugin starts — a view missing from `views`, a res
 - Its contributions stand while the plugin is enabled, before any process ran: agents see its tools from the manifest. The first call, tick, ending, notification, build step or view subscription starts the process; after a quiet period with no call in flight and no open subscription (five minutes by default) it stops and reads `idle`. A crash also leaves it `idle`, and the next demand waits out a backoff of 1 to 60 s. A rebuild that changes the process restarts a running one once and an idle one takes it at its next start; one that changes only views restarts nothing.
 - The SDK owns stdout for the protocol from the first byte: `console.log` and writes to `process.stdout`, those of modules loading included, go to stderr. The process exits when Tagma closes its input.
 
+## Providers
+
+- The provider part runs inside Tagma's server, never in the plugin's process: `models` is an adapter from `defineAdapter` in `@runlith/tagma/adapter/provider` (wire providers, CLI agents, a settings form), `speech` a list of `defineSpeech` providers from `@runlith/tagma/adapter/speech`. Its imports reach only Tagma's own copies of `effect`, `@runlith/tagma/adapter/*`, `@runlith/llm/*` and `@runlith/speech/*`; the build bundles the rest and refuses native addons and computed imports. The `providers` reference is a whole one with its test.
+- Providers stand on the whole machine: project enabling does not apply to them, and a plugin that is only a provider part runs no process. They leave the menus only when the plugin is turned off on the machine or uninstalled.
+- Tagma copies each build's `tagma-plugin.json` and `dist/`, without `dist/ui/`, into a revision of its own, so an install, an update or a rebuild in place reaches the model menu and Settings → Speech at once. A run, an ask, a CLI session or a recognition already going keeps the revision it started on; that copy is removed once nothing holds it. Read a file of the part from `import.meta.dir`, which is that revision's `dist/`.
+- A part that does not import, declares a malformed provider or a provider id another part holds leaves every other provider standing; the plugin's card reads broken, its `faults` naming the reason under point `providers` (models) or `speech`.
+- The providers Tagma ships stand as built-in plugins, `builtin: true` in read_plugins: only `enable_plugin {scope: "machine"}` acts on one, and no plugin may take its id.
+
 ## Views
 
 A view is a Svelte 5 component of the folder, as `ui/Board.svelte`, mounted inside Tagma's window as part of the page: no frame, no origin, no protocol. `tagma-plugin build` type-checks it with the definition (an error reads `ui/Board.svelte(12,5): …`) and ships it with everything it imports under `dist/ui/`. Tagma compiles that for its own Svelte when the plugin is installed or rebuilt, so a Tagma update never needs a rebuild of the plugin; meanwhile the view reads as preparing.
@@ -127,6 +136,8 @@ A view that does not compile shows the reason where it stands and on the plugin'
 - `tagma` is a double `(operation, input, projectId) => Promise<answer>` that throws `TagmaRefused` to refuse;
 - `manifest` is what the build writes, without `version` and `build`; `changed` lists the URIs `ctx.changed` reported.
 
+`runConformance(folder, {models?, speech?})` from the same door runs a built folder's provider part with no Tagma: a sign-in, a model call and a failure against a stub, and the speech catalog's checks with one recognition or synthesis (the `providers` reference).
+
 ## Checking it in Tagma
 
 1. `read_plugins` until the row shows the process `idle` or `running`; `refused` or `failure` names the cause.
@@ -140,5 +151,6 @@ A view that does not compile shows the reason where it stands and on the plugin'
 - `outdated: true` on the row — the sources moved past the last build: build again.
 - `process.state: failed`, its tools offered to no agent until a rebuild or a clean start — `process.failure` names a field that did not register; a listing that differs from the manifest, so the process was built from other sources: build again; or why it would not start, ending with its stderr.
 - A tool missing from an agent's catalog — the plugin is not enabled in that project, the tool's audience is not `agents`, or the agent lacks the `plugins` capability.
+- A provider missing from the model menu or Settings → Speech — the row's `faults` under `providers` or `speech` name why its part did not load; `off: true` means it is turned off on the machine.
 - A view that does not compile — its place and the plugin's card name the file and the reason; fix the source, build again, or ask Fix with an agent there.
 - A view that stays preparing — Tagma is compiling it; a large dependency graph takes longer, and a deep import shrinks it.
