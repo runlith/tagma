@@ -189,9 +189,8 @@ type PluginHosted = {
   readonly title: string;
   readonly root: string;
   readonly data: string;
-  readonly revision: string;
-  readonly processRevision: string | null;
-  readonly outputs: readonly string[];
+  readonly digest: string;
+  readonly processDigest: string | null;
   readonly process: PluginProcess | null;
   readonly contributes: Readonly<Record<string, unknown>>;
   readonly options: Readonly<Record<string, string>>;

@@ -6,7 +6,7 @@ import { modelAccessLayer } from './access.js';
 import { ModelAccess } from './contract/service/access.js';
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
 import { Context, Effect, Layer, Result } from 'effect';
-import { type AdapterSource, AdapterSources, ProviderRegistry } from './contract/service/registry.js';
+import { type AdapterSource, ProviderRegistry } from './contract/service/registry.js';
 import { registryLayer } from './registry.js';
 import { fixedSources } from './testing/registry.js';
 
@@ -28,9 +28,7 @@ const source = (id: string, load: AdapterSource['load']): AdapterSource => ({ id
 const declaring = (id: string, providers: readonly Provider[]) => source(id, async () => () => providers);
 
 const registry = (sources: readonly AdapterSource[]) =>
-  Effect.map(Layer.build(registryLayer.pipe(Layer.provide(Layer.succeed(AdapterSources, fixedSources(sources))))), (context) =>
-    Context.get(context, ProviderRegistry),
-  );
+  Effect.map(Layer.build(registryLayer.pipe(Layer.provide(fixedSources(sources)))), (context) => Context.get(context, ProviderRegistry));
 
 it.effect('the first callable provider in picker order supplies its declared default', () =>
   Effect.gen(function* () {

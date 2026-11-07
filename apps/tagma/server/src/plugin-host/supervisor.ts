@@ -12,7 +12,6 @@ import {
   Effect,
   Exit,
   FiberMap,
-  Option,
   References,
   Result,
   Scope,
@@ -20,8 +19,6 @@ import {
   type Stream,
   Tracer,
 } from 'effect';
-import { FileWatcher } from '../platform/contract/service/watch.js';
-import { type TreeRescan, type TreeWatch, type WatchEvent, watchAll } from '../platform/watch/tree.js';
 import type { PluginProcess } from '../plugins/contract/service/format.js';
 import type { HostedPlugins } from '../plugins/contract/service/plugins.js';
 import { checkedOf, type PluginPoints, type PluginRef } from '../plugins/contract/service/points.js';
@@ -48,10 +45,7 @@ class ContributionsRefused extends Data.TaggedError('ContributionsRefused')<{ re
 
 const TEMPORARY: ReadonlySet<string> = new Set(['PluginUnreadable', 'PluginsUnreadable']);
 
-const SETTLE = Duration.millis(300);
 const POLL = Duration.seconds(5);
-const LOST: ReadonlySet<TreeRescan> = new Set(['lost', 'error', 'polling']);
-const PASSED_OVER: ReadonlySet<string> = new Set(['node_modules', '.git']);
 const REASON_CHARACTERS = 1_000;
 
 const clipped = (reason: string): string =>
@@ -63,8 +57,8 @@ const STABLE_MS = 30_000;
 
 type Standing = {
   readonly ref: PluginRef;
-  readonly revision: string;
-  readonly processRevision: string | null;
+  readonly digest: string;
+  readonly processDigest: string | null;
   readonly process: PluginProcess | null;
   readonly environment: LaunchEnvironment;
   readonly tools: ToolEntries;
@@ -87,8 +81,6 @@ type Slot = {
   restarts: number;
   failures: number;
   gate: number;
-  watch: TreeWatch | null;
-  outputs: ReadonlySet<string> | null;
 };
 
 const backoffOf = (failures: number): number => Math.min(FIRST_RETRY_MS * 2 ** Math.max(failures - 1, 0), LAST_RETRY_MS);
@@ -106,9 +98,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
   const pending = yield* FiberMap.make<string>();
   const quiets = yield* FiberMap.make<string>();
   const slots = new Map<string, Slot>();
-  const context = yield* Effect.context<never>();
-  const forked = Effect.runForkWith(context);
-  const watcher = Context.getOption(context, FileWatcher);
 
   const notConnected = (slot: Slot) => new McpNotConnected({ server: slot.id, state: slot.state });
 
@@ -161,8 +150,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       restarts: 0,
       failures: 0,
       gate: 0,
-      watch: null,
-      outputs: null,
     };
     slots.set(id, slot);
     return slot;
@@ -192,32 +179,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
         ),
       );
     });
-
-  const touches = (slot: Slot, path: string): boolean => {
-    const outputs = slot.outputs;
-    if (outputs === null) return !path.split('/').some((part) => PASSED_OVER.has(part));
-    if (path === '' || outputs.has(path)) return true;
-    for (const output of outputs) if (output.startsWith(`${path}/`)) return true;
-    return false;
-  };
-
-  const heard = (slot: Slot, event: WatchEvent): void => {
-    const named = event.paths ?? [];
-    if ('rescan' in event && (event.rescan !== 'rename' || named.length === 0)) {
-      void forked(schedule(slot, LOST.has(event.rescan) ? POLL : SETTLE));
-      return;
-    }
-    if (!named.some((path) => touches(slot, path))) return;
-    void forked(schedule(slot, SETTLE));
-  };
-
-  const watched = Effect.fn('PluginHost.watched')(function* (slot: Slot) {
-    if (slot.watch?.watching() === true) return;
-    slot.watch?.close();
-    const opening = watchAll([{ at: slot.root, recursive: true, required: true, listen: (event) => heard(slot, event) }]);
-    slot.watch = yield* Option.isSome(watcher) ? Effect.provideService(opening, FileWatcher, watcher.value) : opening;
-    if (!slot.watch.watching()) yield* schedule(slot, POLL);
-  });
 
   const closed = Effect.fnUntraced(function* (slot: Slot) {
     const old = slot.live;
@@ -295,7 +256,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
           data: standing.ref.data,
           server,
           process: standing.process,
-          revision: standing.revision,
+          revision: standing.digest,
           environment: standing.environment,
         },
         generations,
@@ -346,8 +307,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
   });
 
   const retired = Effect.fnUntraced(function* (slot: Slot) {
-    slot.watch?.close();
-    slot.watch = null;
     yield* FiberMap.remove(quiets, slot.id);
     yield* closed(slot);
     slot.standing?.withdraw();
@@ -359,7 +318,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
 
   const inspected = Effect.fnUntraced(function* (slot: Slot) {
     const plugin = yield* hosted.read(slot.id);
-    slot.outputs = new Set(plugin.outputs);
     const checked = points.check(slot.id, plugin.contributes);
     if (Result.isFailure(checked)) return yield* new ContributionsRefused({ reason: checked.failure });
     return { plugin, checked: checked.success, environment: environmentOf(plugin.options, plugin.redact) };
@@ -388,7 +346,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       onSuccess: Effect.fnUntraced(function* ({ plugin, checked, environment }) {
         slot.refused = undefined;
         const standing = slot.standing;
-        if (standing !== null && standing.revision === plugin.revision && standing.environment.fingerprint === environment.fingerprint) {
+        if (standing !== null && standing.digest === plugin.digest && standing.environment.fingerprint === environment.fingerprint) {
           if (slot.rejected || standing.process?.resident !== true || slot.live !== null) return;
           const wait = slot.gate - (yield* Clock.currentTimeMillis);
           if (wait > 0) return yield* schedule(slot, wait);
@@ -400,7 +358,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
           standing !== null &&
           !slot.rejected &&
           standing.environment.fingerprint === environment.fingerprint &&
-          standing.processRevision === plugin.processRevision &&
+          standing.processDigest === plugin.processDigest &&
           JSON.stringify(standing.process) === JSON.stringify(plugin.process) &&
           JSON.stringify(standing.tools) === JSON.stringify(tools)
         ) {
@@ -419,7 +377,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
                 offers.broken(slot.id, true);
                 return;
               }
-              slot.standing = { ...standing, ref, revision: plugin.revision, withdraw: published.success };
+              slot.standing = { ...standing, ref, digest: plugin.digest, withdraw: published.success };
             }),
           );
         }
@@ -444,8 +402,8 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
             }
             const next: Standing = {
               ref,
-              revision: plugin.revision,
-              processRevision: plugin.processRevision,
+              digest: plugin.digest,
+              processDigest: plugin.processDigest,
               process: plugin.process,
               environment,
               tools,
@@ -467,7 +425,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
   const bring = Effect.fn('PluginHost.bring')(
     function* (slot: Slot): Effect.fn.Return<void> {
       if (slots.get(slot.id) !== slot) return;
-      yield* watched(slot);
       yield* refresh(slot);
     },
     Effect.uninterruptible,
@@ -479,15 +436,6 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
     if (slot === undefined) return;
     yield* slot.lock.withPermit(Effect.uninterruptible(Effect.andThen(FiberMap.remove(pending, id), moved(slot, retired(slot)))));
   });
-
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const slot of slots.values()) {
-        slot.watch?.close();
-        slot.watch = null;
-      }
-    }),
-  );
 
   return {
     reading: (id: string): PluginProcessRow | undefined => {

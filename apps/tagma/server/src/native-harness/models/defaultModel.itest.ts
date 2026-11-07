@@ -11,7 +11,7 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { CredentialFiles } from '../../providers/contract/service/credentials.js';
-import { type AdapterSource, AdapterSources, ProviderRegistry } from '../../providers/contract/service/registry.js';
+import { type AdapterSource, ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { fixedSources } from '../../providers/testing/registry.js';
 import { DefaultAccounts, ProviderAccounts } from '../../providers/contract/service/accounts.js';
 import { registryLayer } from '../../providers/registry.js';
@@ -96,11 +96,7 @@ const birthOn = Effect.fnUntraced(function* (
     yield* Layer.build(
       registryLayer.pipe(
         Layer.provide(
-          Layer.mergeAll(
-            Layer.succeed(AdapterSources, fixedSources(SOURCES)),
-            Layer.succeed(CredentialFiles, { tokensPath }),
-            Layer.succeed(AccountCli, account),
-          ),
+          Layer.mergeAll(fixedSources(SOURCES), Layer.succeed(CredentialFiles, { tokensPath }), Layer.succeed(AccountCli, account)),
         ),
       ),
     ),

@@ -1,17 +1,30 @@
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
-import { Effect, Stream } from 'effect';
+import { Context, Effect, Layer, Stream } from 'effect';
+import { PluginFaults, PluginRevisions } from '../../plugins/contract/service/plugins.js';
+import { unfaulted } from '../../plugins/testing/faults.js';
+import { unheldRevisions } from '../../plugins/testing/revisions.js';
 import {
   type AdapterSource,
   AdapterSources,
   notInstalled,
   type ProviderCatalog,
   type ProviderRegistry,
+  RevisionUnread,
 } from '../contract/service/registry.js';
 import { catalogOf } from '../registry.js';
 import { modeSections } from '../accounts/modes.js';
 
 export const fixedSources = (sources: readonly AdapterSource[]) =>
-  AdapterSources.of({ current: () => sources, changes: Stream.never, host: {} });
+  Layer.succeedContext(
+    Context.make(
+      AdapterSources,
+      AdapterSources.of({
+        current: () => sources,
+        changes: Stream.never,
+        at: (directory) => Effect.fail(new RevisionUnread({ directory, reason: 'the fixed sources hold no revision directory' })),
+      }),
+    ).pipe(Context.add(PluginRevisions, unheldRevisions), Context.add(PluginFaults, unfaulted)),
+  );
 
 export const providerCatalogOf = (providers: readonly Provider[]): ProviderCatalog =>
   catalogOf(

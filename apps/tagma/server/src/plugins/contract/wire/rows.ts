@@ -46,7 +46,7 @@ export const PluginProviders = Schema.Struct({
 });
 export type PluginProviders = typeof PluginProviders.Type;
 
-export const PROVIDER_FAULTS = { models: 'providers', speech: 'speech', revision: 'revisions' } as const;
+export const PROVIDER_FAULTS = { providers: 'providers', speech: 'speech', revisions: 'revisions' } as const;
 
 export const PluginOrigin = Schema.Struct({
   marketplace: Named.annotate({ description: 'The marketplace the plugin was installed from.' }),

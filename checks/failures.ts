@@ -9,6 +9,13 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'A plugin whose directory does not read keeps the revision it brought before: its row answers the refusal and, where a part stood, a revisions fault names it; the next change of the plugin reads it again.',
   },
   {
+    path: 'apps/tagma/server/src/plugins/outputs.ts',
+    symbol: 'makeOutputs.outputsOf',
+    form: 'match',
+    site: '7bd4648e',
+    why: 'A plugin whose package does not read names no outputs, so its folder is watched for any change outside node_modules and .git; its refusal is answered by its row and its host, and the next read narrows the watch again.',
+  },
+  {
     path: 'apps/tagma/server/src/views/modules/builds.ts',
     symbol: 'makeBuilds.onSuccess',
     form: 'catch',

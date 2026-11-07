@@ -21,7 +21,7 @@ import { FileWatcher, WatchRefused } from '../../platform/contract/service/watch
 import { DefaultLogins, defaultLoginsLayer, type DefaultLoginBook } from '../../providers/accounts/defaultLogins.js';
 import { HarnessDirectories, makeHarnessDirectoryStore, type HarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
 import { AccountCli, LoginPlaces } from '../../providers/contract/service/cli.js';
-import { AdapterSources, ProviderRegistry } from '../../providers/contract/service/registry.js';
+import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { fixedSources } from '../../providers/testing/registry.js';
 import type { DirectoryAccount } from '../../providers/contract/wire/harnessAccounts.js';
 import { registryLayer } from '../../providers/registry.js';
@@ -159,12 +159,9 @@ const makeRig = Effect.fnUntraced(function* (input: {
   const users =
     input.environment ??
     makeUserEnvironment({ shell: null, env: { PATH: join(input.root, 'bin'), ...input.variables }, world: null, home: null });
-  const builtin = Layer.succeed(
-    AdapterSources,
-    fixedSources([
-      { id: 'login-fixture', title: 'Login fixture', origin: 'builtin', version: null, load: async () => () => input.providers },
-    ]),
-  );
+  const builtin = fixedSources([
+    { id: 'login-fixture', title: 'Login fixture', origin: 'builtin', version: null, load: async () => () => input.providers },
+  ]);
   const registry = Context.get(yield* Layer.build(registryLayer.pipe(Layer.provide(builtin))), ProviderRegistry);
   const adapters = yield* makeHarnessAdapters;
   yield* adapters.declared(registry.current().harnesses);

@@ -21,10 +21,11 @@ import {
 } from './contract/service/plugins.js';
 import { PluginPoints } from './contract/service/points.js';
 import type { PluginFault } from './contract/wire/rows.js';
-import { pluginsOptions } from './contract/wire/settings.js';
+import { pluginsInstalled, pluginsOptions } from './contract/wire/settings.js';
 import { makeDigests } from './digests.js';
 import { makeEnabled } from './enabled.js';
 import { makeInstalls } from './installs.js';
+import { makeOutputs } from './outputs.js';
 import { makePoints } from './points.js';
 import { makeRevisions } from './revisions.js';
 import { makeShelf } from './shelf.js';
@@ -121,10 +122,20 @@ export const pluginsLayer: Layer.Layer<
       touched,
       faults: faultsOf,
     });
-    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs });
     const settings = yield* Settings;
+    yield* makeOutputs({ shelf, installs: yield* settings.changes(pluginsInstalled).pipe(Effect.orDie), touched });
     const records = yield* RevisionRecords;
-    const { parts, revisions } = yield* makeRevisions({ home, shelf, digests, builtins, faults, settings, records, pulses });
+    const { parts, revisions } = yield* makeRevisions({
+      home,
+      shelf,
+      digests,
+      builtins,
+      faults,
+      settings,
+      records,
+      touched: Stream.fromPubSub(inputs),
+    });
+    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs, parts });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* settings.changes(pluginsOptions).pipe(Effect.orDie);
     let seen: Options | null = null;

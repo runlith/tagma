@@ -13,12 +13,13 @@ import {
   type PluginLoaded,
   PluginsUnreadable,
   PluginUnhosted,
+  type ProviderParts,
 } from './contract/service/plugins.js';
 import type { PluginContribution, PluginPoints } from './contract/service/points.js';
 import { type HookEntries, HOOKS_FACE } from './contract/wire/hooks.js';
 import { pluginsDisabled, pluginsEnabled, pluginsInstalled, pluginsOff } from './contract/wire/settings.js';
 import type { Digests } from './digests.js';
-import { enablingIn } from './enabling.js';
+import { enablingIn, runningOf } from './enabling.js';
 import { hosted, type Read } from './reader.js';
 import { SECRET_KIND, type Shelf } from './shelf.js';
 
@@ -30,8 +31,9 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   readonly points: PluginPoints['Service'];
   readonly pulses: PubSub.PubSub<number | null>;
   readonly inputs: PubSub.PubSub<string>;
+  readonly parts: ProviderParts['Service'];
 }) {
-  const { shelf, digests, points, pulses, inputs } = input;
+  const { shelf, digests, points, pulses, inputs, parts } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const hooks = yield* points.hold(HOOKS);
@@ -112,7 +114,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     return (): readonly string[] => {
       const now = { enabled: enabled(), off: off(), machineOff: machineOff() };
       if (seen !== null && seen.enabled === now.enabled && seen.off === now.off && seen.machineOff === now.machineOff) return seen.running;
-      seen = { ...now, running: now.enabled.filter((id) => !now.off.includes(id) && !now.machineOff.includes(id)) };
+      seen = { ...now, running: runningOf(now.enabled, now.off, now.machineOff) };
       return seen.running;
     };
   });
@@ -189,20 +191,19 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
       .values(id, pkg)
       .pipe(Effect.mapError((failure) => (failure._tag === 'PluginUnreadable' ? failure : unreadable(failure))));
     const outputs = pkg.build?.outputs ?? [];
-    const revision = yield* digests.digest(install.root, outputs, 'outputs').pipe(Effect.mapError(unreadable));
-    if (revision === null) {
+    const digest = yield* digests.digest(install.root, outputs, 'outputs').pipe(Effect.mapError(unreadable));
+    if (digest === null) {
       return yield* new PluginUnreadable({ path: install.root, reason: `${outputs.join(' or ')} went missing while it was read` });
     }
-    const processRevision =
+    const processDigest =
       pkg.process === null ? null : yield* digests.digest(install.root, [pkg.process.entry], 'process').pipe(Effect.mapError(unreadable));
     return {
       id,
       title: pkg.title ?? pkg.name,
       root: install.root,
       data: shelf.data(id),
-      revision,
-      processRevision,
-      outputs,
+      digest,
+      processDigest,
       process: pkg.process,
       contributes: pkg.contributes,
       options,
@@ -214,18 +215,14 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     kind: SECRET_KIND,
     holders: Effect.fn('EnabledPlugins.holders')(
       function* (projectId: number) {
-        const { running, machineOff } = yield* enablingIn(settings, projectId);
+        const { running } = yield* enablingIn(settings, projectId);
+        const provided = new Set(parts.current().flatMap((part) => (part.builtin || part.off ? [] : [part.id])));
         const installed = yield* settings.value(pluginsInstalled);
         const holders = [];
         for (const install of installed) {
           const { id } = install;
-          if (machineOff.has(id)) continue;
-          const found = running.has(id)
-            ? yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)))
-            : yield* shelf.read(install.root, install.declared ?? null).pipe(
-                Effect.map((read) => (read.package.providers === null ? null : read)),
-                Effect.catchTags(readRefused(id)),
-              );
+          if (!running.has(id) && !provided.has(id)) continue;
+          const found = yield* shelf.read(install.root, install.declared ?? null).pipe(Effect.catchTags(readRefused(id)));
           if (found === null) continue;
           const entries = found.package.options
             .filter((option) => option.sensitive)

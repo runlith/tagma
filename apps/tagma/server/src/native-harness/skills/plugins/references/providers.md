@@ -52,7 +52,7 @@ export default defineProviders({
 
 - `models` is an adapter: wire providers that answer by request (the request profile and quota come from `@runlith/llm`, as the built-in adapters show), CLI agents — harness providers with a `terminal` or `acp` surface, whose hook codec the CLI's hook process loads from the same module — and an optional settings form (`defineAdapter(provide, settings)`) whose saved instances reach `provide` as `host.instances`.
 - `speech` lists speech providers written against the speech kit: requests, events and capabilities from `@runlith/speech/wire/*`, the duplex runner from `@runlith/speech/protocol/duplex`. A provider may require only the HTTP client and the kit's `DuplexTransport`; Tagma gives both. A required credential is a console key the person enters in the console-key window.
-- Imports reach Tagma's own copies of `effect`, `@runlith/tagma/adapter/*`, `@runlith/llm/*` and `@runlith/speech/*`; anything else is bundled. A file the module reads at run time sits in `dist/` and is found from `import.meta.dir`.
+- Imports reach Tagma's own copies of `effect`, `@runlith/tagma/adapter/*`, `@runlith/llm/*` and `@runlith/speech/*`; anything else is bundled. A file the module reads at run time sits beside `dist/providers.js`, not in a folder under it, and is found from `import.meta.dir`.
 
 ## Building and installing
 

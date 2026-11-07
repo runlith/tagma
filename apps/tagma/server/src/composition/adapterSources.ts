@@ -4,18 +4,29 @@ import { importProviders } from '@runlith/tagma/adapter/loader';
 import { Effect, FileSystem, Layer, Stream } from 'effect';
 import { ADAPTERS } from '../installation/contract/wire/layout.js';
 import { type ProviderPart, ProviderParts } from '../plugins/contract/service/plugins.js';
-import { AdapterPlaces, type AdapterSource, AdapterSources } from '../providers/contract/service/registry.js';
+import { AdapterPlaces, type AdapterSource, AdapterSources, RevisionUnread } from '../providers/contract/service/registry.js';
 import { HOST_MODULES } from './hostModules.generated.js';
 
-const pluginSource = (part: ProviderPart, directory: string): AdapterSource => ({
-  id: part.id,
-  title: part.title,
+type Identity = { readonly id: string; readonly title: string; readonly version: string | null; readonly off: boolean };
+
+const pluginSource = (identity: Identity, directory: string): AdapterSource => ({
+  id: identity.id,
+  title: identity.title,
   origin: 'plugin',
-  version: part.version,
+  version: identity.version,
   directory,
-  disabled: part.off ? true : undefined,
+  disabled: identity.off ? true : undefined,
   load: async () => (await importProviders(directory, HOST_MODULES)).models,
 });
+
+const sourceAt = (directory: string) =>
+  Effect.map(
+    Effect.tryPromise({
+      try: () => importProviders(directory, HOST_MODULES),
+      catch: (cause) => new RevisionUnread({ directory, reason: cause instanceof Error ? cause.message : String(cause) }),
+    }),
+    ({ id, version }) => pluginSource({ id, title: id, version, off: false }, directory),
+  );
 
 const sourcesLayer = (builtins: readonly AdapterSource[]) =>
   Layer.effect(
@@ -38,7 +49,7 @@ const sourcesLayer = (builtins: readonly AdapterSource[]) =>
       return AdapterSources.of({
         current: () => sourcesOf(parts.current()),
         changes: Stream.map(parts.changes, sourcesOf),
-        host: HOST_MODULES,
+        at: sourceAt,
       });
     }),
   );

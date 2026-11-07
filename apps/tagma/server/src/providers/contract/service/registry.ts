@@ -1,8 +1,7 @@
 import type { ModelCatalog, ModelOption } from '@runlith/llm/models/catalog';
 import type { AskKind } from '@runlith/llm/models/description';
 import type { Adapter, AdapterSettings, AskProgram, HarnessProvider, Provider, WireProvider } from '@runlith/tagma/adapter/provider';
-import type { HostModules } from '@runlith/tagma/adapter/loader';
-import { Context, Effect, type Stream } from 'effect';
+import { Context, Data, Effect, type Stream } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { AdapterOrigin, AdapterState, ServedCatalog, AccountSection, CatalogSnapshot } from '../wire/catalog.js';
 import type { CredentialFileFault } from '@runlith/credential-file/failure';
@@ -107,12 +106,18 @@ export type AdapterSource = AdapterIdentity & {
   readonly directory?: string;
 };
 
+export class RevisionUnread extends Data.TaggedError('RevisionUnread')<{ readonly directory: string; readonly reason: string }> {
+  override get message(): string {
+    return `${this.directory} does not import: ${this.reason}`;
+  }
+}
+
 export class AdapterSources extends Context.Service<
   AdapterSources,
   {
     current(): readonly AdapterSource[];
     readonly changes: Stream.Stream<readonly AdapterSource[]>;
-    readonly host: HostModules;
+    at(directory: string): Effect.Effect<AdapterSource, RevisionUnread>;
   }
 >()('tagma/providers/AdapterSources') {}
 

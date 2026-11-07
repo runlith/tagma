@@ -2,11 +2,11 @@ import { expect } from 'bun:test';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Context, Effect, FileSystem, Layer, Queue, Schedule, Stream } from 'effect';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
-import { PluginRevisions, Plugins, ProviderParts } from '../../../plugins/contract/service/plugins.js';
+import { HostedPlugins, PluginRevisions, Plugins, ProviderParts } from '../../../plugins/contract/service/plugins.js';
 import { PLUGIN_OPERATIONS } from '../../../plugins/contract/wire/operations.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeDoorWorld } from '../doorFixture.js';
@@ -97,6 +97,7 @@ const makeWorld = Effect.gen(function* () {
     registry: Context.get(door.runtime.owners, ProviderRegistry),
     plugins: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, Plugins))),
     parts: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, ProviderParts))),
+    hosted: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, HostedPlugins))),
     revisions: Context.get(door.runtime.owners, PluginRevisions),
     settled: (threadId: string) => settledThread({ threadId, projectId }).pipe(Effect.provide(door.runtime.owners)),
   };
@@ -365,6 +366,52 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
         }).pipe(Effect.scoped),
     );
 
+    it.effect('a revision carries the provider part’s own files, so rebuilding only the process and the views mints none', () =>
+      Effect.gen(function* () {
+        const { op, root, parts, hosted } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        const folder = join(root, 'mixed');
+        const built = Effect.fnUntraced(function* (hash: string, process: string, view: string) {
+          yield* files.makeDirectory(join(folder, 'dist/ui'), { recursive: true });
+          yield* files.writeFileString(join(folder, 'dist/process.js'), process);
+          yield* files.writeFileString(join(folder, 'dist/ui/graph.json'), view);
+          yield* files.writeFileString(
+            join(folder, MANIFEST),
+            manifestText({
+              id: 'mixed-plugin',
+              program: 'unused',
+              providers: { models: true, harnesses: false, speech: false },
+              build: { hash: hash.repeat(64), sources: [] },
+            }),
+          );
+        });
+        yield* built('a', '// one\n', '{}');
+        yield* files.writeFileString(join(folder, 'dist/ask.sh'), 'echo asked\n');
+        yield* files.writeFileString(join(folder, PROVIDERS_ENTRY), wire('mixed'));
+        const seen = yield* Queue.unbounded<string>();
+        yield* Effect.forkScoped(
+          Stream.runForEach(parts.changes, (standing) => {
+            const directory = standing.find((part) => part.id === 'mixed-plugin')?.directory;
+            return directory == null ? Effect.void : Queue.offer(seen, directory);
+          }),
+        );
+        const heard = yield* Queue.unbounded<string>();
+        yield* Effect.forkScoped(Stream.runForEach(hosted.changes, (id) => Queue.offer(heard, id)));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        const first = (yield* partOf('mixed-plugin'))!;
+        const copied = yield* files.readDirectory(first, { recursive: true });
+        expect(copied.filter((name) => name.includes('.')).sort()).toEqual(['dist/ask.sh', 'dist/providers.js', MANIFEST]);
+
+        yield* built('b', '// two\n', '{"rebuilt":true}');
+        yield* Effect.repeat(Queue.take(heard), { until: (id) => id === 'mixed-plugin' });
+        yield* files.writeFileString(join(folder, PROVIDERS_ENTRY), `${wire('mixed')}// rebuilt\n`);
+        const second = (yield* partOf('mixed-plugin', first))!;
+        const distinct = [...new Set(yield* Queue.takeAll(seen))];
+        expect(distinct).toEqual([first, second]);
+        expect(yield* op('uninstall_plugin', { id: 'mixed-plugin' })).toMatchObject({ status: 200 });
+      }).pipe(Effect.scoped),
+    );
+
     it.effect('an npm package installs by its name from the registry the machine’s npm configuration names', () =>
       Effect.gen(function* () {
         const { op, root } = yield* World;
@@ -382,8 +429,15 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
                 const path = new URL(request.url).pathname;
                 if (path === '/npm-acme')
                   return Response.json({
+                    name: 'npm-acme',
                     'dist-tags': { latest: '1.0.0' },
-                    versions: { '1.0.0': { dist: { tarball: new URL('/npm-acme-1.0.0.tgz', request.url).href } } },
+                    versions: {
+                      '1.0.0': {
+                        name: 'npm-acme',
+                        version: '1.0.0',
+                        dist: { tarball: new URL('/npm-acme-1.0.0.tgz', request.url).href },
+                      },
+                    },
                   });
                 return path === '/npm-acme-1.0.0.tgz' ? new Response(bytes) : new Response('absent', { status: 404 });
               },
@@ -391,16 +445,19 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
           ),
           (served) => Effect.promise(() => served.stop(true)),
         );
+        const variables = { npm_config_registry: `http://127.0.0.1:${server.port}`, BUN_INSTALL_CACHE_DIR: join(root, 'npm-cache') };
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            const kept = process.env.npm_config_registry;
-            process.env.npm_config_registry = `http://127.0.0.1:${server.port}`;
+            const kept = Object.fromEntries(Object.keys(variables).map((name) => [name, process.env[name]]));
+            Object.assign(process.env, variables);
             return kept;
           }),
           (kept) =>
             Effect.sync(() => {
-              if (kept === undefined) delete process.env.npm_config_registry;
-              else process.env.npm_config_registry = kept;
+              for (const [name, value] of Object.entries(kept)) {
+                if (value === undefined) delete process.env[name];
+                else process.env[name] = value;
+              }
             }),
         );
         expect(yield* op('install_plugin', { source: 'npm:npm-acme' })).toMatchObject({

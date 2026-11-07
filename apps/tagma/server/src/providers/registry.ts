@@ -27,7 +27,6 @@ import { indexHarnesses } from './harnessIndex.js';
 import { type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
 import { dirname, join } from 'node:path';
-import { importProviders } from '@runlith/tagma/adapter/loader';
 import { accountSource, makeAccountModes, modeSections } from './accounts/modes.js';
 import type { AccountSection } from './contract/wire/catalog.js';
 import { CredentialFiles } from './contract/service/credentials.js';
@@ -248,8 +247,8 @@ export const registryLayer = Layer.effect(
     const places = yield* Effect.serviceOption(AdapterPlaces);
     const data = places._tag === 'Some' ? places.value.data : null;
     const disk = yield* Effect.serviceOption(FileSystem.FileSystem);
-    const revisions = yield* Effect.serviceOption(PluginRevisions);
-    const faults = yield* Effect.serviceOption(PluginFaults);
+    const revisions = yield* PluginRevisions;
+    const faults = yield* PluginFaults;
     const stored = yield* Effect.serviceOption(AdapterInstances);
     const files = yield* Effect.serviceOption(CredentialFiles);
     const cli = yield* Effect.serviceOption(AccountCli);
@@ -270,38 +269,34 @@ export const registryLayer = Layer.effect(
         ? Effect.orDie(stored.value.read())
         : Effect.succeed({ instances: new Map<string, readonly SettingInstance[]>(), secrets: {} });
     const loadVersion = Effect.fn('providers.loadVersion')(function* (directory: string) {
-      const imported = yield* Effect.result(
-        Effect.tryPromise({
-          try: () => importProviders(directory, sources.host, process.execArgv),
-          catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
-        }),
-      );
-      if (Result.isFailure(imported)) {
-        yield* Effect.logError('a held provider revision did not load', { directory, reason: imported.failure });
+      const found = yield* Effect.result(sources.at(directory));
+      if (Result.isFailure(found)) {
+        yield* Effect.logError('a held provider revision did not load', { directory, reason: found.failure.reason });
         return [];
       }
-      const { id, version, models } = imported.success;
-      const source: AdapterSource = { id, title: id, origin: 'plugin', version, directory, load: async () => models };
-      return (yield* load(source, adapterHost(yield* snapshot, id), new Map(), new Map())).providers;
+      const source = found.success;
+      return (yield* load(source, adapterHost(yield* snapshot, source.id), new Map(), new Map())).providers;
     });
-    const faulted = (loaded: readonly Loaded[]): void => {
-      if (faults._tag === 'None') return;
-      for (const { state } of loaded) {
-        if (state.state === 'failed')
-          faults.value.put(state.id, PROVIDER_FAULTS.models, { title: 'Its model providers did not load.', detail: state.reason });
-        else faults.value.clear(state.id, PROVIDER_FAULTS.models);
-      }
-    };
+    const faulted = (loaded: readonly Loaded[]): void =>
+      faults.replace(
+        PROVIDER_FAULTS.providers,
+        new Map(
+          loaded.flatMap(({ state }) =>
+            state.state === 'failed' ? [[state.id, { title: 'Its model providers did not load.', detail: state.reason }] as const] : [],
+          ),
+        ),
+      );
     const runs = new Map<string, ProviderCatalog>();
     const pinnedPackages = () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()]));
+    let loadedFrom: readonly AdapterSource[] | null = null;
     let loading: ReadonlySet<string> = new Set();
     let published: ReadonlySet<string> = new Set();
-    if (revisions._tag === 'Some')
-      yield* revisions.value.register({ standing: () => new Set([...loading, ...published, ...pinnedPackages()]) });
+    yield* revisions.register({ standing: () => new Set([...loading, ...published, ...pinnedPackages()]) });
     const externals = Effect.gen(function* () {
       const { instances, secrets } = yield* snapshot;
       const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
       const listed = sources.current();
+      loadedFrom = listed;
       loading = new Set(listed.flatMap((source) => (source.directory === undefined ? [] : [source.directory])));
       const next = yield* loadAll(listed, hostOf, [], previous);
       if (data !== null) {
@@ -319,7 +314,7 @@ export const registryLayer = Layer.effect(
     let current = yield* SubscriptionRef.get(state);
     published = new Set(current.packages.values());
     loading = new Set();
-    const released = revisions._tag === 'Some' ? revisions.value.released : Effect.void;
+    const { released } = revisions;
     const publish = Effect.fnUntraced(function* (next: ProviderCatalog) {
       current = next;
       published = new Set(next.packages.values());
@@ -336,11 +331,9 @@ export const registryLayer = Layer.effect(
         ? current
         : yield* publish(catalogOf(previous, previousInstances, sections, snapshots));
     });
-    let loadedFrom = sources.current();
     yield* Effect.forkScoped(
       Stream.runForEach(sources.changes, (next) => {
         if (next === loadedFrom) return Effect.void;
-        loadedFrom = next;
         return Effect.asVoid(reload);
       }),
     );

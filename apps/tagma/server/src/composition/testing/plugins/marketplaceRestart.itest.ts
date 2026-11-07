@@ -49,6 +49,7 @@ type Body = {
   readonly preview?: { readonly prepared: string };
   readonly plugins?: readonly {
     readonly id: string;
+    readonly builtin: boolean;
     readonly enabled: boolean;
     readonly components: readonly { readonly name: string }[];
   }[];
@@ -199,7 +200,9 @@ it.live(
         'own',
         'vendor-codex',
       ]);
-      expect((yield* second.op('read_plugins', {}, scope)).plugins).toEqual([expect.objectContaining({ id: 'echoer', enabled: true })]);
+      expect((yield* second.op('read_plugins', {}, scope)).plugins?.filter((plugin) => !plugin.builtin)).toEqual([
+        expect.objectContaining({ id: 'echoer', enabled: true }),
+      ]);
       const thread = (yield* second.op('create_thread', {}, scope)).snapshot?.thread.id;
       expect(
         ((yield* second.op('read_agent_skills', { kind: 'thread', id: thread }, scope)).skills ?? [])

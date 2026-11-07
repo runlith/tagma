@@ -16,12 +16,9 @@ import { DefaultAccounts } from '../../../providers/contract/service/accounts.js
 import { CredentialFiles, KeyedProviders, QuotaProviders } from '../../../providers/contract/service/credentials.js';
 import { AccountQuota } from '../../../providers/contract/service/quota.js';
 import { AccountCli } from '../../../providers/contract/service/cli.js';
-import { AdapterSources } from '../../../providers/contract/service/registry.js';
 import { SignIns } from '../../../providers/contract/service/signIns.js';
 import { providers } from '../../../providers/providers.js';
 import { fixedSources } from '../../../providers/testing/registry.js';
-import { PluginRevisions } from '../../../plugins/contract/service/plugins.js';
-import { unheldRevisions } from '../../../plugins/testing/revisions.js';
 import { credentialsLayer } from '../../../speech/credentials.js';
 
 const home = mkdtempSync(join(tmpdir(), 'tagma-speech-keys-'));
@@ -33,8 +30,7 @@ const world = credentialsLayer.pipe(
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(KeyedProviders, { ids: () => ['soniox', 'elevenlabs'] }),
       Layer.succeed(QuotaProviders, { providers: [] }),
-      Layer.succeed(AdapterSources, fixedSources([])),
-      Layer.succeed(PluginRevisions, unheldRevisions),
+      fixedSources([]),
       Layer.succeed(AccountCli, {
         installed: () => Effect.succeed({ _tag: 'Missing', reason: 'absent' } as const),
         changes: Stream.empty,

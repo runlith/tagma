@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import {
   type PluginFormat,
@@ -8,10 +8,21 @@ import {
   type PluginServer,
 } from '../../plugins/contract/service/format.js';
 import { serverOf } from '../agent-plugins/servers.js';
-import { entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
+import { entryOf, jsonOf, namesIn, textOf } from '../../plugins/contract/service/reading.js';
 import { Envelope, MANIFEST } from './contract/wire/manifest.js';
 
 const decodeManifest = Schema.decodeUnknownEffect(Envelope);
+
+const partFiles = Effect.fnUntraced(function* (root: string, entry: string, process: PluginProcess | null) {
+  const directory = dirname(entry);
+  const files: string[] = [];
+  for (const name of yield* namesIn(join(root, directory))) {
+    const path = directory === '.' ? name : `${directory}/${name}`;
+    if (path === MANIFEST || path === process?.entry) continue;
+    if ((yield* entryOf(root, path)).kind === 'file') files.push(path);
+  }
+  return files;
+});
 
 const claim: PluginFormat['claim'] = Effect.fnUntraced(function* (root) {
   return (yield* entryOf(root, MANIFEST)).kind === 'file' ? 'manifest' : null;
@@ -37,12 +48,14 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
       reason: `${MANIFEST} runs ${process.entry}, which is not a file inside the plugin: build the plugin again`,
     });
   }
-  const providers = manifest.providers ?? null;
-  if (providers !== null && (yield* entryOf(root, providers.entry)).kind !== 'file') {
+  const declared = manifest.providers;
+  if (declared !== undefined && (yield* entryOf(root, declared.entry)).kind !== 'file') {
     return yield* new PluginRefused({
-      reason: `${MANIFEST} brings providers from ${providers.entry}, which is not a file inside the plugin: build the plugin again`,
+      reason: `${MANIFEST} brings providers from ${declared.entry}, which is not a file inside the plugin: build the plugin again`,
     });
   }
+  const providers =
+    declared === undefined ? null : { ...declared, files: yield* partFiles(root, declared.entry, process), manifest: MANIFEST };
   const ignored: PluginIgnored[] = [];
   const servers: PluginServer[] = [];
   for (const [name, server] of Object.entries(manifest.mcpServers ?? {})) {
@@ -74,7 +87,7 @@ const read: PluginFormat['read'] = Effect.fn('tagma.read')(function* (root, _cla
     build: {
       hash: manifest.build.hash,
       sources: manifest.build.sources,
-      outputs: [MANIFEST, ...(process === null ? [] : [process.entry]), ...(providers === null ? [] : [providers.entry])],
+      outputs: [MANIFEST, ...(process === null ? [] : [process.entry]), ...(providers?.files ?? [])],
     },
     contributes: manifest.contributes ?? {},
     ignored,

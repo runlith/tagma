@@ -11,7 +11,7 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { AccountCli } from '../contract/service/cli.js';
 import { CredentialFiles, ProviderCredentials } from '../contract/service/credentials.js';
-import { type AdapterSource, AdapterSources, ProviderRegistry } from '../contract/service/registry.js';
+import { type AdapterSource, ProviderRegistry } from '../contract/service/registry.js';
 import { fixedSources } from '../testing/registry.js';
 import { DefaultAccounts } from '../contract/service/accounts.js';
 import { AccountQuota } from '../contract/service/quota.js';
@@ -99,7 +99,7 @@ const registry = (path: string, installed: () => boolean, sources: readonly Adap
       registryLayer.pipe(
         Layer.provide(
           Layer.mergeAll(
-            Layer.succeed(AdapterSources, fixedSources(sources)),
+            fixedSources(sources),
             Layer.succeed(CredentialFiles, { tokensPath: join(path, 'tokens.json') }),
             Layer.succeed(AccountCli, cli(installed)),
           ),

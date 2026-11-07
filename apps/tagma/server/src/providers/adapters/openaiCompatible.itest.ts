@@ -8,7 +8,7 @@ import type { SettingInstance } from '@runlith/tagma/adapter/provider';
 import { Context, Effect, Layer, Stream } from 'effect';
 import { credentialMissing } from '../credentials/missing.js';
 import { AdapterInstances } from '../contract/service/instances.js';
-import { AdapterSources, ProviderRegistry } from '../contract/service/registry.js';
+import { ProviderRegistry } from '../contract/service/registry.js';
 import { fixedSources } from '../testing/registry.js';
 import { registryLayer } from '../registry.js';
 
@@ -68,12 +68,9 @@ const registryOf = Effect.fnUntraced(function* (
     registryLayer.pipe(
       Layer.provide(stored),
       Layer.provide(
-        Layer.succeed(
-          AdapterSources,
-          fixedSources([
-            { id: 'openai-compatible', title: 'OpenAI-compatible server', origin: 'builtin', version: null, load: async () => adapter },
-          ]),
-        ),
+        fixedSources([
+          { id: 'openai-compatible', title: 'OpenAI-compatible server', origin: 'builtin', version: null, load: async () => adapter },
+        ]),
       ),
     ),
   );

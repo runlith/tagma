@@ -26,7 +26,6 @@ import { AccountCli } from '../contract/service/cli.js';
 import { CredentialFiles } from '../contract/service/credentials.js';
 import { HarnessAccounts } from '../contract/service/harness.js';
 import { AccountQuota } from '../contract/service/quota.js';
-import { AdapterSources } from '../contract/service/registry.js';
 import { fixedSources } from '../testing/registry.js';
 import { PluginRevisions } from '../../plugins/contract/service/plugins.js';
 import { unheldRevisions } from '../../plugins/testing/revisions.js';
@@ -124,10 +123,7 @@ const cli: AccountCli['Service'] = {
 const layer = providersLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
-      Layer.succeed(
-        AdapterSources,
-        fixedSources([{ id: 'fixture', title: 'Fixture', origin: 'builtin', version: null, load: async () => () => providers }]),
-      ),
+      fixedSources([{ id: 'fixture', title: 'Fixture', origin: 'builtin', version: null, load: async () => () => providers }]),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(AccountCli, cli),
       Layer.succeed(PluginRevisions, unheldRevisions),

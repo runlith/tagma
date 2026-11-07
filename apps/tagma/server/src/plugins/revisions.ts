@@ -1,9 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, renameSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
-import { Duration, Effect, FileSystem, Option, PubSub, Queue, Result, Semaphore, Stream } from 'effect';
-import { FileWatcher } from '../platform/contract/service/watch.js';
-import { type TreeWatch, watchAll } from '../platform/watch/tree.js';
+import { Effect, FileSystem, PubSub, Result, Semaphore, Stream } from 'effect';
 import type { Settings } from '../settings/contract/service/values.js';
 import { type PluginPackage, PluginUnreadable } from './contract/service/format.js';
 import {
@@ -22,13 +20,11 @@ import type { Shelf } from './shelf.js';
 
 const REVISIONS = 'plugin-revisions';
 
-const MANIFEST = 'tagma-plugin.json';
-const DIST = 'dist';
-const VIEWS = 'dist/ui';
 const STAGING = '.staging-';
 const RETIRED = '.retired-';
-const POINT = PROVIDER_FAULTS.revision;
-const SETTLE = Duration.millis(300);
+const POINT = PROVIDER_FAULTS.revisions;
+
+type Part = NonNullable<PluginPackage['providers']>;
 
 type Standing = {
   readonly root: string;
@@ -48,8 +44,18 @@ const reasonOf = (failure: unknown): string =>
 const sameParts = (left: readonly ProviderPart[], right: readonly ProviderPart[]): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
-const shownOf = (pkg: PluginPackage) =>
-  pkg.providers === null ? null : { models: pkg.providers.models, harnesses: pkg.providers.harnesses, speech: pkg.providers.speech };
+const revisionOf = (pkg: PluginPackage, part: Part, files: string): string =>
+  createHash('sha256')
+    .update(files)
+    .update('\0')
+    .update(
+      JSON.stringify({
+        id: pkg.name,
+        version: pkg.version,
+        providers: { entry: part.entry, models: part.models, harnesses: part.harnesses, speech: part.speech },
+      }),
+    )
+    .digest('hex');
 
 export const makeRevisions = Effect.fnUntraced(function* (input: {
   readonly home: string;
@@ -59,11 +65,10 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
   readonly faults: PluginFaults['Service'];
   readonly settings: Settings['Service'];
   readonly records: RevisionRecords['Service'];
-  readonly pulses: PubSub.PubSub<number | null>;
+  readonly touched: Stream.Stream<string>;
 }) {
-  const { home, shelf, digests, builtins, faults, settings, records, pulses } = input;
+  const { home, shelf, digests, builtins, faults, settings, records, touched } = input;
   const files = yield* FileSystem.FileSystem;
-  const watcher = yield* Effect.serviceOption(FileWatcher);
   const base = join(home, REVISIONS);
   const lock = yield* Semaphore.make(1);
   const sweeping = yield* Semaphore.make(1);
@@ -72,42 +77,31 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
   const handed = new Map<string, number>();
   const placing = new Set<string>();
   const holders = new Set<RevisionHolder>();
-  const watches = new Map<string, { readonly root: string; readonly watch: TreeWatch }>();
   let moment = 0;
   let parts: readonly ProviderPart[] = [];
 
   const moves = yield* Effect.acquireRelease(PubSub.sliding<readonly ProviderPart[]>({ capacity: 1, replay: 1 }), PubSub.shutdown);
-  const heard = yield* Effect.acquireRelease(Queue.unbounded<string>(), Queue.shutdown);
 
   const inside = (directory: string): boolean => {
     const path = relative(base, directory);
     return path !== '' && !path.startsWith('..') && path.split(sep).length === 2;
   };
 
-  const outputsOf = Effect.fnUntraced(function* (root: string) {
-    const listed = yield* files.readDirectory(join(root, DIST), { recursive: true });
-    const found: string[] = [MANIFEST];
-    for (const name of listed) {
-      const path = `${DIST}/${name.replaceAll('\\', '/')}`;
-      if (path === VIEWS || path.startsWith(`${VIEWS}/`)) continue;
-      if ((yield* files.stat(join(root, path))).type === 'File') found.push(path);
-    }
-    return found.sort();
-  });
-
-  const copied = Effect.fn('PluginRevisions.copy')(function* (id: string, root: string, revision: string, paths: readonly string[]) {
+  const copied = Effect.fn('PluginRevisions.copy')(function* (install: PluginInstall, part: Part, digest: string, revision: string) {
+    const { id, root } = install;
     const directory = join(base, id, revision.slice(0, 16));
     if (yield* files.exists(directory)) return directory;
     const stage = join(base, id, `${STAGING}${randomUUID()}`);
     placing.add(directory);
     return yield* Effect.gen(function* () {
-      for (const path of paths) {
+      for (const path of new Set([...part.files, part.manifest])) {
         yield* files.makeDirectory(dirname(join(stage, path)), { recursive: true });
         yield* files.copyFile(join(root, path), join(stage, path));
       }
-      const taken = yield* digests.digest(stage, paths, 'revision');
+      const taken = yield* digests.digest(stage, part.files, 'revision');
       digests.forget(stage);
-      if (taken !== revision) {
+      const after = (yield* shelf.read(root, install.declared ?? null)).package;
+      if (taken !== digest || after.providers === null || revisionOf(after, after.providers, digest) !== revision) {
         yield* files.remove(stage, { recursive: true, force: true });
         return null;
       }
@@ -136,17 +130,17 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
       return;
     }
     const pkg = read.success.package;
-    const providers = shownOf(pkg);
-    if (providers === null) {
+    const part = pkg.providers;
+    if (part === null) {
       standing.delete(id);
       faults.clear(id, POINT);
       return;
     }
+    const providers = { models: part.models, harnesses: part.harnesses, speech: part.speech };
     const taken = yield* Effect.result(
       Effect.gen(function* () {
-        const paths = yield* outputsOf(root);
-        const revision = yield* digests.digest(root, paths, 'revision');
-        return revision === null ? null : yield* copied(id, root, revision, paths);
+        const digest = yield* digests.digest(root, part.files, 'revision');
+        return digest === null ? null : yield* copied(install, part, digest, revisionOf(pkg, part, digest));
       }),
     );
     if (taken._tag === 'Failure') {
@@ -159,36 +153,6 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
     if (taken.success === null) return;
     faults.clear(id, POINT);
     standing.set(id, { root, directory: taken.success, title: pkg.title ?? pkg.name, version: pkg.version, providers });
-  });
-
-  const watched = Effect.fnUntraced(function* (installs: readonly PluginInstall[]) {
-    const wanted = new Map(installs.flatMap((install) => (install.source.kind === 'folder' ? [[install.id, install.root] as const] : [])));
-    for (const [id, held] of watches) {
-      if (wanted.get(id) === held.root && held.watch.watching()) continue;
-      held.watch.close();
-      watches.delete(id);
-    }
-    for (const [id, root] of wanted) {
-      if (watches.has(id)) continue;
-      const opening = watchAll([
-        {
-          at: root,
-          recursive: true,
-          listen: (event) => {
-            const named = event.paths ?? [];
-            const touches =
-              named.length === 0 ||
-              named.some(
-                (path) =>
-                  path === '' || path === MANIFEST || path === DIST || (path.startsWith(`${DIST}/`) && !path.startsWith(`${VIEWS}/`)),
-              );
-            if (touches) Queue.offerUnsafe(heard, id);
-          },
-        },
-      ]);
-      const watch = yield* Option.isSome(watcher) ? Effect.provideService(opening, FileWatcher, watcher.value) : opening;
-      watches.set(id, { root, watch });
-    }
   });
 
   const kept = (after = 0): ReadonlySet<string> =>
@@ -289,7 +253,6 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
     const ids = new Set(installs.map((install) => install.id));
     for (const id of standing.keys()) if (!ids.has(id)) standing.delete(id);
     for (const install of installs) if (only === null || only.has(install.id)) yield* synced(install);
-    yield* watched(installs);
     return yield* published(installs);
   });
 
@@ -314,24 +277,21 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
       return left > 0 || kept().has(directory) ? Effect.void : collected(false);
     });
 
+  const installed = yield* settings.changes(pluginsInstalled).pipe(Effect.orDie);
+  const off = yield* settings.changes(pluginsOff).pipe(Effect.orDie);
+  let entries = new Map<string, string>();
+  const moved = (installs: readonly PluginInstall[]): ReadonlySet<string> => {
+    const next = new Map(installs.map((install) => [install.id, JSON.stringify(install)] as const));
+    const changed = new Set([...next].flatMap(([id, entry]) => (entries.get(id) === entry ? [] : [id])));
+    entries = next;
+    return changed;
+  };
+  moved(yield* settings.value(pluginsInstalled).pipe(Effect.orDie));
   yield* refreshed(null);
   yield* collected(true);
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const held of watches.values()) held.watch.close();
-    }),
-  );
-  yield* Effect.forkScoped(Stream.runForEach(Stream.fromPubSub(pulses), () => refreshed(null)));
-  yield* Effect.forkScoped(
-    Effect.forever(
-      Effect.gen(function* () {
-        const first = yield* Queue.take(heard);
-        yield* Effect.sleep(SETTLE);
-        const rest = yield* Queue.clear(heard);
-        yield* refreshed(new Set([first, ...rest]));
-      }),
-    ),
-  );
+  yield* Effect.forkScoped(Stream.runForEach(Stream.drop(installed, 1), (installs) => refreshed(moved(installs))));
+  yield* Effect.forkScoped(Stream.runForEach(Stream.drop(off, 1), () => refreshed(new Set())));
+  yield* Effect.forkScoped(Stream.runForEach(touched, (id) => refreshed(new Set([id]))));
 
   return {
     parts: ProviderParts.of({ current: () => parts, changes: Stream.fromPubSub(moves) }),

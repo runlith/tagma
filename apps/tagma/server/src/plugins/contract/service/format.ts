@@ -84,7 +84,11 @@ export type PluginAbout = {
 
 export type PluginProcess = { readonly entry: string; readonly resident: boolean };
 
-type PluginProviderPart = PluginProviders & { readonly entry: string };
+type PluginProviderPart = PluginProviders & {
+  readonly entry: string;
+  readonly files: readonly string[];
+  readonly manifest: string;
+};
 
 type PluginBuild = { readonly hash: string; readonly sources: readonly string[]; readonly outputs: readonly string[] };
 

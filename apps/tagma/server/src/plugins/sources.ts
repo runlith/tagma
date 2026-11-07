@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { type CloneFailed, type CommitUnreachable, isGitUrl, shallowClone } from '@runlith/git/clone';
-import { Config, Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
+import { Data, Effect, Fiber, FileSystem, type PlatformError, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { within } from './contract/service/reading.js';
 import { npmSourceOf, type PluginSource } from './contract/wire/rows.js';
@@ -28,8 +28,6 @@ export type Fetched = {
   readonly root: string;
   readonly stage: string | null;
 };
-
-const NPM_REGISTRY = 'https://registry.npmjs.org';
 
 export const sourceOf = (given: string, projectRoot: string): PluginSource =>
   npmSourceOf(given) ??
@@ -103,59 +101,46 @@ const copiedFrom = Effect.fnUntraced(function* (root: string, into: string) {
 
 type NpmSource = Extract<PluginSource, { readonly kind: 'npm' }>;
 
-const Packument = Schema.Struct({
-  'dist-tags': Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  versions: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ dist: Schema.Struct({ tarball: Schema.String }) }))),
-});
-const decodePackument = Schema.decodeUnknownEffect(Packument);
-
-const asked = (name: string, url: string) =>
-  Effect.tryPromise({
-    try: async () => {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`${url} answered ${response.status}`);
-      return response;
-    },
-    catch: (cause) => new PackageUnreachable({ name, reason: cause instanceof Error ? cause.message : String(cause) }),
-  });
+const INSTALL = [
+  'install',
+  '--ignore-scripts',
+  '--no-save',
+  '--production',
+  '--omit=optional',
+  '--omit=peer',
+  '--linker=hoisted',
+  '--no-progress',
+  '--no-summary',
+] as const;
 
 const unpacked = Effect.fn('plugins.npm')(function* (source: NpmSource, stage: string) {
   const files = yield* FileSystem.FileSystem;
   const { name } = source;
   const failed = (reason: string) => new PackageUnreachable({ name, reason });
-  const registry = (yield* Config.String('npm_config_registry').pipe(
-    Config.withDefault(NPM_REGISTRY),
-    Effect.mapError((failure) => failed(failure.message)),
-  )).replace(/\/+$/u, '');
-  const document = yield* asked(name, `${registry}/${name.replace('/', '%2F')}`).pipe(
-    Effect.flatMap((response) =>
-      Effect.tryPromise({ try: () => response.json(), catch: () => failed('its registry document is not JSON') }),
-    ),
-    Effect.flatMap((json) => decodePackument(json).pipe(Effect.mapError((failure) => failed(failure.message)))),
-  );
-  const range = source.range ?? 'latest';
-  const chosen =
-    document['dist-tags']?.[range] ??
-    Object.keys(document.versions ?? {})
-      .filter((version) => Bun.semver.satisfies(version, range))
-      .sort((left, right) => Bun.semver.order(right, left))[0];
-  const tarball = chosen === undefined ? undefined : document.versions?.[chosen]?.dist.tarball;
-  if (tarball === undefined) return yield* failed(`no version satisfies ${range}`);
-  const bytes = yield* asked(name, tarball).pipe(
-    Effect.flatMap((response) => Effect.tryPromise({ try: () => response.arrayBuffer(), catch: () => failed(`${tarball} broke off`) })),
-  );
-  const archive = join(stage, 'package.tgz');
-  const into = join(stage, 'unpacked');
-  yield* files.writeFile(archive, new Uint8Array(bytes)).pipe(Effect.mapError((failure) => failed(failure.message)));
-  yield* files.makeDirectory(into, { recursive: true }).pipe(Effect.mapError((failure) => failed(failure.message)));
-  const exit = yield* Effect.scoped(
-    Effect.flatMap(
-      ChildProcess.make('tar', ['-xzf', archive, '-C', into], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }),
-      (handle) => handle.exitCode,
-    ),
-  ).pipe(Effect.mapError((failure) => failed(`tar could not be run: ${failure.reason._tag}`)));
-  if (exit !== 0) return yield* failed(`its archive did not unpack: tar exited ${exit}`);
-  return into;
+  const project = join(stage, 'resolve');
+  yield* files.makeDirectory(project, { recursive: true }).pipe(Effect.mapError((failure) => failed(failure.message)));
+  yield* files
+    .writeFileString(
+      join(project, 'package.json'),
+      JSON.stringify({ name: 'tagma-plugin-fetch', private: true, dependencies: { [name]: source.range ?? 'latest' } }),
+    )
+    .pipe(Effect.mapError((failure) => failed(failure.message)));
+  const { exit, said } = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* ChildProcess.make(process.execPath, INSTALL, {
+        cwd: project,
+        env: { BUN_BE_BUN: '1' },
+        extendEnv: true,
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      const said = yield* Effect.forkScoped(Stream.mkString(Stream.decodeText(handle.stderr)));
+      return { exit: yield* handle.exitCode, said: yield* Fiber.join(said) };
+    }),
+  ).pipe(Effect.mapError((failure) => failed(`its package manager could not be run: ${failure.message}`)));
+  if (exit !== 0) return yield* failed(said.trim().split('\n').at(-1) || `bun install exited ${exit}`);
+  return join(project, 'node_modules');
 });
 
 export const fetchSource = Effect.fn('plugins.fetch')(function* (
@@ -188,8 +173,8 @@ export const fetchSource = Effect.fn('plugins.fetch')(function* (
       }
       case 'npm': {
         const into = yield* unpacked(source, stage);
-        const root = yield* copiedFrom(yield* directoryIn(into, 'package', source.name), taken);
-        yield* files.remove(into, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+        const root = yield* copiedFrom(yield* directoryIn(into, source.name, source.name), taken);
+        yield* files.remove(join(into, '..'), { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
         return { source, root, stage };
       }
     }
