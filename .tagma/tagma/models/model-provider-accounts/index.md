@@ -82,4 +82,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/providers
 ---
-Models run on the operator’s subscriptions, keys and installed programs. The module owns provider declarations, accounts, credentials, quotas and fresh model asks: features name an answer kind and a selection, while the provider’s declared request, borrowing or program path decides how the answer is served. It also gives an outside caller, a plugin, the model menu and one ask on the operator’s accounts, recorded as the caller’s.
+Models run on the operator’s subscriptions, keys and installed programs. The module owns provider declarations, accounts, credentials, quotas and fresh model asks: features name an answer kind and a selection, while the provider’s declared request, borrowing or program path decides how the answer is served. It also gives an outside caller, a plugin, the model menu and one ask on the operator’s accounts, recorded as the caller’s. Its adapters come through its own `AdapterSources` port, which composition fills from the built-in adapters and the plugins' provider parts; the module installs nothing.

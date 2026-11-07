@@ -8,3 +8,5 @@ sources:
     ref: apps/tagma/server/src/plugins/sources.ts
 ---
 A plugin's data directory is `<data>/agent-plugin-data/<id>/`, apart from its installed copy in `<data>/agent-plugins/<id>/`, because an update replaces the copy whole: the staged revision is renamed over the former one, so anything written inside the copy would be lost on the next install from a git URL or a marketplace entry. A folder installed in place gets the same data directory, so moving a plugin between a folder and a git source keeps its data. The directory is made before the process starts, reaches a plugin in Tagma's format as `TAGMA_PLUGIN_DATA`, holds its views' storage, and outlives uninstalling.
+
+A plugin's provider part runs from neither: each build of it is copied into `<data>/plugin-revisions/<id>/<revision>/` — the manifest and `dist/` without `dist/ui/` — so an update that replaces the installed copy whole never rewrites files a running ask or a CLI's hook process still imports.
