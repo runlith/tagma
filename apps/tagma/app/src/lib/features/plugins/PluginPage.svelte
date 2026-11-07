@@ -249,10 +249,14 @@
           {/each}
           {#if secretSet !== undefined}
             <SecretFields set={secretSet} projectId={project.id} {onchanged} />
-          {:else if !row.enabled && row.options.some((option) => option.sensitive)}
-            <p class="border-t px-3 py-3 text-small text-muted-foreground">
-              Its secret values are entered here once it runs in {project.name}.
-            </p>
+          {:else if row.options.some((option) => option.sensitive)}
+            {#if row.off}
+              <p class="border-t px-3 py-3 text-small text-muted-foreground">Its secret values are entered here once it is turned on.</p>
+            {:else if !row.enabled && row.providers === undefined}
+              <p class="border-t px-3 py-3 text-small text-muted-foreground">
+                Its secret values are entered here once it runs in {project.name}.
+              </p>
+            {/if}
           {/if}
         </div>
       </section>
