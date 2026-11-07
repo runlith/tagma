@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const CLI = join(import.meta.dir, 'cli.ts');
 
@@ -44,4 +44,33 @@ test('platform files are selected before importing them in discovered and explic
   expect(await run(['itest', '--no-isolate'], only)).toEqual(['native']);
   expect(await run(['itest', './shared.itest.ts'], only)).toEqual([]);
   expect(await run(['bun', 'test', './shared.test.ts', `./native.${process.platform}.test.ts`], only)).toEqual(['native']);
+});
+
+test('a vitest run under TESTBED_PLATFORM_ONLY takes only the files marked for this platform, and none starts no runner', async () => {
+  const vitest = join(dirname(Bun.resolveSync('vitest/package.json', import.meta.dir)), 'vitest.mjs');
+  const suite = (files: Readonly<Record<string, string>>) => {
+    const root = join(process.env['TMPDIR']!, `platform-vitest-${crypto.randomUUID()}`);
+    mkdirSync(root);
+    writeFileSync(join(root, 'vitest.config.mjs'), "export default { test: { globals: true, include: ['**/*.itest.ts'] } };\n");
+    for (const [name, label] of Object.entries(files))
+      writeFileSync(join(root, name), `test('runs', () => console.log('selected:${label}'));\n`);
+    return root;
+  };
+  const run = async (root: string) => {
+    const child = Bun.spawn([process.execPath, CLI, 'bun', '--bun', vitest, 'run', '--root', root, '--no-color'], {
+      cwd: root,
+      env: { ...process.env, TESTBED_PLATFORM_ONLY: '1' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [out, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect(code, out + error).toBe(0);
+    return { output: `${out}\n${error}`, selected: [...`${out}\n${error}`.matchAll(/selected:(\w+)/gu)].map((match) => match[1]).sort() };
+  };
+  expect((await run(suite({ 'shared.itest.ts': 'shared', [`native.${process.platform}.itest.ts`]: 'native' }))).selected).toEqual([
+    'native',
+  ]);
+  const unmarked = await run(suite({ 'shared.itest.ts': 'shared' }));
+  expect(unmarked.selected).toEqual([]);
+  expect(unmarked.output).toContain('SKIP testbed: no test file here is marked for');
 });

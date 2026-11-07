@@ -48,7 +48,7 @@ const runsHere = (file: string): boolean => runsOnPlatform(file, process.platfor
 const noFileForPlatform = (count: number): never => {
   console.error(
     platformOnly
-      ? `SKIP testbed: none of ${count} files is marked for ${process.platform}, and ${PLATFORM_ONLY_ENV} runs marked files alone`
+      ? `SKIP testbed: no test file here is marked for ${process.platform}, and ${PLATFORM_ONLY_ENV} runs marked files alone`
       : `SKIP testbed: ${count} platform-specific files do not run on ${process.platform}`,
   );
   process.exit(0);
@@ -165,6 +165,12 @@ if (bunTest && selected === undefined) {
     for (let at = command.length - 1; at >= 0; at--) {
       if (named.includes(command[at]!) && !runsHere(command[at]!)) command.splice(at, 1);
     }
+}
+if (vitest && platformOnly) {
+  const kinds = ['unit', 'resource', 'e2e'] as const;
+  const marked = (await Promise.all(kinds.map((kind) => discover(kind, `*.${process.platform}.*`)))).flat().filter(runsHere);
+  if (marked.length === 0) noFileForPlatform(0);
+  command.push('--passWithNoTests', ...marked);
 }
 const runner = bunTest ? 'bun' : vitest ? 'vitest' : 'other';
 const budget = machineBudget(process.env);
