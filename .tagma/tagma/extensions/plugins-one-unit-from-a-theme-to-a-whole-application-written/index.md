@@ -291,7 +291,7 @@ By rule [[0528876d]], nothing old is carried over or read beside the new.
 6. **Depth 2** (child spec).
 7. **Depth 3** (child spec).
 8. **Providers through the one loader**, speech included ([[f70d7231]]).
-9. **The SDK's stable release**, and Tagma's marketplace carrying plugins in Tagma's format.
+9. **The SDK's stable release**, and Tagma's marketplace carrying plugins in Tagma's format, with the project's plugin list and updates from every source ([[48d72b26]]).
 10. **Window entries:** plain, frameless and always-on-top windows a plugin declares, the shell's grants for them, and their floating panels on the web. Plugins use no new windows before this step (operator's decision, 2026-11-06).
 
 ## Acceptance
