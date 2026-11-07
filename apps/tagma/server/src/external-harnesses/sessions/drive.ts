@@ -108,7 +108,7 @@ export class SessionDriver implements Driving {
     private readonly executionEndings: ExecutionEndings['Service'],
     private readonly log: ActivityLog,
     private readonly adapters: HarnessAdapters['Service'],
-    installs: PluginRevisions['Service'],
+    private readonly installs: PluginRevisions['Service'],
   ) {
     this.lease = new SessionLease(store, terminals, executionEndings, endings, owners, idle, ownerId, (threadId) => this.attend(threadId));
     this.roots = new SessionRoots(
@@ -618,7 +618,7 @@ export class SessionDriver implements Driving {
     failure: string | null,
     { stopWins = false }: { readonly stopWins?: boolean } = {},
   ) {
-    const { roots, endings, store, ownerId, released } = this;
+    const { roots, endings, store, ownerId, released, installs } = this;
     yield* roots
       .settleHeld(threadId, sessionId)
       .pipe(Effect.catch((cause) => Effect.logWarning('held answers could not be settled at the ending', { threadId, cause })));
@@ -665,6 +665,7 @@ export class SessionDriver implements Driving {
       if (key) yield* forgetKept(key);
     }
     yield* released(threadId, written.session);
+    if (written.session.package !== undefined) yield* installs.released;
   });
 
   private readonly unsent = Effect.fnUntraced(function* (

@@ -134,7 +134,7 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
   'an installed harness version a live CLI holds',
   (it) => {
     it.effect(
-      'reads its screen with that version past an update, and after removal and a restart its turn ends as that version reads it and the CLI ends at rest',
+      'reads its screen with that version past an update, and after removal and a restart its turn ends as that version reads it, the CLI ends at rest and its revision goes',
       () =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -200,6 +200,13 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
             });
             expect(settled?.turn).toBeUndefined();
             expect(yield* ended(Number((yield* files.readFileString(launched)).trim()))).toBe(true);
+            expect(
+              yield* Effect.repeat(files.exists(version), {
+                until: (standing) => !standing,
+                schedule: Schedule.spaced('20 millis'),
+                times: 500,
+              }),
+            ).toBe(false);
           }),
         ),
     );
