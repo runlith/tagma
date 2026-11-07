@@ -1,10 +1,13 @@
 import { Context, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from 'effect';
 import type { AnyProvider, SpeechHost } from '../protocol/adapter.ts';
-import { speechCatalog } from './catalog.ts';
+import { type SpeechPart, speechCatalog } from './catalog.ts';
 import { type SpeechSet, speechSet } from './set.ts';
 import type { SpeechCredentials } from './SpeechCredentials.ts';
 import type { SpeechDetector } from './SpeechDetector.ts';
 import { SpeechSources, type SpeechStanding } from './SpeechSources.ts';
+
+const revisionsOf = (parts: ReadonlyArray<SpeechPart<SpeechHost>>): ReadonlySet<string> =>
+  new Set(parts.flatMap((part) => (part.revision === undefined ? [] : [part.revision])));
 
 type Standing = {
   readonly source: SpeechStanding;
@@ -44,9 +47,8 @@ export class Speech extends Context.Service<
         const catalog = speechCatalog(source.parts, source.taken);
         const limits = new Map<string, Map<string, Semaphore.Semaphore>>();
         for (const provider of catalog.providers) limits.set(provider.id, yield* limited(provider));
-        const revisions = new Set(source.parts.flatMap((part) => (part.revision === undefined ? [] : [part.revision])));
         const set = speechSet({ catalog, context, streams: (provider, model) => limits.get(provider)?.get(model) });
-        return { source, set, revisions, holds: 0 } satisfies Standing;
+        return { source, set, revisions: revisionsOf(source.parts), holds: 0 } satisfies Standing;
       });
       let latest: Standing = yield* standingOf(sources.current());
       const sets = yield* Effect.acquireRelease(PubSub.sliding<SpeechSet>({ capacity: 1, replay: 1 }), PubSub.shutdown);
@@ -60,10 +62,21 @@ export class Speech extends Context.Service<
           if (previous.holds > 0) held.add(previous);
           return Effect.andThen(PubSub.publish(sets, next.set), previous.holds > 0 ? Effect.void : PubSub.publish(releases, undefined));
         });
+      let building: ReadonlySet<string> = new Set();
       yield* Effect.forkScoped(
-        Stream.runForEach(
-          Stream.filter(sources.changes, (source) => source !== latest.source),
-          (source) => Effect.flatMap(standingOf(source), replace),
+        Stream.runForEach(sources.changes, () =>
+          Effect.suspend(() => {
+            const source = sources.current();
+            if (source === latest.source) return Effect.void;
+            building = revisionsOf(source.parts);
+            return Effect.flatMap(standingOf(source), replace).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  building = new Set();
+                }),
+              ),
+            );
+          }),
         ),
       );
       const current = (): Standing => latest;
@@ -88,7 +101,7 @@ export class Speech extends Context.Service<
           (standing) => standing.set,
         ),
         changes: Stream.fromPubSub(sets),
-        revisions: () => new Set([...current().revisions, ...[...held].flatMap((standing) => [...standing.revisions])]),
+        revisions: () => new Set([...current().revisions, ...building, ...[...held].flatMap((standing) => [...standing.revisions])]),
         released: Stream.fromPubSub(releases),
       });
     }),

@@ -33,16 +33,18 @@ type Shape = {
   readonly turns?: string;
   readonly keyed?: boolean;
   readonly unsigned?: boolean;
+  readonly codeless?: boolean;
   readonly preamble?: string;
   readonly leading?: string;
 };
 
-const modelled = (id: string) => `
-import { Effect } from 'effect';
+const modelled = (id: string, auth: 'api-key' | 'oauth' = 'api-key') => `
+import { Effect, Schema } from 'effect';
 import { defineAdapter } from '@runlith/tagma/adapter/provider';
 export default {
   models: defineAdapter(() => [{
-    id: '${id}', label: '${id}', kind: 'wire', auth: 'api-key',
+    id: '${id}', label: '${id}', kind: 'wire', auth: '${auth}',
+    ${auth === 'oauth' ? "accounts: { credential: Schema.Struct({ token: Schema.String }), key: () => 'account', label: () => 'Account', signIns: [{ kind: 'paste', begin: () => Effect.die('unused') }] }," : ''}
     models: { '${id}-1': { label: 'One', capacity: { context: 100000, output: 1024 }, capabilities: ['text'], reasoning: [], defaultReasoning: null } },
     cacheLifetime: { promisedSeconds: null, prior: null },
     defaultTextModel: '${id}-1',
@@ -61,7 +63,7 @@ const model = {
   label: '${label}',
   recognition: {
     kind: 'stream', rates: [16000], partials: false, turns: ${shape.turns ?? "['provider']"}, finalize: false, timestamps: 'segment',
-    speakers: false, confidence: false, languages: { codes: ['en'], hints: 1, detect: true },
+    speakers: false, confidence: false, languages: { ${shape.codeless === true ? '' : "codes: ['en'], "}hints: 1, detect: true },
     prompting: { prompt: false, terms: false }, limits: {}, tuning: [],
   },
 };
@@ -280,6 +282,69 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
         ]);
         expect((yield* status()).some((model) => model.provider === 'twin')).toBe(false);
         for (const id of ['twin-speech', 'twin-models']) expect(yield* op('uninstall_plugin', { id })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a speech model with no language codes reads broken while speech_status answers, and its fixed rebuild stands', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const folder = yield* part(join(root, 'codeless'), 'codeless-speech', echo('codeless', 'Codeless A', 'never', { codeless: true }));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        const faulted = yield* until(rows(), (listed) =>
+          Boolean(listed.find((row) => row.id === 'codeless-speech')?.faults.some((fault) => fault.point === 'speech')),
+        );
+        expect(faulted.find((row) => row.id === 'codeless-speech')?.faults).toEqual([
+          expect.objectContaining({ point: 'speech', detail: expect.stringContaining('malformed') }),
+        ]);
+        expect(yield* op('speech_status', {})).toMatchObject({ status: 200 });
+        expect((yield* status()).some((model) => model.provider === 'codeless')).toBe(false);
+        expect((yield* status()).some((model) => model.provider === 'openai')).toBe(true);
+
+        yield* part(folder, 'codeless-speech', echo('codeless', 'Codeless B', 'never'));
+        expect((yield* until(status(), (models) => models.some((model) => model.label === 'Codeless B'))).length).toBeGreaterThan(0);
+        expect(yield* op('uninstall_plugin', { id: 'codeless-speech' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a model plugin serving the id whisper takes the built-in Whisper speech out with a fault on its card', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        expect((yield* status()).some((model) => model.provider === 'whisper')).toBe(true);
+        const folder = yield* part(join(root, 'whisper-models'), 'whisper-models', modelled('whisper'), 'models');
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        const faulted = yield* until(rows(), (listed) =>
+          Boolean(listed.find((row) => row.id === 'whisper')?.faults.some((fault) => fault.point === 'speech')),
+        );
+        expect(faulted.find((row) => row.id === 'whisper')?.faults).toEqual([
+          expect.objectContaining({ point: 'speech', detail: expect.stringContaining('whisper-models') }),
+        ]);
+        expect((yield* status()).some((model) => model.provider === 'whisper')).toBe(false);
+        expect(yield* op('uninstall_plugin', { id: 'whisper-models' })).toMatchObject({ status: 200 });
+        expect((yield* until(status(), (models) => models.some((model) => model.provider === 'whisper'))).length).toBeGreaterThan(0);
+      }),
+    );
+
+    it.effect('a keyed speech provider refused for another plugin’s model id never reaches the console providers', () =>
+      Effect.gen(function* () {
+        const { op, root, registry } = yield* World;
+        const consoles = Effect.suspend(() =>
+          Effect.map(op('list_console_keys', {}), (read) =>
+            (read.body as { readonly providers: readonly { readonly provider: string }[] }).providers.map((row) => row.provider),
+          ),
+        );
+        const speaking = yield* part(join(root, 'clash-speech'), 'clash-speech', echo('clash', 'Clash', 'never', { keyed: true }));
+        expect(yield* op('install_plugin', { source: speaking })).toMatchObject({ status: 200 });
+        yield* until(status(), (models) => models.some((model) => model.provider === 'clash'));
+        expect(yield* consoles).toContain('clash');
+        const models = yield* part(join(root, 'clash-models'), 'clash-models', modelled('clash', 'oauth'), 'models');
+        expect(yield* op('install_plugin', { source: models })).toMatchObject({ status: 200 });
+        yield* until(
+          Effect.sync(() => registry.current().served.providers),
+          (served) => served.some((provider) => provider.id === 'clash'),
+        );
+        yield* until(status(), (listed) => !listed.some((model) => model.provider === 'clash'));
+        expect(yield* until(consoles, (listed) => !listed.includes('clash'))).not.toContain('clash');
+        for (const id of ['clash-speech', 'clash-models']) expect(yield* op('uninstall_plugin', { id })).toMatchObject({ status: 200 });
       }),
     );
 

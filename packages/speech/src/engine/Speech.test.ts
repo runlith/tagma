@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Exit, Fiber, Scope, Stream } from 'effect';
-import { batching, filing, streaming } from '../testing/models.ts';
+import { batching, filing, streaming, voiced } from '../testing/models.ts';
 import { LIVE, RECORDED } from '../wire/capabilities.ts';
 import { controlOf, incoming, scriptedProvider } from '../testing/scriptedProvider.ts';
 import { scriptedTrack } from '../testing/scriptedTrack.ts';
@@ -193,6 +193,25 @@ it.effect('a provider with inconsistent capabilities or a taken id is left out w
       'its module threw on import',
     ]);
     expect(yield* set.status()).toMatchObject({ models: [{ provider: 'scripted', model: 'live' }] });
+  }),
+);
+
+it.effect('a declared road that cannot be called is left out with its fault, and the rest of the set answers its status', () =>
+  Effect.gen(function* () {
+    const silent = {
+      ...scriptedProvider({ id: 'silent', recognition: [streaming('s')] }),
+      recognizer: { models: [streaming('s')], stream: null },
+    };
+    const { open: _, ...mute } = scriptedProvider({ id: 'mute', synthesis: [voiced('v', 'stream')] }).synthesizer!;
+    const voiceless = { ...scriptedProvider({ id: 'voiceless', synthesis: [voiced('v', 'stream')] }), synthesizer: mute };
+    const set = yield* inWorld([provider], (world) =>
+      world.reload([{ owner: 'plugin', providers: [silent as never, voiceless as never, provider] }]),
+    );
+    expect(set.faults.map((fault) => fault.reason)).toEqual([
+      'Speech provider "silent" declares a recognizer whose stream is not a function.',
+      'Speech provider "voiceless" declares a synthesizer whose open is not a function.',
+    ]);
+    expect((yield* set.status()).models.map((model) => model.provider)).toEqual(['scripted']);
   }),
 );
 

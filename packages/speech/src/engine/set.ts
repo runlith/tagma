@@ -47,6 +47,7 @@ export type SpeechSet = {
   readonly recognition: ReadonlyArray<Offer<RecognitionModel>>;
   readonly synthesis: ReadonlyArray<Offer<SynthesisModel>>;
   readonly faults: ReadonlyArray<SpeechFault>;
+  readonly keyed: ReadonlyArray<string>;
   readonly status: (account?: string) => Effect.Effect<SpeechStatus>;
   readonly recognizer: (need: RecognitionNeed, account?: string) => Effect.Effect<RecognitionChoice, NoModel>;
   readonly voice: (need: SynthesisNeed, account?: string) => Effect.Effect<SynthesisChoice, NoModel>;
@@ -84,6 +85,7 @@ export const speechSet = <R>(input: {
     recognition: catalog.recognition,
     synthesis: catalog.synthesis,
     faults: catalog.faults,
+    keyed: catalog.providers.filter((provider) => provider.credential._tag === 'required').map((provider) => provider.id),
     status: (account) =>
       Effect.map(judged(account), (known) => ({
         detector: known.detector,

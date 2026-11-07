@@ -1,6 +1,13 @@
-import { Predicate, Schema } from 'effect';
+import { Predicate, Result, Schema } from 'effect';
 import type { AnyProvider } from '../protocol/adapter.ts';
-import type { Knob, LiveRecognition, RecognitionCapabilities, RecognitionModel, SynthesisModel, TurnMode } from '../wire/capabilities.ts';
+import {
+  type Knob,
+  type LiveRecognition,
+  type RecognitionCapabilities,
+  RecognitionModel,
+  SynthesisModel,
+  type TurnMode,
+} from '../wire/capabilities.ts';
 
 export type Offer<Model> = {
   readonly provider: string;
@@ -83,6 +90,10 @@ const recognitionConsistent = (capabilities: RecognitionCapabilities, where: str
   knobs(capabilities.tuning, capabilities.turns, where);
 };
 
+const recognitionShape = Schema.decodeUnknownResult(RecognitionModel);
+
+const synthesisShape = Schema.decodeUnknownResult(SynthesisModel);
+
 const declared = (entry: unknown): void => {
   if (!Predicate.isObject(entry)) throw new Error('A speech list entry is not a speech provider.');
   const { id, label, egress, credential, availability, recognizer, synthesizer } = entry;
@@ -95,12 +106,29 @@ const declared = (entry: unknown): void => {
   if (credential['_tag'] === 'required' && !Schema.isSchema(credential['schema']))
     throw new Error(`Speech provider "${id}" requires a credential without a schema.`);
   if (typeof availability !== 'function') throw new Error(`Speech provider "${id}" declares no availability.`);
-  for (const [what, side] of [
-    ['recognizer', recognizer],
-    ['synthesizer', synthesizer],
-  ] as const)
-    if (side !== undefined && (!Predicate.isObject(side) || !Array.isArray(side['models'])))
+  const side = (
+    what: string,
+    declaredSide: unknown,
+    shape: (entry: unknown) => Result.Result<unknown, { readonly message: string }>,
+    calls: ReadonlyArray<string>,
+    required: ReadonlyArray<string>,
+  ) => {
+    if (declaredSide === undefined) return;
+    if (!Predicate.isObject(declaredSide) || !Array.isArray(declaredSide['models']))
       throw new Error(`Speech provider "${id}" declares a ${what} without a list of models.`);
+    for (const entry of declaredSide['models']) {
+      const shaped = shape(entry);
+      if (Result.isFailure(shaped))
+        throw new Error(`Speech provider "${id}" declares a ${what} model that is malformed: ${shaped.failure.message}`);
+    }
+    for (const call of calls) {
+      const value = declaredSide[call];
+      if ((value !== undefined || required.includes(call)) && typeof value !== 'function')
+        throw new Error(`Speech provider "${id}" declares a ${what} whose ${call} is not a function.`);
+    }
+  };
+  side('recognizer', recognizer, recognitionShape, ['stream', 'batch', 'file', 'resume', 'discard'], []);
+  side('synthesizer', synthesizer, synthesisShape, ['open'], ['open']);
 };
 
 const providerConsistent = <R>(provider: AnyProvider<R>) => {

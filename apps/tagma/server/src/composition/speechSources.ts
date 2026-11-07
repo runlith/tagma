@@ -1,4 +1,4 @@
-import { type SpeechFault, type SpeechPart, speechCatalog } from '@runlith/speech/engine/catalog';
+import type { SpeechFault, SpeechPart } from '@runlith/speech/engine/catalog';
 import { Speech } from '@runlith/speech/engine/Speech';
 import { SpeechSources, type SpeechStanding } from '@runlith/speech/engine/SpeechSources';
 import type { AnyProvider, SpeechHost } from '@runlith/speech/protocol/adapter';
@@ -38,10 +38,9 @@ const sameTaken = (left: ReadonlyMap<string, string>, right: ReadonlyMap<string,
 const revisionsOf = (parts: Parts): ReadonlySet<string> =>
   new Set(parts.flatMap((part) => (part.revision === undefined ? [] : [part.revision])));
 
-const keyedOf = (parts: Parts): ReadonlyArray<string> =>
-  speechCatalog(parts)
-    .providers.filter((provider) => provider.credential._tag === 'required')
-    .map((provider) => provider.id);
+export class SpeechKeys extends Context.Service<SpeechKeys, { admit(keyed: ReadonlyArray<string>): void }>()(
+  'tagma/composition/SpeechKeys',
+) {}
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -85,7 +84,6 @@ export const speechPartsWith = (builtins: BuiltinSpeech) =>
             const next = found.flatMap((part) => (part === null ? [] : [part]));
             if (sameParts(next, latest)) return true;
             latest = next;
-            keyed = keyedOf(next);
             yield* PubSub.publish(published, next);
             return true;
           }),
@@ -96,6 +94,14 @@ export const speechPartsWith = (builtins: BuiltinSpeech) =>
       yield* Effect.forkScoped(Stream.runForEach(rows.changes, reload));
       return Context.make(SpeechParts, SpeechParts.of({ current: () => latest, changes: Stream.fromPubSub(published) })).pipe(
         Context.add(KeyedProviders, KeyedProviders.of({ ids: () => keyed })),
+        Context.add(
+          SpeechKeys,
+          SpeechKeys.of({
+            admit: (admitted) => {
+              keyed = admitted;
+            },
+          }),
+        ),
       );
     }),
   );
@@ -124,6 +130,7 @@ export const speechSourcesWith = <R>(localOf: Effect.Effect<BuiltinSpeech, never
       const local = yield* localOf;
       const parts = yield* SpeechParts;
       const registry = yield* ProviderRegistry;
+      const revisions = yield* PluginRevisions;
       const filled = (raw: Parts): Parts =>
         raw.map((part) =>
           part.revision === undefined && 'providers' in part && local.has(part.owner)
@@ -132,21 +139,21 @@ export const speechSourcesWith = <R>(localOf: Effect.Effect<BuiltinSpeech, never
         );
       const read = () => {
         const raw = parts.current();
-        return { raw, taken: takenOf(raw, registry.current().served.providers) };
+        const whole = filled(raw);
+        return { raw, standing: { parts: whole, taken: takenOf(whole, registry.current().served.providers) } };
       };
       let seen = read();
-      let latest: SpeechStanding = { parts: filled(seen.raw), taken: seen.taken };
+      yield* revisions.register({ standing: () => revisionsOf(seen.raw) });
       const published = yield* Effect.acquireRelease(PubSub.sliding<SpeechStanding>({ capacity: 1, replay: 1 }), PubSub.shutdown);
-      yield* PubSub.publish(published, latest);
+      yield* PubSub.publish(published, seen.standing);
       const refresh = Effect.suspend(() => {
         const next = read();
-        if (sameParts(next.raw, seen.raw) && sameTaken(next.taken, seen.taken)) return Effect.void;
+        if (sameParts(next.raw, seen.raw) && sameTaken(next.standing.taken, seen.standing.taken)) return Effect.void;
         seen = next;
-        latest = { parts: filled(next.raw), taken: next.taken };
-        return Effect.asVoid(PubSub.publish(published, latest));
+        return Effect.asVoid(PubSub.publish(published, next.standing));
       });
       yield* Effect.forkScoped(Stream.runForEach(Stream.merge(parts.changes, registry.changes), () => refresh));
-      return SpeechSources.of({ current: () => latest, changes: Stream.fromPubSub(published) });
+      return SpeechSources.of({ current: () => seen.standing, changes: Stream.fromPubSub(published) });
     }),
   );
 
@@ -157,11 +164,13 @@ export const speechHolding = Layer.effectDiscard(
     const speech = yield* Speech;
     const revisions = yield* PluginRevisions;
     const faults = yield* PluginFaults;
+    const keys = yield* SpeechKeys;
     yield* revisions.register({ standing: speech.revisions });
     yield* Effect.forkScoped(Stream.runForEach(speech.released, () => revisions.released));
     yield* Effect.forkScoped(
       Stream.runForEach(speech.changes, (set) =>
-        Effect.sync(() =>
+        Effect.sync(() => {
+          keys.admit(set.keyed);
           faults.replace(
             PROVIDER_FAULTS.speech,
             new Map(
@@ -170,8 +179,8 @@ export const speechHolding = Layer.effectDiscard(
                 { title: 'Some of its speech providers could not be used.', detail: found.map(detailOf).join('\n') },
               ]),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }),

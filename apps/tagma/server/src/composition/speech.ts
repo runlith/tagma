@@ -38,7 +38,14 @@ import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/ser
 import type { BuiltinSpeechId } from './builtinSpeech.js';
 import type { PluginRevisions, ProviderParts } from '../plugins/contract/service/plugins.js';
 import type { KeyedProviders } from '../providers/contract/service/credentials.js';
-import { type BuiltinSpeech, type SpeechParts, speechHolding, speechPartsWith, speechSourcesWith } from './speechSources.js';
+import {
+  type BuiltinSpeech,
+  type SpeechKeys,
+  type SpeechParts,
+  speechHolding,
+  speechPartsWith,
+  speechSourcesWith,
+} from './speechSources.js';
 
 export type SpeechPlace = {
   readonly hostApp: string;
@@ -149,7 +156,7 @@ const installationOf = <A, E, R>(
   place: SpeechPlace,
   local: Local,
   models: Layer.Layer<ModelStore>,
-  parts: Layer.Layer<SpeechParts | KeyedProviders, never, ProviderParts | PluginRevisions>,
+  parts: Layer.Layer<SpeechParts | SpeechKeys | KeyedProviders, never, ProviderParts | PluginRevisions>,
   credentials: Layer.Layer<A, E, R>,
 ) => {
   const detector = local.built
