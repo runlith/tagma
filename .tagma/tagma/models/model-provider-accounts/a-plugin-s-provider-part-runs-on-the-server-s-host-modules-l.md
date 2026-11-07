@@ -10,11 +10,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/hostModules.ts
   - kind: file
-    ref: apps/tagma/server/src/providers/adapters/external.ts
-  - kind: file
-    ref: apps/tagma/server/src/providers/adapters/installs.ts
-  - kind: file
     ref: apps/tagma/server/src/providers/registry.ts
+  - kind: file
+    ref: packages/tagma/src/adapter/loader.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/adapterSources.ts
 ---
 A provider part runs inside the server process and receives `effect`, the contract's `@runlith/llm` modules, the `@runlith/speech` wire and protocol modules, `@runlith/held/Held`, `@runlith/tagma/adapter/*` and built-in adapters' models and profiles from the server copy: `importProviders` (`@runlith/tagma/adapter/loader`) serves them through `Bun.plugin` as virtual modules from the composition list (`hostModules.generated.ts`, written from every workspace package's `tagma.host`). So `instanceof LLMError`, Schema classes and the global `Held` registry are the same objects for a plugin's providers and the core. The list is the contract surface: the SDK build leaves exactly these as imports and bundles the rest, and a module outside it never reaches the part.
 

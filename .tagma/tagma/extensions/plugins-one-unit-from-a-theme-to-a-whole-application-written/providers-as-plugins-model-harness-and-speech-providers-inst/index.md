@@ -34,7 +34,7 @@ A model provider, a CLI harness and a speech provider reach Tagma the way everyt
 
 A plugin may be nothing but a provider part. A provider part runs in the server process, so it is a separate module from `plugin.ts`: the process bundle never carries provider code, and provider code never reaches the process.
 
-**What the build emits.** `tagma-plugin build` bundles the providers module into `dist/providers.js` with every host module left as an import, so the server's own copies serve them (explanation 6cdd67c3). It refuses a native addon and a dynamic import it cannot bundle, as it does for the process. It imports the module in describe mode through the SDK's host modules, the way conformance does, and writes the manifest envelope `providers: {entry: 'dist/providers.js', models: boolean, speech: boolean}`, so the card says what the plugin brings without loading it.
+**What the build emits.** `tagma-plugin build` bundles the providers module into `dist/providers.js` with every host module left as an import, so the server's own copies serve them (explanation 6cdd67c3). It refuses a native addon and a dynamic import it cannot bundle, as it does for the process. It imports the module in describe mode through the SDK's host modules, the way conformance does, and writes the manifest envelope `providers: {entry: 'dist/providers.js', models: boolean, harnesses: boolean, speech: boolean}` — `harnesses` when `models` declares a CLI agent — so the card says what the plugin brings without loading it.
 
 **Host modules.** The speech contract's runtime modules join the list the same way the model contract's did: `tagma.host` entries in `packages/speech/package.json` and in each module a speech provider imports. A plugin's speech provider may require only what the host gives every one of them: the HTTP client and the speech kit's WebSocket transport. Whisper's engine and model store stay the built-in's own.
 
@@ -44,7 +44,7 @@ A plugin may be nothing but a provider part. A provider part runs in the server 
 
 ## The loader
 
-`@runlith/tagma/adapter/loader` keeps the host-module serving and the `--no-install` refusal, and its one import becomes `importProviders(directory, host)`: it reads the provider entry from the `tagma-plugin.json` in `directory` and answers `{models?, speech?}`. Package `exports` are no longer read. The registry, the speech catalog and the CLI hook process all import through it, so one revision directory imported by two of them is one module instance.
+`@runlith/tagma/adapter/loader` keeps the host-module serving and the `--no-install` refusal, and its one import becomes `importProviders(directory, host)`: it reads the provider entry from the `tagma-plugin.json` in `directory` and answers `{id, version, models?, speech?}`, the plugin's id and version beside the module's default export, so a held revision is loaded by its directory alone. `defineProviders` and `ProvidersDefinition` stand in `@runlith/tagma/plugin`, `defineSpeech` in `/adapter/speech`. Package `exports` are no longer read. The registry, the speech catalog and the CLI hook process all import through it, so one revision directory imported by two of them is one module instance.
 
 ## Plugins: provider revisions, holders and the machine switch
 
@@ -60,13 +60,14 @@ A plugin may be nothing but a provider part. A provider part runs in the server 
 
 **Built-in plugins.** Composition lists the providers Tagma ships as built-in plugins, one per vendor, each carrying the code it compiles in: Anthropic, OpenAI (its models, Codex and its speech), Cursor, xAI, Google, Muse, Devin, OpenCode Go, OpenCode, StepFun, DeepSeek, OpenRouter, OpenAI-compatible server, Soniox, and Whisper. `plugins` answers them as rows of their own origin: no source, no install root, never in `plugins.installed`. `uninstall_plugin` refuses one, naming the machine switch as the way to turn it off; an install whose id a built-in holds refuses `plugin-id-taken`. The only act on a built-in is the machine switch.
 
-**Faults.** A provider part that fails to import or declare, or declares a provider id another part holds, is put on its plugin as a fault of the `providers` point through `PluginFaults`, with the loader's reason, and is cleared when a later load succeeds. The card then reads broken with **Fix with an agent**.
+**Faults.** A provider part that fails to import or declare, or declares a provider id another part holds, is put on its plugin as a fault through `PluginFaults`, with the loader's reason, and is cleared when a later load succeeds. Each half has its own point, named by `PROVIDER_FAULTS` in the plugins wire: `providers` for the models half, put by the registry; `speech` for the speech half, put by speech's filler; `revisions` when `plugins` could not copy a build into a revision or no longer reads a plugin whose part stood. The card then reads broken with **Fix with an agent**.
 
 ## Providers
 
 - **Sources.** The registry loads built-in sources and every standing provider part with `models`, in that order and then in install order, so an id collision fails the later part. A part switched off on the machine reads disabled, as a disabled adapter does now. The registry reloads on every change of the parts.
 - **Holding.** Asks and launches take their lease from the revision store; the registry registers its holders with it. `ProviderRegistry.loadVersion` reads a held revision directory the same way, by its `tagma-plugin.json`.
-- **The harness index** stays providers' projection, moved out of the removed `adapters/` folder; its rows name revision directories, and the hook process imports a row only while its directory stands (explanation bdbe083e).
+- **The harness index** stays providers' projection (`providers/harnessIndex.ts`, `<data>/provider-harnesses.json`); its rows name revision directories, and the hook process imports a row only while its directory stands (explanation bdbe083e).
+- **The port** is `AdapterSources` (`current()`, `changes`, `host`), filled by `composition/adapterSources.ts`: the built-in adapters first, each disabled while its built-in plugin is off, then every standing part that brings models.
 - **Removed:** `install_adapter`, `update_adapter`, `remove_adapter`, `disable_adapter`, `enable_adapter` and `read_adapters`; the `tagma adapter` verb; `AdapterInstalls`; `providers/adapters/{fetch,record,installs,external}.ts`; `installed.json` and `<data>/adapters/`, which nothing reads and the new server removes at start. Refusal hints that name `install_adapter` or `read_adapters` (`cli/verbs/mcpServe.ts`, `external-harnesses/cli/hook.ts`, `notInstalled` in `providers/contract/service/registry.ts`) name `install_plugin` and the Plugins screen instead.
 - **Kept:** adapter settings instances — `read_adapter_settings`, `save_adapter_instance`, `remove_adapter_instance`, `discover_adapter_models` — which configure a loaded provider, not an install.
 

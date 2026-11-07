@@ -8061,18 +8061,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/fetch.ts#FetchedSource",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/harnessIndex.ts#HarnessPackage",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/installs.ts#MachineAdapters",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/providers/adapters/instanceActs.ts#InstanceSave",
           "owner": "5a3bed29"
         },
@@ -18294,10 +18282,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/sqlite-process/src/writerPermit.ts#WriterPermit",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/tagma/kit/host.generated.ts#host",
           "owner": "5a3bed29"
         },
         {
