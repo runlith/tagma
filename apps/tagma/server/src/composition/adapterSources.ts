@@ -22,14 +22,18 @@ const sourcesLayer = (builtins: readonly AdapterSource[]) =>
     AdapterSources,
     Effect.gen(function* () {
       const parts = yield* ProviderParts;
+      let seen: { readonly parts: readonly ProviderPart[]; readonly sources: readonly AdapterSource[] } | null = null;
       const sourcesOf = (standing: readonly ProviderPart[]): readonly AdapterSource[] => {
+        if (seen?.parts === standing) return seen.sources;
         const off = new Set(standing.flatMap((part) => (part.builtin && part.off ? [part.id] : [])));
-        return [
+        const sources = [
           ...builtins.map((source) => (off.has(source.id) ? { ...source, disabled: true as const } : source)),
           ...standing.flatMap((part) =>
             part.builtin || !part.providers.models || part.directory === null ? [] : [pluginSource(part, part.directory)],
           ),
         ];
+        seen = { parts: standing, sources };
+        return sources;
       };
       return AdapterSources.of({
         current: () => sourcesOf(parts.current()),

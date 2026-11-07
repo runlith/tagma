@@ -6,6 +6,8 @@ import { Context, Effect, FileSystem, Layer, Schedule } from 'effect';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
+import { PluginRevisions, Plugins, ProviderParts } from '../../../plugins/contract/service/plugins.js';
+import { PLUGIN_OPERATIONS } from '../../../plugins/contract/wire/operations.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { settledThread } from '../native-harness/settled.fixture.js';
@@ -91,7 +93,11 @@ const makeWorld = Effect.gen(function* () {
   return {
     op: (id: string, input: unknown): Effect.Effect<Answer> => door.op(id, input, project),
     root: yield* files.makeTempDirectoryScoped({ prefix: 'provider-parts-' }),
+    projectId,
     registry: Context.get(door.runtime.owners, ProviderRegistry),
+    plugins: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, Plugins))),
+    parts: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, ProviderParts))),
+    revisions: Context.get(door.runtime.owners, PluginRevisions),
     settled: (threadId: string) => settledThread({ threadId, projectId }).pipe(Effect.provide(door.runtime.owners)),
   };
 });
@@ -122,6 +128,22 @@ const menu = Effect.fnUntraced(function* () {
 
 const until = <A>(read: Effect.Effect<A, never, World>, done: (value: A) => boolean) =>
   Effect.repeat(read, { until: done, schedule: Schedule.spaced('20 millis'), times: 500 });
+
+const packaged = (provider: string, other?: string) =>
+  Effect.flatMap(World, ({ registry }) =>
+    until(
+      Effect.sync(() => registry.current().packages.get(provider)),
+      (directory) => directory !== undefined && directory !== other,
+    ),
+  );
+
+const partOf = (id: string, other?: string) =>
+  Effect.flatMap(World, ({ parts }) =>
+    until(
+      Effect.sync(() => parts.current().find((held) => held.id === id)?.directory ?? undefined),
+      (directory) => directory !== undefined && directory !== other,
+    ),
+  );
 
 layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'provider parts',
@@ -229,6 +251,118 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
 
         expect(yield* op('uninstall_plugin', { id: 'relay-plugin' })).toMatchObject({ status: 200 });
       }).pipe(Effect.scoped),
+    );
+
+    it.effect('installing a provider plugin that runs in no project asks consent for its provider part, which joins the menu', () =>
+      Effect.gen(function* () {
+        const { op, root, projectId, plugins } = yield* World;
+        const quiet = yield* part(join(root, 'quiet'), 'quiet-plugin', wire('quiet'));
+        const input = { source: quiet, enabled: false };
+        const prepared = yield* plugins.prepare({ projectId, source: quiet });
+        expect(PLUGIN_OPERATIONS.install_plugin.subjects(input, prepared)).toEqual([
+          { kind: 'execute', value: expect.stringMatching(/quiet\/dist\/providers\.js$/u) },
+        ]);
+        expect(yield* op('install_plugin', input)).toMatchObject({ status: 200 });
+        expect(yield* until(menu(), (listed) => listed.includes('quiet'))).toContain('quiet');
+        expect(yield* op('uninstall_plugin', { id: 'quiet-plugin' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('turning a built-in plugin on again takes its provider id back from a later plugin, which reads broken naming it', () =>
+      Effect.gen(function* () {
+        const { op, root, registry } = yield* World;
+        const owner = () => Effect.sync(() => registry.current().served.providers.find((provider) => provider.id === 'anthropic')?.plugin);
+        expect(yield* op('enable_plugin', { id: 'anthropic', enabled: false, scope: 'machine' })).toMatchObject({ status: 200 });
+        const impostor = yield* part(join(root, 'impostor'), 'impostor-plugin', wire('anthropic'));
+        expect(yield* op('install_plugin', { source: impostor })).toMatchObject({ status: 200 });
+        expect(yield* until(owner(), (plugin) => plugin === 'impostor-plugin')).toBe('impostor-plugin');
+
+        expect(yield* op('enable_plugin', { id: 'anthropic', enabled: true, scope: 'machine' })).toMatchObject({ status: 200 });
+        expect(yield* until(owner(), (plugin) => plugin === 'anthropic')).toBe('anthropic');
+        const faulted = yield* until(rows(), (listed) =>
+          listed.some((row) => row.id === 'impostor-plugin' && row.faults.some((fault) => fault.point === 'providers')),
+        );
+        expect(faulted.find((row) => row.id === 'impostor-plugin')?.faults).toEqual([
+          expect.objectContaining({ point: 'providers', detail: expect.stringContaining('anthropic') }),
+        ]);
+        expect(faulted.find((row) => row.id === 'anthropic')?.faults).toEqual([]);
+        expect(yield* op('uninstall_plugin', { id: 'impostor-plugin' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a folder plugin installed without providers serves them once a rebuild in place adds its provider part', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        const late = join(root, 'late');
+        yield* files.makeDirectory(join(late, 'dist'), { recursive: true });
+        yield* files.writeFileString(join(late, MANIFEST), manifestText({ id: 'late-plugin' }));
+        expect(yield* op('install_plugin', { source: late })).toMatchObject({ status: 200 });
+        yield* part(late, 'late-plugin', wire('late'));
+        expect(yield* until(menu(), (listed) => listed.includes('late'))).toContain('late');
+        expect(yield* op('uninstall_plugin', { id: 'late-plugin' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a revision whose removal fails waits for a later collection, and the builds after it still reach the catalog', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        const stuck = yield* part(join(root, 'stuck'), 'stuck-plugin', wire('stuck'));
+        expect(yield* op('install_plugin', { source: stuck })).toMatchObject({ status: 200 });
+        const first = (yield* packaged('stuck'))!;
+        const base = join(first, '..', '..');
+        yield* Effect.acquireRelease(files.chmod(join(first, 'dist'), 0o555), () =>
+          Effect.gen(function* () {
+            const retired = (yield* files.readDirectory(base)).filter((name) => name.startsWith('.retired-'));
+            for (const directory of [join(first, 'dist'), ...retired.map((name) => join(base, name, 'dist'))])
+              if (yield* files.exists(directory)) yield* files.chmod(directory, 0o755);
+          }).pipe(Effect.orDie),
+        );
+        yield* part(stuck, 'stuck-plugin', `${wire('stuck')}// second\n`);
+        const second = (yield* packaged('stuck', first))!;
+        yield* part(stuck, 'stuck-plugin', `${wire('stuck')}// third\n`);
+        expect(yield* packaged('stuck', second)).not.toBe(second);
+        expect(yield* op('uninstall_plugin', { id: 'stuck-plugin' })).toMatchObject({ status: 200 });
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect(
+      'a revision the registry is still loading outlives a newer build and a collection, and goes once the registry moves past it',
+      () =>
+        Effect.gen(function* () {
+          const { op, root, registry, revisions } = yield* World;
+          const files = yield* FileSystem.FileSystem;
+          const gate = globalThis as { __providerPartsGate?: () => void };
+          const open = Effect.sync(() => {
+            gate.__providerPartsGate?.();
+            delete gate.__providerPartsGate;
+          });
+          yield* Effect.addFinalizer(() => open);
+          const slow = yield* part(join(root, 'slow'), 'slow-plugin', wire('slow'));
+          expect(yield* op('install_plugin', { source: slow })).toMatchObject({ status: 200 });
+          const first = (yield* packaged('slow'))!;
+          yield* part(slow, 'slow-plugin', `${wire('slow')}await new Promise((open) => { globalThis.__providerPartsGate = open; });\n`);
+          const loading = (yield* partOf('slow-plugin', first))!;
+          yield* until(
+            Effect.sync(() => gate.__providerPartsGate),
+            (open) => open !== undefined,
+          );
+          yield* part(slow, 'slow-plugin', `${wire('slow')}// newer\n`);
+          const newer = (yield* partOf('slow-plugin', loading))!;
+          yield* revisions.released;
+          expect(yield* files.exists(loading)).toBe(true);
+
+          yield* open;
+          expect(
+            yield* until(
+              Effect.sync(() => registry.current().packages.get('slow')),
+              (directory) => directory === newer,
+            ),
+          ).toBe(newer);
+          expect(yield* until(files.exists(loading).pipe(Effect.orDie), (standing) => !standing)).toBe(false);
+          expect(yield* op('uninstall_plugin', { id: 'slow-plugin' })).toMatchObject({ status: 200 });
+        }).pipe(Effect.scoped),
     );
 
     it.effect('an npm package installs by its name from the registry the machine’s npm configuration names', () =>

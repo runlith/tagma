@@ -162,7 +162,11 @@ export const catalogOf = (
   const adapters = loaded.map((adapter) => adapter.state);
   const instanced = new Set([...instances.values()].flatMap((held) => held.map((instance) => instance.id)));
   const sourceOf = (id: string) => accountSource(providers, sections, id);
-  const plugins = new Map(loaded.flatMap(({ state, providers: declared }) => declared.map((provider) => [provider.id, state.id] as const)));
+  const plugins = new Map(
+    loaded.flatMap(({ state, providers: declared }) =>
+      state.state === 'disabled' ? [] : declared.map((provider) => [provider.id, state.id] as const),
+    ),
+  );
   const serve = servedOf(instanced, failures, sourceOf, asks, plugins);
   const harnessesWhere = (judged: (section: AccountSection, mode: string) => boolean) =>
     new Set(
@@ -215,13 +219,6 @@ const loadAll = Effect.fn('providers.loadAll')(function* (
     if (adapter.state.state !== 'disabled') for (const provider of adapter.providers) taken.set(provider.id, adapter.state.id);
   }
   const held = new Map(previous.map((adapter) => [`${adapter.state.origin}:${adapter.state.id}`, adapter]));
-  for (const source of sources) {
-    if (source.disabled === true) continue;
-    const prior = held.get(`${source.origin}:${source.id}`);
-    for (const provider of prior?.providers ?? []) {
-      if (!taken.has(provider.id)) taken.set(provider.id, source.id);
-    }
-  }
   const loaded: Loaded[] = [];
   let sections = standing.reduce(
     (claims, adapter) =>
@@ -229,13 +226,12 @@ const loadAll = Effect.fn('providers.loadAll')(function* (
     new Map() as ReadonlyMap<string, SectionClaim>,
   );
   for (const source of sources) {
-    const prior = held.get(`${source.origin}:${source.id}`);
-    for (const provider of prior?.providers ?? []) {
-      if (taken.get(provider.id) === source.id) taken.delete(provider.id);
-    }
     const read = yield* load(source, hostOf(source.id), taken, sections);
+    const prior = read.state.state === 'loaded' ? undefined : held.get(`${source.origin}:${source.id}`);
     const adapter =
-      read.state.state !== 'loaded' && prior !== undefined ? { ...read, providers: prior.providers, directory: prior.directory } : read;
+      prior === undefined
+        ? read
+        : { ...read, providers: prior.providers.filter((provider) => !taken.has(provider.id)), directory: prior.directory };
     if (adapter.state.state !== 'disabled') {
       for (const provider of adapter.providers) taken.set(provider.id, source.id);
       sections = claimSections(sections, adapter.providers, `adapter ${source.id}`);
@@ -296,10 +292,18 @@ export const registryLayer = Layer.effect(
         else faults.value.clear(state.id, PROVIDER_FAULTS.models);
       }
     };
+    const runs = new Map<string, ProviderCatalog>();
+    const pinnedPackages = () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()]));
+    let loading: ReadonlySet<string> = new Set();
+    let published: ReadonlySet<string> = new Set();
+    if (revisions._tag === 'Some')
+      yield* revisions.value.register({ standing: () => new Set([...loading, ...published, ...pinnedPackages()]) });
     const externals = Effect.gen(function* () {
       const { instances, secrets } = yield* snapshot;
       const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
-      const next = yield* loadAll(sources.current(), hostOf, [], previous);
+      const listed = sources.current();
+      loading = new Set(listed.flatMap((source) => (source.directory === undefined ? [] : [source.directory])));
+      const next = yield* loadAll(listed, hostOf, [], previous);
       if (data !== null) {
         if (disk._tag === 'None') return yield* Effect.die('the harness index requires FileSystem');
         yield* indexHarnesses(data, next).pipe(Effect.provideService(FileSystem.FileSystem, disk.value), Effect.orDie);
@@ -312,11 +316,14 @@ export const registryLayer = Layer.effect(
     });
     const state = yield* SubscriptionRef.make(yield* externals);
     const lock = yield* Semaphore.make(1);
-    const runs = new Map<string, ProviderCatalog>();
     let current = yield* SubscriptionRef.get(state);
+    published = new Set(current.packages.values());
+    loading = new Set();
     const released = revisions._tag === 'Some' ? revisions.value.released : Effect.void;
     const publish = Effect.fnUntraced(function* (next: ProviderCatalog) {
       current = next;
+      published = new Set(next.packages.values());
+      loading = new Set();
       yield* SubscriptionRef.set(state, next);
       return next;
     });
@@ -329,9 +336,6 @@ export const registryLayer = Layer.effect(
         ? current
         : yield* publish(catalogOf(previous, previousInstances, sections, snapshots));
     });
-    const pinnedPackages = () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()]));
-    if (revisions._tag === 'Some')
-      yield* revisions.value.register({ standing: () => new Set([...pinnedPackages(), ...current.packages.values()]) });
     let loadedFrom = sources.current();
     yield* Effect.forkScoped(
       Stream.runForEach(sources.changes, (next) => {
