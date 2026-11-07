@@ -1,16 +1,21 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Exit, Fiber, Scope, Stream } from 'effect';
+import { Deferred, Effect, Exit, Fiber, Layer, Scheduler, Scope, Stream } from 'effect';
+import { HttpClient } from 'effect/http';
+import { fakeDetector } from '../testing/fakeDetector.ts';
 import { batching, filing, streaming, voiced } from '../testing/models.ts';
-import { LIVE, RECORDED } from '../wire/capabilities.ts';
+import { scriptedTransport } from '../testing/ScriptedTransport.ts';
+import { LIVE, RECORDED, type SynthesisLimits } from '../wire/capabilities.ts';
 import { controlOf, incoming, scriptedProvider } from '../testing/scriptedProvider.ts';
 import { scriptedTrack } from '../testing/scriptedTrack.ts';
-import { type Listening, inWorld, settle } from '../testing/world.ts';
+import { credentials, type Listening, inWorld, offline, settle } from '../testing/world.ts';
 import { SpeechEvent, type Unit } from '../wire/events.ts';
 import type { Utterance } from '../wire/heard.ts';
 import type { RecognitionChoice } from './choose.ts';
 import { listeningDefaults } from './settings.ts';
+import { Speech } from './Speech.ts';
 import { SpeechDetector } from './SpeechDetector.ts';
+import { SpeechSources, type SpeechStanding } from './SpeechSources.ts';
 
 const live = streaming('live');
 const provider = scriptedProvider({ id: 'scripted', recognition: [live] });
@@ -215,6 +220,28 @@ it.effect('a declared road that cannot be called is left out with its fault, and
   }),
 );
 
+it.effect('a synthesis model counting characters or streams in fractions is left out with its fault, and the others stand', () =>
+  Effect.gen(function* () {
+    const counted = (id: string, limits: SynthesisLimits) => {
+      const model = voiced('v', 'whole');
+      return scriptedProvider({ id, synthesis: [{ ...model, synthesis: { ...model.synthesis, limits } }] });
+    };
+    const set = yield* inWorld([provider], (world) =>
+      world.reload([
+        {
+          owner: 'plugin',
+          providers: [counted('halved', { characters: 0.5 }), counted('starved', { streams: 0.5 }), counted('whole', {})],
+        },
+      ]),
+    );
+    expect(set.faults.map((fault) => [fault.provider, fault.reason])).toEqual([
+      ['halved', expect.stringContaining('malformed')],
+      ['starved', expect.stringContaining('malformed')],
+    ]);
+    expect(set.synthesis.map((offer) => offer.provider)).toEqual(['whole']);
+  }),
+);
+
 it.effect('a choice made on one revision of a provider is refused by the set of another revision', () =>
   Effect.gen(function* () {
     const refused = yield* inWorld([provider], (world) =>
@@ -266,15 +293,43 @@ it.effect('work holding a set keeps its revision standing through a reload, and 
         const work = yield* Scope.make();
         yield* Scope.provide(world.service.take, work);
         yield* world.reload([{ owner: 'plugin', revision: 'B', providers: [provider] }]);
-        const during = [...world.service.revisions()].sort();
+        const during = [...world.held()].sort();
         const released = yield* Effect.forkChild(Stream.runHead(world.service.released));
         yield* settle;
         yield* Scope.close(work, Exit.void);
         yield* Fiber.join(released);
-        return { during, after: [...world.service.revisions()] };
+        return { during, after: [...world.held()] };
       }),
     );
     expect(seen).toEqual({ during: ['A', 'B'], after: ['B'] });
+  }),
+);
+
+it.effect('the revision of the first set is held from the moment Speech reads it, while that set is still being built', () =>
+  Effect.gen(function* () {
+    const read = yield* Deferred.make<void>();
+    let holder: () => ReadonlySet<string> = () => new Set();
+    const standing: SpeechStanding = { parts: [{ owner: 'plugin', revision: 'A', providers: [provider] }], taken: new Map() };
+    const sources = Layer.succeed(SpeechSources, {
+      current: () => {
+        Deferred.doneUnsafe(read, Exit.void);
+        return standing;
+      },
+      changes: Stream.never,
+      hold: (revisions) =>
+        Effect.sync(() => {
+          holder = revisions;
+        }),
+    });
+    const seen = yield* Effect.forkChild(
+      Deferred.await(read).pipe(Effect.andThen(Effect.yieldNow), Effect.andThen(Effect.sync(() => [...holder()]))),
+    );
+    const transport = yield* scriptedTransport;
+    const speech = Speech.layer.pipe(
+      Layer.provide(Layer.mergeAll(sources, transport.layer, credentials, fakeDetector(), Layer.succeed(HttpClient.HttpClient, offline))),
+    );
+    yield* Layer.build(speech).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 8));
+    expect(yield* Fiber.join(seen)).toEqual(['A']);
   }),
 );
 

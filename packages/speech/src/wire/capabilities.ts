@@ -25,10 +25,14 @@ export const Prompting = Schema.Struct({
 });
 export type Prompting = typeof Prompting.Type;
 
+const Count = Schema.Int.check(Schema.isGreaterThan(0));
+
+const Span = Schema.Finite.check(Schema.isGreaterThan(0));
+
 export const Limits = Schema.Struct({
-  sessionMs: Schema.optional(Schema.Number),
-  clipMs: Schema.optional(Schema.Number),
-  clipBytes: Schema.optional(Schema.Number),
+  sessionMs: Schema.optional(Span),
+  clipMs: Schema.optional(Span),
+  clipBytes: Schema.optional(Count),
 });
 export type Limits = typeof Limits.Type;
 
@@ -74,7 +78,7 @@ export const BatchRecognition = Schema.Struct({
 export type BatchRecognition = typeof BatchRecognition.Type;
 
 export const FileLimits = Schema.Struct({
-  fileMs: Schema.optional(Schema.Number),
+  fileMs: Schema.optional(Span),
 });
 export type FileLimits = typeof FileLimits.Type;
 
@@ -105,9 +109,9 @@ export const Voice = Schema.Struct({
 export type Voice = typeof Voice.Type;
 
 export const SynthesisLimits = Schema.Struct({
-  characters: Schema.optional(Schema.Number),
-  audioMs: Schema.optional(Schema.Number),
-  streams: Schema.optional(Schema.Number),
+  characters: Schema.optional(Count),
+  audioMs: Schema.optional(Span),
+  streams: Schema.optional(Count),
 });
 export type SynthesisLimits = typeof SynthesisLimits.Type;
 

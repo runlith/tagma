@@ -71,7 +71,7 @@ const sources = Layer.effect(
   SpeechSources,
   Effect.map(whisperProvider, (provider) => {
     const standing = { parts: [{ owner: 'whisper', providers: [provider] }], taken: new Map<string, string>() };
-    return SpeechSources.of({ current: () => standing, changes: Stream.empty });
+    return SpeechSources.of({ current: () => standing, changes: Stream.empty, hold: () => Effect.void });
   }),
 );
 

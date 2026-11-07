@@ -112,6 +112,7 @@ export const heardIn = Effect.fnUntraced(function* (opening: Opening, scope: Sco
           Layer.succeed(SpeechSources, {
             current: () => ({ parts: [{ owner: 'world', providers: [opening.provider ?? scripted] }], taken: new Map() }),
             changes: Stream.empty,
+            hold: () => Effect.void,
           }),
           transport.layer,
           credentials,

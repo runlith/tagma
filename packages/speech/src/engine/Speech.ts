@@ -22,7 +22,6 @@ export class Speech extends Context.Service<
     readonly now: Effect.Effect<SpeechSet>;
     readonly take: Effect.Effect<SpeechSet, never, Scope.Scope>;
     readonly changes: Stream.Stream<SpeechSet>;
-    readonly revisions: () => ReadonlySet<string>;
     readonly released: Stream.Stream<void>;
   }
 >()('speech/Speech') {
@@ -50,32 +49,37 @@ export class Speech extends Context.Service<
         const set = speechSet({ catalog, context, streams: (provider, model) => limits.get(provider)?.get(model) });
         return { source, set, revisions: revisionsOf(source.parts), holds: 0 } satisfies Standing;
       });
-      let latest: Standing = yield* standingOf(sources.current());
+      const live = new Set<Standing>();
+      let building: ReadonlySet<string> = new Set();
+      yield* sources.hold(() => new Set([...building, ...[...live].flatMap((standing) => [...standing.revisions])]));
+      const built = (source: SpeechStanding) => {
+        building = revisionsOf(source.parts);
+        return standingOf(source).pipe(
+          Effect.tap((standing) => Effect.sync(() => live.add(standing))),
+          Effect.ensuring(
+            Effect.sync(() => {
+              building = new Set();
+            }),
+          ),
+        );
+      };
+      let latest: Standing = yield* built(sources.current());
       const sets = yield* Effect.acquireRelease(PubSub.sliding<SpeechSet>({ capacity: 1, replay: 1 }), PubSub.shutdown);
       const releases = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
       yield* PubSub.publish(sets, latest.set);
-      const held = new Set<Standing>();
       const replace = (next: Standing) =>
         Effect.suspend(() => {
           const previous = latest;
           latest = next;
-          if (previous.holds > 0) held.add(previous);
-          return Effect.andThen(PubSub.publish(sets, next.set), previous.holds > 0 ? Effect.void : PubSub.publish(releases, undefined));
+          if (previous.holds > 0) return PubSub.publish(sets, next.set);
+          live.delete(previous);
+          return Effect.andThen(PubSub.publish(sets, next.set), PubSub.publish(releases, undefined));
         });
-      let building: ReadonlySet<string> = new Set();
       yield* Effect.forkScoped(
         Stream.runForEach(sources.changes, () =>
           Effect.suspend(() => {
             const source = sources.current();
-            if (source === latest.source) return Effect.void;
-            building = revisionsOf(source.parts);
-            return Effect.flatMap(standingOf(source), replace).pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  building = new Set();
-                }),
-              ),
-            );
+            return source === latest.source ? Effect.void : Effect.flatMap(built(source), replace);
           }),
         ),
       );
@@ -84,7 +88,7 @@ export class Speech extends Context.Service<
         Effect.suspend(() => {
           standing.holds -= 1;
           if (standing.holds > 0 || standing === current()) return Effect.void;
-          held.delete(standing);
+          live.delete(standing);
           return PubSub.publish(releases, undefined);
         });
       return Speech.of({
@@ -101,7 +105,6 @@ export class Speech extends Context.Service<
           (standing) => standing.set,
         ),
         changes: Stream.fromPubSub(sets),
-        revisions: () => new Set([...current().revisions, ...building, ...[...held].flatMap((standing) => [...standing.revisions])]),
         released: Stream.fromPubSub(releases),
       });
     }),

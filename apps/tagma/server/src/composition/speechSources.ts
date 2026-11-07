@@ -118,6 +118,8 @@ const declaredIds = (parts: Parts): ReadonlySet<string> =>
     ),
   );
 
+type Seen = { readonly raw: Parts; readonly standing: SpeechStanding };
+
 const takenOf = (parts: Parts, models: ReadonlyArray<{ readonly id: string; readonly plugin: string }>): ReadonlyMap<string, string> => {
   const speaking = declaredIds(parts);
   return new Map(models.filter((provider) => speaking.has(provider.id)).map((provider) => [provider.id, provider.plugin]));
@@ -137,13 +139,14 @@ export const speechSourcesWith = <R>(localOf: Effect.Effect<BuiltinSpeech, never
             ? { ...part, providers: local.get(part.owner)! }
             : part,
         );
-      const read = () => {
+      const read = (): Seen => {
         const raw = parts.current();
         const whole = filled(raw);
         return { raw, standing: { parts: whole, taken: takenOf(whole, registry.current().served.providers) } };
       };
-      let seen = read();
+      let seen: Seen = { raw: [], standing: { parts: [], taken: new Map() } };
       yield* revisions.register({ standing: () => revisionsOf(seen.raw) });
+      seen = read();
       const published = yield* Effect.acquireRelease(PubSub.sliding<SpeechStanding>({ capacity: 1, replay: 1 }), PubSub.shutdown);
       yield* PubSub.publish(published, seen.standing);
       const refresh = Effect.suspend(() => {
@@ -153,7 +156,11 @@ export const speechSourcesWith = <R>(localOf: Effect.Effect<BuiltinSpeech, never
         return Effect.asVoid(PubSub.publish(published, next.standing));
       });
       yield* Effect.forkScoped(Stream.runForEach(Stream.merge(parts.changes, registry.changes), () => refresh));
-      return SpeechSources.of({ current: () => seen.standing, changes: Stream.fromPubSub(published) });
+      return SpeechSources.of({
+        current: () => seen.standing,
+        changes: Stream.fromPubSub(published),
+        hold: (standing) => revisions.register({ standing }),
+      });
     }),
   );
 
@@ -165,7 +172,6 @@ export const speechHolding = Layer.effectDiscard(
     const revisions = yield* PluginRevisions;
     const faults = yield* PluginFaults;
     const keys = yield* SpeechKeys;
-    yield* revisions.register({ standing: speech.revisions });
     yield* Effect.forkScoped(Stream.runForEach(speech.released, () => revisions.released));
     yield* Effect.forkScoped(
       Stream.runForEach(speech.changes, (set) =>

@@ -36,8 +36,6 @@ export type SpeechCatalog<R> = {
   readonly provider: (id: string) => AnyProvider<R> | undefined;
 };
 
-const positive = (value: number | undefined) => value === undefined || (Number.isFinite(value) && value > 0);
-
 const unique = (ids: ReadonlyArray<string>, what: string) => {
   const seen = new Set<string>();
   for (const id of ids) {
@@ -72,13 +70,9 @@ const recognitionConsistent = (capabilities: RecognitionCapabilities, where: str
     throw new Error(`${where} translates into no language.`);
   if (capabilities.kind === 'file') {
     if (capabilities.containers.length === 0) throw new Error(`${where} takes no file container.`);
-    if (!positive(capabilities.limits.fileMs)) throw new Error(`${where} declares a limit that is not positive.`);
     return;
   }
   rates(capabilities.rates, where);
-  const limits = capabilities.limits;
-  if (!positive(limits.sessionMs) || !positive(limits.clipMs) || !positive(limits.clipBytes))
-    throw new Error(`${where} declares a limit that is not positive.`);
   if (capabilities.kind === 'batch') {
     knobs(capabilities.tuning, ['client'], where);
     return;
@@ -169,9 +163,6 @@ const providerConsistent = <R>(provider: AnyProvider<R>) => {
         model.synthesis.voices.map((voice) => voice.id),
         `${where} voice`,
       );
-      const limits = model.synthesis.limits;
-      if (!positive(limits.characters) || !positive(limits.audioMs) || !positive(limits.streams))
-        throw new Error(`${where} declares a limit that is not positive.`);
       if (model.synthesis.needsLanguage && model.synthesis.languages.length === 0)
         throw new Error(`${where} needs a language but names none.`);
     }

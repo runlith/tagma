@@ -28,6 +28,7 @@ export type World = {
   readonly transport: ScriptedTransport;
   readonly service: Speech['Service'];
   readonly speech: SpeechSet;
+  readonly held: () => ReadonlySet<string>;
   readonly reload: (parts: ReadonlyArray<SpeechPart<SpeechHost>>, taken?: ReadonlyMap<string, string>) => Effect.Effect<SpeechSet>;
   readonly listen: (
     choice: RecognitionChoice,
@@ -72,7 +73,15 @@ export const inWorld = Effect.fnUntraced(function* <A, E>(
   const transport = yield* scriptedTransport;
   const standings = yield* PubSub.sliding<SpeechStanding>({ capacity: 1, replay: 1 });
   let standing: SpeechStanding = { parts: [{ owner: 'world', providers }], taken: new Map() };
-  const sources = Layer.succeed(SpeechSources, { current: () => standing, changes: Stream.fromPubSub(standings) });
+  let holder: () => ReadonlySet<string> = () => new Set();
+  const sources = Layer.succeed(SpeechSources, {
+    current: () => standing,
+    changes: Stream.fromPubSub(standings),
+    hold: (revisions) =>
+      Effect.sync(() => {
+        holder = revisions;
+      }),
+  });
   const layer = Speech.layer.pipe(
     Layer.provide(Layer.mergeAll(sources, transport.layer, keys, detector, Layer.succeed(HttpClient.HttpClient, offline))),
   );
@@ -83,6 +92,7 @@ export const inWorld = Effect.fnUntraced(function* <A, E>(
       transport,
       service,
       speech,
+      held: () => holder(),
       reload: Effect.fnUntraced(function* (next, taken = new Map()) {
         const before = yield* service.now;
         standing = { parts: next, taken };

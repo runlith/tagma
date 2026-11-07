@@ -169,7 +169,10 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
     it.effect('a plugin’s speech provider is in speech_status at once and recognizes; a rebuild serves the next work', () =>
       Effect.gen(function* () {
         const { op, root, speech } = yield* World;
-        const folder = yield* part(join(root, 'echo'), 'echo-speech', echo('echo', 'Echo A', 'plugin words'));
+        const files = yield* FileSystem.FileSystem;
+        const loaded = join(root, 'loaded');
+        const preamble = `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(loaded)}, import.meta.dir);\n`;
+        const folder = yield* part(join(root, 'echo'), 'echo-speech', echo('echo', 'Echo A', 'plugin words', { preamble }));
         expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
         const listed = yield* until(status(), (models) => models.some((model) => model.provider === 'echo'));
         expect(listed.find((model) => model.provider === 'echo')).toMatchObject({ model: 'echo-1', label: 'Echo A' });
@@ -177,16 +180,13 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
 
         const work = yield* Scope.make();
         yield* Scope.provide(speech.take, work);
-        const first = [...speech.revisions()];
+        const held = join(yield* files.readFileString(loaded), '..');
         yield* part(folder, 'echo-speech', echo('echo', 'Echo B', 'rebuilt words'));
         yield* until(status(), (models) => models.some((model) => model.label === 'Echo B'));
         expect(yield* Effect.scoped(heard(speech))).toEqual(['rebuilt words']);
-        const files = yield* FileSystem.FileSystem;
-        const held = first.filter((directory) => directory.includes('echo-speech'));
-        expect(held.length).toBe(1);
-        expect(yield* files.exists(held[0]!)).toBe(true);
+        expect(yield* files.exists(held)).toBe(true);
         yield* Scope.close(work, Exit.void);
-        expect(yield* until(files.exists(held[0]!).pipe(Effect.orDie), (standing) => !standing)).toBe(false);
+        expect(yield* until(files.exists(held).pipe(Effect.orDie), (standing) => !standing)).toBe(false);
 
         expect(yield* op('uninstall_plugin', { id: 'echo-speech' })).toMatchObject({ status: 200 });
         expect(yield* until(status(), (models) => !models.some((model) => model.provider === 'echo'))).not.toContainEqual(
