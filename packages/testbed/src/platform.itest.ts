@@ -18,8 +18,13 @@ test('platform files are selected before importing them in discovered and explic
   writeFileSync(join(root, `foreign.${other}.test.ts`), 'throw new Error("a foreign platform file was imported");');
   writeFileSync(join(root, `foreign.${other}.spec.ts`), 'throw new Error("a foreign platform file was imported");');
   writeFileSync(join(root, `foreign.${other}.itest.ts`), 'throw new Error("a foreign platform file was imported");');
-  const run = async (args: readonly string[]) => {
-    const child = Bun.spawn([process.execPath, CLI, ...args], { cwd: root, env: process.env, stdout: 'pipe', stderr: 'pipe' });
+  const run = async (args: readonly string[], env: Readonly<Record<string, string>> = {}) => {
+    const child = Bun.spawn([process.execPath, CLI, ...args], {
+      cwd: root,
+      env: { ...process.env, ...env },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const [out, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect(code, out + error).toBe(0);
     return `${out}\n${error}`
@@ -34,4 +39,9 @@ test('platform files are selected before importing them in discovered and explic
   expect(await run(['bun', 'test', '--shard=1/1', 'shared.test'])).toEqual(['shared']);
   expect(await run(['bun', 'test', './shared.itest.ts', `./foreign.${other}.itest.ts`])).toEqual(['shared']);
   expect(await run(['itest', `./foreign.${other}.itest.ts`])).toEqual([]);
+  const only = { TESTBED_PLATFORM_ONLY: '1' };
+  expect(await run(['bun', 'test', '--no-isolate'], only)).toEqual(['native']);
+  expect(await run(['itest', '--no-isolate'], only)).toEqual(['native']);
+  expect(await run(['itest', './shared.itest.ts'], only)).toEqual([]);
+  expect(await run(['bun', 'test', './shared.test.ts', `./native.${process.platform}.test.ts`], only)).toEqual(['native']);
 });

@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { constants, getPriority, setPriority } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { kindOf, runsAs, runsOnPlatform, type Kind } from './core/files.ts';
+import { kindOf, PLATFORM_ONLY_ENV, runsAs, runsOnPlatform, type Kind } from './core/files.ts';
 import type { FileRow, NotRunRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
@@ -42,8 +42,15 @@ const discover = async (kind: Kind, pathspec: string): Promise<string[]> => {
     .filter((file) => existsSync(file));
 };
 
+const platformOnly = process.env[PLATFORM_ONLY_ENV] === '1';
+const runsHere = (file: string): boolean => runsOnPlatform(file, process.platform, platformOnly);
+
 const noFileForPlatform = (count: number): never => {
-  console.error(`SKIP testbed: ${count} platform-specific files do not run on ${process.platform}`);
+  console.error(
+    platformOnly
+      ? `SKIP testbed: none of ${count} files is marked for ${process.platform}, and ${PLATFORM_ONLY_ENV} runs marked files alone`
+      : `SKIP testbed: ${count} platform-specific files do not run on ${process.platform}`,
+  );
   process.exit(0);
 };
 
@@ -121,7 +128,7 @@ if (program) {
     console.error(`testbed: no ${selected.suffix} files found`);
     process.exit(1);
   }
-  const eligible = files.filter((file) => runsOnPlatform(file));
+  const eligible = files.filter(runsHere);
   if (eligible.length === 0) noFileForPlatform(files.length);
   command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(eligible.sort()));
 }
@@ -149,14 +156,14 @@ if (bunTest && selected === undefined) {
           .flat()
           .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
       : named;
-  const eligible = files.filter((file) => runsOnPlatform(file));
+  const eligible = files.filter(runsHere);
   if (files.length > 0 && eligible.length === 0) noFileForPlatform(files.length);
   if (named.length === 0) {
     if (eligible.length > 0) for (const at of filterAt.reverse()) command.splice(at, 1);
     command.push(...eligible);
   } else
     for (let at = command.length - 1; at >= 0; at--) {
-      if (named.includes(command[at]!) && !runsOnPlatform(command[at]!)) command.splice(at, 1);
+      if (named.includes(command[at]!) && !runsHere(command[at]!)) command.splice(at, 1);
     }
 }
 const runner = bunTest ? 'bun' : vitest ? 'vitest' : 'other';

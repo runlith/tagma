@@ -4,9 +4,11 @@ const RESOURCE = /\.itest\.[cm]?[jt]sx?$/;
 const E2E = /\.e2e\.ts$/;
 const PLATFORMS = /\.((?:(?:aix|android|darwin|freebsd|haiku|linux|openbsd|sunos|win32)\.)+)(?:test|itest|e2e|spec)\.[cm]?[jt]sx?$/;
 
-export const runsOnPlatform = (file: string, platform: string = process.platform): boolean => {
+export const PLATFORM_ONLY_ENV = 'TESTBED_PLATFORM_ONLY';
+
+export const runsOnPlatform = (file: string, platform: string = process.platform, only = false): boolean => {
   const matched = PLATFORMS.exec(file);
-  return matched === null || matched[1]!.split('.').includes(platform);
+  return matched === null ? !only : matched[1]!.split('.').includes(platform);
 };
 
 export const kindOf = (file: string): Kind => (E2E.test(file) ? 'e2e' : RESOURCE.test(file) ? 'resource' : 'unit');
