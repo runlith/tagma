@@ -8,7 +8,7 @@ import { declare } from '../adapter/declaration';
 import { importProviders } from '../adapter/loader';
 import type { HostModules } from '../adapter/loader';
 import { computedImports } from './computed.js';
-import { MANIFEST } from './describe.js';
+import { MANIFEST } from '../manifest.js';
 import { BuildFailed } from './failure.js';
 import type { PluginEnvelope } from './points.generated.js';
 

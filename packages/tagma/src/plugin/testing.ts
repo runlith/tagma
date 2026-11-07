@@ -1,6 +1,5 @@
 import { strict as assert } from 'node:assert';
 import { mkdtempSync } from 'node:fs';
-import { readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Fiber, Layer, Result, Schema, type Scope, Stream } from 'effect';
@@ -25,7 +24,7 @@ import { declare } from '../adapter/declaration';
 import { importProviders } from '../adapter/loader';
 import { sdkHost } from '../adapter/sdkHost';
 import type { AdapterHost, WireProvider } from '../adapter/provider';
-import { MANIFEST, manifestOf } from './describe.js';
+import { manifestOf } from './describe.js';
 import type { OperationId, PluginDefinition, TagmaClient } from './plugin.js';
 import {
   type ActionInput,
@@ -386,12 +385,7 @@ const conformSpeech = async (owner: string, speech: readonly AnyProvider<SpeechH
 };
 
 export const runConformance = async (directory: string, fixture: ConformanceFixture): Promise<ConformanceResult> => {
-  const real = await realpath(directory);
-  const { providers } = JSON.parse(await readFile(join(real, MANIFEST), 'utf8')) as {
-    readonly providers?: { readonly entry: string };
-  };
-  assert(providers !== undefined, `${MANIFEST} declares no provider part: build the plugin first`);
-  const imported = await importProviders(real, await sdkHost(), ['--no-install']);
+  const imported = await importProviders(directory, await sdkHost(), ['--no-install']);
   assert(imported.models === undefined || fixture.models !== undefined, 'The folder declares models: give the fixture a models stub');
   assert(imported.speech === undefined || fixture.speech !== undefined, 'The folder declares speech: give the fixture a speech stub');
   return {

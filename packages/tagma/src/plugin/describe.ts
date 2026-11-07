@@ -15,8 +15,6 @@ export type PluginDescription = {
   readonly contributes: Partial<PluginPoints>;
 };
 
-export const MANIFEST = 'tagma-plugin.json';
-
 export const PROCESS_ENTRY = 'dist/process.js';
 
 type PluginManifest = Omit<PluginEnvelope, 'version' | 'build'>;

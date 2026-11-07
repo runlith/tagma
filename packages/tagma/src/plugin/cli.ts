@@ -3,7 +3,7 @@ import { watch } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { buildPlugin } from './build.js';
-import { MANIFEST } from './describe.js';
+import { MANIFEST } from '../manifest.js';
 import { pluginIdRefusal } from './checks.generated.js';
 import { BuildFailed } from './failure.js';
 import { pluginTemplate } from './template.js';

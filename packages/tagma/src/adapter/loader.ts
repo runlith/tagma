@@ -1,7 +1,7 @@
 import { readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { MANIFEST } from '../plugin/describe';
+import { MANIFEST } from '../manifest';
 import type { ProvidersDefinition } from '../plugin/plugin';
 
 export type HostModule = () => Promise<object>;
