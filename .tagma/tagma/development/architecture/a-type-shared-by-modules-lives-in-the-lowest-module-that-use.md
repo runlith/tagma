@@ -21,10 +21,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated literals:0bbcb0fdb836c05c: apps/tagma/app/src/lib/features/speech/values.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated object:099c3d9904a29237: apps/tagma/app/src/lib/features/threads/Draft.svelte.ts",
           "owner": "5a3bed29"
         },
@@ -314,10 +310,6 @@ fields:
         },
         {
           "fingerprint": "repeated-declarations repeated object:d14bfa2a16918fd0: packages/speech-whisper/src/models/ModelStore.ts",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "repeated-declarations repeated literals:0bbcb0fdb836c05c: packages/speech/src/wire/capabilities.ts",
           "owner": "5a3bed29"
         },
         {
