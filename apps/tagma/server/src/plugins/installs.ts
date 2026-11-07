@@ -152,10 +152,10 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly builtins: readonly BuiltinPlugin[];
   readonly processes: () => PluginProcessControl;
   readonly changed: (projectId: number | null) => Effect.Effect<void>;
-  readonly touched: (id: string) => Effect.Effect<void>;
+  readonly rebuilt: (id: string) => Effect.Effect<void>;
   readonly faults: (id: string) => readonly PluginFault[];
 }) {
-  const { shelf, digests, home, points, builtins, processes, changed, touched, faults } = input;
+  const { shelf, digests, home, points, builtins, processes, changed, rebuilt, faults } = input;
   const builtin = new Map(builtins.map((plugin) => [plugin.id, plugin]));
   const settings = yield* Settings;
   const projects = yield* Projects;
@@ -316,14 +316,6 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       expires: (yield* Clock.currentTimeMillis) + Duration.toMillis(KEPT),
     } satisfies Held;
   });
-
-  const dropped = (taken: Held) =>
-    taken.stage === null
-      ? Effect.void
-      : Effect.andThen(
-          Effect.sync(() => shelf.forget(taken.root)),
-          Effect.orDie(dropStage(taken.stage).pipe(Effect.provideService(FileSystem.FileSystem, files))),
-        );
 
   const rowOf = Effect.fn('Plugins.rowOf')(function* (install: PluginInstall, projectId: number, enabled: Enabling) {
     const project = yield* projectRoot(projectId);
@@ -529,7 +521,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       current.some((entry) => entry.id === id) ? current.map((entry) => (entry.id === id ? install : entry)) : [...current, install],
     );
     if (change !== 'kept') yield* switched(projectId, id, change);
-    if (replaces) yield* touched(id);
+    if (replaces) yield* rebuilt(id);
     yield* changed(null);
     return yield* row(projectId, id);
   });
@@ -575,13 +567,25 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         typeof given === 'string'
           ? { source: sourceOf(given, yield* projectRoot(projectId)), origin: null, declared: null }
           : { source: given.source, origin: given.origin, declared: given.declared };
-      const taken = yield* fetched(wanted);
-      const prepared = yield* Effect.flatMap(readOf(taken.root, taken.declared), (read) => preparedOf(taken, read, projectId)).pipe(
-        Effect.tapError(() => dropped(taken)),
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const taken = yield* restore(fetched(wanted));
+            const prepared = yield* restore(
+              Effect.flatMap(readOf(taken.root, taken.declared), (read) => preparedOf(taken, read, projectId)),
+            ).pipe(
+              Effect.onError(() =>
+                Effect.sync(() => {
+                  if (taken.stage !== null) shelf.forget(taken.root);
+                }),
+              ),
+            );
+            holding.set(taken.token, taken);
+            yield* Effect.forkIn(Effect.delay(expire(taken.token), KEPT), scope);
+            return prepared;
+          }),
+        ),
       );
-      holding.set(taken.token, taken);
-      yield* Effect.forkIn(Effect.delay(expire(taken.token), KEPT), scope);
-      return prepared;
     }),
     held: Effect.fn('Plugins.held')(function* ({ projectId, token }) {
       return yield* locked(

@@ -209,6 +209,7 @@ export class HostedPlugins extends Context.Service<
   HostedPlugins,
   {
     roots(): Effect.Effect<ReadonlyMap<string, PluginHostedRoot>, PluginsUnreadable>;
+    root(id: string): Effect.Effect<PluginHostedRoot | null, PluginsUnreadable>;
     read(id: string): Effect.Effect<PluginHosted, PluginUnhosted | PluginRefused | PluginUnreadable | PluginsUnreadable>;
     readonly changes: Stream.Stream<string>;
   }

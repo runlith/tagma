@@ -17,7 +17,7 @@ import {
 } from './contract/service/plugins.js';
 import type { PluginContribution, PluginPoints } from './contract/service/points.js';
 import { type HookEntries, HOOKS_FACE } from './contract/wire/hooks.js';
-import { pluginsDisabled, pluginsEnabled, pluginsInstalled, pluginsOff } from './contract/wire/settings.js';
+import { type PluginInstall, pluginsDisabled, pluginsEnabled, pluginsInstalled, pluginsOff } from './contract/wire/settings.js';
 import type { Digests } from './digests.js';
 import { enablingIn, runningOf } from './enabling.js';
 import { hosted, type Read } from './reader.js';
@@ -30,10 +30,11 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
   readonly digests: Digests;
   readonly points: PluginPoints['Service'];
   readonly pulses: PubSub.PubSub<number | null>;
-  readonly inputs: PubSub.PubSub<string>;
+  readonly rebuilds: PubSub.PubSub<string>;
+  readonly values: PubSub.PubSub<string>;
   readonly parts: ProviderParts['Service'];
 }) {
-  const { shelf, digests, points, pulses, inputs, parts } = input;
+  const { shelf, digests, points, pulses, rebuilds, values, parts } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
   const hooks = yield* points.hold(HOOKS);
@@ -160,23 +161,32 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
     return running;
   });
 
+  const hostedRoot = Effect.fnUntraced(function* (install: PluginInstall, there: readonly number[] | undefined) {
+    if (there === undefined) return null;
+    const taken = yield* shelf.read(install.root, install.declared ?? null).pipe(
+      Effect.map((found) => hosted(found.package)),
+      Effect.catchTags({
+        PluginRefused: () => Effect.succeed(true),
+        PluginUnreadable: () => Effect.succeed(true),
+        NamesCollide: () => Effect.succeed(true),
+      }),
+    );
+    return taken ? ({ root: install.root, projects: [...there].sort((a, b) => a - b) } satisfies PluginHostedRoot) : null;
+  });
+
   const roots = Effect.fn('HostedPlugins.roots')(function* () {
     const running = yield* anywhere();
     const listed = new Map<string, PluginHostedRoot>();
     for (const install of yield* installs) {
-      const there = running.get(install.id);
-      if (there === undefined) continue;
-      const taken = yield* shelf.read(install.root, install.declared ?? null).pipe(
-        Effect.map((found) => hosted(found.package)),
-        Effect.catchTags({
-          PluginRefused: () => Effect.succeed(true),
-          PluginUnreadable: () => Effect.succeed(true),
-          NamesCollide: () => Effect.succeed(true),
-        }),
-      );
-      if (taken) listed.set(install.id, { root: install.root, projects: there.sort((a, b) => a - b) });
+      const taken = yield* hostedRoot(install, running.get(install.id));
+      if (taken !== null) listed.set(install.id, taken);
     }
     return listed;
+  });
+
+  const root = Effect.fn('HostedPlugins.root')(function* (id: string) {
+    const install = (yield* installs).find((entry) => entry.id === id);
+    return install === undefined ? null : yield* hostedRoot(install, (yield* anywhere()).get(id));
   });
 
   const read = Effect.fn('HostedPlugins.read')(function* (id: string) {
@@ -241,12 +251,17 @@ export const makeEnabled = Effect.fnUntraced(function* (input: {
             }),
         ),
     ),
-    changed: (key) => Effect.andThen(PubSub.publish(inputs, key), PubSub.publish(pulses, null)).pipe(Effect.asVoid),
+    changed: (key) => Effect.andThen(PubSub.publish(values, key), PubSub.publish(pulses, null)).pipe(Effect.asVoid),
   };
 
   return {
     enabled: EnabledPlugins.of({ of, hooks: hooksOf, held, changes: Stream.fromPubSub(pulses) }),
-    hosted: HostedPlugins.of({ roots, read, changes: Stream.fromPubSub(inputs) }),
+    hosted: HostedPlugins.of({
+      roots,
+      root,
+      read,
+      changes: Stream.merge(Stream.fromPubSub(rebuilds), Stream.fromPubSub(values)),
+    }),
     owner,
   };
 });

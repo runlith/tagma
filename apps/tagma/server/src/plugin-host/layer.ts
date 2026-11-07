@@ -44,13 +44,26 @@ export const pluginHostLayer: Layer.Layer<
       (effect) => serial.withPermit(effect),
     );
 
-    const settled = reconcile().pipe(
-      Effect.tapError((failure) =>
-        Effect.logWarning(`the installed plugins could not be read, asked again in ${ASKED_AGAIN}: ${failure.message}`),
-      ),
-      Effect.retry(Schedule.spaced(ASKED_AGAIN)),
-      Effect.orDie,
+    const rehosted = Effect.fn('PluginHost.rehost')(
+      function* (id: string) {
+        const taken = yield* hosted.root(id);
+        if (taken === null) return yield* supervisor.stop(id);
+        if (yield* supervisor.ensure(id, taken.root, taken.projects)) return;
+        yield* supervisor.reread(id);
+      },
+      (effect) => serial.withPermit(effect),
     );
+
+    const asked = <E extends { readonly message: string }>(work: Effect.Effect<void, E>) =>
+      work.pipe(
+        Effect.tapError((failure) =>
+          Effect.logWarning(`the installed plugins could not be read, asked again in ${ASKED_AGAIN}: ${failure.message}`),
+        ),
+        Effect.retry(Schedule.spaced(ASKED_AGAIN)),
+        Effect.orDie,
+      );
+
+    const settled = asked(reconcile());
 
     return Context.make(
       PluginHost,
@@ -61,7 +74,7 @@ export const pluginHostLayer: Layer.Layer<
             scope,
           );
           yield* Effect.forkIn(
-            Stream.runForEach(hosted.changes, (id) => supervisor.reread(id)),
+            Stream.runForEach(hosted.changes, (id) => asked(rehosted(id))),
             scope,
           );
           yield* settled;
@@ -71,7 +84,7 @@ export const pluginHostLayer: Layer.Layer<
         reading: supervisor.reading,
         hosts: supervisor.hosts,
         title: supervisor.title,
-        pending: (id) => Effect.map(hosted.roots(), (roots) => roots.has(id) && !supervisor.standing(id)),
+        pending: (id) => Effect.map(hosted.root(id), (taken) => taken !== null && !supervisor.standing(id)),
         call: supervisor.call,
         callAdmitted: supervisor.callAdmitted,
         read: supervisor.read,

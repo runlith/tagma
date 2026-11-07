@@ -7,11 +7,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Clock, Context, Effect, Exit, Fiber, Layer, Schedule, Scope } from 'effect';
 import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
-import { FileWatcher } from '../platform/contract/service/watch.js';
+import { FileWatcher, WatchRefused } from '../platform/contract/service/watch.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
 import { MANIFEST } from '../plugin-formats/tagma/contract/wire/manifest.js';
 import { tagmaFormat } from '../plugin-formats/tagma/format.js';
-import { manifestText } from '../plugin-formats/tagma/testing/folder.js';
+import { manifestText, type PluginFolder, writePlugin } from '../plugin-formats/tagma/testing/folder.js';
 import { fixtureEntries } from './testing/tools.js';
 import { hostWorld } from './testing/world.js';
 
@@ -282,6 +282,53 @@ it.live('a plugin whose manifest is broken when the server starts is watched, an
     yield* world.until(() => booted.host.reading('fixture')?.state === 'idle');
     expect(yield* booted.host.pending('fixture')).toBe(false);
     expect(Object.keys((yield* booted.tools.of(world.projectId)).agents())).toEqual(['plugin__fixture__look']);
+  }),
+);
+
+it.live('a plugin is read again by polling while its watch is refused, and is watched again once the watch answers', () =>
+  Effect.gen(function* () {
+    const watcher = Context.get(yield* watched, FileWatcher);
+    let refusing = true;
+    let opened = 0;
+    const recovering = FileWatcher.of({
+      ...watcher,
+      subscribe: (at, options, hearing) =>
+        refusing
+          ? Effect.fail(new WatchRefused({ message: 'the watch service is unavailable' }))
+          : Effect.tap(watcher.subscribe(at, options, hearing), () => Effect.sync(() => void (opened += 1))),
+    });
+    const world = yield* hostWorld({ prefix: 'host-polled-', watcher: Context.make(FileWatcher, recovering) });
+    const { host, until } = world;
+    const root = yield* world.place('fixture', { program: FIXTURE, contributes: TOOLS });
+    yield* world.install(root);
+    yield* until(() => host.reading('fixture')?.state === 'idle');
+    const retitled = (title: string) =>
+      Effect.promise(() => writeFile(join(root, MANIFEST), manifestText({ id: 'fixture', title, program: FIXTURE, contributes: TOOLS })));
+    yield* retitled('Polled');
+    yield* until(() => host.title('fixture') === 'Polled');
+    refusing = false;
+    yield* until(() => opened > 0);
+    yield* retitled('Watched');
+    yield* until(() => host.title('fixture') === 'Watched');
+  }),
+);
+
+it.live('rebuilds alone take a plugin up when it gains a process and contributions, and stop it when it loses them', () =>
+  Effect.gen(function* () {
+    const world = yield* hostWorld({ prefix: 'host-gained-', watcher: yield* watched });
+    const { host, projectId, tools, until } = world;
+    const root = yield* world.place('fixture', {});
+    const rebuilt = (folder: Omit<PluginFolder, 'id'>) =>
+      Effect.promise(() => writePlugin(root, { id: 'fixture', title: 'Fixture', ...folder }));
+    yield* world.install(root);
+    expect(host.reading('fixture')).toBeUndefined();
+    yield* rebuilt({ program: FIXTURE, contributes: TOOLS });
+    yield* until(() => host.reading('fixture')?.state === 'idle');
+    yield* rebuilt({});
+    yield* until(() => host.reading('fixture') === undefined);
+    yield* rebuilt({ program: FIXTURE, contributes: TOOLS });
+    yield* until(() => host.reading('fixture')?.state === 'idle');
+    expect(Object.keys((yield* tools.of(projectId)).agents())).toEqual(['plugin__fixture__look']);
   }),
 );
 

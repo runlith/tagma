@@ -457,10 +457,11 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
       const standing = slots.get(id);
       if (standing?.root === root) {
         standing.projects = projects;
-        return;
+        return false;
       }
       if (standing !== undefined) yield* stop(id);
       yield* bring(made(id, root, projects));
+      return true;
     }),
     reread: (id: string): Effect.Effect<void> => {
       const slot = slots.get(id);

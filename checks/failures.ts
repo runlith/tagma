@@ -9,6 +9,13 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'A plugin whose directory does not read keeps the revision it brought before: its row answers the refusal and, where a part stood, a revisions fault names it; the next change of the plugin reads it again.',
   },
   {
+    path: 'apps/tagma/server/src/plugins/sources.ts',
+    symbol: 'staged',
+    form: 'catch',
+    site: 'e9af52df',
+    why: 'A fetch that failed or was cut leaves its staging tree only when removing it fails; the failure the fetch answers stands, and the next start clears all staging.',
+  },
+  {
     path: 'apps/tagma/server/src/plugins/outputs.ts',
     symbol: 'makeOutputs.outputsOf',
     form: 'match',

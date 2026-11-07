@@ -1,4 +1,4 @@
-import { Duration, Effect, FiberMap, Option, Queue, Stream } from 'effect';
+import { Duration, Effect, FiberMap, FiberSet, Option, Queue, Stream } from 'effect';
 import { FileWatcher } from '../platform/contract/service/watch.js';
 import { type TreeRescan, type TreeWatch, type WatchEvent, watchAll } from '../platform/watch/tree.js';
 import type { PluginInstall } from './contract/wire/settings.js';
@@ -9,11 +9,15 @@ const POLL = Duration.seconds(5);
 const LOST: ReadonlySet<TreeRescan> = new Set(['lost', 'error', 'polling']);
 const PASSED_OVER: ReadonlySet<string> = new Set(['node_modules', '.git']);
 
+type Owed = 'look' | 'rebuilt';
+
 type Watched = {
   readonly root: string;
   declared: PluginInstall['declared'];
   watch: TreeWatch | null;
   outputs: ReadonlySet<string> | null;
+  owed: Owed | null;
+  passing: boolean;
 };
 
 const touches = (outputs: ReadonlySet<string> | null, path: string): boolean => {
@@ -26,13 +30,19 @@ const touches = (outputs: ReadonlySet<string> | null, path: string): boolean => 
 export const makeOutputs = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
   readonly installs: Stream.Stream<readonly PluginInstall[]>;
-  readonly touched: (id: string) => Effect.Effect<void>;
+  readonly rebuilt: (id: string) => Effect.Effect<void>;
 }) {
-  const { shelf, installs, touched } = input;
+  const { shelf, installs, rebuilt } = input;
   const watcher = yield* Effect.serviceOption(FileWatcher);
-  const pending = yield* FiberMap.make<string>();
-  const heard = yield* Effect.acquireRelease(Queue.unbounded<{ readonly id: string; readonly delay: Duration.Input }>(), Queue.shutdown);
   const watched = new Map<string, Watched>();
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      for (const held of watched.values()) held.watch?.close();
+    }),
+  );
+  const pending = yield* FiberMap.make<string>();
+  const passes = yield* FiberSet.make();
+  const heard = yield* Effect.acquireRelease(Queue.unbounded<{ readonly id: string; readonly delay: Duration.Input }>(), Queue.shutdown);
 
   const listen = (id: string) => (event: WatchEvent) => {
     const held = watched.get(id);
@@ -59,44 +69,77 @@ export const makeOutputs = Effect.fnUntraced(function* (input: {
     if (!held.watch.watching()) yield* Queue.offer(heard, { id, delay: POLL });
   });
 
-  const settled = Effect.fn('PluginOutputs.settled')(function* (id: string) {
-    const held = watched.get(id);
-    if (held === undefined) return;
-    yield* opened(id, held);
-    held.outputs = yield* outputsOf(held);
-    yield* touched(id);
-  });
+  const passed = Effect.fn('PluginOutputs.pass')(
+    function* (id: string, held: Watched) {
+      let owed = held.owed;
+      while (owed !== null && watched.get(id) === held) {
+        held.owed = null;
+        yield* opened(id, held);
+        if (watched.get(id) !== held) {
+          held.watch?.close();
+          break;
+        }
+        held.outputs = yield* outputsOf(held);
+        if (owed === 'rebuilt') yield* rebuilt(id);
+        owed = held.owed;
+      }
+      held.passing = false;
+    },
+    (effect, _id, held) =>
+      Effect.onInterrupt(effect, () =>
+        Effect.sync(() => {
+          held.passing = false;
+        }),
+      ),
+  );
 
-  const synced = Effect.fn('PluginOutputs.sync')(function* (listed: readonly PluginInstall[]) {
-    const wanted = new Map(listed.map((install) => [install.id, install] as const));
+  const owe = (id: string, held: Watched, owed: Owed) =>
+    Effect.uninterruptible(
+      Effect.suspend(() => {
+        if (held.owed !== 'rebuilt') held.owed = owed;
+        if (held.passing) return Effect.void;
+        held.passing = true;
+        return Effect.asVoid(FiberSet.run(passes, passed(id, held)));
+      }),
+    );
+
+  let listed = false;
+  const synced = Effect.fn('PluginOutputs.sync')(function* (listing: readonly PluginInstall[]) {
+    const wanted = new Map(listing.map((install) => [install.id, install] as const));
     for (const [id, held] of watched) {
       const install = wanted.get(id);
       if (install?.root === held.root) {
         held.declared = install.declared;
         continue;
       }
-      held.watch?.close();
       watched.delete(id);
+      held.watch?.close();
       yield* FiberMap.remove(pending, id);
     }
+    const owed: Owed = listed ? 'rebuilt' : 'look';
+    listed = true;
     for (const [id, install] of wanted) {
       if (watched.has(id)) continue;
-      const held: Watched = { root: install.root, declared: install.declared, watch: null, outputs: null };
+      const held: Watched = { root: install.root, declared: install.declared, watch: null, outputs: null, owed: null, passing: false };
       watched.set(id, held);
-      held.outputs = yield* outputsOf(held);
-      yield* opened(id, held);
+      yield* owe(id, held, owed);
     }
   });
 
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const held of watched.values()) held.watch?.close();
-    }),
-  );
   yield* Effect.forkScoped(Stream.runForEach(installs, synced));
   yield* Effect.forkScoped(
     Stream.runForEach(Stream.fromQueue(heard), ({ id, delay }) =>
-      FiberMap.run(pending, id, Effect.sleep(delay).pipe(Effect.andThen(settled(id)))),
+      FiberMap.run(
+        pending,
+        id,
+        Effect.andThen(
+          Effect.sleep(delay),
+          Effect.suspend(() => {
+            const held = watched.get(id);
+            return held === undefined ? Effect.void : owe(id, held, 'rebuilt');
+          }),
+        ),
+      ),
     ),
   );
 });

@@ -67,8 +67,9 @@ export const pluginsLayer: Layer.Layer<
     yield* clearStaging(home).pipe(Effect.orDie);
     const pulses = yield* Effect.acquireRelease(PubSub.unbounded<number | null>({ replay: 1 }), PubSub.shutdown);
     const changed = (projectId: number | null) => Effect.asVoid(PubSub.publish(pulses, projectId));
-    const inputs = yield* Effect.acquireRelease(PubSub.unbounded<string>(), PubSub.shutdown);
-    const touched = (id: string) => Effect.asVoid(PubSub.publish(inputs, id));
+    const rebuilds = yield* Effect.acquireRelease(PubSub.unbounded<string>(), PubSub.shutdown);
+    const rebuilt = (id: string) => Effect.asVoid(PubSub.publish(rebuilds, id));
+    const values = yield* Effect.acquireRelease(PubSub.unbounded<string>(), PubSub.shutdown);
     const points = makePoints();
     let control = UNHOSTED;
     const processes = PluginProcesses.of({
@@ -119,11 +120,11 @@ export const pluginsLayer: Layer.Layer<
       builtins,
       processes: () => control,
       changed,
-      touched,
+      rebuilt,
       faults: faultsOf,
     });
     const settings = yield* Settings;
-    yield* makeOutputs({ shelf, installs: yield* settings.changes(pluginsInstalled).pipe(Effect.orDie), touched });
+    yield* makeOutputs({ shelf, installs: yield* settings.changes(pluginsInstalled).pipe(Effect.orDie), rebuilt });
     const records = yield* RevisionRecords;
     const { parts, revisions } = yield* makeRevisions({
       home,
@@ -133,9 +134,9 @@ export const pluginsLayer: Layer.Layer<
       faults,
       settings,
       records,
-      touched: Stream.fromPubSub(inputs),
+      rebuilds: Stream.fromPubSub(rebuilds),
     });
-    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, inputs, parts });
+    const { enabled, hosted, owner } = yield* makeEnabled({ shelf, digests, points, pulses, rebuilds, values, parts });
     yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));
     const options = yield* settings.changes(pluginsOptions).pipe(Effect.orDie);
     let seen: Options | null = null;
@@ -145,7 +146,7 @@ export const pluginsLayer: Layer.Layer<
           const before = seen;
           seen = now;
           if (before === null) return;
-          yield* Effect.forEach(differing(before, now), touched, { discard: true });
+          yield* Effect.forEach(differing(before, now), (id) => PubSub.publish(values, id), { discard: true });
           yield* changed(null);
         }),
       ),

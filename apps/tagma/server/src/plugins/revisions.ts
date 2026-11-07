@@ -65,9 +65,9 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
   readonly faults: PluginFaults['Service'];
   readonly settings: Settings['Service'];
   readonly records: RevisionRecords['Service'];
-  readonly touched: Stream.Stream<string>;
+  readonly rebuilds: Stream.Stream<string>;
 }) {
-  const { home, shelf, digests, builtins, faults, settings, records, touched } = input;
+  const { home, shelf, digests, builtins, faults, settings, records, rebuilds } = input;
   const files = yield* FileSystem.FileSystem;
   const base = join(home, REVISIONS);
   const lock = yield* Semaphore.make(1);
@@ -291,7 +291,7 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
   yield* collected(true);
   yield* Effect.forkScoped(Stream.runForEach(Stream.drop(installed, 1), (installs) => refreshed(moved(installs))));
   yield* Effect.forkScoped(Stream.runForEach(Stream.drop(off, 1), () => refreshed(new Set())));
-  yield* Effect.forkScoped(Stream.runForEach(touched, (id) => refreshed(new Set([id]))));
+  yield* Effect.forkScoped(Stream.runForEach(rebuilds, (id) => refreshed(new Set([id]))));
 
   return {
     parts: ProviderParts.of({ current: () => parts, changes: Stream.fromPubSub(moves) }),

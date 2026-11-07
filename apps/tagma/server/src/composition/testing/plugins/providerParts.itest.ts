@@ -1,12 +1,13 @@
 import { expect } from 'bun:test';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Queue, Schedule, Stream } from 'effect';
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Queue, Schedule, Stream } from 'effect';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
-import { HostedPlugins, PluginRevisions, Plugins, ProviderParts } from '../../../plugins/contract/service/plugins.js';
+import { HostedPlugins, PluginPlaces, PluginRevisions, Plugins, ProviderParts } from '../../../plugins/contract/service/plugins.js';
 import { PLUGIN_OPERATIONS } from '../../../plugins/contract/wire/operations.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeDoorWorld } from '../doorFixture.js';
@@ -99,6 +100,7 @@ const makeWorld = Effect.gen(function* () {
     parts: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, ProviderParts))),
     hosted: yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, HostedPlugins))),
     revisions: Context.get(door.runtime.owners, PluginRevisions),
+    home: (yield* Effect.orDie(Effect.fromOption(Context.getOption(door.runtime.owners, PluginPlaces)))).home,
     settled: (threadId: string) => settledThread({ threadId, projectId }).pipe(Effect.provide(door.runtime.owners)),
   };
 });
@@ -144,6 +146,23 @@ const partOf = (id: string, other?: string) =>
       Effect.sync(() => parts.current().find((held) => held.id === id)?.directory ?? undefined),
       (directory) => directory !== undefined && directory !== other,
     ),
+  );
+
+const registryAt = (port: number | undefined, cache: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const variables = { npm_config_registry: `http://127.0.0.1:${port}`, BUN_INSTALL_CACHE_DIR: cache };
+      const kept = Object.fromEntries(Object.keys(variables).map((name) => [name, process.env[name]]));
+      Object.assign(process.env, variables);
+      return kept;
+    }),
+    (kept) =>
+      Effect.sync(() => {
+        for (const [name, value] of Object.entries(kept)) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }),
   );
 
 layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
@@ -445,27 +464,39 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
           ),
           (served) => Effect.promise(() => served.stop(true)),
         );
-        const variables = { npm_config_registry: `http://127.0.0.1:${server.port}`, BUN_INSTALL_CACHE_DIR: join(root, 'npm-cache') };
-        yield* Effect.acquireRelease(
-          Effect.sync(() => {
-            const kept = Object.fromEntries(Object.keys(variables).map((name) => [name, process.env[name]]));
-            Object.assign(process.env, variables);
-            return kept;
-          }),
-          (kept) =>
-            Effect.sync(() => {
-              for (const [name, value] of Object.entries(kept)) {
-                if (value === undefined) delete process.env[name];
-                else process.env[name] = value;
-              }
-            }),
-        );
+        yield* registryAt(server.port, join(root, 'npm-cache'));
         expect(yield* op('install_plugin', { source: 'npm:npm-acme' })).toMatchObject({
           status: 200,
           body: { plugin: { id: 'npm-acme', source: { kind: 'npm', name: 'npm-acme' } } },
         });
         expect(yield* until(menu(), (listed) => listed.includes('npmacme'))).toContain('npmacme');
         expect(yield* op('uninstall_plugin', { id: 'npm-acme' })).toMatchObject({ status: 200 });
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect('an npm fetch cut short while its package manager runs leaves no staging behind', () =>
+      Effect.gen(function* () {
+        const { plugins, projectId, root, home } = yield* World;
+        const asked = yield* Deferred.make<void>();
+        const server = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              port: 0,
+              fetch: () => {
+                Deferred.doneUnsafe(asked, Effect.void);
+                return new Promise<Response>(() => undefined);
+              },
+            }),
+          ),
+          (served) => Effect.promise(() => served.stop(true)),
+        );
+        yield* registryAt(server.port, join(root, 'npm-cache-unanswered'));
+        const staging = join(home, 'agent-plugins', '.staging');
+        const preparing = yield* Effect.forkChild(plugins.prepare({ projectId, source: 'npm:npm-unanswered' }));
+        yield* Deferred.await(asked);
+        expect(readdirSync(staging)).toHaveLength(1);
+        yield* Fiber.interrupt(preparing);
+        expect(readdirSync(staging)).toEqual([]);
       }).pipe(Effect.scoped),
     );
   },

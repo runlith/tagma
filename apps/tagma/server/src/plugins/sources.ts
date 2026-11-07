@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { type CloneFailed, type CommitUnreachable, isGitUrl, shallowClone } from '@runlith/git/clone';
-import { Data, Effect, Fiber, FileSystem, type PlatformError, Stream } from 'effect';
+import { Data, Effect, Exit, Fiber, FileSystem, type PlatformError, type Scope, Stream } from 'effect';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { within } from './contract/service/reading.js';
 import { npmSourceOf, type PluginSource } from './contract/wire/rows.js';
@@ -69,8 +69,18 @@ const directoryIn = Effect.fnUntraced(function* (base: string, path: string | un
 
 const staged = Effect.fnUntraced(function* (home: string) {
   const files = yield* FileSystem.FileSystem;
-  yield* files.makeDirectory(join(home, CLONES, STAGING), { recursive: true }).pipe(Effect.mapError(unreadable));
-  return yield* files.makeTempDirectory({ directory: join(home, CLONES, STAGING), prefix: 'stage-' }).pipe(Effect.mapError(unreadable));
+  return yield* Effect.acquireRelease(
+    Effect.andThen(
+      files.makeDirectory(join(home, CLONES, STAGING), { recursive: true }),
+      files.makeTempDirectory({ directory: join(home, CLONES, STAGING), prefix: 'stage-' }),
+    ).pipe(Effect.mapError(unreadable)),
+    (stage, exit) =>
+      Exit.isSuccess(exit)
+        ? Effect.void
+        : files
+            .remove(stage, { recursive: true, force: true })
+            .pipe(Effect.catch((failure) => Effect.logWarning(`a plugin's staging stays until the next start: ${failure.message}`))),
+  );
 });
 
 const materialized: (
@@ -150,36 +160,29 @@ export const fetchSource = Effect.fn('plugins.fetch')(function* (
 ): Effect.fn.Return<
   Fetched,
   SourceUnreadable | CloneFailed | CommitUnreachable | PackageUnreachable,
-  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
 > {
   const files = yield* FileSystem.FileSystem;
   if (source.kind === 'folder' && !snapshot) return { source, root: yield* directoryIn(source.path, undefined, source.path), stage: null };
   const stage = yield* staged(home);
   const taken = join(stage, TAKEN);
-  const copied = Effect.fnUntraced(function* (): Effect.fn.Return<
-    Fetched,
-    SourceUnreadable | CloneFailed | CommitUnreachable | PackageUnreachable,
-    FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-  > {
-    switch (source.kind) {
-      case 'folder':
-        return { source, root: yield* copiedFrom(yield* directoryIn(source.path, undefined, source.path), taken), stage };
-      case 'git': {
-        const repository = join(stage, 'repository');
-        const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
-        const root = yield* copiedFrom(yield* directoryIn(repository, source.path, source.url), taken);
-        yield* files.remove(repository, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
-        return { source: { ...source, commit }, root, stage };
-      }
-      case 'npm': {
-        const into = yield* unpacked(source, stage);
-        const root = yield* copiedFrom(yield* directoryIn(into, source.name, source.name), taken);
-        yield* files.remove(join(into, '..'), { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
-        return { source, root, stage };
-      }
+  switch (source.kind) {
+    case 'folder':
+      return { source, root: yield* copiedFrom(yield* directoryIn(source.path, undefined, source.path), taken), stage };
+    case 'git': {
+      const repository = join(stage, 'repository');
+      const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
+      const root = yield* copiedFrom(yield* directoryIn(repository, source.path, source.url), taken);
+      yield* files.remove(repository, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+      return { source: { ...source, commit }, root, stage };
     }
-  });
-  return yield* copied().pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
+    case 'npm': {
+      const into = yield* unpacked(source, stage);
+      const root = yield* copiedFrom(yield* directoryIn(into, source.name, source.name), taken);
+      yield* files.remove(join(into, '..'), { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+      return { source, root, stage };
+    }
+  }
 });
 
 export const settle = Effect.fn('plugins.settle')(function* (fetched: { readonly root: string; readonly stage: string }, target: string) {
