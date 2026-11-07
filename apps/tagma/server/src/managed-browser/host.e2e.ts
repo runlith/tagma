@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { headed, notRun } from '@runlith/testbed/fixture';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { Hosts } from '../browser/contract/service/hosts.js';
 import { Pages } from '../browser/contract/service/pages.js';
 import { Profiles } from '../browser/contract/service/profiles.js';
@@ -94,9 +95,14 @@ const evaluate = (page: PageId, expression: string) =>
     Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : undefined)),
   );
 
-const windowsOf = Effect.fnUntraced(function* (profile: ProfileId) {
+const reached = Effect.fnUntraced(function* (profile: ProfileId) {
   const record = yield* (yield* Profiles).record(profile);
-  const inspection = yield* (yield* (yield* Hosts).reach(record.adapter)).profiles.session(record);
+  return { record, host: yield* (yield* Hosts).reach(record.adapter) };
+});
+
+const windowsOf = Effect.fnUntraced(function* (profile: ProfileId) {
+  const { record, host } = yield* reached(profile);
+  const inspection = yield* host.profiles.session(record);
   const { targetInfo } = yield* inspection.send('Target.getTargetInfo');
   const { targetInfos } = yield* inspection.send('Target.getTargets');
   const pages = targetInfos.filter((info) => info.type === 'page' && info.targetId !== targetInfo.targetId);
@@ -104,13 +110,21 @@ const windowsOf = Effect.fnUntraced(function* (profile: ProfileId) {
   return { urls: pages.map((info) => info.url).sort(), windows: new Set(held.map((one) => one.windowId)).size };
 }, Effect.scoped);
 
+const tabOutsideTagma = Effect.fnUntraced(function* (profile: ProfileId) {
+  const { record, host } = yield* reached(profile);
+  const inspection = yield* host.profiles.session(record);
+  yield* inspection.send('Target.createTarget', { url: 'about:blank', background: true });
+}, Effect.scoped);
+
 const IDENTITY = 'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation';
 const TABS = 'a shown profile holds its pages as tabs of one window, and opens a window again once every page closed';
 const BEHIND = 'an agent drives a background tab of a shown profile, and its viewers see it move';
+const KEPT = 'a shown profile keeps its undriven page and its window holding a tab Tagma did not open, however long they stay idle';
 if (chromeInstalled && !headed()) {
   notRun(IDENTITY.replace('%s', SHOWN), 'headed');
   notRun(TABS, 'headed');
   notRun(BEHIND, 'headed');
+  notRun(KEPT, 'headed');
 }
 const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED, ...(headed() ? [SHOWN] : [])] : [MANAGED_AGENT];
 const fixture = managedFixture();
@@ -271,6 +285,24 @@ layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
       expect(listed.pages.find((held) => held.id === page)?.downloads).toBe(1);
     }),
   );
+});
+
+layer(managedFixture())('the managed host on the test clock', (it) => {
+  if (chromeInstalled && headed())
+    it.effect(KEPT, () =>
+      Effect.gen(function* () {
+        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/second'), profile: SHOWN }, undefined, OPERATOR));
+        const page = opened.page.id;
+        yield* tabOutsideTagma(SHOWN);
+        yield* TestClock.adjust('21 minutes');
+        const { host } = yield* reached(SHOWN);
+        expect((yield* host.pages.live).map((live) => live.page)).toContain(page);
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: ['about:blank', at('/second')], windows: 1 });
+        yield* calling(PAGE.close_page.body.execute({ page }, undefined, OPERATOR));
+        yield* TestClock.adjust('6 minutes');
+        expect(yield* windowsOf(SHOWN)).toEqual({ urls: ['about:blank'], windows: 1 });
+      }),
+    );
 });
 
 layer(managedFixture({ missing: true }), {

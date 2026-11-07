@@ -76,6 +76,7 @@ type Running = {
   readonly connection: Connection;
   readonly scope: Scope.Closeable;
   readonly tabs: Map<string, Tab>;
+  readonly targets: Set<string>;
   readonly downloads: Downloads;
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
@@ -251,6 +252,7 @@ export const makeManagedHost = Effect.gen(function* () {
     switch (event.method) {
       case 'Target.targetCreated': {
         const { targetInfo: info } = yield* eventParams('Target.targetCreated', event);
+        if (info.type === 'page') state.targets.add(info.targetId);
         yield* state.navigation.created(info);
         if (info.type !== 'page' || info.openerId === undefined || state.tabs.has(info.targetId)) return;
         const opener = state.tabs.get(info.openerId)?.page ?? null;
@@ -275,6 +277,7 @@ export const makeManagedHost = Effect.gen(function* () {
       }
       case 'Target.targetDestroyed': {
         const { targetId } = yield* eventParams('Target.targetDestroyed', event);
+        state.targets.delete(targetId);
         const tab = state.tabs.get(targetId);
         if (tab === undefined) {
           yield* state.navigation.forget(targetId);
@@ -311,7 +314,9 @@ export const makeManagedHost = Effect.gen(function* () {
     }
   });
 
-  const gone = Effect.fnUntraced(function* (state: Running) {
+  const gone = Effect.fnUntraced(function* (state: Running, why: string) {
+    if (running.get(state.profile) === state)
+      yield* Effect.logInfo(`managed browser: the browser of profile ${state.profile} ends: ${why}`);
     yield* drop(state);
     yield* state.connection.root.send('Browser.close').pipe(quiet(`closing the browser of profile ${state.profile}`));
     yield* Scope.close(state.scope, Exit.void);
@@ -376,6 +381,7 @@ export const makeManagedHost = Effect.gen(function* () {
         connection,
         scope: held,
         tabs: new Map(),
+        targets: new Set(),
         downloads: makeDownloads({ directory: downloads, navigation, events }),
         permissions,
         navigation,
@@ -403,7 +409,7 @@ export const makeManagedHost = Effect.gen(function* () {
         ),
         held,
       );
-      yield* Effect.flatMap(connection.ended, () => gone(state)).pipe(Effect.forkIn(scope));
+      yield* Effect.flatMap(connection.ended, () => gone(state, 'it ended without Tagma closing it')).pipe(Effect.forkIn(scope));
       return state;
     }).pipe(
       Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)),
@@ -440,6 +446,9 @@ export const makeManagedHost = Effect.gen(function* () {
   });
 
   const unload = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId) {
+    yield* Effect.logInfo(
+      `managed browser: Tagma unloads page ${page} of profile ${state.profile}, ${UNLOAD_MS / 60_000} minutes undriven`,
+    );
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target }).pipe(quiet(`unloading page ${page}`));
     yield* emit({ kind: 'dropped', page });
@@ -448,14 +457,15 @@ export const makeManagedHost = Effect.gen(function* () {
   const sweep = Effect.fnUntraced(function* () {
     const now = yield* Clock.currentTimeMillis;
     for (const state of [...running.values()]) {
+      const shown = state.window === 'shown';
       for (const tab of [...state.tabs.values()]) {
-        if (tab.page !== null && tab.sessions === 0 && tab.quietSince !== null && now - tab.quietSince >= UNLOAD_MS)
+        if (!shown && tab.page !== null && tab.sessions === 0 && tab.quietSince !== null && now - tab.quietSince >= UNLOAD_MS)
           yield* unload(state, tab, tab.page);
       }
-      const busy = state.users > 0 || [...state.tabs.values()].some((tab) => tab.page !== null);
+      const busy = state.users > 0 || [...state.tabs.values()].some((tab) => tab.page !== null) || (shown && state.targets.size > 0);
       if (busy) state.idleSince = null;
       else if (state.idleSince === null) state.idleSince = now;
-      else if (now - state.idleSince >= IDLE_MS) yield* gone(state);
+      else if (now - state.idleSince >= IDLE_MS) yield* gone(state, `Tagma closes it, idle for ${IDLE_MS / 60_000} minutes`);
     }
   });
 
@@ -709,7 +719,7 @@ export const makeManagedHost = Effect.gen(function* () {
       }),
       remove: Effect.fn('ManagedHost.remove')(function* (profile) {
         const state = running.get(profile);
-        if (state !== undefined) yield* gone(state);
+        if (state !== undefined) yield* gone(state, 'Tagma closes it to remove its profile');
         yield* Effect.all([
           files.remove(path.join(place.profiles, profile), { recursive: true, force: true }),
           files.remove(path.join(place.downloads, profile), { recursive: true, force: true }),
