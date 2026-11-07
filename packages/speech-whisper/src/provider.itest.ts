@@ -69,7 +69,10 @@ const credentials = Layer.succeed(SpeechCredentials, { get: () => Effect.die('wh
 
 const sources = Layer.effect(
   SpeechSources,
-  Effect.map(whisperProvider, (provider) => SpeechSources.of({ parts: Stream.succeed([{ owner: 'whisper', providers: [provider] }]) })),
+  Effect.map(whisperProvider, (provider) => {
+    const standing = { parts: [{ owner: 'whisper', providers: [provider] }], taken: new Map<string, string>() };
+    return SpeechSources.of({ current: () => standing, changes: Stream.empty });
+  }),
 );
 
 const unreached = Layer.mergeAll(

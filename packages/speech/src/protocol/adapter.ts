@@ -1,6 +1,8 @@
 import type { Availability } from '@runlith/audio/port/devices';
 import type { Format } from '@runlith/audio/sound/format';
 import type { Effect, Schema, Scope, Stream } from 'effect';
+import type { HttpClient } from 'effect/http';
+import type { DuplexTransport } from './transport.ts';
 import type { RecognitionModel, SynthesisModel } from '../wire/capabilities.ts';
 import type { FileEvent, Frames, SpeechEvent } from '../wire/events.ts';
 import type { Overflow, SpeechFailure } from '../wire/failure.ts';
@@ -79,6 +81,10 @@ export type Synthesizer<Credential, R> = {
 export type CredentialForm<Credential> =
   | { readonly _tag: 'none'; readonly value: Credential }
   | { readonly _tag: 'required'; readonly schema: Schema.Codec<Credential, unknown> };
+
+export type SpeechHost = DuplexTransport | HttpClient.HttpClient;
+
+export type AnyProvider<R> = SpeechProvider<any, R>;
 
 export type SpeechProvider<Credential = unknown, R = never> = {
   readonly id: string;

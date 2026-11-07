@@ -4,9 +4,9 @@ import { Service } from '@runlith/layer/key';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { SpeechRepo } from './Repo.js';
 
-export class Catalog extends Service<Catalog>()('SpeechCatalog', { tier: 'app' }) {
+export class StatusRefresh extends Service<StatusRefresh>()('SpeechStatusRefresh', { tier: 'app' }) {
   static *make() {
-    return new Catalog(yield* Live, yield* SpeechRepo, yield* Scope, yield* Failure);
+    return new StatusRefresh(yield* Live, yield* SpeechRepo, yield* Scope, yield* Failure);
   }
 
   constructor(

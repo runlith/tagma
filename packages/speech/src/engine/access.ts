@@ -1,7 +1,8 @@
 import type { Availability } from '@runlith/audio/port/devices';
 import { Context, Effect, Result, Schema, Scope } from 'effect';
 import { SpeechFailure } from '../wire/failure.ts';
-import type { AnyProvider, SpeechCatalog } from './catalog.ts';
+import type { AnyProvider } from '../protocol/adapter.ts';
+import type { SpeechCatalog } from './catalog.ts';
 import type { Conditions } from './choose.ts';
 import { SpeechCredentials } from './SpeechCredentials.ts';
 

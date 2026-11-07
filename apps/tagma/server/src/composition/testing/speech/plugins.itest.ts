@@ -11,6 +11,7 @@ import { LIVE } from '@runlith/speech/wire/capabilities';
 import { Context, Effect, Exit, FileSystem, Layer, Schedule, Scope, Stream } from 'effect';
 import { MANIFEST } from '../../../plugin-formats/tagma/contract/wire/manifest.js';
 import { manifestText, PROVIDERS_ENTRY } from '../../../plugin-formats/tagma/testing/folder.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { makeDoorWorld } from '../doorFixture.js';
 
 type Answer = { readonly status: number; readonly body: unknown };
@@ -28,7 +29,28 @@ const noInstall = Layer.effectDiscard(
   ),
 );
 
-type Shape = { readonly turns?: string; readonly keyed?: boolean; readonly preamble?: string; readonly leading?: string };
+type Shape = {
+  readonly turns?: string;
+  readonly keyed?: boolean;
+  readonly unsigned?: boolean;
+  readonly preamble?: string;
+  readonly leading?: string;
+};
+
+const modelled = (id: string) => `
+import { Effect } from 'effect';
+import { defineAdapter } from '@runlith/tagma/adapter/provider';
+export default {
+  models: defineAdapter(() => [{
+    id: '${id}', label: '${id}', kind: 'wire', auth: 'api-key',
+    models: { '${id}-1': { label: 'One', capacity: { context: 100000, output: 1024 }, capabilities: ['text'], reasoning: [], defaultReasoning: null } },
+    cacheLifetime: { promisedSeconds: null, prior: null },
+    defaultTextModel: '${id}-1',
+    profile: { model: () => Effect.die('unused'), options: () => undefined, output: { budget: 1024, sent: false } },
+    quota: { read: () => Effect.die('unused'), fromHeaders: () => null },
+  }]),
+};
+`;
 
 const echo = (id: string, label: string, words: string, shape: Shape = {}) => `
 import { Deferred, Effect, Schema, Stream } from 'effect';
@@ -46,7 +68,7 @@ const model = {
 export default {
   speech: [${shape.leading ?? ''}{
     id: '${id}', label: '${id}', egress: [],
-    credential: ${shape.keyed === true ? "{ _tag: 'required', schema: Schema.Struct({ apiKey: Schema.String }) }" : "{ _tag: 'none', value: undefined }"},
+    ${shape.unsigned === true ? '' : `credential: ${shape.keyed === true ? "{ _tag: 'required', schema: Schema.Struct({ apiKey: Schema.String }) }" : "{ _tag: 'none', value: undefined }"},`}
     availability: () => Effect.succeed({ _tag: 'present' }),
     recognizer: {
       models: [model],
@@ -68,12 +90,12 @@ export default {
 };
 `;
 
-const part = Effect.fnUntraced(function* (directory: string, id: string, code: string) {
+const part = Effect.fnUntraced(function* (directory: string, id: string, code: string, brings: 'speech' | 'models' = 'speech') {
   const files = yield* FileSystem.FileSystem;
   yield* files.makeDirectory(join(directory, 'dist'), { recursive: true });
   yield* files.writeFileString(
     join(directory, MANIFEST),
-    manifestText({ id, providers: { models: false, harnesses: false, speech: true } }),
+    manifestText({ id, providers: { models: brings === 'models', harnesses: false, speech: brings === 'speech' } }),
   );
   yield* files.writeFileString(join(directory, PROVIDERS_ENTRY), code);
   return directory;
@@ -85,6 +107,7 @@ class World extends Context.Service<
     readonly op: (id: string, input: unknown) => Effect.Effect<Answer>;
     readonly root: string;
     readonly speech: Speech['Service'];
+    readonly registry: ProviderRegistry['Service'];
   }
 >()('testing/SpeechPluginsWorld') {}
 
@@ -98,6 +121,7 @@ const world = Layer.effect(
       op: (id: string, input: unknown) => door.op(id, input, project),
       root: yield* files.makeTempDirectoryScoped({ prefix: 'speech-plugins-' }),
       speech: Context.get(door.runtime.owners, Speech),
+      registry: Context.get(door.runtime.owners, ProviderRegistry),
     };
   }),
 );
@@ -220,6 +244,57 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
         const cleared = yield* until(rows(), (listed) => listed.find((row) => row.id === 'holey-speech')?.faults.length === 0);
         expect(cleared.find((row) => row.id === 'holey-speech')?.faults).toEqual([]);
         expect(yield* op('uninstall_plugin', { id: 'holey-speech' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a speech provider with no credential form reads broken, and console keys and speech_status still answer', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const folder = yield* part(join(root, 'unsigned'), 'unsigned-speech', echo('unsigned', 'Unsigned', 'never', { unsigned: true }));
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        const faulted = yield* until(rows(), (listed) =>
+          Boolean(listed.find((row) => row.id === 'unsigned-speech')?.faults.some((fault) => fault.point === 'speech')),
+        );
+        expect(faulted.find((row) => row.id === 'unsigned-speech')?.faults).toEqual([
+          expect.objectContaining({ point: 'speech', detail: expect.stringContaining('declares no credential form') }),
+        ]);
+        expect(yield* op('list_console_keys', {})).toMatchObject({ status: 200 });
+        expect((yield* status()).some((model) => model.provider === 'openai')).toBe(true);
+        expect(yield* op('uninstall_plugin', { id: 'unsigned-speech' })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a speech provider whose id another plugin serves as a model provider reads broken, whichever was installed first', () =>
+      Effect.gen(function* () {
+        const { op, root } = yield* World;
+        const speaking = yield* part(join(root, 'twin-speech'), 'twin-speech', echo('twin', 'Twin', 'never'));
+        expect(yield* op('install_plugin', { source: speaking })).toMatchObject({ status: 200 });
+        yield* until(status(), (models) => models.some((model) => model.provider === 'twin'));
+        const models = yield* part(join(root, 'twin-models'), 'twin-models', modelled('twin'), 'models');
+        expect(yield* op('install_plugin', { source: models })).toMatchObject({ status: 200 });
+        const faulted = yield* until(rows(), (listed) =>
+          Boolean(listed.find((row) => row.id === 'twin-speech')?.faults.some((fault) => fault.point === 'speech')),
+        );
+        expect(faulted.find((row) => row.id === 'twin-speech')?.faults).toEqual([
+          expect.objectContaining({ point: 'speech', detail: expect.stringContaining('twin-models') }),
+        ]);
+        expect((yield* status()).some((model) => model.provider === 'twin')).toBe(false);
+        for (const id of ['twin-speech', 'twin-models']) expect(yield* op('uninstall_plugin', { id })).toMatchObject({ status: 200 });
+      }),
+    );
+
+    it.effect('a plugin bringing only models leaves the speech set as it stands', () =>
+      Effect.gen(function* () {
+        const { op, root, speech, registry } = yield* World;
+        const before = yield* speech.now;
+        const folder = yield* part(join(root, 'only-models'), 'only-models', modelled('onlymodels'), 'models');
+        expect(yield* op('install_plugin', { source: folder })).toMatchObject({ status: 200 });
+        yield* until(
+          Effect.sync(() => registry.current().served.providers),
+          (providers) => providers.some((provider) => provider.id === 'onlymodels'),
+        );
+        expect(yield* speech.now).toBe(before);
+        expect(yield* op('uninstall_plugin', { id: 'only-models' })).toMatchObject({ status: 200 });
       }),
     );
 

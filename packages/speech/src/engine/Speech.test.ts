@@ -4,6 +4,7 @@ import { Effect, Exit, Fiber, Scope, Stream } from 'effect';
 import { batching, filing, streaming } from '../testing/models.ts';
 import { LIVE, RECORDED } from '../wire/capabilities.ts';
 import { controlOf, incoming, scriptedProvider } from '../testing/scriptedProvider.ts';
+import { scriptedTrack } from '../testing/scriptedTrack.ts';
 import { type Listening, inWorld, settle } from '../testing/world.ts';
 import { SpeechEvent, type Unit } from '../wire/events.ts';
 import type { Utterance } from '../wire/heard.ts';
@@ -162,20 +163,52 @@ it.effect('a batch model hears the track in clips cut by the Segmenter, each tim
 it.effect('a provider with inconsistent capabilities or a taken id is left out with its fault, and the others stand', () =>
   Effect.gen(function* () {
     const broken = scriptedProvider({ id: 'broken', recognition: [streaming('x', { turns: [] })] });
+    const { credential: _, ...unsigned } = scriptedProvider({ id: 'unsigned', recognition: [streaming('y')] });
+    const modelled = scriptedProvider({ id: 'modelled', recognition: [streaming('z')] });
     const set = yield* inWorld([broken, provider], (world) =>
-      world.reload([
-        { owner: 'first', providers: [broken, provider] },
-        { owner: 'second', providers: [scriptedProvider({ id: 'scripted', recognition: [streaming('other')] })] },
-        { owner: 'third', providers: [], failure: 'its module threw on import' },
-      ]),
+      world.reload(
+        [
+          { owner: 'first', providers: [broken, provider, null as never, unsigned as never] },
+          { owner: 'second', providers: [scriptedProvider({ id: 'scripted', recognition: [streaming('other')] }), modelled] },
+          { owner: 'third', failure: 'its module threw on import' },
+        ],
+        new Map([['modelled', 'a model plugin']]),
+      ),
     );
     expect(set.recognition.map((offer) => `${offer.provider}/${offer.model.id}`)).toEqual(['scripted/live']);
     expect(set.faults.map((fault) => [fault.owner, fault.provider])).toEqual([
       ['first', 'broken'],
+      ['first', undefined],
+      ['first', 'unsigned'],
       ['second', 'scripted'],
-      ['third', ''],
+      ['second', 'modelled'],
+      ['third', undefined],
     ]);
-    expect(set.faults[1]?.reason).toContain('first');
+    expect(set.faults.map((fault) => fault.reason)).toEqual([
+      expect.stringContaining('supports no turn mode'),
+      'A speech list entry is not a speech provider.',
+      'Speech provider "unsigned" declares no credential form.',
+      expect.stringContaining('first'),
+      expect.stringContaining('a model plugin'),
+      'its module threw on import',
+    ]);
+    expect(yield* set.status()).toMatchObject({ models: [{ provider: 'scripted', model: 'live' }] });
+  }),
+);
+
+it.effect('a choice made on one revision of a provider is refused by the set of another revision', () =>
+  Effect.gen(function* () {
+    const refused = yield* inWorld([provider], (world) =>
+      Effect.gen(function* () {
+        const choice = yield* world.speech.recognizer({ kinds: LIVE });
+        const next = yield* world.reload([
+          { owner: 'plugin', providers: [scriptedProvider({ id: 'scripted', recognition: [streaming('live')] })] },
+        ]);
+        const track = yield* scriptedTrack({ rate: 16_000, channels: 1 });
+        return yield* Effect.flip(Stream.runDrain(next.recognize(choice, track.track, { track: 'mic', origin: 0n })));
+      }),
+    );
+    expect(refused.message).toContain('not a recognizer of this catalog set');
   }),
 );
 
@@ -202,7 +235,7 @@ it.effect('a recognition keeps the set it started on through a reload, and the n
     expect(seen.told.at(-1)?.text).toBe('kept');
     expect(seen.told.at(-1)?.closed).toBe(true);
     expect(seen.offered).toBe(0);
-    expect(seen.refused).toContain('not a registered recognizer');
+    expect(seen.refused).toContain('not a recognizer of this catalog set');
   }),
 );
 

@@ -3,7 +3,7 @@ import { SettingSections } from '$lib/features/settings/section.js';
 import { viewCapability } from '$lib/features/plugin-views/capabilities.js';
 import { Actions } from '$lib/features/workspace/action.js';
 import { Captures } from './Captures.svelte.js';
-import { Catalog } from './Catalog.js';
+import { StatusRefresh } from './StatusRefresh.js';
 import { Check } from './Check.svelte.js';
 import { actions } from './dictation/action.js';
 import { Dictation } from './dictation/Dictation.svelte.js';
@@ -20,7 +20,7 @@ export const SpeechLayer = Layer.mergeAll(
   SpeechRepo,
   Check,
   Installs,
-  Catalog,
+  StatusRefresh,
   Dictation,
   Targets,
   Captures,

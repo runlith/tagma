@@ -1,13 +1,16 @@
 import { Context, type Stream } from 'effect';
-import type { HttpClient } from 'effect/http';
-import type { DuplexTransport } from '../protocol/transport.ts';
+import type { SpeechHost } from '../protocol/adapter.ts';
 import type { SpeechPart } from './catalog.ts';
 
-export type SpeechHost = DuplexTransport | HttpClient.HttpClient;
+export type SpeechStanding = {
+  readonly parts: ReadonlyArray<SpeechPart<SpeechHost>>;
+  readonly taken: ReadonlyMap<string, string>;
+};
 
 export class SpeechSources extends Context.Service<
   SpeechSources,
   {
-    readonly parts: Stream.Stream<ReadonlyArray<SpeechPart<SpeechHost>>>;
+    current(): SpeechStanding;
+    readonly changes: Stream.Stream<SpeechStanding>;
   }
 >()('speech/SpeechSources') {}

@@ -15,9 +15,8 @@ import type { ModelCredentials } from '@runlith/llm/profiles/contract';
 import type { GeneratedImage, ImageRequest } from '@runlith/llm/profiles/images';
 import { type McpCaller, mcpCallerMeta } from '@runlith/mcp/caller';
 import type { McpServedResult } from '@runlith/mcp/server';
-import { type AnyProvider, speechCatalog } from '@runlith/speech/engine/catalog';
-import type { SpeechHost } from '@runlith/speech/engine/SpeechSources';
-import type { Recorded } from '@runlith/speech/protocol/adapter';
+import { speechCatalog } from '@runlith/speech/engine/catalog';
+import type { AnyProvider, Recorded, SpeechHost } from '@runlith/speech/protocol/adapter';
 import { type ScriptedLink, scriptedTransport } from '@runlith/speech/testing/ScriptedTransport';
 import type { RecognitionModel, SynthesisModel } from '@runlith/speech/wire/capabilities';
 import type { FileEvent } from '@runlith/speech/wire/events';
@@ -356,7 +355,7 @@ const speaking = Effect.fnUntraced(function* (
 
 const conformSpeech = async (owner: string, speech: readonly AnyProvider<SpeechHost>[], fixture: SpeechFixture): Promise<SpeechResult> => {
   const { faults } = speechCatalog([{ owner, providers: speech }]);
-  assert.equal(faults.length, 0, faults.map((fault) => `${fault.provider}: ${fault.reason}`).join('\n'));
+  assert.equal(faults.length, 0, faults.map((fault) => `${fault.provider ?? owner}: ${fault.reason}`).join('\n'));
   const provider = speech.find((provider) => provider.id === fixture.provider);
   assert(provider !== undefined, `The folder declares no speech provider ${fixture.provider}`);
   const model = [...(provider.recognizer?.models ?? []), ...(provider.synthesizer?.models ?? [])].find(

@@ -7,7 +7,8 @@ import { SpeechFailure } from '../wire/failure.ts';
 import type { Heard, Transcribed } from '../wire/heard.ts';
 import type { RecognitionRequest } from '../wire/requests.ts';
 import { credentialOf, within } from './access.ts';
-import type { AnyProvider, SpeechCatalog } from './catalog.ts';
+import type { AnyProvider } from '../protocol/adapter.ts';
+import type { SpeechCatalog } from './catalog.ts';
 import type { RecognitionChoice } from './choose.ts';
 import { fitsRecognition } from './fits.ts';
 import { listeningDefaults, type ListeningSettings } from './settings.ts';
@@ -28,9 +29,9 @@ type Found<R> = { readonly provider: AnyProvider<R>; readonly model: Recognition
 
 const found = <R>(catalog: SpeechCatalog<R>, choice: RecognitionChoice): Result.Result<Found<R>, SpeechFailure> => {
   const provider = catalog.provider(choice.provider);
-  const model = provider?.recognizer?.models.find((candidate) => candidate.id === choice.model.id);
+  const model = provider?.recognizer?.models.find((candidate) => candidate === choice.model);
   if (provider === undefined || model === undefined)
-    return Result.fail(SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a registered recognizer`));
+    return Result.fail(SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a recognizer of this catalog set`));
   const recognition = model.recognition;
   if (recognition.kind !== 'file')
     return Result.fail(SpeechFailure.unsupported(`${provider.id}/${model.id} hears a live track, not a recorded file`));

@@ -1,11 +1,13 @@
-import { Context, Deferred, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from 'effect';
-import { type AnyProvider, type SpeechPart, speechCatalog } from './catalog.ts';
+import { Context, Effect, Layer, PubSub, type Scope, Semaphore, Stream } from 'effect';
+import type { AnyProvider, SpeechHost } from '../protocol/adapter.ts';
+import { speechCatalog } from './catalog.ts';
 import { type SpeechSet, speechSet } from './set.ts';
 import type { SpeechCredentials } from './SpeechCredentials.ts';
 import type { SpeechDetector } from './SpeechDetector.ts';
-import { type SpeechHost, SpeechSources } from './SpeechSources.ts';
+import { SpeechSources, type SpeechStanding } from './SpeechSources.ts';
 
 type Standing = {
+  readonly source: SpeechStanding;
   readonly set: SpeechSet;
   readonly revisions: ReadonlySet<string>;
   holds: number;
@@ -38,44 +40,33 @@ export class Speech extends Context.Service<
         permits.set(provider, own);
         return own;
       });
-      const standingOf = Effect.fnUntraced(function* (parts: ReadonlyArray<SpeechPart<SpeechHost>>) {
-        const catalog = speechCatalog(parts);
+      const standingOf = Effect.fnUntraced(function* (source: SpeechStanding) {
+        const catalog = speechCatalog(source.parts, source.taken);
         const limits = new Map<string, Map<string, Semaphore.Semaphore>>();
         for (const provider of catalog.providers) limits.set(provider.id, yield* limited(provider));
-        const revisions = new Set(parts.flatMap((part) => (part.revision === undefined ? [] : [part.revision])));
+        const revisions = new Set(source.parts.flatMap((part) => (part.revision === undefined ? [] : [part.revision])));
         const set = speechSet({ catalog, context, streams: (provider, model) => limits.get(provider)?.get(model) });
-        return { set, revisions, holds: 0 } satisfies Standing;
+        return { source, set, revisions, holds: 0 } satisfies Standing;
       });
+      let latest: Standing = yield* standingOf(sources.current());
       const sets = yield* Effect.acquireRelease(PubSub.sliding<SpeechSet>({ capacity: 1, replay: 1 }), PubSub.shutdown);
       const releases = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
+      yield* PubSub.publish(sets, latest.set);
       const held = new Set<Standing>();
-      const first = yield* Deferred.make<Standing>();
-      let latest: Standing | undefined;
       const replace = (next: Standing) =>
         Effect.suspend(() => {
           const previous = latest;
           latest = next;
-          if (previous !== undefined && previous.holds > 0) held.add(previous);
-          return Effect.andThen(
-            PubSub.publish(sets, next.set),
-            previous === undefined || previous.holds > 0 ? Effect.void : PubSub.publish(releases, undefined),
-          );
+          if (previous.holds > 0) held.add(previous);
+          return Effect.andThen(PubSub.publish(sets, next.set), previous.holds > 0 ? Effect.void : PubSub.publish(releases, undefined));
         });
       yield* Effect.forkScoped(
-        Stream.runForEach(sources.parts, (parts) =>
-          Effect.flatMap(standingOf(parts), (next) => Effect.andThen(replace(next), Deferred.succeed(first, next))),
-        ).pipe(
-          Effect.ensuring(
-            Effect.suspend(() =>
-              latest !== undefined
-                ? Effect.void
-                : Effect.flatMap(standingOf([]), (empty) => Effect.andThen(replace(empty), Deferred.succeed(first, empty))),
-            ),
-          ),
+        Stream.runForEach(
+          Stream.filter(sources.changes, (source) => source !== latest.source),
+          (source) => Effect.flatMap(standingOf(source), replace),
         ),
       );
-      const opening = yield* Deferred.await(first);
-      const current = (): Standing => latest ?? opening;
+      const current = (): Standing => latest;
       const release = (standing: Standing) =>
         Effect.suspend(() => {
           standing.holds -= 1;

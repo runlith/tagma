@@ -1,7 +1,6 @@
-import type { SpeechProvider } from '../protocol/adapter.ts';
+import { Predicate, Schema } from 'effect';
+import type { AnyProvider } from '../protocol/adapter.ts';
 import type { Knob, LiveRecognition, RecognitionCapabilities, RecognitionModel, SynthesisModel, TurnMode } from '../wire/capabilities.ts';
-
-export type AnyProvider<R> = SpeechProvider<any, R>;
 
 export type Offer<Model> = {
   readonly provider: string;
@@ -11,21 +10,19 @@ export type Offer<Model> = {
 export const live = (offer: Offer<RecognitionModel>): offer is Offer<RecognitionModel<LiveRecognition>> =>
   offer.model.recognition.kind !== 'file';
 
-export type SpeechPart<R> = {
-  readonly owner: string;
-  readonly revision?: string | undefined;
-  readonly providers: ReadonlyArray<AnyProvider<R>>;
-  readonly failure?: string | undefined;
-};
+export type SpeechPart<R> =
+  | { readonly owner: string; readonly revision?: string | undefined; readonly providers: ReadonlyArray<AnyProvider<R>> }
+  | { readonly owner: string; readonly revision?: string | undefined; readonly failure: string };
 
 export type SpeechFault = {
   readonly owner: string;
-  readonly provider: string;
+  readonly provider?: string | undefined;
   readonly reason: string;
 };
 
 export type SpeechCatalog<R> = {
   readonly providers: ReadonlyArray<AnyProvider<R>>;
+  readonly owners: ReadonlyMap<string, string>;
   readonly recognition: ReadonlyArray<Offer<RecognitionModel>>;
   readonly synthesis: ReadonlyArray<Offer<SynthesisModel>>;
   readonly faults: ReadonlyArray<SpeechFault>;
@@ -86,11 +83,27 @@ const recognitionConsistent = (capabilities: RecognitionCapabilities, where: str
   knobs(capabilities.tuning, capabilities.turns, where);
 };
 
+const declared = (entry: unknown): void => {
+  if (!Predicate.isObject(entry)) throw new Error('A speech list entry is not a speech provider.');
+  const { id, label, egress, credential, availability, recognizer, synthesizer } = entry;
+  if (typeof id !== 'string' || id === '') throw new Error('Speech provider has an empty id.');
+  if (typeof label !== 'string') throw new Error(`Speech provider "${id}" has no label.`);
+  if (!Array.isArray(egress) || !egress.every((host) => typeof host === 'string'))
+    throw new Error(`Speech provider "${id}" declares egress that is not a list of hosts.`);
+  if (!Predicate.isObject(credential) || (credential['_tag'] !== 'none' && credential['_tag'] !== 'required'))
+    throw new Error(`Speech provider "${id}" declares no credential form.`);
+  if (credential['_tag'] === 'required' && !Schema.isSchema(credential['schema']))
+    throw new Error(`Speech provider "${id}" requires a credential without a schema.`);
+  if (typeof availability !== 'function') throw new Error(`Speech provider "${id}" declares no availability.`);
+  for (const [what, side] of [
+    ['recognizer', recognizer],
+    ['synthesizer', synthesizer],
+  ] as const)
+    if (side !== undefined && (!Predicate.isObject(side) || !Array.isArray(side['models'])))
+      throw new Error(`Speech provider "${id}" declares a ${what} without a list of models.`);
+};
+
 const providerConsistent = <R>(provider: AnyProvider<R>) => {
-  const form: unknown = provider.credential;
-  if (typeof form !== 'object' || form === null || !('_tag' in form) || (form._tag !== 'none' && form._tag !== 'required'))
-    throw new Error(`Speech provider "${provider.id}" declares no credential form.`);
-  if (typeof provider.availability !== 'function') throw new Error(`Speech provider "${provider.id}" declares no availability.`);
   const recognizer = provider.recognizer;
   const synthesizer = provider.synthesizer;
   if (recognizer === undefined && synthesizer === undefined)
@@ -137,16 +150,21 @@ const providerConsistent = <R>(provider: AnyProvider<R>) => {
   }
 };
 
-const idOf = (provider: unknown): string =>
-  typeof provider === 'object' && provider !== null && 'id' in provider && typeof provider.id === 'string' ? provider.id : '';
+const idOf = (entry: unknown): string | undefined =>
+  Predicate.isObject(entry) && typeof entry['id'] === 'string' && entry['id'] !== '' ? entry['id'] : undefined;
 
-const refusalOf = <R>(provider: AnyProvider<R>, holders: ReadonlyMap<string, string>): string | undefined => {
-  if (typeof provider !== 'object' || provider === null) return 'A speech list entry is not a speech provider.';
-  const id = idOf(provider);
-  if (id === '') return 'Speech provider has an empty id.';
-  const holder = holders.get(id);
-  if (holder !== undefined) return `Speech provider "${id}" is already declared by ${holder}.`;
+const refusalOf = <R>(
+  provider: AnyProvider<R>,
+  owner: string,
+  holders: ReadonlyMap<string, string>,
+  taken: ReadonlyMap<string, string>,
+): string | undefined => {
   try {
+    declared(provider);
+    const holder = holders.get(provider.id);
+    if (holder !== undefined) return `Speech provider "${provider.id}" is already declared by ${holder}.`;
+    const other = taken.get(provider.id);
+    if (other !== undefined && other !== owner) return `"${provider.id}" is already a provider of ${other}.`;
     providerConsistent(provider);
     return undefined;
   } catch (error) {
@@ -154,14 +172,17 @@ const refusalOf = <R>(provider: AnyProvider<R>, holders: ReadonlyMap<string, str
   }
 };
 
-export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>): SpeechCatalog<R> => {
+export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>, taken: ReadonlyMap<string, string> = new Map()): SpeechCatalog<R> => {
   const holders = new Map<string, string>();
   const providers: Array<AnyProvider<R>> = [];
   const faults: Array<SpeechFault> = [];
   for (const part of parts) {
-    if (part.failure !== undefined) faults.push({ owner: part.owner, provider: '', reason: part.failure });
+    if ('failure' in part) {
+      faults.push({ owner: part.owner, reason: part.failure });
+      continue;
+    }
     for (const provider of part.providers) {
-      const reason = refusalOf(provider, holders);
+      const reason = refusalOf(provider, part.owner, holders, taken);
       if (reason !== undefined) {
         faults.push({ owner: part.owner, provider: idOf(provider), reason });
         continue;
@@ -173,6 +194,7 @@ export const speechCatalog = <R>(parts: ReadonlyArray<SpeechPart<R>>): SpeechCat
   const byId = new Map(providers.map((provider) => [provider.id, provider]));
   return {
     providers,
+    owners: holders,
     recognition: providers.flatMap((provider) => (provider.recognizer?.models ?? []).map((model) => ({ provider: provider.id, model }))),
     synthesis: providers.flatMap((provider) => (provider.synthesizer?.models ?? []).map((model) => ({ provider: provider.id, model }))),
     faults,

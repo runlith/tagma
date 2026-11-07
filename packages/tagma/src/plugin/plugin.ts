@@ -1,6 +1,5 @@
 import type { McpCaller } from '@runlith/mcp/caller';
-import type { AnyProvider } from '@runlith/speech/engine/catalog';
-import type { SpeechHost } from '@runlith/speech/engine/SpeechSources';
+import type { AnyProvider, SpeechHost } from '@runlith/speech/protocol/adapter';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { Adapter } from '../adapter/provider.js';
 import type { ModelsClient } from './models.js';

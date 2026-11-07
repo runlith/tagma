@@ -77,7 +77,7 @@ export const SYNTHESIS_FEED = feed('speech.synthesize', {
 });
 
 export const CatalogEvent = Schema.Struct({
-  providers: Schema.Array(Schema.String).annotate({ description: 'The speech providers standing in the catalog, in its order.' }),
+  kind: Schema.Literal('changed').annotate({ description: 'The speech catalog moved; speech_status answers what stands now.' }),
 });
 export type CatalogEvent = typeof CatalogEvent.Type;
 

@@ -33,6 +33,7 @@ export class PluginFaults extends Context.Service<
   {
     put(plugin: string, point: string, fault: Omit<PluginFault, 'point'>): void;
     clear(plugin: string, point: string): void;
+    replace(point: string, faults: ReadonlyMap<string, Omit<PluginFault, 'point'>>): void;
   }
 >()('tagma/plugins/PluginFaults') {}
 

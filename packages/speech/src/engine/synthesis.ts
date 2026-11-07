@@ -81,9 +81,11 @@ export const synthesis = Effect.fnUntraced(function* <R>(
 ): Effect.fn.Return<Synthesis, SpeechFailure, Scope.Scope> {
   const provider = catalog.provider(choice.provider);
   const synthesizer = provider?.synthesizer;
-  const model = synthesizer?.models.find((candidate) => candidate.id === choice.model.id);
+  const model = synthesizer?.models.find((candidate) => candidate === choice.model);
   if (provider === undefined || synthesizer === undefined || model === undefined)
-    return yield* Effect.fail(SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a registered synthesizer`));
+    return yield* Effect.fail(
+      SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a synthesizer of this catalog set`),
+    );
   const capabilities = model.synthesis;
   const wants = choice.wants;
   const fits = fitsSynthesis(capabilities, choice.voice, wants);

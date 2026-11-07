@@ -3,6 +3,7 @@ import type { HostedRunner } from '@runlith/hosted-runner/run';
 import type { Signer } from '../cli/contract/service/server.js';
 import type { BuiltinPlugin } from '../plugins/contract/service/plugins.js';
 import type { AdapterSource } from '../providers/contract/service/registry.js';
+import { BUILTIN_SPEECH } from './builtinSpeech.js';
 
 type BuiltinHarness = {
   readonly id: string;
@@ -13,11 +14,11 @@ type BuiltinHarness = {
 
 type Builtin = AdapterSource & { readonly harness?: BuiltinHarness };
 
-type Shipped = Omit<BuiltinPlugin, 'providers'> & { readonly speech?: true };
+type Shipped = Omit<BuiltinPlugin, 'providers'>;
 
 const SHIPPED: readonly Shipped[] = [
   { id: 'anthropic', title: 'Anthropic', description: 'Claude models and the Claude Code agent.' },
-  { id: 'openai', title: 'OpenAI', description: 'OpenAI models, the Codex agent, and OpenAI speech recognition and voices.', speech: true },
+  { id: 'openai', title: 'OpenAI', description: 'OpenAI models, the Codex agent, and OpenAI speech recognition and voices.' },
   { id: 'cursor', title: 'Cursor', description: 'The Cursor agent and the models it serves.' },
   { id: 'xai', title: 'xAI', description: 'Grok models and the Grok agent.' },
   { id: 'google', title: 'Google', description: 'The Gemini CLI agent and the models it serves.' },
@@ -29,8 +30,8 @@ const SHIPPED: readonly Shipped[] = [
   { id: 'deepseek', title: 'DeepSeek', description: 'DeepSeek models.' },
   { id: 'openrouter', title: 'OpenRouter', description: 'The models OpenRouter serves.' },
   { id: 'openai-compatible', title: 'OpenAI-compatible server', description: 'Models of any server that speaks the OpenAI API.' },
-  { id: 'soniox', title: 'Soniox', description: 'Soniox speech recognition and voices.', speech: true },
-  { id: 'whisper', title: 'Whisper', description: 'Speech recognition on this Mac, with no account.', speech: true },
+  { id: 'soniox', title: 'Soniox', description: 'Soniox speech recognition and voices.' },
+  { id: 'whisper', title: 'Whisper', description: 'Speech recognition on this Mac, with no account.' },
 ];
 
 const builtin = (id: string, load: () => Promise<{ readonly adapter: Adapter }>, harness?: BuiltinHarness): Builtin => ({
@@ -92,11 +93,13 @@ export const BUILTIN_ADAPTERS: readonly Builtin[] = [
 
 const adapterOf = new Map(BUILTIN_ADAPTERS.map((source) => [source.id, source]));
 
-export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = SHIPPED.map(({ speech, ...plugin }) => {
+const speaks = new Set<string>(BUILTIN_SPEECH);
+
+export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = SHIPPED.map((plugin) => {
   const models = adapterOf.get(plugin.id);
   return {
     ...plugin,
-    providers: { models: models !== undefined, harnesses: models?.harness !== undefined, speech: speech === true },
+    providers: { models: models !== undefined, harnesses: models?.harness !== undefined, speech: speaks.has(plugin.id) },
   };
 });
 

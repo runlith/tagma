@@ -24,9 +24,9 @@ export const recognition = <R>(
 ): Stream.Stream<Heard, SpeechFailure> => {
   const provider = catalog.provider(choice.provider);
   const recognizer = provider?.recognizer;
-  const model = recognizer?.models.find((candidate) => candidate.id === choice.model.id);
+  const model = recognizer?.models.find((candidate) => candidate === choice.model);
   if (provider === undefined || recognizer === undefined || model === undefined)
-    return Stream.fail(SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a registered recognizer`));
+    return Stream.fail(SpeechFailure.invalidRequest(`${choice.provider}/${choice.model.id} is not a recognizer of this catalog set`));
   if (track.format.channels !== 1) return Stream.fail(SpeechFailure.invalidRequest('recognition takes mono audio'));
   const capabilities = model.recognition;
   if (capabilities.kind === 'file')

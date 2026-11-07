@@ -109,7 +109,10 @@ export const heardIn = Effect.fnUntraced(function* (opening: Opening, scope: Sco
     Speech.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
-          Layer.succeed(SpeechSources, { parts: Stream.succeed([{ owner: 'world', providers: [opening.provider ?? scripted] }]) }),
+          Layer.succeed(SpeechSources, {
+            current: () => ({ parts: [{ owner: 'world', providers: [opening.provider ?? scripted] }], taken: new Map() }),
+            changes: Stream.empty,
+          }),
           transport.layer,
           credentials,
           fakeDetector(),

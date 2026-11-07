@@ -11,7 +11,7 @@ import { capabilities } from '@runlith/audio-darwin/capabilities';
 import { DarwinChannel, LocalSockets } from '@runlith/audio-darwin/channel';
 import { Speech } from '@runlith/speech/engine/Speech';
 import { SpeechDetector } from '@runlith/speech/engine/SpeechDetector';
-import type { SpeechProvider } from '@runlith/speech/protocol/adapter';
+import type { AnyProvider, SpeechHost, SpeechProvider } from '@runlith/speech/protocol/adapter';
 import { webSocketTransport } from '@runlith/speech/transport/websocket';
 import { openai } from '@runlith/speech-openai/provider';
 import { soniox } from '@runlith/speech-soniox/provider';
@@ -35,7 +35,10 @@ import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { speech } from '../speech/speech.js';
 import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/service/models.js';
-import { type BuiltinSpeech, speechHolding, speechSourcesWith } from './speechSources.js';
+import type { BuiltinSpeechId } from './builtinSpeech.js';
+import type { PluginRevisions, ProviderParts } from '../plugins/contract/service/plugins.js';
+import type { KeyedProviders } from '../providers/contract/service/credentials.js';
+import { type BuiltinSpeech, type SpeechParts, speechHolding, speechPartsWith, speechSourcesWith } from './speechSources.js';
 
 export type SpeechPlace = {
   readonly hostApp: string;
@@ -125,33 +128,39 @@ const localOf = (place: SpeechPlace): Local => {
   return { built: false, reason: recorded !== '' ? recorded : `the Whisper engine is not built at ${place.engine}` };
 };
 
-const builtinsWith = <R>(whisperOf: Effect.Effect<SpeechProvider<undefined>, never, R>): Effect.Effect<BuiltinSpeech, never, R> =>
-  Effect.map(
-    whisperOf,
-    (whisper): BuiltinSpeech =>
-      new Map([
-        ['soniox', [soniox]],
-        ['openai', [openai]],
-        ['whisper', [whisper]],
-      ]),
-  );
+const WHISPER = 'whisper' satisfies BuiltinSpeechId;
 
-const sourcesOf = (local: Local, models: Layer.Layer<ModelStore>) =>
+const CLOUD: Readonly<Record<Exclude<BuiltinSpeechId, typeof WHISPER>, ReadonlyArray<AnyProvider<SpeechHost>>>> = {
+  openai: [openai],
+  soniox: [soniox],
+};
+
+const CLOUD_SPEECH: BuiltinSpeech = new Map(Object.entries(CLOUD));
+
+const whisperOf = <R>(whisper: Effect.Effect<SpeechProvider<undefined>, never, R>): Effect.Effect<BuiltinSpeech, never, R> =>
+  Effect.map(whisper, (provider): BuiltinSpeech => new Map([[WHISPER, [provider]]]));
+
+const standingOf = (local: Local, models: Layer.Layer<ModelStore>) =>
   local.built
-    ? speechSourcesWith(builtinsWith(whisperProvider)).pipe(Layer.provide(local.engine), Layer.provide(models))
-    : speechSourcesWith(builtinsWith(Effect.succeed(unbuiltProvider(local.reason))));
+    ? speechSourcesWith(whisperOf(whisperProvider)).pipe(Layer.provide(local.engine), Layer.provide(models))
+    : speechSourcesWith(whisperOf(Effect.succeed(unbuiltProvider(local.reason))));
 
 const installationOf = <A, E, R>(
   place: SpeechPlace,
   local: Local,
   models: Layer.Layer<ModelStore>,
-  sources: ReturnType<typeof sourcesOf>,
+  parts: Layer.Layer<SpeechParts | KeyedProviders, never, ProviderParts | PluginRevisions>,
   credentials: Layer.Layer<A, E, R>,
 ) => {
   const detector = local.built
     ? detectorLayer.pipe(Layer.provide(local.engine))
     : SpeechDetector.none(local.reason, ['build it with bun run --cwd packages/speech-whisper build']);
-  const recognizers = speechHolding.pipe(Layer.provideMerge(Speech.layer), Layer.provideMerge(detector), Layer.provide(sources));
+  const recognizers = speechHolding.pipe(
+    Layer.provideMerge(Speech.layer),
+    Layer.provideMerge(detector),
+    Layer.provide(standingOf(local, models)),
+    Layer.provide(parts),
+  );
   const bindings = Layer.mergeAll(recognizers, devices(place), localModels).pipe(
     Layer.provide(models),
     Layer.provide(Layer.mergeAll(webSockets, FetchHttpClient.layer)),
@@ -162,7 +171,7 @@ const installationOf = <A, E, R>(
 export const speechComposition = (place: SpeechPlace) => {
   const local = localOf(place);
   const models = store(place);
-  const sources = sourcesOf(local, models);
+  const sources = speechPartsWith(CLOUD_SPEECH);
   return {
     sources,
     installation: <A, E, R>(credentials: Layer.Layer<A, E, R>) => installationOf(place, local, models, sources, credentials),

@@ -82,18 +82,30 @@ export const pluginsLayer: Layer.Layer<
     const shelf = yield* makeShelf({ home });
     const digests = yield* makeDigests;
     const found = new Map<string, Map<string, PluginFault>>();
+    const placed = (plugin: string, point: string, fault: Omit<PluginFault, 'point'>): boolean => {
+      const held = found.get(plugin) ?? new Map<string, PluginFault>();
+      const standing = held.get(point);
+      if (standing?.title === fault.title && standing.detail === fault.detail) return false;
+      found.set(plugin, held.set(point, { point, ...fault }));
+      return true;
+    };
+    const lifted = (plugin: string, point: string): boolean => {
+      if (found.get(plugin)?.delete(point) !== true) return false;
+      if (found.get(plugin)?.size === 0) found.delete(plugin);
+      return true;
+    };
     const faults = PluginFaults.of({
       put: (plugin, point, fault) => {
-        const held = found.get(plugin) ?? new Map<string, PluginFault>();
-        const standing = held.get(point);
-        if (standing?.title === fault.title && standing.detail === fault.detail) return;
-        found.set(plugin, held.set(point, { point, ...fault }));
-        PubSub.publishUnsafe(pulses, null);
+        if (placed(plugin, point, fault)) PubSub.publishUnsafe(pulses, null);
       },
       clear: (plugin, point) => {
-        if (found.get(plugin)?.delete(point) !== true) return;
-        if (found.get(plugin)?.size === 0) found.delete(plugin);
-        PubSub.publishUnsafe(pulses, null);
+        if (lifted(plugin, point)) PubSub.publishUnsafe(pulses, null);
+      },
+      replace: (point, next) => {
+        let moved = false;
+        for (const plugin of [...found.keys()]) if (!next.has(plugin) && lifted(plugin, point)) moved = true;
+        for (const [plugin, fault] of next) if (placed(plugin, point, fault)) moved = true;
+        if (moved) PubSub.publishUnsafe(pulses, null);
       },
     });
     const faultsOf = (id: string) => [...(found.get(id)?.values() ?? [])];
