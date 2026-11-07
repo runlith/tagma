@@ -5,7 +5,7 @@ ord: 8
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -79,7 +79,7 @@ A plugin may be nothing but a provider part. A provider part runs in the server 
 
 **Sources.** Composition fills speech's port with the built-in providers, under their built-in plugins, and the speech of every standing provider part, through the loader. A part switched off on the machine leaves the set.
 
-**Holding.** `Speech.revisions()` names the revision directories the current and every held set were built from, and `Speech.released` fires when a held set drops; composition registers the first as a `RevisionHolder` and forwards the second to `PluginRevisions.released`. Speech's faults go on each plugin's `speech` point; an import failure goes there only for a part that brings no models.
+**Holding.** Before it reads its first standing, `Speech` hands `SpeechSources.hold` the revision directories of the set it is building, the current one and every held one; composition registers that as a `RevisionHolder`, so the first set is held while it is built. `Speech.released` fires when a held set drops, and composition forwards it to `PluginRevisions.released`. Speech's faults go on each plugin's `speech` point; an import failure goes there only for a part that brings no models.
 
 **Keys.** `KeyedProviders` answers the ids of the providers whose credential is required in the judged catalog of the standing speech parts, read per use — from the parts' owner rather than the set, since `providers` is built before `Speech`, whose credentials it supplies — so a key for a plugin's speech provider is entered in the console-key window like a built-in's.
 
