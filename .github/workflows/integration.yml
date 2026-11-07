@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       runner:
-        description: The machine every shard runs on
+        description: The machine every shard runs on; a macOS runner runs only the files marked for darwin
         required: false
         default: ubuntu-latest
       script:
@@ -38,5 +38,5 @@ jobs:
       name: ${{ inputs.script == 'test:native' && 'native' || 'integration' }}-${{ inputs.runner || 'ubuntu-latest' }}
       script: ${{ inputs.script || 'test:integration' }}
       runner: ${{ inputs.runner || 'ubuntu-latest' }}
-      shards: ${{ inputs.script == 'test:native' && 1 || 5 }}
+      shards: ${{ (inputs.script == 'test:native' && 1) || (startsWith(inputs.runner, 'macos') && 2) || 5 }}
       package: ${{ inputs.package }}

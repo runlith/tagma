@@ -146,6 +146,7 @@ jobs:
           LANES: ${{ inputs.lanes }}
           TEST_PATTERN: ${{ inputs.test-pattern }}
           E2E_IOS_RUNTIMES: '26'
+          TESTBED_PLATFORM_ONLY: ${{ runner.os == 'macOS' && inputs.script == 'test:integration' && '1' || '' }}
         run: |
           mkdir -p "$RUNNER_TEMP/report"
           if [ "$RUNNER_OS" = macOS ]; then
