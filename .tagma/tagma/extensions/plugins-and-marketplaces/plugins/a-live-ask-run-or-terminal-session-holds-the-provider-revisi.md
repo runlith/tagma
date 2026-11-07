@@ -1,7 +1,7 @@
 ---
 id: 01a18e37-1c6d-78dd-8bd3-2a1bf928125d
 title: A live ask, run or terminal session holds the provider revision it runs from, and only an unheld revision is deleted
-ord: 28
+ord: 13
 tags: ["explanation"]
 edges:
   - kind: relates
