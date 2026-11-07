@@ -236,7 +236,7 @@ export const MARKETPLACE_OPERATIONS = {
     ],
     confirmation: (input, prepared?: PluginConsented) => ({
       summary: `Update the plugin ${input.id} from its marketplace?`,
-      facts: prepared === undefined ? [] : consentFacts(prepared),
+      facts: prepared === undefined ? [] : consentFacts(prepared.consent),
       consequence: 'The new version runs at once wherever the plugin is enabled; its MCP servers and hooks run as the operator.',
     }),
     confirmLabel: 'Update',

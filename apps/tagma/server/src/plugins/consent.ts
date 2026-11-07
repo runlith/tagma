@@ -13,15 +13,15 @@ const reachOf = (server: PluginLoaded['servers'][number]): string =>
 const maskOf = (loaded: PluginLoaded): ((text: string) => string) =>
   loaded.redact.length === 0 ? (text) => text : mcpRedactor([...loaded.redact]);
 
-export const consentOf = (loaded: PluginLoaded): PluginConsent => {
+export const consentOf = (loaded: PluginLoaded, off: boolean): PluginConsent => {
   const mask = maskOf(loaded);
+  const providers: PermissionSubject[] =
+    loaded.providers === null ? [] : [{ kind: 'execute', value: mask(join(loaded.place.root, loaded.providers.entry)) }];
   const subjects: PermissionSubject[] = [
     ...(loaded.process === null
       ? []
       : [{ kind: 'execute', value: mask(join(loaded.place.root, loaded.process.entry)) } satisfies PermissionSubject]),
-    ...(loaded.providers === null
-      ? []
-      : [{ kind: 'execute', value: mask(join(loaded.place.root, loaded.providers.entry)) } satisfies PermissionSubject]),
+    ...providers,
     ...loaded.servers.map((server): PermissionSubject => ({
       kind: server.transport === 'stdio' ? 'execute' : 'network',
       value: mask(reachOf(server)),
@@ -40,7 +40,7 @@ export const consentOf = (loaded: PluginLoaded): PluginConsent => {
           },
         ];
   });
-  return { subjects, raised };
+  return { subjects, raised, standing: off ? [] : providers };
 };
 
 const contributionComponent = (points: PluginPoints['Service'], point: string, value: unknown): PluginComponent => {

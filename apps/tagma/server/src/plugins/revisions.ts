@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, renameSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { Duration, Effect, FileSystem, Option, PubSub, Queue, Result, Semaphore, Stream } from 'effect';
 import { FileWatcher } from '../platform/contract/service/watch.js';
@@ -163,11 +162,7 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
   });
 
   const watched = Effect.fnUntraced(function* (installs: readonly PluginInstall[]) {
-    const wanted = new Map(
-      installs.flatMap((install) =>
-        install.source.kind === 'folder' && standing.has(install.id) ? [[install.id, install.root] as const] : [],
-      ),
-    );
+    const wanted = new Map(installs.flatMap((install) => (install.source.kind === 'folder' ? [[install.id, install.root] as const] : [])));
     for (const [id, held] of watches) {
       if (wanted.get(id) === held.root && held.watch.watching()) continue;
       held.watch.close();
@@ -196,12 +191,13 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
     }
   });
 
-  const kept = (): ReadonlySet<string> =>
+  const kept = (after = 0): ReadonlySet<string> =>
     new Set([
       ...leases.keys(),
-      ...handed.keys(),
+      ...[...handed].flatMap(([directory, at]) => (at > after ? [directory] : [])),
       ...placing,
       ...[...standing.values()].map((held) => held.directory),
+      ...parts.flatMap((part) => (part.directory === null ? [] : [part.directory])),
       ...[...holders].flatMap((holder) => [...holder.standing()]),
     ]);
 
@@ -211,7 +207,7 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
     const retired = yield* Effect.try({
       try: () => {
         if (!existsSync(base)) return [];
-        const live = new Set([...kept(), ...recorded]);
+        const live = new Set([...kept(mark), ...recorded]);
         const away: string[] = [];
         const retire = (path: string) => {
           const target = join(base, `${RETIRED}${++moment}`);
@@ -220,6 +216,10 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
         };
         for (const id of readdirSync(base)) {
           const at = join(base, id);
+          if (id.startsWith(RETIRED)) {
+            away.push(at);
+            continue;
+          }
           if (id.startsWith('.')) {
             if (boot) retire(at);
             continue;
@@ -237,7 +237,9 @@ export const makeRevisions = Effect.fnUntraced(function* (input: {
       catch: (failure) => new PluginUnreadable({ path: base, reason: reasonOf(failure) }),
     });
     for (const [directory, at] of handed) if (at < mark) handed.delete(directory);
-    yield* Effect.forEach(retired, (away) => Effect.promise(() => rm(away, { recursive: true, force: true })), { discard: true });
+    yield* Effect.validate(retired, (away) => files.remove(away, { recursive: true, force: true }), { discard: true }).pipe(
+      Effect.mapError((failures) => new PluginUnreadable({ path: base, reason: failures.map(reasonOf).join('; ') })),
+    );
   });
 
   const collected = (boot: boolean) =>

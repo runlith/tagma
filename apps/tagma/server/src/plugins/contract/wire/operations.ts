@@ -5,7 +5,7 @@ import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import { placedCursor, projectField } from '../../../platform/contract/wire/place.js';
 import { SETTABLE_SCOPES, type SettableScope } from '../../../platform/contract/wire/setting.js';
-import type { PluginConsented } from './consent.js';
+import type { PluginConsent, PluginConsented } from './consent.js';
 import { PluginId, PluginLabel } from './names.js';
 import { pluginRowSchema } from './rows.js';
 
@@ -80,6 +80,13 @@ const REACH_REFUSALS = ['mcp-reconcile-stalled', 'mcp-contributions-unreadable']
 
 const runs = (input: { readonly enabled?: boolean }, prepared: PluginConsented): boolean => input.enabled !== false || prepared.running;
 
+const admitted = (input: { readonly enabled?: boolean }, prepared: PluginConsented | undefined): PluginConsent =>
+  prepared === undefined
+    ? { subjects: [], raised: [], standing: [] }
+    : runs(input, prepared)
+      ? prepared.consent
+      : { ...prepared.consent, subjects: prepared.consent.standing, raised: [] };
+
 const pluginScope = Schema.optional(Schema.Literals(SETTABLE_SCOPES)).annotate({
   description: 'project (the default): this project. user: every project, except one that switches it off.',
 });
@@ -95,9 +102,9 @@ const switchScope = Schema.optional(Schema.Literals(SWITCH_SCOPES)).annotate({
 const reachOf = (input: { readonly scope?: PluginSwitchScope }): string =>
   input.scope === 'user' ? 'every project' : input.scope === 'machine' ? 'this machine' : 'this project';
 
-export const consentFacts = (prepared: PluginConsented) => {
-  const runs = prepared.consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
-  const reaches = prepared.consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value);
+export const consentFacts = (consent: PluginConsent) => {
+  const runs = consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
+  const reaches = consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value);
   return [
     ...(runs.length === 0 ? [] : [{ label: 'runs', value: runs.join('\n') }]),
     ...(reaches.length === 0 ? [] : [{ label: 'reaches', value: reaches.join('\n') }]),
@@ -157,17 +164,24 @@ export const PLUGIN_OPERATIONS = {
         prepared === undefined
           ? `Install the plugin from ${input.source ?? 'a prepared revision'}?`
           : input.enabled === false
-            ? `Install the plugin ${prepared.id} on this machine without running it?`
+            ? prepared.consent.standing.length === 0
+              ? `Install the plugin ${prepared.id} on this machine without running it?`
+              : `Install the plugin ${prepared.id} and its providers on this machine without running it in a project?`
             : `Install the plugin ${prepared.id} and run it in ${reachOf(input)}?`,
-      facts: prepared === undefined || !runs(input, prepared) ? [] : consentFacts(prepared),
-      consequence: prepared?.running
-        ? 'It is already enabled in a project, so this version runs there at once; its process, MCP servers and hooks run as the operator on this machine wherever it is enabled.'
-        : 'Its process, MCP servers and hooks run as the operator on this machine wherever it is enabled.',
+      facts: consentFacts(admitted(input, prepared)),
+      consequence: [
+        ...(prepared === undefined || prepared.consent.standing.length === 0
+          ? []
+          : ['Its providers run inside Tagma on this whole machine at once, whatever the projects run.']),
+        prepared?.running
+          ? 'It is already enabled in a project, so this version runs there at once; its process, MCP servers and hooks run as the operator on this machine wherever it is enabled.'
+          : 'Its process, MCP servers and hooks run as the operator on this machine wherever it is enabled.',
+      ].join(' '),
     }),
     confirmLabel: 'Install',
     presentation: { running: 'Installing a plugin', done: 'Installed a plugin' },
-    subjects: (input, prepared?: PluginConsented) => (prepared !== undefined && runs(input, prepared) ? prepared.consent.subjects : []),
-    raises: (input, prepared?: PluginConsented) => (prepared !== undefined && runs(input, prepared) ? prepared.consent.raised : []),
+    subjects: (input, prepared?: PluginConsented) => admitted(input, prepared).subjects,
+    raises: (input, prepared?: PluginConsented) => admitted(input, prepared).raised,
   }),
   enable_plugin: operation('enable_plugin', {
     approval: { ...ASKS_IN_REVIEW, when: [MCP_ENV_RESOLVING] },
@@ -195,7 +209,7 @@ export const PLUGIN_OPERATIONS = {
           : input.enabled === false
             ? `Stop running the plugin ${input.id} in ${reachOf(input)}?`
             : `Run the plugin ${input.id} in ${reachOf(input)}?`,
-      facts: prepared ? consentFacts(prepared) : [],
+      facts: prepared ? consentFacts(prepared.consent) : [],
       consequence:
         input.scope === 'machine' && input.enabled === false
           ? 'It runs in no project and its models and speech leave every menu until it is turned on again; a run already going keeps them.'

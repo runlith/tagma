@@ -245,7 +245,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
 
   const preparedOf = Effect.fnUntraced(function* (held: Held, read: Read, projectId: number) {
     const bound = yield* boundOf(read, held.root, projectId);
-    const consent = consentOf(bound.loaded);
+    const consent = consentOf(bound.loaded, (yield* enabling(projectId)).machineOff.has(read.id));
     const pkg = read.package;
     return {
       id: read.id,
@@ -599,11 +599,12 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       return yield* locked(put(projectId, prepared, 'kept'));
     }),
     installed: Effect.fn('Plugins.installed')(function* ({ projectId, id }) {
-      if (builtin.has(id)) return { id, consent: { subjects: [], raised: [] }, running: false };
+      if (builtin.has(id)) return { id, consent: { subjects: [], raised: [], standing: [] }, running: false };
       const install = yield* installedOf(id);
       const read = yield* readOf(install.root, install.declared);
       const bound = yield* boundOf(read, install.root, projectId);
-      return { id: read.id, consent: consentOf(bound.loaded), running: yield* runningAnywhere(read.id) };
+      const off = (yield* enabling(projectId)).machineOff.has(read.id);
+      return { id: read.id, consent: consentOf(bound.loaded, off), running: yield* runningAnywhere(read.id) };
     }),
     enable: Effect.fn('Plugins.enable')(function* ({ projectId, id, enabled, scope }) {
       return yield* locked(
